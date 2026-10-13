@@ -403,6 +403,18 @@ Deferred from Phase 0b until there's a way to test it. The OAuth code is built a
 
 Planned in [specs/2026-10-13-1400-phase-8-premium-installer.md](specs/2026-10-13-1400-phase-8-premium-installer.md): an `init` installer with arrow-key prompts and spinners, registration with Claude Code, Claude Desktop, Cursor and Codex, a readable `setup status` and `--help`, and a Tag Manager name-match fix.
 
+## Phase 9: Ahrefs and Semrush as data providers
+
+Planned in [specs/2026-10-13-1500-phase-9-seo-data-providers.md](specs/2026-10-13-1500-phase-9-seo-data-providers.md), with API notes in `docs/research/`.
+
+## Phase 10: Installer polish
+
+After Phase 9. A menu when `init` runs on a finished setup; step timings and "Done in Ns"; "Try asking Claude" example prompts (the user's own client names when they have clients, read locally and shown only in an interactive terminal; example.com otherwise and in plain/CI mode); clickable links and "Press Enter to open" browser shortcuts; dim tips under results; a daily update notice (never in CI, opt-out env var, sends no client data).
+
+## Phase 11: Launch post and demo
+
+The launch blog outline lives in [docs/launch/blog-outline.md](docs/launch/blog-outline.md). **Every phase that adds a tool, prompt, command or feature also adds it there**, marked Shipped or Coming. Before launch: write the post from the outline, check every claim against the README, and produce the 15–30 second demo video from its shot list using example.com data only.
+
 ## Final checklist
 
 - [ ] All phases typecheck and tests pass.
