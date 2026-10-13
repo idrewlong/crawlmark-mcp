@@ -3,6 +3,7 @@
 Working outline for the launch blog post (Phase 11). It's a living document: every phase that adds a feature, tool, prompt or command also adds it to [What it can do](#5-what-it-can-do) below, marked **Shipped** or **Coming**. Before publishing, check every item against the README and drop anything that didn't ship.
 
 **Working title options**
+
 - "Stop digging, start answering: an SEO data layer for AI"
 - "We spent hours on every SEO report, so we built crawlmark"
 - "Let AI read the SEO data, so you can do the work"
@@ -13,8 +14,8 @@ Working outline for the launch blog post (Phase 11). It's a living document: eve
 
 ## 1. Hook (2–3 short paragraphs)
 
-- Open on a real moment: a client asks a simple question ("why did traffic drop last month?") and answering it means an afternoon of exports.
-- Name the cost: Search Console in one tab, GA4 in another, a keyword tool in a third, Lighthouse runs, spreadsheets to stitch it together. The report takes hours; the insight takes minutes.
+- Open on a real moment: a client asks a simple question ("why did traffic drop last month?") and answering it means an hour of digging through GA4 data.
+- Name the cost: Search Console in one tab, GA4 in another, SEMRush in a third, etc. Even doing a report takes hours; the insight takes minutes.
 - The turn: AI is very good at reading data and explaining it. It just needs the data in front of it.
 
 ## 2. Why we built it
@@ -46,41 +47,50 @@ Working outline for the launch blog post (Phase 11). It's a living document: eve
 Grouped by job, each with one example question a reader could ask. Mark every line **Shipped** or **Coming** until launch.
 
 **Reports** (Shipped)
-- Monthly report: Search Console and GA4, month over month and year over year, top and moving queries and pages, tracked keyword positions. *"Write the October report for example.com."*
-- Branded vs non-branded split, with brand terms learned automatically from how people search. *"How much of our growth is people searching our name?"*
+
+- Monthly report: Search Console and GA4, month over month and year over year, top and moving queries and pages, tracked keyword positions. _"Write the October report for example.com."_
+- Branded vs non-branded split, with brand terms learned automatically from how people search. _"How much of our growth is people searching our name?"_
 - A ready-made prompt that writes the client-facing report in plain language.
 
 **Opportunities** (Shipped, free)
-- Striking-distance queries, quick-win pages, low-CTR titles, keyword cannibalization, declining pages, with estimated extra clicks. *"What are the five easiest wins this month?"*
+
+- Striking-distance queries, quick-win pages, low-CTR titles, keyword cannibalization, declining pages, with estimated extra clicks. _"What are the five easiest wins this month?"_
 
 **Audits** (Shipped)
-- Lighthouse, accessibility (axe), rendered-vs-raw HTML (what Google sees before JavaScript), index status, on-page checks. *"Audit the homepage and pricing page."*
+
+- Lighthouse, accessibility (axe), rendered-vs-raw HTML (what Google sees before JavaScript), index status, on-page checks. _"Audit the homepage and pricing page."_
 - Site hygiene: robots.txt, sitemaps, structured data, hreflang, orphan pages.
 - hreflang read from page tags, sitemap entries and `Link` headers, with conflict detection.
-- Saved audits with diffs: what's new, fixed or still open since last time. *"What did we fix since the last audit?"*
+- Saved audits with diffs: what's new, fixed or still open since last time. _"What did we fix since the last audit?"_
 - Tag Manager audit: paused, unfired and legacy tags, duplicate GA4 tags, consent gaps, unpublished changes.
 
 **Competitors and keywords** (Shipped)
-- Competitor suggestions from keyword overlap and local search results, with evidence; you pick which to keep. *"Who are our real local competitors?"*
+
+- Competitor suggestions from keyword overlap and local search results, with evidence; you pick which to keep. _"Who are our real local competitors?"_
 - Tracked keywords and competitor lists per client.
 
 **Clients** (Shipped)
+
 - Clients discovered automatically from Search Console, GA4 and Tag Manager; add others by hand. Works for one site or a hundred.
 
 **Monitoring** (Shipped)
+
 - Scheduled audits and traffic checks from cron or CI, with alerts for new critical issues or non-branded click drops, sent to Slack-style webhooks.
 
 **Cost control** (Shipped)
+
 - Per-client and global monthly caps, a spend ledger, response caching, sandbox mode for trying it free.
 
 **Setup** (Shipped)
+
 - One-command installer: `npx crawlmark-mcp@latest init`, with live credential checks.
 - Registers with Claude Code, Claude Desktop, Cursor and Codex; Claude Desktop also has a one-click bundle.
 - Google via your own account (OAuth) or a service account.
 - `setup status` and an in-Claude `setup_status` tool that say exactly what to fix.
 
 **Bring your own data provider** (Shipped; live API check pending a key)
-- Use your own Ahrefs (API v3, Lite plan or higher) or Semrush (SEO Business plan plus an API unit package) key instead of, or alongside, DataForSEO. The provider is set once (a default, plus an optional per-client override), not per question: with example.com on Ahrefs, *"Which keywords does example.com rank for?"* answers from Ahrefs.
+
+- Use your own Ahrefs (API v3, Lite plan or higher) or Semrush (SEO Business plan plus an API unit package) key instead of, or alongside, DataForSEO. The provider is set once (a default, plus an optional per-client override), not per question: with example.com on Ahrefs, _"Which keywords does example.com rank for?"_ answers from Ahrefs.
 - What each provider covers: keyword volume (`keyword_volume`), ranked keywords (`ranked_keywords`), organic competitors (`competitor_domains`, and the overlap half of `suggest_competitors`) and backlinks (`backlinks_summary`, with Ahrefs Domain Rating or the Semrush authority score, labelled, never mixed). Live SERPs, on-page checks and full crawls stay on DataForSEO.
 - One default provider, overridable per client: `npx crawlmark-mcp clients set example.com --provider semrush --country GB` (or `set_client_profile`). A missing key never quietly falls back to another account.
 - Budgets in each provider's own currency: DataForSEO keeps its dollar caps; Ahrefs and Semrush get monthly API-unit caps, globally and per client, checked before each call and shown in `spend_summary`.
@@ -88,6 +98,7 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - New free tools `ahrefs_status` and `semrush_status` check a key without spending units; `setup_status` shows the default provider and where it's set.
 
 **Installer polish** (Shipped)
+
 - A menu when you re-run `init` on a finished setup: add or change a data provider, change the Google sign-in, re-register AI apps, refresh clients, check status, run everything again, or exit. A one-line status (which sources work, how many clients) sits above it.
 - Every live check shows how long it took (`[1.2s]`), and the run ends with `Done in 14s`.
 - A short tip under results, with the exact command for your install, e.g. `To switch accounts later: npx crawlmark-mcp setup --step google`.
@@ -96,7 +107,8 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - A daily "Update available" notice from `init`, `--help` and `--version`: one request for the latest version number, no data about you or your clients, never in CI, and off with `CRAWLMARK_NO_UPDATE_CHECK=1`. The MCP server itself never checks.
 
 **Report files and templates** (Shipped)
-- Branded report files in Markdown, HTML, PDF and Word from reusable YAML templates (global and per client), with your agency name, logo, colours and footer. *"Write the September report for example.com and save it as a PDF and a Word file."*
+
+- Branded report files in Markdown, HTML, PDF and Word from reusable YAML templates (global and per client), with your agency name, logo, colours and footer. _"Write the September report for example.com and save it as a PDF and a Word file."_
 - From Claude, with written commentary next to the numbers it discusses; from cron, data only and labelled that way.
 - Save it as a Google Doc with your own Google Drive connector, only after you say yes. crawlmark itself never writes to Google.
 - New tools: `list_report_templates`, `get_report_template`, `validate_report_template`, `run_report_template`, `export_report`.
@@ -104,40 +116,48 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - New commands: `crawlmark-cli report --client example.com|--all [--format md,html,pdf,docx]` and `crawlmark-cli report templates list|validate|init`.
 
 **Core Web Vitals history** (Shipped)
-- Real-user LCP, INP and CLS week by week for up to 40 weeks, with ratings and a trend, from the Chrome UX Report (free with a Google key). *"Has example.com's LCP improved since spring?"*
+
+- Real-user LCP, INP and CLS week by week for up to 40 weeks, with ratings and a trend, from the Chrome UX Report (free with a Google key). _"Has example.com's LCP improved since spring?"_
 - New tool `crux_history`, setup step `setup --step crux`, an optional `cwv` report section, and `run_audit` with `cruxHistory`.
 
 **Rank history** (Shipped)
-- Tracked keywords' positions saved over time: Search Console's 7-day average for free, and live Google ranks when you ask (DataForSEO, paid, estimate first). *"How have our tracked keywords moved since July for example.com?"*
+
+- Tracked keywords' positions saved over time: Search Console's 7-day average for free, and live Google ranks when you ask (DataForSEO, paid, estimate first). _"How have our tracked keywords moved since July for example.com?"_
 - An alert when a live rank leaves the top 10 or drops 5 places (Search Console averages never alert).
 - New tools: `check_ranks`, `rank_history`. New command: `crawlmark-cli check-ranks --client example.com|--all [--live] [--dry-run]` (live ranks only with an explicit `--live`).
 - New report section `rank_trend` (optional `ranks` in the builtin monthly).
 
 **Keyword ideas and competitor gap** (Shipped)
-- Keyword ideas from seed keywords and the keywords competitors rank for that you don't, from your own DataForSEO, Ahrefs or Semrush account, with each provider's difficulty labelled. *"What keywords do our competitors rank for that we don't?"*
+
+- Keyword ideas from seed keywords and the keywords competitors rank for that you don't, from your own DataForSEO, Ahrefs or Semrush account, with each provider's difficulty labelled. _"What keywords do our competitors rank for that we don't?"_
 - Always an estimate first, checked against your monthly caps; a call that wouldn't fit is refused before any spend, with a limit that would.
 - New tools: `keyword_ideas`, `keyword_gap`. New prompt: `keyword-research`. New report section `keyword_gap` (paid, opt-in).
 
 **Tag Manager findings in audits** (Shipped, opt-in)
+
 - `run_audit` with `includeTagManager` and `crawlmark-cli audit --include-tag-manager` add Tag Manager findings to saved audits and diffs; an optional `gtm` report section. Never on by default, never an alert.
 
 **Free local crawl** (Shipped)
-- Crawl a client's own site from your machine, free: broken links, redirect chains, missing and duplicate titles and descriptions, canonicals, depth, noindex pages and orphans against the sitemaps. Polite (robots.txt, Crawl-delay, an honest user agent) and capped. *"Crawl example.com and tell me what's broken."*
+
+- Crawl a client's own site from your machine, free: broken links, redirect chains, missing and duplicate titles and descriptions, canonicals, depth, noindex pages and orphans against the sitemaps. Polite (robots.txt, Crawl-delay, an honest user agent) and capped. _"Crawl example.com and tell me what's broken."_
 - Orphan detection in `site_hygiene` no longer needs a paid DataForSEO crawl (that path still works).
 - New tools: `local_crawl`, `local_crawl_pages`. New command: `crawlmark-cli crawl --client example.com [--max-pages 500]`. `run_audit` with `localCrawl`, and a `site_crawl` report section.
 
 **Server-log analysis** (Shipped)
-- See what Googlebot and AI crawlers (GPTBot, ClaudeBot, PerplexityBot and others) actually request from your site, from your own access logs: hits, 404s, 5xx, top paths, parameter URLs. Googlebot is checked against Google's published IP ranges. *"How often did Googlebot and the AI crawlers hit example.com in the last two weeks, and what 404'd?"*
+
+- See what Googlebot and AI crawlers (GPTBot, ClaudeBot, PerplexityBot and others) actually request from your site, from your own access logs: hits, 404s, 5xx, top paths, parameter URLs. Googlebot is checked against Google's published IP ranges. _"How often did Googlebot and the AI crawlers hit example.com in the last two weeks, and what 404'd?"_
 - Logs never leave your machine; only counts come back, never IP addresses or user agents.
 - New tool: `log_analysis` (reads only the folders you allow with `LOG_DIRS`). New command: `crawlmark-cli logs --client example.com /var/log/nginx/access.log`.
 
 **Bing Webmaster Tools** (Shipped)
-- Bing clicks, impressions and CTR against the previous period, top queries and pages, and Bing's crawl stats and crawl issues, free with your own Bing key. *"How is example.com doing on Bing this month, and does Bing have crawl problems with it?"*
+
+- Bing clicks, impressions and CTR against the previous period, top queries and pages, and Bing's crawl stats and crawl issues, free with your own Bing key. _"How is example.com doing on Bing this month, and does Bing have crawl problems with it?"_
 - Read-only: crawlmark never submits URLs, sitemaps or IndexNow pings to Bing.
 - New tool: `bing_report` (Shipped). New setup step: `crawlmark-cli setup --step bing` (Shipped). New option: `crawlmark-cli clients set example.com --bing-site <url>` and `bingSite` in `set_client_profile` (Shipped). New report section `bing_overview` (Shipped).
 
 **Audits: AI search readiness** (Shipped)
-- Which AI crawlers robots.txt lets in, split into AI search crawlers (blocking them hides the site in ChatGPT search, Claude and Perplexity answers) and training-only crawlers (blocking them is a fair choice). *"Can ChatGPT search and Perplexity see example.com, and which AI crawlers does it block?"*
+
+- Which AI crawlers robots.txt lets in, split into AI search crawlers (blocking them hides the site in ChatGPT search, Claude and Perplexity answers) and training-only crawlers (blocking them is a fair choice). _"Can ChatGPT search and Perplexity see example.com, and which AI crawlers does it block?"_
 - llms.txt check: present or not, format against the llmstxt.org proposal, and links that don't load. For information only, since Google says it doesn't use llms.txt.
 - Part of `site_hygiene` and `run_audit`, with a new optional `ai_readiness` report section.
 
@@ -151,6 +171,7 @@ Grouped by job, each with one example question a reader could ask. Mark every li
    - "Give me the monthly report for example.com."
    - "What are the quick wins for example.com?"
    - "Audit example.com and tell me what changed since last time."
+
 - Link to the README for setup details and the full tool list.
 
 ## 7. What it isn't
@@ -182,12 +203,12 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 
 ## Demo video shot list (about 25 seconds)
 
-| Time | Shot | On screen |
-|---|---|---|
-| 0–3 s | Terminal: `npx crawlmark-mcp@latest init`, banner drops in | "SEO data, for your AI." |
-| 3–8 s | Fast cuts of checks turning green: DataForSEO, Google, clients discovered, apps registered | "One command. Every source." |
-| 8–18 s | Claude: "Why did example.com lose traffic last month?" and the answer streaming in with a table | "Ask anything. Get answers, not exports." |
-| 18–23 s | Quick montage: quick wins list, audit diff, competitor suggestions | "Reports in minutes, not hours." |
-| 23–27 s | Logo and install command | `npx crawlmark-mcp@latest init` |
+| Time    | Shot                                                                                            | On screen                                 |
+| ------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| 0–3 s   | Terminal: `npx crawlmark-mcp@latest init`, banner drops in                                      | "SEO data, for your AI."                  |
+| 3–8 s   | Fast cuts of checks turning green: DataForSEO, Google, clients discovered, apps registered      | "One command. Every source."              |
+| 8–18 s  | Claude: "Why did example.com lose traffic last month?" and the answer streaming in with a table | "Ask anything. Get answers, not exports." |
+| 18–23 s | Quick montage: quick wins list, audit diff, competitor suggestions                              | "Reports in minutes, not hours."          |
+| 23–27 s | Logo and install command                                                                        | `npx crawlmark-mcp@latest init`           |
 
 Use only example.com data in every shot.
