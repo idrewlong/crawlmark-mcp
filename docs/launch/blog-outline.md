@@ -117,7 +117,7 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 
 ## Assets checklist
 
-- [ ] Demo video (15–30 s), see the shot list below
+- [ ] Demo video (15–30 s): tools and plan in [demo-video.md](demo-video.md), shot list below
 - [ ] Hero image or GIF of the installer (banner, spinners, summary box)
 - [ ] Architecture diagram for section 4
 - [ ] Two or three screenshots of real answers in Claude, with client data replaced by example.com
