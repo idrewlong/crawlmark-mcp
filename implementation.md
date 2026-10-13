@@ -397,6 +397,8 @@ Deferred from Phase 0b until there's a way to test it. The OAuth code is built a
 
 **Done when** all of the above works on a real account and the README's Known limits and Google sections no longer say OAuth is unverified.
 
+**Status:** done on 2026-10-13 with a personal Gmail account (External, Testing). Login wrote a 0600 token with all four read-only scopes; OAuth discovery found 14 clients (the service account sees 7); `gsc_query` and `ga4_report` returned real data, including a GA4 property only the Gmail account can open; forcing `service_account` for one process got Google's permission error for that property instead of the OAuth-cached result; `auth logout` revoked and deleted the token, tools then pointed at `auth login`, and a second login worked. Not exercised: the 7-day Testing expiry (`invalid_grant`) and a Workspace Internal app.
+
 ## Final checklist
 
 - [ ] All phases typecheck and tests pass.

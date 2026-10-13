@@ -110,7 +110,7 @@ Google is optional. Without it, the Search Console, GA4 and Tag Manager tools sa
 
 With Workspace, use A. Without it, use C for daily work and scheduled jobs, or B if you'd rather not share each property with a service account. You can set up more than one and switch with `GOOGLE_AUTH_MODE`.
 
-> The service account (option C) is tested against live Google data. OAuth (options A and B) is built and unit tested but not yet verified end to end against a real account, so prefer option C for now.
+> Both modes are tested against live Google data. The service account suits scheduled jobs; OAuth sees everything your own account can open.
 
 #### Google Cloud project
 
@@ -405,7 +405,7 @@ npm run inspect      # MCP Inspector
 
 [docs/development.md](docs/development.md) covers the code layout, adding a data source and releasing. [docs/audits.md](docs/audits.md) lists every audit and site-hygiene check.
 
-**Known limits:** OAuth sign-in hasn't been verified against a real Google account yet, Windows is untested, and Tag Manager findings aren't part of `run_audit` yet.
+**Known limits:** Windows is untested, OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has), and Tag Manager findings aren't part of `run_audit` yet.
 
 License
 -------
