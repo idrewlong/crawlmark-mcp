@@ -19,6 +19,7 @@ import { checkSemrushKey } from "../providers/semrush.js";
 import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type ProviderId } from "../lib/provider-ids.js";
 import { checkPsiKey } from "./checks.js";
 import { checkCruxKey } from "../providers/crux.js";
+import { checkBingKey } from "../providers/bing.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
 import { uiFor, type SummaryRow, type Ui } from "./ui.js";
 import { tryAskingExamples, type ExampleClient } from "./try-asking.js";
@@ -30,7 +31,7 @@ export const STEP_NAMES = ["node", "provider", "dataforseo", "ahrefs", "semrush"
  * Phase 12: steps run only with --step. They are not in the default flow, the returning-user menu or the
  * step lists the wizard prints, so plain installer output is unchanged.
  */
-export const EXTRA_STEP_NAMES = ["crux"] as const;
+export const EXTRA_STEP_NAMES = ["crux", "bing"] as const;
 export type StepName = (typeof STEP_NAMES)[number] | (typeof EXTRA_STEP_NAMES)[number];
 
 export { DFS_LIVE_URL, DFS_SANDBOX_URL };
@@ -631,6 +632,39 @@ export async function stepCrux(ctx: WizardContext): Promise<StepResult> {
 }
 
 /**
+ * Phase 12 C3: the Bing Webmaster Tools key (`--step bing` only). The check is one free GetUserSites call,
+ * which sends nothing about any client. The key is only ever read by crawlmark (allowlisted read methods).
+ */
+export async function stepBing(ctx: WizardContext): Promise<StepResult> {
+  const step = "bing";
+  const st = (await showStatus(ctx, ["bing"])).get("bing");
+  const set = Boolean(st && st.state !== "missing");
+  if (!(await ctx.prompt.confirm(set ? "Replace the Bing Webmaster Tools API key?" : "Add a Bing Webmaster Tools API key (free; crawlmark only reads with it)?", !set))) {
+    return { step, outcome: "skipped", message: set ? "Kept the current Bing Webmaster key." : "No Bing Webmaster key (bing_report and the bing_overview report section stay unavailable)." };
+  }
+  ctx.out(`1. Sign in to Bing Webmaster Tools and add and verify your sites (you can import them from Search Console): ${LINKS.bingWebmaster}`);
+  ctx.out("2. Settings (top right) > API Access > accept the terms > API Key > Generate API Key.");
+  ctx.out("   One key covers every site you've verified. crawlmark only reads with it; it never submits URLs or sitemaps.");
+  await offerOpen(ctx, "Bing Webmaster Tools", LINKS.bingWebmaster);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const key = await ctx.prompt.secret("Bing Webmaster API key");
+    if (!key) {
+      uiFor(ctx).fail("No key entered.");
+      continue;
+    }
+    const check = await uiFor(ctx).spin("Checking the key with one free Bing request (your site list)...", () => checkBingKey(key, ctx.fetch));
+    if (!check.ok) {
+      uiFor(ctx).fail(check.problem);
+      continue;
+    }
+    if (!check.verified) uiFor(ctx).info(`The key works, but none of its ${check.sites} site(s) is verified yet; verify them at ${LINKS.bingWebmaster}.`);
+    saveEnv(ctx, { BING_WEBMASTER_API_KEY: key });
+    return { step, outcome: "done", message: `Bing Webmaster key works (${check.verified} verified site(s)).` };
+  }
+  return { step, outcome: "failed", message: `No working Bing Webmaster key after ${MAX_ATTEMPTS} attempts.` };
+}
+
+/**
  * Run crawlmark-cli in a child process. Plain mode gives it the terminal, as
  * before; fancy mode captures its output behind a spinner and then prints it
  * inside the frame (stderr only when it failed).
@@ -827,6 +861,7 @@ const STEPS: Record<Exclude<StepName, "provider">, { title: string; run: StepRun
   google: { title: "Google", run: stepGoogle },
   psi: { title: "PageSpeed Insights key (optional)", run: stepPsi },
   crux: { title: "CrUX History key (optional)", run: stepCrux },
+  bing: { title: "Bing Webmaster Tools key (optional)", run: stepBing },
   discovery: { title: "Clients", run: stepDiscovery },
   register: { title: "Register with Claude", run: stepRegister },
 };
@@ -854,6 +889,7 @@ const SUMMARY_LABELS: Record<Exclude<StepName, "register">, string> = {
   google: "Google",
   psi: "PageSpeed",
   crux: "CrUX",
+  bing: "Bing",
   discovery: "Clients",
 };
 

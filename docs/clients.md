@@ -34,6 +34,7 @@ Every field is in `config/clients.example.yaml`. The file is re-read on every ca
 | `monthlyBudgetUsd` | `DEFAULT_CLIENT_MONTHLY_BUDGET_USD` (5) |
 | `dataProvider` | `SEO_DATA_PROVIDER` (blank means `dataforseo`) |
 | `country` | The country of a country-level `locationCode` (2840 gives `US`, 2826 gives `GB`); none for a city or region code |
+| `bingSite` | The verified Bing Webmaster Tools site whose host is the client's domain (https first, then the root path) |
 | `monthlyUnits.ahrefs`, `monthlyUnits.semrush` | `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS` (10,000) and `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` (5,000) |
 
 Arrays you set (`competitors`, `trackedKeywords`, `keyPages`) replace the defaults rather than append.
@@ -64,6 +65,17 @@ Set or clear them with the CLI or the `set_client_profile` tool (`""` clears a v
 crawlmark-cli clients set example.com --provider ahrefs --country GB
 crawlmark-cli clients set example.com --provider none --country none   # back to the default; country from the location code
 ```
+
+### Bing site
+
+`bing_report` and the `bing_overview` report section find the client's site among the sites your Bing Webmaster Tools key can read (`GetUserSites`, cached a day), using the same domain matching as Search Console discovery: `https://www.example.com/` and `http://example.com/` both match `example.com`, verified sites only. To pick a different one, set `bingSite` to the URL exactly as Bing lists it:
+
+```bash
+crawlmark-cli clients set example.com --bing-site https://www.example.com/
+crawlmark-cli clients set example.com --bing-site none   # back to matching by domain
+```
+
+`bingSite` must be on the client's own domain or a subdomain of it (`https://www.example.com/` or `https://blog.example.com/` for `example.com`); a site on another host is refused, so one client's report can never show another site's Bing data. A `bingSite` that the key can't read, or that isn't verified yet, is an error naming `bingSite`. Bing sites are never written to clients.yaml automatically, and the Bing lookup never runs during client discovery, so a Bing problem can't affect `list_clients`.
 
 `list_clients` shows each client's resolved `dataProvider` (marked `(default)` when it comes from `SEO_DATA_PROVIDER`) and `country`.
 

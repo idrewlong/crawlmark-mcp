@@ -246,6 +246,20 @@ export interface SiteCrawlData {
   issues: { severity: "critical" | "high" | "medium" | "low"; rule: string; title: string; url: string }[];
 }
 
+/** Phase 12 C3: Bing Webmaster Tools for the report period (bing_overview section). Text fields are stripControl'd. */
+export interface BingOverviewData {
+  site: string;
+  window: DateRange;
+  comparedWith: { which: Comparison; range: DateRange } | null;
+  totals: { clicks: number; impressions: number; ctr: number; change: { clicks: number | null; impressions: number | null; ctr: number | null } };
+  previous: { clicks: number; impressions: number; ctr: number } | null;
+  topQueries: { query: string; clicks: number; impressions: number; avgPosition: number | null }[];
+  topPages: { page: string; clicks: number; impressions: number; avgPosition: number | null }[];
+  crawl: { latest: { date: string; crawledPages: number; crawlErrors: number; inIndex: number } | null; issueCount: number };
+  limit: number;
+  notes: string[];
+}
+
 export interface TextData {
   text: string;
 }

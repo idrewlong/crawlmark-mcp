@@ -22,6 +22,7 @@ import { computeHighlights } from "../highlights.js";
 import { brandedSplitFor, compare, liveRanksAvailability, movers, organicTrafficCompare, QUERY_ROW_LIMIT, trackedKeywordRows, type Ga4Summary, type PeriodTotals } from "../monthly.js";
 import type {
   AuditChangesData,
+  BingOverviewData,
   BrandedSplitData,
   Comparison,
   CruxHistoryResult,
@@ -77,6 +78,8 @@ export interface RunDeps {
   gapCompetitors(client: Client, passed: readonly string[] | undefined): string[];
   /** Phase 12 C1: the client's newest saved local crawl (local, free). */
   latestLocalCrawl(client: string): StoredCrawl | undefined;
+  /** Phase 12 C3: Bing Webmaster Tools for a period (free, read-only; BingUnavailableError without a key, BingSiteError without a verified site). */
+  bingOverview(client: Client, req: { window: DateRange; compare?: { which: Comparison; range: DateRange } | undefined; limit: number }): Promise<BingOverviewData>;
 }
 
 /** The real sources. Modules load on first use, so planning a run (or a dry run) never loads Google clients. */
@@ -95,6 +98,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     import("../../ranks.js"),
   ]);
   const crawls = await import("../../lib/crawls.js");
+  const bing = await import("../../providers/bing.js");
   return {
     googleConfigured: google.googleConfigured,
     gscQuery: gsc.gscQuery,
@@ -121,6 +125,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     keywordGap: (c, r, o) => seoData.keywordGap(c, r, o),
     gapCompetitors: seoData.gapCompetitors,
     latestLocalCrawl: (slug) => crawls.latestCrawl(slug),
+    bingOverview: (c, req) => bing.bingOverview(c, req),
   };
 }
 
@@ -396,6 +401,15 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
         findingCount: a.findings.length,
         issues: topFindings(a.findings, limit).map((f) => ({ severity: f.severity, rule: f.rule, title: f.title, url: f.url })),
       };
+    },
+    bing_overview: async (s: Extract<SectionSpec, { type: "bing_overview" }>): Promise<BingOverviewData> => {
+      try {
+        return await deps.bingOverview(client, { window: cur, compare: prim, limit: s.limit ?? 10 });
+      } catch (err) {
+        // The error lists the key's other verified sites: fine for the operator, not for a client's report.
+        if ((err as Error).name === "BingSiteError") throw new SectionUnavailableError(`no verified Bing Webmaster Tools site for ${client.domain} (set it with crawlmark-cli clients set ${client.domain} --bing-site <url>)`);
+        throw err;
+      }
     },
     keyword_gap: async (s: Extract<SectionSpec, { type: "keyword_gap" }>): Promise<KeywordGapData> => {
       let competitors: string[];

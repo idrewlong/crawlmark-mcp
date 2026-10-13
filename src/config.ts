@@ -31,8 +31,8 @@ export const ENV_FILE = resolve(HOME.dir, ".env");
 // Must run before EnvSchema.parse. A missing .env is fine (env may come from the client config).
 // loadEnvFile never overrides variables already set (shell or client config win).
 // A blank Phase 9 bundle field ("" or a leftover placeholder) must not hide the .env value (D11).
-// Phase 12: the same for the Claude Desktop bundle's optional CrUX key field.
-dropUnsetKeys(process.env, [...PHASE9_ENV_KEYS, "CRUX_API_KEY"]);
+// Phase 12: the same for the Claude Desktop bundle's optional CrUX and Bing key fields.
+dropUnsetKeys(process.env, [...PHASE9_ENV_KEYS, "CRUX_API_KEY", "BING_WEBMASTER_API_KEY"]);
 const keysBefore = new Set(Object.keys(process.env));
 if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 /** Variables that came from ENV_FILE (not the shell). The setup wizard drops them when it starts a child, so the child re-reads the edited file. */
@@ -53,6 +53,8 @@ const EnvSchema = z.object({
   PSI_API_KEY: z.string().optional(),
   // Phase 12: CrUX History (crux_history). Unset: PSI_API_KEY is tried (its project needs the Chrome UX Report API).
   CRUX_API_KEY: z.string().optional(),
+  // Phase 12 C3: Bing Webmaster Tools API key (bing_report, read-only). One key per Bing user, for all their verified sites.
+  BING_WEBMASTER_API_KEY: z.string().optional(),
   CLIENTS_FILE: z.string().default("./config/clients.yaml"),
   DATA_DIR: z.string().default("./data"),
   // Phase 12: report files (export_report, crawlmark-cli report), relative to the config home.
@@ -90,6 +92,8 @@ export const AHREFS_DEFAULT_BASE_URL = "https://api.ahrefs.com/v3";
 export const SEMRUSH_DEFAULT_BASE_URL = "https://api.semrush.com";
 export const SEMRUSH_DEFAULT_BALANCE_URL = "https://www.semrush.com/users/countapiunits.html";
 export const CRUX_DEFAULT_BASE_URL = "https://chromeuxreport.googleapis.com/v1";
+/** Bing Webmaster Tools JSON endpoint; methods are appended as /<Method>. */
+export const BING_DEFAULT_BASE_URL = "https://ssl.bing.com/webmaster/api.svc/json";
 /** Google's published crawler IP range files (common-crawlers.json, special-crawlers.json) live here. */
 export const CRAWLER_IPRANGES_DEFAULT_BASE_URL = "https://developers.google.com/static/crawling/ipranges";
 /** Test-only base URL overrides, honoured only from the shell (never .env). */
@@ -127,6 +131,7 @@ export const env = {
   SEMRUSH_BASE_URL: urlOverride("SEMRUSH_BASE_URL", SEMRUSH_DEFAULT_BASE_URL),
   SEMRUSH_BALANCE_URL: urlOverride("SEMRUSH_BALANCE_URL", SEMRUSH_DEFAULT_BALANCE_URL),
   CRUX_BASE_URL: urlOverride("CRUX_BASE_URL", CRUX_DEFAULT_BASE_URL),
+  BING_BASE_URL: urlOverride("BING_BASE_URL", BING_DEFAULT_BASE_URL),
   CRAWLER_IPRANGES_BASE_URL: urlOverride("CRAWLER_IPRANGES_BASE_URL", CRAWLER_IPRANGES_DEFAULT_BASE_URL),
 };
 
@@ -146,5 +151,6 @@ export const providerUrlNotice: string | undefined = urlOverrideNotice([
   { name: "SEMRUSH_BASE_URL", value: env.SEMRUSH_BASE_URL, fallback: SEMRUSH_DEFAULT_BASE_URL },
   { name: "SEMRUSH_BALANCE_URL", value: env.SEMRUSH_BALANCE_URL, fallback: SEMRUSH_DEFAULT_BALANCE_URL },
   { name: "CRUX_BASE_URL", value: env.CRUX_BASE_URL, fallback: CRUX_DEFAULT_BASE_URL },
+  { name: "BING_BASE_URL", value: env.BING_BASE_URL, fallback: BING_DEFAULT_BASE_URL },
   { name: "CRAWLER_IPRANGES_BASE_URL", value: env.CRAWLER_IPRANGES_BASE_URL, fallback: CRAWLER_IPRANGES_DEFAULT_BASE_URL },
 ]);

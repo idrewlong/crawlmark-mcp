@@ -91,6 +91,8 @@ const sectionSchemas = [
   }),
   // Phase 12 C1: the newest saved local crawl (free, local; never starts a crawl).
   z.strictObject({ ...common, type: z.literal("site_crawl"), limit: limit(50) }),
+  // Phase 12 C3: Bing Webmaster Tools for the report period (free with the user's own Bing key).
+  z.strictObject({ ...common, type: z.literal("bing_overview"), limit: limit(25) }),
   z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
 ] as const;
 
@@ -119,6 +121,7 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   rank_trend: "Tracked keyword rank trends",
   keyword_gap: "Competitor keyword gap",
   site_crawl: "Site crawl",
+  bing_overview: "Bing search performance",
   text: "Note",
 };
 

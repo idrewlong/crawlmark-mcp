@@ -15,7 +15,7 @@ import { displayProviderValue, invalidProviderMessage, PROVIDER_LABELS, type Def
 
 export type IntegrationState = "configured" | "working" | "missing" | "error";
 
-export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "chrome", "clients"] as const;
+export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "bing", "chrome", "clients"] as const;
 export type IntegrationId = (typeof INTEGRATIONS)[number];
 
 export interface IntegrationStatus {
@@ -113,6 +113,8 @@ export interface StatusProviders {
   psiKeySet(): boolean;
   /** Phase 12: which key CrUX History would use (CRUX_API_KEY, else PSI_API_KEY) and a free live check of it; absent means no row data. */
   crux?(): Promise<{ source: "CRUX_API_KEY" | "PSI_API_KEY" | null; check: { ok: true } | { ok: false; problem: string } | null }>;
+  /** Phase 12 C3: whether BING_WEBMASTER_API_KEY is set and a free live check of it (GetUserSites); absent means no row data. */
+  bing?(): Promise<{ keySet: boolean; check: { ok: true; sites: number; verified: number } | { ok: false; kind?: "refused" | "network" | "throttled" | "other"; problem: string } | null }>;
   chrome(): Promise<{ ok: true; version: string } | { ok: false; error: string }>;
   clients(): { count: number; ignored: number; file: string; exists: boolean };
 }
@@ -127,6 +129,7 @@ export const LINKS = {
   enableTagManager: "https://console.cloud.google.com/apis/library/tagmanager.googleapis.com",
   enablePageSpeed: "https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com",
   enableCrux: "https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com",
+  bingWebmaster: "https://www.bing.com/webmasters",
   credentials: "https://console.cloud.google.com/apis/credentials",
   searchConsoleUsers: "https://search.google.com/search-console/users",
   ga4Access: "https://analytics.google.com/analytics/web/#/admin",
@@ -488,6 +491,34 @@ export async function collectSetupStatus(
       });
     } else {
       out.push({ id: "crux", label, state: "configured", detail: `${c.source} is set but the Chrome UX Report API refused it: ${c.check.problem}`.slice(0, 400), next: step("crux"), data: { keySource: c.source } });
+    }
+  }
+
+  if (want("bing")) {
+    // Phase 12 C3: always in --json; human output shows it only when a key is set (status-render.ts).
+    const b = p.bing ? await p.bing() : { keySet: false, check: null };
+    const label = "Bing Webmaster Tools";
+    if (!b.keySet) {
+      out.push({ id: "bing", label, state: "missing", detail: "Optional. Adds Bing search data (bing_report and the bing_overview report section); free, read-only.", next: step("bing"), data: { keySet: false } });
+    } else if (!b.check) {
+      out.push({ id: "bing", label, state: "configured", detail: "BING_WEBMASTER_API_KEY is set (not checked here).", next: null, data: { keySet: true } });
+    } else if (b.check.ok) {
+      out.push({
+        id: "bing",
+        label,
+        state: "working",
+        detail: `BING_WEBMASTER_API_KEY works: ${b.check.verified} verified site(s)${b.check.sites > b.check.verified ? ` (${b.check.sites - b.check.verified} not verified yet)` : ""}.`,
+        next: b.check.verified ? null : LINKS.bingWebmaster,
+        data: { keySet: true, sites: b.check.sites, verified: b.check.verified },
+      });
+    } else if (b.check.kind === "network" || b.check.kind === "throttled") {
+      // Not the key's fault: say so, and don't send the user to replace a key that may be fine.
+      const why = b.check.kind === "network" ? `Bing Webmaster Tools couldn't be reached to check it (${b.check.problem.replace(/^Couldn't reach Bing Webmaster Tools \(|\)\.$/g, "")})` : "Bing is throttling requests for this key right now";
+      out.push({ id: "bing", label, state: "configured", detail: `BING_WEBMASTER_API_KEY is set, but ${why}. Try again in a few minutes.`.slice(0, 400), next: null, data: { keySet: true, checkFailed: b.check.kind } });
+    } else if (b.check.kind === "other") {
+      out.push({ id: "bing", label, state: "configured", detail: `BING_WEBMASTER_API_KEY is set, but Bing returned an error while checking it: ${b.check.problem}`.slice(0, 400), next: null, data: { keySet: true, checkFailed: "other" } });
+    } else {
+      out.push({ id: "bing", label, state: "configured", detail: `BING_WEBMASTER_API_KEY is set but Bing refused it: ${b.check.problem}`.slice(0, 400), next: step("bing"), data: { keySet: true } });
     }
   }
 

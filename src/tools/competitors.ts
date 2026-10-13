@@ -131,7 +131,7 @@ export function registerCompetitorTools(server: McpServer) {
         "Set a client's area, niche, display name or brand terms in clients.yaml. brandTerms are names people search for the brand (e.g. [\"example plumbing\", \"ex plumbing\"]); they add to the built-in domain and name matching used to split branded from non-branded queries, and the list you pass replaces the stored one ([] clears it). area is a DataForSEO location_name (City,Region,Country, " +
         'e.g. "Austin,Texas,United States") used for local SERP searches; niche is a few words on what the client does ' +
         '(e.g. "emergency plumber"). dataProvider overrides the default SEO data provider for this client; it chooses whose paid data is used, not credentials. ' +
-        'country is the ISO two-letter market Ahrefs and Semrush use (e.g. "US", "GB"). Pass an empty string to clear a field. Free, local.',
+        'country is the ISO two-letter market Ahrefs and Semrush use (e.g. "US", "GB"). bingSite pins the Bing Webmaster Tools site bing_report reads (e.g. "https://www.example.com/"; it must be on the client\'s domain or a subdomain); unset, the domain is matched against your Bing key\'s verified sites. Pass an empty string to clear a field. Free, local.',
       inputSchema: {
         client: clientArg,
         area: z.string().max(200).optional(),
@@ -147,11 +147,16 @@ export function registerCompetitorTools(server: McpServer) {
           .regex(/^([A-Za-z]{2})?$/)
           .optional()
           .describe('ISO 3166-1 alpha-2 market for Ahrefs/Semrush, stored uppercase (e.g. "US", "GB"); "" clears it.'),
+        bingSite: z
+          .string()
+          .max(500)
+          .optional()
+          .describe('The Bing Webmaster Tools site URL for bing_report, as Bing lists it (e.g. "https://www.example.com/"); "" clears it (match by domain).'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country }) =>
-      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country }),
+    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite }) =>
+      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite }),
     ),
   );
 

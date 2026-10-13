@@ -3,6 +3,7 @@ import { monthlyAuditSection } from "../../../src/analysis/diff.js";
 import type { Client } from "../../../src/config.js";
 import type { RunDeps } from "../../../src/reports/templates/run.js";
 import type { CruxHistoryResult } from "../../../src/reports/report-types.js";
+import { BingUnavailableError, NO_BING_KEY } from "../../../src/providers/bing.js";
 import * as d from "./data.js";
 
 export const client = d.CLIENT as unknown as Client;
@@ -64,6 +65,10 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
     },
     gapCompetitors: (_c, passed) => (passed?.length ? [...passed] : ["competitor-a.example"]),
     latestLocalCrawl: () => undefined,
+    // Phase 12 C3: no Bing key unless a test supplies data.
+    bingOverview: async () => {
+      throw new BingUnavailableError(NO_BING_KEY);
+    },
     ...over,
   };
 }

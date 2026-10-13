@@ -10,6 +10,7 @@ import {
   runPlan,
   runWizard,
   STEP_NAMES,
+  stepBing,
   stepCrux,
   stepDataForSeo,
   stepDiscovery,
@@ -492,5 +493,40 @@ describe("wizard: crux step (Phase 12, --step crux only)", () => {
     expect(runPlan()).not.toContain("crux");
     expect(runPlan("crux")).toEqual(["crux"]);
     expect(STEP_NAMES).not.toContain("crux");
+  });
+});
+
+describe("wizard: bing step (Phase 12 C3, --step bing only)", () => {
+  const sites = () => new Response('{"d":[{"Url":"https://www.example.com/","IsVerified":true},{"Url":"https://example.org/","IsVerified":false}]}', { status: 200 });
+
+  it("checks a new key with one free GetUserSites call and saves it to .env (0600), never printing it", async () => {
+    const f = fake([true, "SENTINEL-bing-wizard-key-123"]);
+    f.fetch.mockResolvedValue(sites());
+    expect(await stepBing(f.ctx)).toMatchObject({ step: "bing", outcome: "done", message: "Bing Webmaster key works (1 verified site(s))." });
+    expect(f.fetch).toHaveBeenCalledTimes(1);
+    const [url] = f.fetch.mock.calls[0] as [string];
+    expect(new URL(url).pathname).toMatch(/\/GetUserSites$/);
+    expect(new URL(url).searchParams.has("siteUrl")).toBe(false);
+    expect(readEnvFile(join(f.home, ".env")).BING_WEBMASTER_API_KEY).toBe("SENTINEL-bing-wizard-key-123");
+    expect(mode(join(f.home, ".env"))).toBe(0o600);
+    expect(f.lines.join("\n")).not.toContain("SENTINEL-bing-wizard-key-123");
+    expect(f.lines.join("\n")).toMatch(/Settings \(top right\) > API Access/);
+  });
+
+  it("a rejected key is retried with Bing's message (never the key); declining skips", async () => {
+    const f = fake([true, "bad-key-0001", "bad-key-0002", "bad-key-0003"]);
+    f.fetch.mockImplementation(async () => new Response('{"ErrorCode":3,"Message":"InvalidApiKey"}', { status: 400 }));
+    const r = await stepBing(f.ctx);
+    expect(r).toMatchObject({ outcome: "failed" });
+    expect(f.lines.join("\n")).not.toContain("bad-key-000");
+    expect(existsSync(join(f.home, ".env"))).toBe(false);
+    const g = fake([false]);
+    expect(await stepBing(g.ctx)).toMatchObject({ outcome: "skipped" });
+  });
+
+  it("is not in the default plan or the printed step list", () => {
+    expect(runPlan()).not.toContain("bing");
+    expect(runPlan("bing")).toEqual(["bing"]);
+    expect(STEP_NAMES).not.toContain("bing");
   });
 });

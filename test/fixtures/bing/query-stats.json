@@ -1,0 +1,49 @@
+{
+ "d": [
+  {
+   "__type": "QueryStats:#Microsoft.Bing.Webmaster.Api",
+   "AvgClickPosition": 4,
+   "AvgImpressionPosition": 3,
+   "Clicks": 40,
+   "Date": "/Date(1789887600000-0700)/",
+   "Impressions": 300,
+   "Query": "emergency plumber"
+  },
+  {
+   "__type": "QueryStats:#Microsoft.Bing.Webmaster.Api",
+   "AvgClickPosition": 6,
+   "AvgImpressionPosition": 5,
+   "Clicks": 20,
+   "Date": "/Date(1790492400000-0700)/",
+   "Impressions": 100,
+   "Query": "emergency plumber"
+  },
+  {
+   "__type": "QueryStats:#Microsoft.Bing.Webmaster.Api",
+   "AvgClickPosition": 7,
+   "AvgImpressionPosition": 6,
+   "Clicks": 30,
+   "Date": "/Date(1790492400000-0700)/",
+   "Impressions": 400,
+   "Query": "drain cleaning"
+  },
+  {
+   "__type": "QueryStats:#Microsoft.Bing.Webmaster.Api",
+   "AvgClickPosition": 10,
+   "AvgImpressionPosition": 9,
+   "Clicks": 5,
+   "Date": "/Date(1791097200000-0700)/",
+   "Impressions": 50,
+   "Query": "water heater <b>repair</b>\u001b[31m"
+  },
+  {
+   "__type": "QueryStats:#Microsoft.Bing.Webmaster.Api",
+   "AvgClickPosition": 2,
+   "AvgImpressionPosition": 1,
+   "Clicks": 99,
+   "Date": "/Date(1786863600000-0700)/",
+   "Impressions": 999,
+   "Query": "old query"
+  }
+ ]
+}

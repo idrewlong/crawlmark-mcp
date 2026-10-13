@@ -42,6 +42,7 @@
         "GOOGLE_OAUTH_CLIENT_SECRET": "${user_config.google_oauth_client_secret}",
         "PSI_API_KEY": "${user_config.psi_api_key}",
         "CRUX_API_KEY": "${user_config.crux_api_key}",
+        "BING_WEBMASTER_API_KEY": "${user_config.bing_webmaster_api_key}",
         "CHROME_PATH": "${user_config.chrome_path}"
       }
     }
@@ -222,6 +223,10 @@
     {
       "name": "log_analysis",
       "description": "Crawler hits from local server access logs: Googlebot (verified against Google's published IP ranges), Bingbot and AI crawlers, with statuses, top paths, 404s, 5xx and hits per day. Aggregates only; logs never leave the machine."
+    },
+    {
+      "name": "bing_report",
+      "description": "Bing Webmaster Tools for a client: clicks and impressions by day vs the previous period, top queries and pages, crawl stats and crawl issues. Read-only and free with your own Bing API key."
     },
     {
       "name": "ga4_report",
@@ -465,6 +470,13 @@
       "type": "string",
       "title": "Chrome UX Report (CrUX) API key",
       "description": "Optional. Adds real-user Core Web Vitals history (crux_history). A Google Cloud API key with the Chrome UX Report API enabled; leave empty to use the PageSpeed Insights key when its project has that API enabled.",
+      "sensitive": true,
+      "required": false
+    },
+    "bing_webmaster_api_key": {
+      "type": "string",
+      "title": "Bing Webmaster Tools API key",
+      "description": "Optional. Adds Bing search data (bing_report). Free: in Bing Webmaster Tools, Settings > API Access > Generate API Key. Crawlmark only reads with it; it never submits anything to Bing.",
       "sensitive": true,
       "required": false
     },

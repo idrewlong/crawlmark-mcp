@@ -5,6 +5,7 @@
  */
 import type {
   AuditChangesData,
+  BingOverviewData,
   BrandedSplitData,
   ComparedTotals,
   CruxHistoryResult,
@@ -335,6 +336,32 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
         : { kind: "paragraph", text: [t("No issues found.")] },
       ...(s.orphans.available ? [] : [{ kind: "note" as const, text: [t(`Orphan pages weren't judged: ${s.orphans.reason}.`)] }]),
       { kind: "note", text: [t("Crawled from this machine without JavaScript rendering, obeying robots.txt. Issue counts are pages.")] },
+    ];
+  },
+  // Phase 12 C3: Bing Webmaster Tools for the report period. Queries and URLs are Bing's (stripControl'd); URLs render as code.
+  bing_overview: (data: BingOverviewData) => {
+    const prev = data.previous;
+    const cmp = data.comparedWith?.which === "previous_year" ? "previous year" : "previous period";
+    const rows: Text[][] = [
+      [cell("Clicks"), cell(fmtInt(data.totals.clicks)), cell(prev ? fmtInt(prev.clicks) : "n/a"), cell(fmtPct(data.totals.change.clicks))],
+      [cell("Impressions"), cell(fmtInt(data.totals.impressions)), cell(prev ? fmtInt(prev.impressions) : "n/a"), cell(fmtPct(data.totals.change.impressions))],
+      [cell("CTR"), cell(fmtCtr(data.totals.ctr)), cell(prev ? fmtCtr(prev.ctr) : "n/a"), cell(data.totals.change.ctr === null ? "n/a" : `${fmtChangeNumber(data.totals.change.ctr)} pts`)],
+    ];
+    const latest = data.crawl.latest;
+    return [
+      { kind: "paragraph", text: [t("Bing Webmaster Tools data for "), c(data.site), t(` from ${data.window.startDate} to ${data.window.endDate}${data.comparedWith ? `, compared with the ${cmp} (${data.comparedWith.range.startDate} to ${data.comparedWith.range.endDate})` : ""}.`)] },
+      { kind: "table", header: ["Metric", "This period", data.comparedWith ? `The ${cmp}` : "Previous", "Change"], rows, numeric: [false, true, true, true] },
+      data.topQueries.length
+        ? { kind: "table", header: ["Query", "Clicks", "Impressions", "Average position"], rows: data.topQueries.map((q) => [d(q.query), cell(fmtInt(q.clicks)), cell(fmtInt(q.impressions)), cell(fmt1(q.avgPosition))]), numeric: [false, true, true, true] }
+        : { kind: "paragraph", text: [t("Bing has no query stats for this period yet.")] },
+      ...(data.topPages.length
+        ? [{ kind: "table" as const, header: ["Page", "Clicks", "Impressions", "Average position"], rows: data.topPages.map((p) => [d(p.page), cell(fmtInt(p.clicks)), cell(fmtInt(p.impressions)), cell(fmt1(p.avgPosition))]), numeric: [false, true, true, true] }]
+        : []),
+      ...(latest
+        ? [{ kind: "paragraph" as const, text: [t(`Crawling on ${latest.date}: ${fmtInt(latest.inIndex)} pages in Bing's index, ${fmtInt(latest.crawledPages)} crawled, ${fmtInt(latest.crawlErrors)} crawl errors. ${fmtInt(data.crawl.issueCount)} URLs have crawl issues listed in Bing Webmaster Tools.`)] }]
+        : []),
+      ...data.notes.filter((n) => n !== "Bing updates query stats weekly").map((n) => ({ kind: "note" as const, text: [t(n)] })),
+      { kind: "note", text: [t("Bing updates query and page stats weekly, so the tables can lag the daily totals. Position is Bing's average for impressions; lower is better.")] },
     ];
   },
   keyword_gap: (data: KeywordGapData) => {

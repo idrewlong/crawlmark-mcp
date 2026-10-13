@@ -1,0 +1,32 @@
+{
+ "d": [
+  {
+   "__type": "Site:#Microsoft.Bing.Webmaster.Api",
+   "AuthenticationCode": "258CAD36B9EEE22F1CFDEB4C239D26BB",
+   "DnsVerificationCode": "258cad36b9eee22f1cfdeb4c239d26bb.example.com",
+   "IsVerified": true,
+   "Url": "https://www.example.com/"
+  },
+  {
+   "__type": "Site:#Microsoft.Bing.Webmaster.Api",
+   "AuthenticationCode": "AAAA",
+   "DnsVerificationCode": "aaaa.example.com",
+   "IsVerified": true,
+   "Url": "http://example.com/"
+  },
+  {
+   "__type": "Site:#Microsoft.Bing.Webmaster.Api",
+   "AuthenticationCode": "BBBB",
+   "DnsVerificationCode": "bbbb.example.org",
+   "IsVerified": false,
+   "Url": "https://example.org/"
+  },
+  {
+   "__type": "Site:#Microsoft.Bing.Webmaster.Api",
+   "AuthenticationCode": "CCCC",
+   "DnsVerificationCode": "cccc.example.net",
+   "IsVerified": true,
+   "Url": "https://example.net/blog/"
+  }
+ ]
+}

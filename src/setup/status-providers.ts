@@ -8,6 +8,7 @@ import type { ProviderId } from "../lib/provider-ids.js";
 import { checkAhrefsKey } from "../providers/ahrefs.js";
 import { checkSemrushKey } from "../providers/semrush.js";
 import { checkCruxKey, cruxKey } from "../providers/crux.js";
+import { bingKey, checkBingKey } from "../providers/bing.js";
 import { shellQuote } from "../lib/claude-config.js";
 import { sourceCheckoutMarker, USER_HOME_DIRNAME, type HomeSource } from "../lib/home.js";
 import { withBrowser } from "../providers/browser.js";
@@ -160,6 +161,10 @@ export const realStatusProviders: StatusProviders = {
   crux: async () => {
     const k = cruxKey();
     return { source: k?.source ?? null, check: k ? await checkCruxKey(k.key, fetch, k.source) : null };
+  },
+  bing: async () => {
+    const key = bingKey();
+    return { keySet: Boolean(key), check: key ? await checkBingKey(key) : null };
   },
   chrome: async () => {
     try {

@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { clientDefaults, env } from "./config.js";
 import { autoAddable } from "./analysis/brand-terms.js";
+import { bingSiteOnDomain } from "./analysis/bing.js";
 import { inferClientBrandTerms } from "./brand-inference.js";
 import {
   planAddBrandTerms,
@@ -532,6 +533,8 @@ export interface ProfileUpdate {
   dataProvider?: string | undefined;
   /** Phase 9: ISO 3166-1 alpha-2 (stored uppercase); empty string clears it. */
   country?: string | undefined;
+  /** Phase 12 C3: the Bing Webmaster Tools site URL (http or https); empty string clears it (back to matching by domain). */
+  bingSite?: string | undefined;
 }
 
 export interface ProfileResult {
@@ -539,7 +542,7 @@ export interface ProfileResult {
   set: Record<string, string>;
   cleared: string[];
   /** dataProvider and country are included when the update set or cleared either of them. */
-  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null };
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null };
   clientsFile: string;
 }
 
@@ -570,14 +573,31 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
     if (v !== "" && !/^[A-Za-z]{2}$/.test(v)) throw new Error(`"${update.country}" is not a two-letter ISO country code (e.g. US or GB).`);
     fields.country = v.toUpperCase();
   }
+  if (update.bingSite !== undefined) {
+    const v = update.bingSite.trim();
+    if (v !== "") {
+      let ok = false;
+      try {
+        const u = new URL(v);
+        ok = (u.protocol === "https:" || u.protocol === "http:") && Boolean(u.hostname) && v.length <= 500 && !/\s/.test(v);
+      } catch {
+        ok = false;
+      }
+      if (!ok) throw new Error(`"${update.bingSite.slice(0, 200)}" is not a site URL. Use the URL as Bing Webmaster Tools lists it, e.g. https://www.example.com/.`);
+    }
+    fields.bingSite = v;
+  }
   let brandTerms: string[] | undefined;
   if (update.brandTerms !== undefined) {
     brandTerms = toBrandTerms(update.brandTerms);
     const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
     if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
   }
-  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider or country.");
+  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country or bingSite.");
   const client = await resolveClient(idOrDomain);
+  if (fields.bingSite && !bingSiteOnDomain(fields.bingSite, client.domain)) {
+    throw new Error(`bingSite ${fields.bingSite.slice(0, 200)} isn't on ${client.domain}: it would show another site's Bing data in this client's reports. Use a Bing site on ${client.domain} or a subdomain of it.`);
+  }
   await editClientsFile((text, path) => {
     const { text: base, entry } = entryFor(text, path, client);
     let next = setEntryFields(base, entry.slug, fields);
@@ -599,6 +619,7 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
       niche: updated.niche ?? null,
       brandTerms: updated.brandTerms,
       ...(update.dataProvider !== undefined || update.country !== undefined ? { dataProvider: updated.dataProvider ?? null, country: updated.country } : {}),
+      ...(update.bingSite !== undefined ? { bingSite: updated.bingSite ?? null } : {}),
     },
     clientsFile: env.CLIENTS_FILE,
   };

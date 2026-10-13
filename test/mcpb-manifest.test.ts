@@ -93,6 +93,7 @@ describe("mcpb/manifest.json", () => {
     expect(uc.google_oauth_client_secret).toMatchObject({ type: "string", sensitive: true });
     expect(uc.psi_api_key).toMatchObject({ type: "string", sensitive: true });
     expect(uc.crux_api_key).toMatchObject({ type: "string", sensitive: true });
+    expect(uc.bing_webmaster_api_key).toMatchObject({ type: "string", sensitive: true });
     expect(uc.chrome_path).toMatchObject({ type: "file" });
     expect(uc.crawlmark_home).toMatchObject({ type: "directory", default: "${HOME}/.crawlmark" });
     expect(env).toMatchObject({
@@ -105,6 +106,7 @@ describe("mcpb/manifest.json", () => {
       GOOGLE_OAUTH_CLIENT_SECRET: "${user_config.google_oauth_client_secret}",
       PSI_API_KEY: "${user_config.psi_api_key}",
       CRUX_API_KEY: "${user_config.crux_api_key}",
+      BING_WEBMASTER_API_KEY: "${user_config.bing_webmaster_api_key}",
       CHROME_PATH: "${user_config.chrome_path}",
     });
   });

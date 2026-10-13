@@ -14,6 +14,7 @@ It combines:
 | Lighthouse | Performance, SEO and best-practice scores, lab Core Web Vitals | Free (runs locally) |
 | PageSpeed Insights | Real-user field data (CrUX) | Free with an API key (optional) |
 | Chrome UX Report History | Real-user Core Web Vitals over the last 40 weeks | Free with an API key (optional) |
+| Bing Webmaster Tools | Bing clicks, impressions, top queries and pages, crawl stats and crawl issues (read-only) | Free with an API key (optional) |
 | axe-core | Automated WCAG A/AA/AAA checks | Free (runs locally) |
 
 Every source is optional. Your client list fills itself from the Search Console sites and GA4 properties your Google account can see, and you can add clients by hand, so the paid data tools, Lighthouse and axe work without Google. Responses are cached in SQLite, and paid calls stop at a per-client and a global monthly cap (dollars for DataForSEO, API units for Ahrefs and Semrush). See [Data providers](#data-providers) for choosing between them.
@@ -106,6 +107,7 @@ The setup wizard covers everything here. Each step shows its current status firs
 | `crawlmark-cli init` (or `setup`) | The whole wizard |
 | `crawlmark-cli setup --step <node\|provider\|dataforseo\|ahrefs\|semrush\|google\|psi\|discovery\|register>` | One step. `provider` picks your SEO data providers and the default one |
 | `crawlmark-cli setup --step crux` | A key for Core Web Vitals history (CrUX). Only run this way; it isn't part of the default wizard |
+| `crawlmark-cli setup --step bing` | A Bing Webmaster Tools API key. Only run this way; it isn't part of the default wizard |
 | `crawlmark-cli setup --dry-run` | Runs the free checks and shows what each step would do, without writing, signing in or registering anything |
 | `crawlmark-cli setup --yes` | Accepts every default. Steps that need input (a password, an API key, a key file) are skipped; the default provider is only written to fix a missing or invalid one when a provider works |
 | `crawlmark-cli setup status` | Each integration's state and the next step (`--json` for machine output) |
@@ -251,6 +253,16 @@ Create an API key in Google Cloud with the PageSpeed Insights API enabled, then 
 
 Core Web Vitals history (`crux_history`, the `cwv` report section and `run_audit` with `cruxHistory`) needs a Google Cloud API key with the [Chrome UX Report API](https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com) enabled. Run `crawlmark-cli setup --step crux` and paste the key (or leave it blank to use `PSI_API_KEY`, which works when its project has the Chrome UX Report API enabled and the key isn't restricted to PageSpeed only). The check is one free query for a public site. The key is saved as `CRUX_API_KEY`.
 
+### Bing Webmaster Tools (optional)
+
+`bing_report` and the `bing_overview` report section read Bing search data with your own Bing Webmaster Tools API key. It's free:
+
+1. Sign in at [Bing Webmaster Tools](https://www.bing.com/webmasters) (a Microsoft, Google or Facebook account works) and add and verify your sites. You can import them from Search Console.
+2. Open **Settings** (top right) > **API Access**, accept the terms the first time, then **API Key** > **Generate API Key**. There is one key per user, and it covers every site you've verified.
+3. Run `crawlmark-cli setup --step bing` and paste it. The check is one free request for your own site list; nothing about your clients is sent. The key is saved as `BING_WEBMASTER_API_KEY` (or set it in the Claude Desktop extension settings).
+
+crawlmark only reads with this key. It calls a fixed list of read methods and never submits URLs, sitemaps or IndexNow pings, or changes anything in your Bing account. Bing requires the key in the request URL, so crawlmark never logs, caches or shows that URL. Each client is matched to the verified Bing site with the same domain; to use a different one on the same domain or a subdomain, set `bingSite` (`crawlmark-cli clients set example.com --bing-site https://www.example.com/`); a site on another host is refused. If the key is ever exposed, delete it and generate a new one on the same page.
+
 Configure your MCP client
 -------------------------
 
@@ -347,6 +359,7 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |
 | `accessibility_check` | axe-core WCAG checks on one page |
 | `crux_history` | Real-user Core Web Vitals (LCP, INP, CLS, FCP, TTFB) per week for up to 40 weeks, with ratings and a trend, for a client, an origin or a URL. Free with a key ([CrUX History](#crux-history-optional)) |
+| `bing_report` | Bing Webmaster Tools for a client: clicks, impressions and CTR for the last 28 days (7 to 180) vs the period before, by day, the top 25 queries and pages, crawl stats for the latest 30 days and up to 50 URLs with crawl issues. Read-only; free with a key ([Bing Webmaster Tools](#bing-webmaster-tools-optional)) |
 | `log_analysis` | Crawler hits from your server's access logs (Apache/Nginx, `.gz` too): Googlebot (checked against Google's published IP ranges), Bingbot and AI crawlers such as GPTBot, ClaudeBot and PerplexityBot, with statuses, top paths, 404s and 5xx, hits per day and parameter URLs. Reads only `LOG_DIRS` or `<home>/logs`; logs never leave your machine and no IP addresses or user agents are returned. Free |
 
 ### Rank history
@@ -502,6 +515,7 @@ The config home holds `.env`, `config/clients.yaml`, `config/report-templates.ya
 | `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS`, `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` | `10000`, `5000` | Monthly API units per client (clients.yaml `monthlyUnits` overrides) |
 | `PSI_API_KEY` | | PageSpeed Insights key |
 | `CRUX_API_KEY` | | Chrome UX Report API key for Core Web Vitals history. Unset, `PSI_API_KEY` is tried |
+| `BING_WEBMASTER_API_KEY` | | Bing Webmaster Tools API key for `bing_report` (read-only) |
 | `CLIENTS_FILE` | `./config/clients.yaml` | The client list |
 | `DATA_DIR` | `./data` | SQLite cache, saved audits, spend ledger and OAuth token |
 | `REPORTS_DIR` | `./reports` | Report files from `export_report` and `crawlmark-cli report` |
@@ -532,7 +546,7 @@ CLI
 | `auth login`, `auth status`, `auth logout` | Google OAuth sign-in, check and sign-out |
 | `clients list [--refresh]` | Discover and list clients |
 | `clients add <domain>...`, `clients remove <domain>... [--ignore]` | Add or remove clients by hand |
-| `clients set <client> [--area …] [--niche …] [--name …] [--brand-terms "a,b"] [--provider <id\|none>] [--country <XX\|none>]` | Set a client's profile, data provider override and country |
+| `clients set <client> [--area …] [--niche …] [--name …] [--brand-terms "a,b"] [--provider <id\|none>] [--country <XX\|none>] [--bing-site <url\|none>]` | Set a client's profile, data provider override, country and Bing site |
 | `competitors list\|add\|remove <client> [domain...]` | Manage competitors |
 | `keywords list\|add\|remove <client> [keyword...]` | Manage tracked keywords (quote ones with spaces) |
 | `brand list\|add\|remove <client> [term...]` | Manage brand terms |

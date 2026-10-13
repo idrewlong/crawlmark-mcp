@@ -1,0 +1,25 @@
+{
+ "d": [
+  {
+   "__type": "UrlWithCrawlIssues:#Microsoft.Bing.Webmaster.Api",
+   "HttpCode": 404,
+   "Issues": 4,
+   "Url": "https://www.example.com/gone",
+   "InLinks": 3
+  },
+  {
+   "__type": "UrlWithCrawlIssues:#Microsoft.Bing.Webmaster.Api",
+   "HttpCode": 200,
+   "Issues": 48,
+   "Url": "https://www.example.com/private",
+   "InLinks": 10
+  },
+  {
+   "__type": "UrlWithCrawlIssues:#Microsoft.Bing.Webmaster.Api",
+   "HttpCode": 301,
+   "Issues": 1,
+   "Url": "https://www.example.com/old",
+   "InLinks": 1
+  }
+ ]
+}

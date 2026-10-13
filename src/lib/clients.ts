@@ -410,6 +410,12 @@ const OverrideSchema = z.object({
     .object({ ahrefs: z.number().int().positive().optional(), semrush: z.number().int().positive().optional() })
     .strict()
     .optional(),
+  /** Phase 12 C3: the Bing Webmaster Tools site URL to read (e.g. https://www.example.com/); unset matches the domain against the key's verified sites. */
+  bingSite: z
+    .string()
+    .max(500)
+    .refine((v) => /^https?:\/\/[^\s/]+/i.test(v.trim()), { error: "must be an http(s) site URL, e.g. https://www.example.com/" })
+    .optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
   ignore: z.boolean().optional(),
 });
@@ -509,6 +515,8 @@ export interface Client {
   country: string | null;
   /** Phase 9: monthly unit caps for this client. */
   monthlyUnits: { ahrefs: number; semrush: number };
+  /** Phase 12 C3: clients.yaml bingSite (the Bing Webmaster Tools site to read); unset means match by domain. */
+  bingSite?: string;
   /** clients.yaml slugs that also resolve to this client. */
   aliases: string[];
   sources: ClientSource[];
@@ -576,6 +584,7 @@ export function mergeClients(
       if (area) client.area = area;
       if (y?.niche?.trim()) client.niche = y.niche.trim();
       if (y?.dataProvider) client.dataProvider = y.dataProvider;
+      if (y?.bingSite?.trim()) client.bingSite = y.bingSite.trim();
       if (d?.ga4DisplayName && d.ga4DisplayName !== client.name) client.ga4Name = d.ga4DisplayName;
       return client;
     });

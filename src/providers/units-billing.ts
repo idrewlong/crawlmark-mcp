@@ -17,7 +17,7 @@ import { stripControl } from "../lib/terminal-text.js";
 export function redact(text: string, secrets: readonly (string | undefined)[], max = 300): string {
   let out = text;
   for (const s of secrets) if (s && s.length >= 4) out = out.split(s).join("<redacted>");
-  out = out.replace(/([?&;]key=)[^&\s"'<>]*/gi, "$1<redacted>");
+  out = out.replace(/([?&;](?:api)?key=)[^&\s"'<>]*/gi, "$1<redacted>");
   out = stripControl(out).replace(/\s+/g, " ").trim();
   return out.length > max ? `${out.slice(0, max)}...` : out;
 }

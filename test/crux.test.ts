@@ -141,3 +141,33 @@ describe("setup status crux row", () => {
     expect(forHumans({ ...set, fromCache: false }).integrations.map((i) => i.id)).toEqual(["home", "crux"]);
   });
 });
+
+describe("setup status bing row (Phase 12 C3)", () => {
+  const base: StatusProviders = {
+    home: () => ({ info: { dir: "/h", source: "env", reason: "test" }, exists: true, envFile: "/h/.env", envFileExists: true, configuredByEnv: false }),
+    cli: () => "crawlmark-cli",
+    googleStatus: () => ({ mode: "none", auto: true, problem: "Google isn't set up." }),
+  } as unknown as StatusProviders;
+  const row = async (bing?: StatusProviders["bing"]) => (await collectSetupStatus({ ...base, ...(bing ? { bing } : {}) }, { only: ["bing"] })).integrations[0]!;
+
+  it("missing, working, configured; human output hides it only while missing", async () => {
+    expect(await row()).toMatchObject({ id: "bing", state: "missing", next: "crawlmark-cli setup --step bing", data: { keySet: false } });
+    expect(await row(async () => ({ keySet: true, check: { ok: true, sites: 3, verified: 2 } }))).toMatchObject({ state: "working", detail: "BING_WEBMASTER_API_KEY works: 2 verified site(s) (1 not verified yet).", next: null, data: { sites: 3, verified: 2 } });
+    expect(await row(async () => ({ keySet: true, check: { ok: true, sites: 1, verified: 0 } }))).toMatchObject({ state: "working", next: "https://www.bing.com/webmasters" });
+    expect(await row(async () => ({ keySet: true, check: { ok: false, kind: "refused", problem: "Bing rejected the API key; run setup --step bing." } }))).toMatchObject({ state: "configured", next: "crawlmark-cli setup --step bing", detail: "BING_WEBMASTER_API_KEY is set but Bing refused it: Bing rejected the API key; run setup --step bing." });
+    // Network trouble and throttling aren't the key's fault: no "refused", and no advice to replace the key.
+    const net = await row(async () => ({ keySet: true, check: { ok: false, kind: "network", problem: "Couldn't reach Bing Webmaster Tools (timed out)." } }));
+    expect(net).toMatchObject({ state: "configured", next: null, detail: "BING_WEBMASTER_API_KEY is set, but Bing Webmaster Tools couldn't be reached to check it (timed out). Try again in a few minutes.", data: { checkFailed: "network" } });
+    const slow = await row(async () => ({ keySet: true, check: { ok: false, kind: "throttled", problem: "Bing Webmaster Tools is throttling requests for this key. Try again in a few minutes." } }));
+    expect(slow).toMatchObject({ next: null, detail: "BING_WEBMASTER_API_KEY is set, but Bing is throttling requests for this key right now. Try again in a few minutes." });
+    for (const r of [net, slow]) expect(r.detail).not.toMatch(/refused/);
+    expect(await row(async () => ({ keySet: true, check: { ok: false, kind: "other", problem: "Bing Webmaster Tools returned error 8 (InvalidParameter)." } }))).toMatchObject({ detail: expect.stringMatching(/returned an error while checking it/) });
+    const missing = await collectSetupStatus(base, { only: ["home", "bing"] });
+    const human = forHumans({ ...missing, fromCache: false });
+    expect(human.integrations.map((i) => i.id)).toEqual(["home"]);
+    expect(renderStatus(human, { width: 80, color: false, unicode: false }).join("\n")).not.toContain("Bing");
+    const set = await collectSetupStatus({ ...base, bing: async () => ({ keySet: true, check: { ok: true, sites: 1, verified: 1 } }) }, { only: ["home", "bing"] });
+    expect(forHumans({ ...set, fromCache: false }).integrations.map((i) => i.id)).toEqual(["home", "bing"]);
+    expect(JSON.stringify(set)).not.toMatch(/apikey/i);
+  });
+});

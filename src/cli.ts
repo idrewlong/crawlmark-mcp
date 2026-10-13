@@ -382,6 +382,7 @@ type ClientsSetFlags = {
   "brand-terms"?: string | undefined;
   provider?: string | undefined;
   country?: string | undefined;
+  "bing-site"?: string | undefined;
 };
 
 /** `none` (any case) clears a value: the empty string setClientProfile expects. */
@@ -389,8 +390,8 @@ const noneToEmpty = (v: string | undefined) => (v !== undefined && v.trim().toLo
 
 async function clientsSet(args: string[], values: ClientsSetFlags): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
-  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country }).every((v) => v === undefined)) {
-    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider or --country.");
+  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"] }).every((v) => v === undefined)) {
+    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country or --bing-site.");
   }
   const provider = noneToEmpty(values.provider)?.trim().toLowerCase();
   if (provider !== undefined && provider !== "" && !(PROVIDER_IDS as readonly string[]).includes(provider)) {
@@ -401,12 +402,13 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
     return usageError(`--country must be a two-letter ISO code such as US or GB, or none (got "${values.country}").`);
   }
   const brandTerms = values["brand-terms"] === undefined ? undefined : values["brand-terms"].split(",");
-  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country });
+  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]) });
   for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
   for (const k of r.cleared) out(`Cleared ${k}.`);
   out(
     `${r.client}: name ${r.profile.name}; area ${r.profile.area ?? "(not set)"}; niche ${r.profile.niche ?? "(not set)"}; brand terms ${r.profile.brandTerms.join(", ") || "(none)"}. ` +
       (r.profile.country !== undefined ? `data provider ${r.profile.dataProvider ?? "(default)"}; country ${r.profile.country ?? "(none)"}. ` : "") +
+      (r.profile.bingSite !== undefined ? `Bing site ${r.profile.bingSite ?? "(matched by domain)"}. ` : "") +
       `File: ${r.clientsFile}`,
   );
   return 0;
@@ -522,6 +524,7 @@ async function main(argv: string[]): Promise<number> {
       "brand-terms": { type: "string" },
       provider: { type: "string" },
       country: { type: "string" },
+      "bing-site": { type: "string" },
       all: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
       "min-confidence": { type: "string" },
