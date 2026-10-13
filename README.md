@@ -10,11 +10,11 @@ It combines:
 | GA4 Data API | Organic sessions, engagement, key events, landing pages | Free |
 | Google Tag Manager | Live container contents for tag audits | Free |
 | DataForSEO | Keyword volume, live SERPs, ranked keywords, competitors, backlinks, site crawls | Pay per call |
-| Ahrefs or Semrush | Keyword volume, ranked keywords, competitors and backlinks, with your own API key | Your plan's API units |
+| Ahrefs or Semrush (beta) | Keyword volume, ranked keywords, competitors and backlinks, with your own API key | Your plan's API units |
 | Lighthouse | Performance, SEO and best-practice scores, lab Core Web Vitals | Free (runs locally) |
 | PageSpeed Insights | Real-user field data (CrUX) | Free with an API key (optional) |
 | Chrome UX Report History | Real-user Core Web Vitals over the last 40 weeks | Free with an API key (optional) |
-| Bing Webmaster Tools | Bing clicks, impressions, top queries and pages, crawl stats and crawl issues (read-only) | Free with an API key (optional) |
+| Bing Webmaster Tools (beta) | Bing clicks, impressions, top queries and pages, crawl stats and crawl issues (read-only) | Free with an API key (optional) |
 | axe-core | Automated WCAG A/AA/AAA checks | Free (runs locally) |
 
 Every source is optional. Your client list fills itself from the Search Console sites and GA4 properties your Google account can see, and you can add clients by hand, so the paid data tools, Lighthouse and axe work without Google. Responses are cached in SQLite, and paid calls stop at a per-client and a global monthly cap (dollars for DataForSEO, API units for Ahrefs and Semrush). See [Data providers](#data-providers) for choosing between them.
@@ -147,6 +147,8 @@ Whatever your default provider, live SERPs (`serp_check`, live ranks in `monthly
 
 ### Ahrefs
 
+> **Beta.** The Ahrefs integration is built to the official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps and key handling are fully tested. If anything looks wrong (an error you don't expect, a missing field, units that don't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
+
 Ahrefs is optional. With an API v3 key it can supply keyword volume, ranked keywords, organic competitors and backlinks (with Ahrefs' Domain Rating).
 
 1. You need the **Lite plan or higher**; other plans can't use the API. Each plan has a monthly unit allowance and a cap on rows per request (Lite 100).
@@ -156,6 +158,8 @@ Ahrefs is optional. With an API v3 key it can supply keyword volume, ranked keyw
 By hand, set `AHREFS_API_KEY` (and `SEO_DATA_PROVIDER=ahrefs` to make it the default). The `ahrefs_status` tool shows the plan, units used and the reset date.
 
 ### Semrush
+
+> **Beta.** The Semrush integration is built to the official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps and key handling are fully tested. If anything looks wrong (an error you don't expect, a missing field, units that don't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
 
 Semrush is optional. Its API needs an **SEO Toolkit Business** plan **plus** a separately bought **API unit package**; the unit balance is zero until you buy one.
 
@@ -167,7 +171,7 @@ By hand, set `SEMRUSH_API_KEY` (and `SEMRUSH_V4_API_KEY`, and `SEO_DATA_PROVIDER
 
 ### Data providers
 
-Keyword volume, rankings, competitors, backlinks, keyword ideas and the competitor keyword gap can come from any of the three providers. Live SERPs, on-page checks and crawls come from DataForSEO only.
+Keyword volume, rankings, competitors, backlinks, keyword ideas and the competitor keyword gap can come from any of the three providers. DataForSEO is the default and is verified against its live API; Ahrefs and Semrush are in beta (see above). Live SERPs, on-page checks and crawls come from DataForSEO only.
 
 | Capability | DataForSEO | Ahrefs | Semrush |
 |---|---|---|---|
@@ -254,6 +258,8 @@ Create an API key in Google Cloud with the PageSpeed Insights API enabled, then 
 Core Web Vitals history (`crux_history`, the `cwv` report section and `run_audit` with `cruxHistory`) needs a Google Cloud API key with the [Chrome UX Report API](https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com) enabled. Run `crawlmark-cli setup --step crux` and paste the key (or leave it blank to use `PSI_API_KEY`, which works when its project has the Chrome UX Report API enabled and the key isn't restricted to PageSpeed only). The check is one free query for a public site. The key is saved as `CRUX_API_KEY`.
 
 ### Bing Webmaster Tools (optional)
+
+> **Beta.** The Bing Webmaster Tools integration is built to the official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps and key handling are fully tested. If anything looks wrong (an error you don't expect, a missing field, units that don't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
 
 `bing_report` and the `bing_overview` report section read Bing search data with your own Bing Webmaster Tools API key. It's free:
 
@@ -581,7 +587,7 @@ npm run inspect      # MCP Inspector
 
 [docs/development.md](docs/development.md) covers the code layout, adding a data source and releasing. [docs/audits.md](docs/audits.md) lists every audit and site-hygiene check.
 
-**Known limits:** Windows is untested, OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
+**Known limits:** the Ahrefs, Semrush and Bing Webmaster Tools integrations are in beta (built to the official docs, not yet verified against a live account). Windows is untested, OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
 
 License
 -------
