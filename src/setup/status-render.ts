@@ -128,3 +128,16 @@ export function renderStatus(report: SetupStatusReport, opts: RenderStatusOption
   lines.push(parts.join(opts.unicode ? " · " : ", "));
   return lines;
 }
+
+/**
+ * Phase 12: rows that human `setup status` shows only once set up (`--json` and setup_status always
+ * include them), so the plain output of an existing setup is unchanged. The summary counts follow.
+ */
+export const HIDDEN_UNTIL_CONFIGURED: readonly string[] = ["crux"];
+
+export function forHumans(report: SetupStatusReport): SetupStatusReport {
+  const integrations = report.integrations.filter((i) => !(HIDDEN_UNTIL_CONFIGURED.includes(i.id) && i.state === "missing"));
+  const summary: SetupStatusReport["summary"] = { working: 0, configured: 0, missing: 0, error: 0 };
+  for (const i of integrations) summary[i.state]++;
+  return { ...report, integrations, summary };
+}

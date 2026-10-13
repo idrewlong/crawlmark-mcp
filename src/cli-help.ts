@@ -6,7 +6,7 @@
 import { basename } from "node:path";
 import { styleText } from "node:util";
 
-export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic"] as const;
+export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "report"] as const;
 export type HelpGroup = (typeof HELP_GROUPS)[number];
 
 export function isHelpGroup(name: string | undefined): name is HelpGroup {
@@ -47,6 +47,7 @@ export function topHelp(o: HelpOptions): string {
     "  clients, competitors, keywords, brand   Manage clients and their lists",
     heading("Scheduled", o),
     "  audit, check-traffic  Run from cron; exit 2 means alerts",
+    "  report                Report files (Markdown, HTML, PDF, Word) from templates",
     "",
     heading("Examples", o),
     "  npx crawlmark-mcp@latest init",
@@ -71,7 +72,8 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  first and can be skipped. init and setup are the same command.",
     "  --step <name>   Run one step: node, provider, dataforseo, ahrefs, semrush,",
     "                  google, psi, discovery or register. provider picks your SEO",
-    "                  data providers and the default one",
+    "                  data providers and the default one. crux (a key for Core",
+    "                  Web Vitals history) runs only with --step",
     "  --dry-run       Write nothing and register nothing (free checks still run)",
     "  --yes           Accept every default without asking; steps that need input",
     "                  are skipped, and an existing registration is never replaced",
@@ -81,7 +83,8 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  next step.",
     "  --json          Print the report as JSON",
     "  --only <id,id>  Check only these: home, dataforseo, seoprovider, ahrefs,",
-    "                  semrush, google, gsc, ga4, tagmanager, psi, chrome, clients",
+    "                  semrush, google, gsc, ga4, tagmanager, psi, crux, chrome,",
+    "                  clients",
     "  --refresh       Skip the 60-second cache",
     "",
     "setup migrate",
@@ -183,6 +186,7 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
   audit: (p) => [
     `Usage: ${p} audit --client <domain|slug> [--urls <url,url>] [--dry-run]`,
     `       ${p} audit --all [--dry-run]`,
+    "                [--include-tag-manager]",
     "",
     "  Scheduled audit: runs discovery (--all), a fresh run_audit per client (one",
     "  at a time), saves the snapshot and diffs it against the previous one.",
@@ -191,6 +195,8 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  --all                   Every client",
     "  --urls <url,url>        Override the page list (one client only)",
     "  --dry-run               List the pages each client would audit; run nothing",
+    "  --include-tag-manager   Also audit each client's Tag Manager container",
+    "                          (findings are medium or low, so they never alert)",
     "",
     ...SCHEDULED_FOOTER,
   ],
@@ -204,6 +210,37 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  --dry-run               Show the date ranges it would compare; fetch nothing",
     "",
     ...SCHEDULED_FOOTER,
+  ],
+  report: (p) => [
+    `Usage: ${p} report --client <domain|slug> | --all [--template <id>]`,
+    "                [--month YYYY-MM | --quarter YYYY-Qn |",
+    "                 --start <date> --end <date>] [--format md,html,pdf,docx]",
+    "                [--include <id,id>] [--paid] [--dry-run]",
+    `       ${p} report templates list|validate [file]|init`,
+    "",
+    "report",
+    "  Writes report files from a template (default: monthly, the same data as",
+    "  the monthly_report tool) to <home>/reports/<client>/<YYYY-MM>/. Data only:",
+    "  no written commentary (ask Claude for that). Clients run one at a time.",
+    "  --client <domain|slug>  One client",
+    "  --all                   Every client (discovery first; ignored ones skipped)",
+    "  --template <id>         A template from report templates list",
+    "  --month, --quarter, --start/--end   Override the template's period",
+    "  --format <list>         md, html, pdf, docx (default: the template file's",
+    "                          defaults, else md,html). PDF needs Chrome",
+    "  --include <id,id>       Optional sections to add, e.g. cwv,gtm",
+    "  --paid                  Run paid sections (a template marks them paid)",
+    "  --dry-run               Show the period and file paths; fetch and write",
+    "                          nothing",
+    "  Prints JSON to stdout. Exit code: 0 all written, 2 written but a section",
+    "  failed or a format couldn't be made, 1 error.",
+    "",
+    "report templates",
+    "  list               Templates (builtin, global file, per-client files)",
+    "  validate [file]    Check a template file (default: the global one); exit 1",
+    "                     when invalid, naming the YAML path",
+    "  init               Write the starter config/report-templates.yaml (never",
+    "                     overwrites)",
   ],
 };
 

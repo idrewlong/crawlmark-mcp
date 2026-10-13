@@ -25,7 +25,7 @@ export interface Skipped {
 }
 
 export interface RunReport<R> {
-  command: "audit" | "check-traffic";
+  command: "audit" | "check-traffic" | "report";
   ranAt: string;
   dryRun: boolean;
   results: R[];
@@ -51,7 +51,7 @@ export interface AuditClientResult {
 }
 
 export interface AuditDeps {
-  runAudit(client: Client, opts: { urls?: string[]; fresh: boolean }): Promise<{ auditId: string }>;
+  runAudit(client: Client, opts: { urls?: string[]; fresh: boolean; includeTagManager?: boolean }): Promise<{ auditId: string }>;
   getAudit(id: string): StoredAudit | undefined;
   latestAuditBefore(client: string, beforeMs: number): StoredAudit | undefined;
 }
@@ -63,8 +63,14 @@ const defaultAuditDeps: AuditDeps = {
   latestAuditBefore,
 };
 
-export async function auditOne(client: Client, urls: string[] | undefined, deps: AuditDeps = defaultAuditDeps): Promise<{ result: AuditClientResult; alerts: Alert[] }> {
-  const { auditId } = await deps.runAudit(client, { ...(urls?.length ? { urls } : {}), fresh: true });
+export async function auditOne(
+  client: Client,
+  urls: string[] | undefined,
+  deps: AuditDeps = defaultAuditDeps,
+  extra: { includeTagManager?: boolean } = {},
+): Promise<{ result: AuditClientResult; alerts: Alert[] }> {
+  // Phase 12: Tag Manager findings only with --include-tag-manager (they are medium/low, so they never alert).
+  const { auditId } = await deps.runAudit(client, { ...(urls?.length ? { urls } : {}), fresh: true, ...(extra.includeTagManager ? { includeTagManager: true } : {}) });
   const target = deps.getAudit(auditId);
   if (!target) throw new Error(`Audit ${auditId} was not saved.`);
   const base = deps.latestAuditBefore(client.slug, target.ranAt);
@@ -83,7 +89,7 @@ export async function auditOne(client: Client, urls: string[] | undefined, deps:
 
 export async function runAudits(
   clients: Client[],
-  opts: { urls?: string[]; dryRun?: boolean; skipped?: Skipped[]; webhookUrl?: string | undefined; discoveryError?: string | undefined; deps?: AuditDeps; send?: typeof sendWebhook },
+  opts: { urls?: string[]; dryRun?: boolean; skipped?: Skipped[]; webhookUrl?: string | undefined; discoveryError?: string | undefined; deps?: AuditDeps; send?: typeof sendWebhook; includeTagManager?: boolean },
 ): Promise<RunReport<AuditClientResult | { client: string; wouldAudit: string[] }>> {
   const skipped = [...(opts.skipped ?? [])];
   const results: (AuditClientResult | { client: string; wouldAudit: string[] })[] = [];
@@ -98,7 +104,7 @@ export async function runAudits(
     }
     attempted++;
     try {
-      const r = await auditOne(client, opts.urls, opts.deps);
+      const r = await auditOne(client, opts.urls, opts.deps, { includeTagManager: opts.includeTagManager === true });
       results.push(r.result);
       alerts.push(...r.alerts);
     } catch (err) {

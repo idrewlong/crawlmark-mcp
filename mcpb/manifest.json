@@ -41,6 +41,7 @@
         "GOOGLE_OAUTH_CLIENT_ID": "${user_config.google_oauth_client_id}",
         "GOOGLE_OAUTH_CLIENT_SECRET": "${user_config.google_oauth_client_secret}",
         "PSI_API_KEY": "${user_config.psi_api_key}",
+        "CRUX_API_KEY": "${user_config.crux_api_key}",
         "CHROME_PATH": "${user_config.chrome_path}"
       }
     }
@@ -53,6 +54,26 @@
     {
       "name": "monthly_report",
       "description": "Build the data for a client's monthly SEO report."
+    },
+    {
+      "name": "list_report_templates",
+      "description": "List the report templates available for a client (builtin, global file, client file) with their periods and optional sections."
+    },
+    {
+      "name": "get_report_template",
+      "description": "One report template with defaults filled in and the resolved branding."
+    },
+    {
+      "name": "validate_report_template",
+      "description": "Validate report template YAML or the saved template file; errors carry YAML paths."
+    },
+    {
+      "name": "run_report_template",
+      "description": "Build a client report from a template: per-section data and status, computed highlights, and a reportId for export_report."
+    },
+    {
+      "name": "export_report",
+      "description": "Save a client report as Markdown, HTML, PDF and/or Word files (data-only, or with your commentary), and optionally return a docs-friendly HTML copy for Google Docs."
     },
     {
       "name": "run_audit",
@@ -171,6 +192,10 @@
       "description": "Index status, Google-selected canonical, last crawl, mobile usability and rich results for one URL."
     },
     {
+      "name": "crux_history",
+      "description": "Real-user Core Web Vitals history (Chrome UX Report): weekly 75th percentile LCP, INP, CLS, FCP and TTFB with ratings and a trend. Free with a Google API key."
+    },
+    {
       "name": "ga4_report",
       "description": "Run a GA4 Data API report for a client."
     },
@@ -249,6 +274,16 @@
         "month"
       ],
       "text": "Run the crawlmark \"monthly-report-writeup\" prompt for ${arguments.client} for ${arguments.month}."
+    },
+    {
+      "name": "template-report",
+      "description": "Build a client report from a report template, write commentary per section, save it as Markdown, HTML, PDF or Word files, and offer a Google Doc only when a Drive tool is available.",
+      "arguments": [
+        "client",
+        "template",
+        "period"
+      ],
+      "text": "Run the crawlmark \"template-report\" prompt for ${arguments.client} with template ${arguments.template} for ${arguments.period}."
     },
     {
       "name": "audit-findings",
@@ -386,6 +421,13 @@
       "type": "string",
       "title": "PageSpeed Insights API key",
       "description": "Optional. Adds real-user (field) data to Lighthouse results.",
+      "sensitive": true,
+      "required": false
+    },
+    "crux_api_key": {
+      "type": "string",
+      "title": "Chrome UX Report (CrUX) API key",
+      "description": "Optional. Adds real-user Core Web Vitals history (crux_history). A Google Cloud API key with the Chrome UX Report API enabled; leave empty to use the PageSpeed Insights key when its project has that API enabled.",
       "sensitive": true,
       "required": false
     },

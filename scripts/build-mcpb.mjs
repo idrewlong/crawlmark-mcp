@@ -86,6 +86,13 @@ function pruneGoogleapis(dir, keep) {
   for (const f of ["index.d.ts", "googleapis.d.ts"]) rmSync(join(dir, "build", "src", f), { force: true });
 }
 
+/** Keep only docx's ESM entry (dist/index.mjs); throw if the layout changed. */
+function pruneDocx(dir) {
+  const dist = join(dir, "dist");
+  if (!existsSync(join(dist, "index.mjs"))) throw new Error(`docx layout changed: ${join(dist, "index.mjs")} not found`);
+  for (const name of readdirSync(dist)) if (name !== "index.mjs") rmSync(join(dist, name), { recursive: true, force: true });
+}
+
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const manifest = JSON.parse(readFileSync(join(root, "mcpb", "manifest.json"), "utf8"));
 if (manifest.version !== pkg.version) {
@@ -117,6 +124,15 @@ pruneGoogleapis(join(stage, "node_modules", "googleapis"), ["analyticsadmin", "a
 run(process.execPath, [
   "-e",
   "const { google } = require('googleapis'); for (const [api, v] of [['searchconsole','v1'],['analyticsdata','v1beta'],['analyticsadmin','v1beta'],['tagmanager','v2']]) { if (typeof google[api] !== 'function') throw new Error(api + ' missing'); google[api]({ version: v }); }",
+], { cwd: stage });
+// docx ships the same code as ESM, CJS, UMD and IIFE builds plus four optional sub-packages and their
+// type declarations (about 9 MB). crawlmark imports only the ESM entry (dist/index.mjs), which is self-contained.
+pruneDocx(join(stage, "node_modules", "docx"));
+// Fail the build if the pruned docx no longer loads or can't write a document.
+run(process.execPath, [
+  "--input-type=module",
+  "-e",
+  "const d = await import('docx'); const b = await d.Packer.toBuffer(new d.Document({ sections: [{ children: [new d.Paragraph('ok')] }] })); if (b.subarray(0, 2).toString() !== 'PK') throw new Error('docx output is not a zip');",
 ], { cwd: stage });
 // The lockfile is only needed for npm ci.
 rmSync(join(stage, "package-lock.json"), { force: true });

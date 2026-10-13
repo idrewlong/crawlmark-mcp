@@ -58,6 +58,7 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "cheerio": "^1.2.0",
     "chrome-launcher": "^1.2.2",
+    "docx": "9.8.1",
     "googleapis": "^185.0.0",
     "lighthouse": "^13.5.0",
     "puppeteer": "^25.13.0",

@@ -10,6 +10,7 @@ import { suggestBrandTerms, suggestBrandTermsForAll, type SuggestBrandResult } f
 import {
   addBrandTerms,
   addClient,
+  loadOverrides,
   addCompetitors,
   addKeywords,
   loadRegistry,
@@ -22,8 +23,8 @@ import {
   type ListAddResult,
   type ListRemoveResult,
 } from "./clients.js";
-import { env, HOME, type Client } from "./config.js";
-import { formatTable, missingPieces } from "./lib/clients.js";
+import { clientDefaults, env, HOME, type Client } from "./config.js";
+import { assembleRegistry, formatTable, missingPieces } from "./lib/clients.js";
 import { PROVIDER_IDS } from "./lib/provider-ids.js";
 import { describeAuthMode } from "./lib/google-auth.js";
 import { describeHome } from "./lib/home.js";
@@ -36,6 +37,8 @@ import { packageVersion } from "./lib/entry.js";
 import { setupCommand } from "./setup/cli-setup.js";
 import { groupHelp, HELP_GROUPS, isHelpGroup, programName, topHelp } from "./cli-help.js";
 import { printUpdateNotice, updateCacheFile } from "./lib/update-check.js";
+import { reportCommand, templatesCommand, type ReportCliDeps } from "./report-cli.js";
+import { closeEgressProxy } from "./lib/egress-proxy.js";
 
 /** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
 async function updateNoticeAfterHelp(json = false): Promise<void> {
@@ -407,7 +410,7 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
   return 0;
 }
 
-type ScheduledFlags = { client?: string | undefined; all: boolean; urls?: string | undefined; "dry-run": boolean };
+type ScheduledFlags = { client?: string | undefined; all: boolean; urls?: string | undefined; "dry-run": boolean; "include-tag-manager": boolean };
 
 /** Usage problems in the scheduled commands exit 1, because 2 means "alerts" to a cron wrapper. */
 function scheduledUsage(problem: string): number {
@@ -420,6 +423,7 @@ async function scheduledCommand(kind: "audit" | "check-traffic", args: string[],
   if (args.length) return scheduledUsage(`${kind} takes only flags, got: ${args.join(" ")}`);
   if (values.all === (values.client !== undefined)) return scheduledUsage(`${kind} takes --client <domain|slug> or --all.`);
   if (values.urls !== undefined && (kind !== "audit" || values.all)) return scheduledUsage("--urls works only with `audit --client`.");
+  if (values["include-tag-manager"] && kind !== "audit") return scheduledUsage("--include-tag-manager works only with `audit`.");
 
   let urls: string[] | undefined;
   if (values.urls !== undefined) {
@@ -454,11 +458,37 @@ async function scheduledCommand(kind: "audit" | "check-traffic", args: string[],
   const thresholds = { trafficDropPct: env.ALERT_TRAFFIC_DROP_PCT, minClicksLost: env.ALERT_MIN_CLICKS_LOST };
   const report =
     kind === "audit"
-      ? await runAudits(clients, { ...common, ...(urls ? { urls } : {}) })
+      ? await runAudits(clients, { ...common, ...(urls ? { urls } : {}), ...(values["include-tag-manager"] ? { includeTagManager: true } : {}) })
       : await runTrafficChecks(clients, { ...common, thresholds });
   out(JSON.stringify({ ...report, discovery }, null, 2));
   for (const e of report.errors) warn(`Error: ${e}`);
   return report.exitCode;
+}
+
+/** The real sources for `report`: discovery as `audit --all` (cached for a dry run), Google, Chrome for PDF. */
+async function realReportDeps(): Promise<ReportCliDeps> {
+  const [{ loadDefaultRunDeps }, { chromePdfPrinter }] = await Promise.all([import("./reports/templates/run.js"), import("./reports/render/pdf.js")]);
+  return {
+    loadClients: async ({ client, all, dryRun }) => {
+      if (!all) return { clients: [await resolveClient(client!)], skipped: [] };
+      // A dry run doesn't run discovery (which can add new domains to clients.yaml): clients.yaml only.
+      const registry = dryRun
+        ? assembleRegistry({ skipped: "Dry run: clients.yaml only (discovery not run)." }, loadOverrides(), clientDefaults)
+        : await loadRegistry({ refresh: true });
+      const d = registry.discovery;
+      if (d.error) warn(`Discovery failed, using clients.yaml entries only: ${d.error}`);
+      return {
+        clients: registry.clients,
+        skipped: registry.ignored.map((domain) => ({ client: domain, reason: "ignore: true in clients.yaml" })),
+        discovery: { ok: d.ok, skipped: d.skipped ?? false, error: d.error, warnings: d.warnings },
+        discoveryError: d.error,
+      };
+    },
+    runDeps: loadDefaultRunDeps,
+    printer: chromePdfPrinter,
+    reportsDir: env.REPORTS_DIR,
+    version: packageVersion(import.meta.url),
+  };
 }
 
 function usageError(problem: string): number {
@@ -494,11 +524,19 @@ async function main(argv: string[]): Promise<number> {
       "paid-sparse": { type: "boolean", default: false },
       client: { type: "string" },
       urls: { type: "string" },
+      "include-tag-manager": { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       step: { type: "string" },
       yes: { type: "boolean", short: "y", default: false },
       json: { type: "boolean", default: false },
       only: { type: "string" },
+      template: { type: "string" },
+      month: { type: "string" },
+      quarter: { type: "string" },
+      start: { type: "string" },
+      end: { type: "string" },
+      format: { type: "string" },
+      include: { type: "string" },
       to: { type: "string" },
       force: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -512,6 +550,18 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (group === "audit" || group === "check-traffic") return scheduledCommand(group, command ? [command, ...args] : args, values);
+  if (group === "report" && command === "templates") {
+    const [sub, ...rest] = args;
+    return templatesCommand(sub, rest, { out, warn, homeDir: HOME.dir, cwd: process.cwd() });
+  }
+  if (group === "report") {
+    try {
+      return await reportCommand(command ? [command, ...args] : args, values, { out, warn, homeDir: HOME.dir, cwd: process.cwd() }, await realReportDeps());
+    } finally {
+      // A PDF starts the egress proxy; its sockets would keep the CLI alive.
+      await closeEgressProxy();
+    }
+  }
   if (group === "clients" && command === "add") return clientsAdd(args, values.name);
   if (group === "clients" && command === "remove") return clientsRemove(args, values.ignore);
   if (group === "clients" && command === "set") return clientsSet(args, values);

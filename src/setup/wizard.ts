@@ -18,6 +18,7 @@ import { checkDataForSeoCredentials } from "../providers/dataforseo.js";
 import { checkSemrushKey } from "../providers/semrush.js";
 import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type ProviderId } from "../lib/provider-ids.js";
 import { checkPsiKey } from "./checks.js";
+import { checkCruxKey } from "../providers/crux.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
 import { uiFor, type SummaryRow, type Ui } from "./ui.js";
 import { tryAskingExamples, type ExampleClient } from "./try-asking.js";
@@ -25,7 +26,12 @@ import { DFS_LIVE_URL, DFS_SANDBOX_URL } from "../lib/env.js";
 import { LINKS, type IntegrationId, type IntegrationStatus, type SetupStatusReport } from "./status.js";
 
 export const STEP_NAMES = ["node", "provider", "dataforseo", "ahrefs", "semrush", "google", "psi", "discovery", "register"] as const;
-export type StepName = (typeof STEP_NAMES)[number];
+/**
+ * Phase 12: steps run only with --step. They are not in the default flow, the returning-user menu or the
+ * step lists the wizard prints, so plain installer output is unchanged.
+ */
+export const EXTRA_STEP_NAMES = ["crux"] as const;
+export type StepName = (typeof STEP_NAMES)[number] | (typeof EXTRA_STEP_NAMES)[number];
 
 export { DFS_LIVE_URL, DFS_SANDBOX_URL };
 export const MIN_NODE = [22, 13] as const;
@@ -586,6 +592,45 @@ export async function stepPsi(ctx: WizardContext): Promise<StepResult> {
 }
 
 /**
+ * Phase 12: the CrUX History key (`--step crux` only). Blank uses PSI_API_KEY when its project
+ * has the Chrome UX Report API enabled. The check is one free query for a public origin
+ * (https://developer.chrome.com), so no client data is sent.
+ */
+export async function stepCrux(ctx: WizardContext): Promise<StepResult> {
+  const step = "crux";
+  const st = (await showStatus(ctx, ["crux"])).get("crux");
+  const set = Boolean(st && st.state !== "missing");
+  if (!(await ctx.prompt.confirm(set ? "Replace the CrUX History key?" : "Add a Chrome UX Report (CrUX) API key for Core Web Vitals history?", !set))) {
+    return { step, outcome: "skipped", message: set ? "Kept the current CrUX setup." : "No CrUX key (crux_history and the cwv report section stay unavailable)." };
+  }
+  ctx.out(`1. Enable the Chrome UX Report API: ${LINKS.enableCrux}`);
+  ctx.out(`2. Create an API key under APIs & Services > Credentials (or reuse your PageSpeed key): ${LINKS.credentials}`);
+  ctx.out("   (If you restrict the key, allow the Chrome UX Report API.)");
+  await offerOpen(ctx, "the Chrome UX Report API page", LINKS.enableCrux);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const key = await ctx.prompt.secret("CrUX API key (blank: use PSI_API_KEY)");
+    if (!key) {
+      const psi = existingEnv(ctx).PSI_API_KEY || process.env.PSI_API_KEY;
+      if (!psi) {
+        uiFor(ctx).fail("No key entered, and there's no PSI_API_KEY to use instead.");
+        continue;
+      }
+      const check = await uiFor(ctx).spin("Checking PSI_API_KEY with one free CrUX request...", () => checkCruxKey(psi, ctx.fetch, "PSI_API_KEY"));
+      if (!check.ok) return { step, outcome: "failed", message: check.problem };
+      return { step, outcome: "done", message: "PSI_API_KEY works for CrUX History; nothing saved." };
+    }
+    const check = await uiFor(ctx).spin("Checking the key with one free CrUX request...", () => checkCruxKey(key, ctx.fetch));
+    if (!check.ok) {
+      uiFor(ctx).fail(check.problem);
+      continue;
+    }
+    saveEnv(ctx, { CRUX_API_KEY: key });
+    return { step, outcome: "done", message: "CrUX History key works." };
+  }
+  return { step, outcome: "failed", message: `No working CrUX key after ${MAX_ATTEMPTS} attempts.` };
+}
+
+/**
  * Run crawlmark-cli in a child process. Plain mode gives it the terminal, as
  * before; fancy mode captures its output behind a spinner and then prints it
  * inside the frame (stderr only when it failed).
@@ -781,6 +826,7 @@ const STEPS: Record<Exclude<StepName, "provider">, { title: string; run: StepRun
   semrush: { title: "Semrush", run: stepSemrush },
   google: { title: "Google", run: stepGoogle },
   psi: { title: "PageSpeed Insights key (optional)", run: stepPsi },
+  crux: { title: "CrUX History key (optional)", run: stepCrux },
   discovery: { title: "Clients", run: stepDiscovery },
   register: { title: "Register with Claude", run: stepRegister },
 };
@@ -807,6 +853,7 @@ const SUMMARY_LABELS: Record<Exclude<StepName, "register">, string> = {
   semrush: "Semrush",
   google: "Google",
   psi: "PageSpeed",
+  crux: "CrUX",
   discovery: "Clients",
 };
 

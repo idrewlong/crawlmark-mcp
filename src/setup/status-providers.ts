@@ -7,6 +7,7 @@ import { globalUnitCap, unitsThisMonth } from "../lib/budget.js";
 import type { ProviderId } from "../lib/provider-ids.js";
 import { checkAhrefsKey } from "../providers/ahrefs.js";
 import { checkSemrushKey } from "../providers/semrush.js";
+import { checkCruxKey, cruxKey } from "../providers/crux.js";
 import { shellQuote } from "../lib/claude-config.js";
 import { sourceCheckoutMarker, USER_HOME_DIRNAME, type HomeSource } from "../lib/home.js";
 import { withBrowser } from "../providers/browser.js";
@@ -156,6 +157,10 @@ export const realStatusProviders: StatusProviders = {
     return { items: value.containers.map((c) => ({ publicId: c.publicId, name: c.name })), warnings: value.errors };
   },
   psiKeySet: () => Boolean(env.PSI_API_KEY),
+  crux: async () => {
+    const k = cruxKey();
+    return { source: k?.source ?? null, check: k ? await checkCruxKey(k.key, fetch, k.source) : null };
+  },
   chrome: async () => {
     try {
       return { ok: true, version: await withBrowser("setup_status Chrome check", undefined, (b) => b.version()) };

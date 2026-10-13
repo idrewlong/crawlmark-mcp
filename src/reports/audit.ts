@@ -5,7 +5,10 @@ import { gscInspectUrl, gscSitemaps } from "../providers/gsc.js";
 import { checkRender, type RenderCheck } from "../providers/render.js";
 import { runLighthouse, type FormFactor, type LighthouseResult } from "../providers/lighthouse.js";
 import { checkedPairs, extractFindings } from "../analysis/findings.js";
+import { clientOrigin, cruxHistory } from "../providers/crux.js";
+import { runGtmAudit, type GtmAuditResult } from "./gtm.js";
 import { newAuditId, saveAudit } from "../lib/audits.js";
+import type { CruxHistoryResult } from "./report-types.js";
 import { section, type Section } from "./section.js";
 import { siteHygiene } from "./site-hygiene.js";
 
@@ -23,6 +26,10 @@ export interface AuditOptions {
   backlinks?: boolean;
   /** Aborts the audit (run_audit's 10-minute limit): the running browser is closed, no further pages start, nothing is saved. */
   signal?: AbortSignal;
+  /** Phase 12: CrUX History for the client's origin as `site.cruxHistory`, with `crux` findings from the latest period. Default false. */
+  cruxHistory?: boolean;
+  /** Phase 12: the Tag Manager container audit as `site.tagManager`, with `gtm` findings (medium/low, never alerts). Opt-in only; default false. */
+  includeTagManager?: boolean;
 }
 
 interface PageAudit {
@@ -35,6 +42,15 @@ interface PageAudit {
 }
 
 export type AuditResult = Awaited<ReturnType<typeof collectAudit>>;
+
+interface SiteChecks {
+  sitemaps: Section<Awaited<ReturnType<typeof gscSitemaps>>>;
+  crawl: Section<Awaited<ReturnType<typeof onPageStartCrawl>>> | null;
+  backlinks: Section<Awaited<ReturnType<typeof backlinksSummary>>> | null;
+  hygiene: Section<Awaited<ReturnType<typeof siteHygiene>>>;
+  cruxHistory?: Section<CruxHistoryResult>;
+  tagManager?: Section<GtmAuditResult>;
+}
 
 /** Run every check and save the snapshot. The result carries `auditId` for list/get/compare_audits. */
 export async function runAudit(client: Client, opts: AuditOptions = {}) {
@@ -65,10 +81,12 @@ async function collectAudit(client: Client, opts: AuditOptions) {
   const cacheOpts = { refresh: fresh, signal };
 
   // Site-level checks run in parallel; they're all network calls.
-  const [sitemaps, crawl, links] = await Promise.all([
+  const [sitemaps, crawl, links, crux, tagManager] = await Promise.all([
     section(() => gscSitemaps(client)),
     opts.fullCrawl ? section(() => onPageStartCrawl(client, opts.maxCrawlPages ?? 100)) : Promise.resolve(null),
     opts.backlinks ? section(() => backlinksSummary(client)) : Promise.resolve(null),
+    opts.cruxHistory ? section(() => cruxHistory({ origin: clientOrigin(client) }, { refresh: fresh })) : Promise.resolve(undefined),
+    opts.includeTagManager ? section(() => runGtmAudit(client, { refresh: fresh })) : Promise.resolve(undefined),
   ]);
 
   // Page-level browser checks run one page at a time so Chrome instances don't
@@ -103,7 +121,8 @@ async function collectAudit(client: Client, opts: AuditOptions) {
     ranAt: new Date().toISOString(),
     settings: { formFactor, wcagLevel, pages: urls.length, fresh },
     summary: summarize(pages),
-    site: { sitemaps, crawl, backlinks: links, hygiene },
+    // Phase 12 keys appear only when their option is set, so a default result keeps its shape.
+    site: { sitemaps, crawl, backlinks: links, hygiene, ...(crux ? { cruxHistory: crux } : {}), ...(tagManager ? { tagManager } : {}) } as SiteChecks,
     pages,
     next: opts.fullCrawl
       ? "A full crawl was started. Call crawl_status with the taskId in site.crawl; crawls of 100 pages usually finish in a few minutes."

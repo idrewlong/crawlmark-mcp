@@ -417,6 +417,12 @@ Planned in [specs/2026-10-13-1700-phase-10-installer-polish.md](specs/2026-10-13
 
 The launch blog outline lives in [docs/launch/blog-outline.md](docs/launch/blog-outline.md). **Every phase that adds a tool, prompt, command or feature also adds it there**, marked Shipped or Coming. Before launch: write the post from the outline, check every claim against the README, and produce the 15–30 second demo video from its shot list using example.com data only.
 
+## Phase 12: Report files, templates, trends and the remaining gaps
+
+Planned in [specs/2026-10-13-1900-phase-12-reports-and-gaps.md](specs/2026-10-13-1900-phase-12-reports-and-gaps.md), with API notes in [docs/research/2026-10-13-phase-12-apis.md](docs/research/2026-10-13-phase-12-apis.md). Three stages, each merged on its own: **Stage A** (report files in Markdown, HTML, PDF and Word from YAML templates, the Google Docs handoff through the user's own Drive connector, CrUX History, opt-in Tag Manager findings in audits), **Stage B** (stored rank history, keyword ideas, competitor keyword gap), **Stage C** (local crawler, server logs, Bing Webmaster, local SEO, AI-search visibility).
+
+**Status:** Stage A built on branch `phase-12a` (tasks A-1 to A-11): report templates (`config/report-templates.yaml`, per-client files, a builtin `monthly`), `run_report_template` and `export_report` writing Markdown, HTML, PDF (managed Chrome, offline) and Word (`docx` 9.8.1) files under `REPORTS_DIR`, the `template-report` prompt and the Google Docs handoff through the user's own Drive connector, `crawlmark-cli report`, `crux_history` with `setup --step crux`, and opt-in Tag Manager and CrUX findings in `run_audit`. Pending: the manual checks in the spec's Done-when (the Word, LibreOffice and Google Docs import of a DOCX, and a Claude session with a Drive connector), review, and merge.
+
 ## Final checklist
 
 - [ ] All phases typecheck and tests pass.

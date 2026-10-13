@@ -2,9 +2,8 @@ import { analyzeContainerVersion, countBySeverity, summarizeWorkspaces, type Gtm
 import { fetchGtmAuditData, resolveGtmContainer, type GtmClientIds } from "../providers/gtm.js";
 
 /**
- * gtm_audit composer. Findings use a local type (source "gtm") and are not part
- * of run_audit or analysis/findings.ts yet; follow-up: add "gtm" to FindingSource
- * and an audit section.
+ * gtm_audit composer. Findings use a local type (source "gtm"); run_audit maps
+ * them into its findings (analysis/findings.ts) only with includeTagManager (Phase 12, opt-in).
  */
 export interface GtmAuditResult {
   client: string;

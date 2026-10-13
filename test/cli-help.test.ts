@@ -5,7 +5,7 @@ const plain = { prog: "crawlmark-mcp" as const, bold: false };
 const width = (text: string) => Math.max(...text.replace(/\u001b\[[0-9;]*m/g, "").split("\n").map((l) => Array.from(l).length));
 
 /** Every flag the Phase 6s USAGE text listed, by group (a fixture of the old text). */
-const OLD_FLAGS: Record<Exclude<HelpGroup, "init">, string[]> = {
+const OLD_FLAGS: Record<Exclude<HelpGroup, "init" | "report">, string[]> = {
   setup: ["--step", "--dry-run", "--yes", "--json", "--only", "--refresh", "--to", "--force"],
   auth: ["login", "status", "logout"],
   clients: ["--refresh", "--name", "--ignore", "--area", "--niche", "--brand-terms"],
@@ -31,6 +31,13 @@ describe("help", () => {
       expect(width(text), group).toBeLessThanOrEqual(80);
       for (const f of flags) expect(text, `${group} ${f}`).toContain(f);
     }
+  });
+
+  it("report help lists its flags and subcommands within 80 columns (Phase 12)", () => {
+    const text = groupHelp("report", plain);
+    expect(width(text)).toBeLessThanOrEqual(80);
+    for (const f of ["--client", "--all", "--template", "--month", "--quarter", "--start", "--end", "--format", "--include", "--paid", "--dry-run", "templates list|validate [file]|init"]) expect(text, f).toContain(f);
+    expect(topHelp(plain)).toContain("report");
   });
 
   it("init shows the setup help; the program name comes from argv[1]", () => {

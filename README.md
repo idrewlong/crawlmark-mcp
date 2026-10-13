@@ -13,6 +13,7 @@ It combines:
 | Ahrefs or Semrush | Keyword volume, ranked keywords, competitors and backlinks, with your own API key | Your plan's API units |
 | Lighthouse | Performance, SEO and best-practice scores, lab Core Web Vitals | Free (runs locally) |
 | PageSpeed Insights | Real-user field data (CrUX) | Free with an API key (optional) |
+| Chrome UX Report History | Real-user Core Web Vitals over the last 40 weeks | Free with an API key (optional) |
 | axe-core | Automated WCAG A/AA/AAA checks | Free (runs locally) |
 
 Every source is optional. Your client list fills itself from the Search Console sites and GA4 properties your Google account can see, and you can add clients by hand, so the paid data tools, Lighthouse and axe work without Google. Responses are cached in SQLite, and paid calls stop at a per-client and a global monthly cap (dollars for DataForSEO, API units for Ahrefs and Semrush). See [Data providers](#data-providers) for choosing between them.
@@ -104,6 +105,7 @@ The setup wizard covers everything here. Each step shows its current status firs
 |---|---|
 | `crawlmark-cli init` (or `setup`) | The whole wizard |
 | `crawlmark-cli setup --step <node\|provider\|dataforseo\|ahrefs\|semrush\|google\|psi\|discovery\|register>` | One step. `provider` picks your SEO data providers and the default one |
+| `crawlmark-cli setup --step crux` | A key for Core Web Vitals history (CrUX). Only run this way; it isn't part of the default wizard |
 | `crawlmark-cli setup --dry-run` | Runs the free checks and shows what each step would do, without writing, signing in or registering anything |
 | `crawlmark-cli setup --yes` | Accepts every default. Steps that need input (a password, an API key, a key file) are skipped; the default provider is only written to fix a missing or invalid one when a provider works |
 | `crawlmark-cli setup status` | Each integration's state and the next step (`--json` for machine output) |
@@ -243,6 +245,10 @@ It prints the mode, the account in use and `Key check: OK` or `Token check: OK`.
 
 Create an API key in Google Cloud with the PageSpeed Insights API enabled, then run `crawlmark-cli setup --step psi` (or set `PSI_API_KEY`). Without it, Lighthouse still runs locally; you just don't get real-user field data.
 
+### CrUX History (optional)
+
+Core Web Vitals history (`crux_history`, the `cwv` report section and `run_audit` with `cruxHistory`) needs a Google Cloud API key with the [Chrome UX Report API](https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com) enabled. Run `crawlmark-cli setup --step crux` and paste the key (or leave it blank to use `PSI_API_KEY`, which works when its project has the Chrome UX Report API enabled and the key isn't restricted to PageSpeed only). The check is one free query for a public site. The key is saved as `CRUX_API_KEY`.
+
 Configure your MCP client
 -------------------------
 
@@ -303,12 +309,17 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 | Tool | Description |
 |---|---|
 | `monthly_report` | Search Console and GA4 for the month vs the previous month and last year: top and moving queries and pages, landing pages, tracked keyword positions, top opportunities, the branded vs non-branded split, and what changed since the last audit. Free by default |
-| `run_audit` | Lighthouse, axe, rendered-vs-raw HTML, index status, on-page checks and site hygiene for each key page, with optional full crawl and backlinks. Saved, so it can be compared later |
+| `run_audit` | Lighthouse, axe, rendered-vs-raw HTML, index status, on-page checks and site hygiene for each key page, with optional full crawl and backlinks, Core Web Vitals history (`cruxHistory`) and Tag Manager findings (`includeTagManager`). Saved, so it can be compared later |
 | `list_audits` | A client's saved audits, newest first |
 | `get_audit` | One saved audit's full result and findings |
 | `compare_audits` | What's new, resolved, still open or unverified between two audits, plus score changes |
 | `crawl_status` | Progress of a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check |
+| `list_report_templates` | Report templates for a client: the builtin `monthly`, your global file and the client's own file, with optional and paid sections. Free |
+| `get_report_template` | One template with its defaults filled in and the resolved branding. Free |
+| `validate_report_template` | Checks template YAML (or a saved file) and names each problem's YAML path. Free |
+| `run_report_template` | Runs a template for a client: per-section data and status, computed highlights, and a `reportId` kept for 24 hours. Free unless you allow a paid section |
+| `export_report` | Saves a report as Markdown, HTML, PDF or Word files under the reports folder, data-only or with the agent's commentary, and can return a docs-friendly HTML copy for Google Docs |
 
 ### Opportunities (free, Search Console only)
 
@@ -331,6 +342,7 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `gtm_audit` | Audits the live Tag Manager container: paused, unfired and legacy tags, duplicate GA4 tags, unused variables, custom HTML, consent gaps and unpublished changes. Free |
 | `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |
 | `accessibility_check` | axe-core WCAG checks on one page |
+| `crux_history` | Real-user Core Web Vitals (LCP, INP, CLS, FCP, TTFB) per week for up to 40 weeks, with ratings and a trend, for a client, an origin or a URL. Free with a key ([CrUX History](#crux-history-optional)) |
 
 ### Competitors, keywords and brand terms
 
@@ -374,7 +386,8 @@ Prompts
 | Prompt | Arguments | Does |
 |---|---|---|
 | `getting-started` | none | Checks setup, gives the command for anything missing, and offers a first report |
-| `monthly-report-writeup` | `client`, `month` (optional, `YYYY-MM`) | Writes a client-facing monthly report: summary, what moved and why, branded vs non-branded, fixes since the last audit, top opportunities, next month's priorities |
+| `monthly-report-writeup` | `client`, `month` (optional, `YYYY-MM`) | Writes a client-facing monthly report: summary, what moved and why, branded vs non-branded, fixes since the last audit, top opportunities, next month's priorities. Offers to save it as files, and as a Google Doc when you have a Google Drive connector |
+| `template-report` | `client`, `template` (optional), `period` (optional: `YYYY-MM`, `YYYY-Qn` or `YYYY-MM-DD..YYYY-MM-DD`) | Runs a report template, writes commentary per section and saves Markdown, HTML, PDF or Word files. Offers a Google Doc only when a Drive connector is available and you say yes |
 | `audit-findings` | `client` | Uses a recent audit or runs one, compares it with the last, and writes findings by severity with a prioritized fix list |
 | `opportunity-review` | `client` | Runs the five opportunity tools and writes a prioritized action list with estimated click upside |
 | `client-health-check` | `client` | One cheap check per source, then a status table and fix list. Useful when onboarding a client |
@@ -399,6 +412,19 @@ Add competitors, tracked keywords, an area and a niche at any time with the tool
 
 [docs/clients.md](docs/clients.md) covers matching rules, defaults, competitor scoring and brand-term inference in full.
 
+Report files
+------------
+
+`export_report` (in Claude) and `crawlmark-cli report` (from cron) turn a client's data into Markdown, HTML, PDF or Word files from a YAML template. In Claude the files carry the commentary Claude writes; from cron they are data only and say so. Files go to `<home>/reports/<client>/<YYYY-MM>/`, readable only by you.
+
+```bash
+crawlmark-cli report templates init                         # writes config/report-templates.yaml (monthly + quarterly)
+crawlmark-cli report --client example.com --format md,pdf,docx
+crawlmark-cli report --all --template quarterly --quarter 2026-Q3 --format pdf
+```
+
+PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, branding, paths and the Docs handoff.
+
 Scheduled audits and alerts
 ---------------------------
 
@@ -408,6 +434,8 @@ Two CLI commands are built for cron, launchd or CI:
 crawlmark-cli check-traffic --all   # last 7 days vs the 7 before, branded vs non-branded (free)
 crawlmark-cli audit --all           # a fresh audit per client, diffed against the previous one
 ```
+
+`audit --include-tag-manager` adds each client's Tag Manager findings (medium or low, so they never alert); without it they're left out. `crawlmark-cli report --all` writes report files on a schedule ([Report files](#report-files)).
 
 Both print JSON. They alert on any new critical or high finding, or a non-branded click drop of at least `ALERT_TRAFFIC_DROP_PCT` (default 25%) and `ALERT_MIN_CLICKS_LOST` (default 50) clicks. Set `ALERT_WEBHOOK_URL` to an `https` Slack-style incoming webhook to get a text summary. Exit codes: `0` no alerts, `1` error, `2` alerts.
 
@@ -428,7 +456,7 @@ Configuration
 
 Settings come from environment variables, with `.env` in the **config home** loaded automatically. Variables set by your shell or the MCP client win over `.env`. [`.env.example`](.env.example) lists every variable with comments.
 
-The config home holds `.env`, `config/clients.yaml`, `data/` (cache, saved audits, spend ledger, OAuth token) and `secrets/`. It is:
+The config home holds `.env`, `config/clients.yaml`, `config/report-templates.yaml`, `data/` (cache, saved audits, spend ledger, OAuth token), `reports/` (report files) and `secrets/`. It is:
 
 1. `CRAWLMARK_HOME`, when set (an absolute path or one starting with `~`);
 2. otherwise the project folder, for a source checkout;
@@ -451,8 +479,10 @@ The config home holds `.env`, `config/clients.yaml`, `data/` (cache, saved audit
 | `AHREFS_MONTHLY_UNIT_CAP`, `SEMRUSH_MONTHLY_UNIT_CAP` | `50000`, `20000` | Monthly API units across all clients |
 | `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS`, `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` | `10000`, `5000` | Monthly API units per client (clients.yaml `monthlyUnits` overrides) |
 | `PSI_API_KEY` | | PageSpeed Insights key |
+| `CRUX_API_KEY` | | Chrome UX Report API key for Core Web Vitals history. Unset, `PSI_API_KEY` is tried |
 | `CLIENTS_FILE` | `./config/clients.yaml` | The client list |
 | `DATA_DIR` | `./data` | SQLite cache, saved audits, spend ledger and OAuth token |
+| `REPORTS_DIR` | `./reports` | Report files from `export_report` and `crawlmark-cli report` |
 | `DEFAULT_LOCATION_CODE`, `DEFAULT_LANGUAGE_CODE` | `2840`, `en` | DataForSEO market for clients that don't set one |
 | `DEFAULT_CLIENT_MONTHLY_BUDGET_USD` | `5` | Per-client monthly cap |
 | `GLOBAL_MONTHLY_BUDGET_USD` | `50` | Monthly cap across all clients |
@@ -483,8 +513,10 @@ CLI
 | `keywords list\|add\|remove <client> [keyword...]` | Manage tracked keywords (quote ones with spaces) |
 | `brand list\|add\|remove <client> [term...]` | Manage brand terms |
 | `brand suggest <client>\|--all [--apply] [--paid]` | Infer brand terms. `--all` makes no paid calls unless `--paid` |
-| `audit --client <domain>\|--all [--dry-run]` | Scheduled audits |
+| `audit --client <domain>\|--all [--dry-run] [--include-tag-manager]` | Scheduled audits |
 | `check-traffic --client <domain>\|--all [--dry-run]` | Scheduled traffic check |
+| `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format md,html,pdf,docx] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only). Exit 0 written, 2 written with a failed section or format, 1 error |
+| `report templates list\|validate [file]\|init` | List, check or create report templates |
 
 Results and errors
 ------------------
@@ -508,7 +540,7 @@ npm run inspect      # MCP Inspector
 
 [docs/development.md](docs/development.md) covers the code layout, adding a data source and releasing. [docs/audits.md](docs/audits.md) lists every audit and site-hygiene check.
 
-**Known limits:** Windows is untested, OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has), and Tag Manager findings aren't part of `run_audit` yet.
+**Known limits:** Windows is untested, OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
 
 License
 -------

@@ -10,6 +10,7 @@ import { backlinksSummary, competitorDomains, rankedKeywords, searchVolume, serp
 import { ga4Report } from "../providers/ga4.js";
 import { gscInspectUrl, gscQuery } from "../providers/gsc.js";
 import { runLighthouse } from "../providers/lighthouse.js";
+import { clientOrigin, cruxHistory } from "../providers/crux.js";
 import { checkRender } from "../providers/render.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import { keywordInput } from "../lib/clients.js";
@@ -61,6 +62,38 @@ export function registerRawTools(server: McpServer) {
     handler("gsc_query", async ({ client, startDate, endDate, ...rest }) =>
       gscQuery(await resolveClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
     ),
+  );
+
+  server.registerTool(
+    "crux_history",
+    {
+      title: "Core Web Vitals history (CrUX)",
+      description:
+        "Real-user Core Web Vitals over time from the Chrome UX Report History API: the 75th percentile of LCP, INP, CLS, FCP and TTFB per weekly period " +
+        "(each a 28-day window; default 25 periods, up to 40, about 10 months), with a good / needs-improvement / poor rating per period and a trend " +
+        "(the last 4 periods against the first 4; within 5% is flat). Give exactly one of client (its https origin), url or origin. " +
+        "Free with CRUX_API_KEY, or a PSI_API_KEY whose Google Cloud project has the Chrome UX Report API enabled (setup --step crux). " +
+        "`available: false` means Chrome has too little traffic data for that origin or URL. Cached for a day.",
+      inputSchema: {
+        client: clientArg.optional(),
+        url: z.string().url().max(2000).optional().describe("One page, e.g. https://example.com/pricing."),
+        origin: z.string().url().max(300).optional().describe("A whole origin, e.g. https://example.com."),
+        formFactor: z.enum(["PHONE", "DESKTOP", "TABLET", "ALL"]).optional().describe("Default PHONE."),
+        weeks: z.number().int().min(1).max(40).optional().describe("Weekly periods. Default 25."),
+        metrics: z.array(z.enum(["lcp", "inp", "cls", "fcp", "ttfb"])).min(1).optional().describe("Default all five."),
+      },
+      annotations: READ_ONLY,
+    },
+    handler("crux_history", async ({ client, url, origin, formFactor, weeks, metrics }) => {
+      if ([client, url, origin].filter((v) => v !== undefined).length !== 1) throw new Error("Give exactly one of client, url or origin.");
+      if (origin !== undefined) {
+        const u = new URL(origin);
+        if (!/^https?:$/.test(u.protocol) || (u.pathname !== "/" && u.pathname !== "") || u.search) throw new Error("origin must be a scheme and host only, e.g. https://example.com.");
+      }
+      if (url !== undefined && !/^https?:/i.test(url)) throw new Error("url must be http or https.");
+      const target = client ? { origin: clientOrigin(await resolveClient(client)) } : origin ? { origin: new URL(origin).origin } : { url };
+      return cruxHistory({ ...target, formFactor, weeks, metrics });
+    }),
   );
 
   server.registerTool(

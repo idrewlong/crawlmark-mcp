@@ -4,7 +4,12 @@ import { loadRegistry, resolveClient } from "../clients.js";
 import { diffAudits, pickComparison } from "../analysis/diff.js";
 import { getAudit, latestAudit, latestAuditBefore, listAudits } from "../lib/audits.js";
 import { missingPieces, type Client } from "../lib/clients.js";
-import { seoDefaultProvider } from "../config.js";
+import { env, HOME, seoDefaultProvider } from "../config.js";
+import { packageVersion } from "../lib/entry.js";
+import { exportReport } from "../reports/export.js";
+import { chromePdfPrinter } from "../reports/render/pdf.js";
+import { loadTemplates, templateFileWarnings } from "../reports/templates/load.js";
+import { FORMATS } from "../reports/templates/schema.js";
 import { canonicalSpendNames } from "../lib/spend.js";
 import { spendSummary } from "../lib/budget.js";
 import { purgeExpired } from "../lib/cache.js";
@@ -12,6 +17,8 @@ import { onPagePagesWithIssue, onPageSummary } from "../providers/dataforseo.js"
 import { runAudit } from "../reports/audit.js";
 import { HYGIENE_BUDGET_MS, siteHygiene } from "../reports/site-hygiene.js";
 import { monthlyReport } from "../reports/monthly.js";
+import { getReportTemplate, listReportTemplates, validateReportTemplate } from "../reports/templates/service.js";
+import { getStoredReport, loadDefaultRunDeps, runTemplate } from "../reports/templates/run.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import { purgeOldToolCalls, summarizeUsage, toolCallsSince } from "../lib/usage.js";
 import { assertUserUrl } from "../user-url.js";
@@ -93,6 +100,146 @@ export function registerReportTools(server: McpServer) {
   );
 
   server.registerTool(
+    "list_report_templates",
+    {
+      title: "List report templates",
+      description:
+        "Report templates available for a client: the builtin `monthly`, the global file (<home>/config/report-templates.yaml) and the client's own file " +
+        "(<home>/config/report-templates/<domain>.yaml), with each template's period, section count, optional sections (rendered only when asked for with `include`) and paid sections. " +
+        "Also reports whether each file exists and is valid; an invalid file never hides the builtin `monthly`. Free and local.",
+      inputSchema: { client: clientArg.optional() },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler("list_report_templates", async ({ client }) => {
+      const slug = client ? (await resolveClient(client)).slug : undefined;
+      return listReportTemplates(HOME.dir, slug);
+    }),
+  );
+
+  server.registerTool(
+    "get_report_template",
+    {
+      title: "Get a report template",
+      description:
+        "One report template with its defaults filled in (period, comparisons, sections) and the resolved branding (client file over global, field by field; the logo as a path plus whether it exists). Free and local.",
+      inputSchema: { client: clientArg.optional(), template: z.string().min(1).max(40).describe("Template id, e.g. monthly. See list_report_templates.") },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler("get_report_template", async ({ client, template }) => {
+      const slug = client ? (await resolveClient(client)).slug : undefined;
+      return getReportTemplate(HOME.dir, template, slug);
+    }),
+  );
+
+  server.registerTool(
+    "validate_report_template",
+    {
+      title: "Validate a report template",
+      description:
+        "Check report template YAML before saving it, or check the saved global or client file. Returns `valid`, `errors` with YAML paths " +
+        "(e.g. templates.monthly.sections[3].limit) and `warnings` (e.g. a logo file that doesn't exist). Give exactly one of `yaml` or `file`. No network, writes nothing.",
+      inputSchema: {
+        yaml: z.string().max(100_000).optional().describe("Template file text to check."),
+        file: z.enum(["global", "client"]).optional().describe("Check the saved global file, or the client's file (needs client)."),
+        client: clientArg.optional(),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler("validate_report_template", async ({ yaml, file, client }) => {
+      const slug = client ? (await resolveClient(client)).slug : undefined;
+      return validateReportTemplate(HOME.dir, { yaml, file, clientSlug: slug });
+    }),
+  );
+
+  server.registerTool(
+    "run_report_template",
+    {
+      title: "Run a report template",
+      description:
+        "Build a client's report from a template (default: the `monthly` template, the same data as monthly_report). Returns `reportId`, the period (with comparisons), " +
+        "each section's `status` (ok, error, unavailable, or skipped for a paid section without allowPaid) and `data`, computed `highlights` (facts only), `notes` and this run's paid `spend`. " +
+        "Read each section's status before writing about it. The data is kept for 24 hours: pass `reportId` to export_report so the files show exactly these numbers. " +
+        "Free unless the template has a paid section and you set allowPaid (state the cost first). Optional sections (e.g. cwv, gtm) run only when listed in `include`.",
+      inputSchema: {
+        client: clientArg,
+        template: z.string().min(1).max(40).optional().describe("Template id (list_report_templates). Default: the template file's default, else monthly."),
+        month: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM. Overrides the template's period."),
+        quarter: z.string().regex(/^\d{4}-Q[1-4]$/i).optional().describe("YYYY-Qn, e.g. 2026-Q3."),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        include: z.array(z.string().min(1).max(40)).max(40).optional().describe("Optional section ids to include, e.g. [\"cwv\", \"gtm\"]."),
+        allowPaid: z.boolean().optional().describe("Run paid sections (only when the user asked; state the estimate first)."),
+      },
+      annotations: READ_ONLY,
+    },
+    handler("run_report_template", async ({ client, ...opts }) => runTemplate(await resolveClient(client), { ...opts, homeDir: HOME.dir }, await loadDefaultRunDeps())),
+  );
+
+  server.registerTool(
+    "export_report",
+    {
+      title: "Export a report to files",
+      description:
+        "Save a client report as Markdown, HTML, PDF and/or Word (docx) files under the reports folder (<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>; files 0600). " +
+        "Pass the `reportId` from run_report_template so the files show exactly the numbers you wrote about (kept 24 hours), or the same arguments as run_report_template to run it first. " +
+        "`narrative` is your commentary (summary plus text per section id; paragraphs, `- ` bullets and **bold** only; at most 30,000 characters); without it the files are labelled data-only. " +
+        "`inline: \"html\"` also returns a docs-friendly HTML copy (no logo, plain tables) for saving to Google Docs with the user's own Drive tool, only after the user agrees; `formats: []` with inline writes no file. " +
+        "Re-exporting the same template and period overwrites its files. PDF needs Chrome; if it fails, the other formats are still written and `warnings` says why.",
+      inputSchema: {
+        client: clientArg,
+        reportId: z.string().max(40).optional().describe("From run_report_template. Leave out the template and period arguments when you pass it."),
+        template: z.string().min(1).max(40).optional(),
+        month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+        quarter: z.string().regex(/^\d{4}-Q[1-4]$/i).optional(),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        include: z.array(z.string().min(1).max(40)).max(40).optional(),
+        allowPaid: z.boolean().optional(),
+        formats: z.array(z.enum(FORMATS)).max(4).optional().describe("Default: the template file's defaults.formats, else md and html."),
+        narrative: z
+          .object({
+            summary: z.string().max(6000).optional(),
+            sections: z.record(z.string().max(40), z.string().max(6000)).optional(),
+          })
+          .strict()
+          .optional()
+          .describe("Your commentary: `summary`, and text keyed by section id (e.g. search, brand, traffic, opportunities, audit)."),
+        inline: z.enum(["html", "md"]).optional().describe("Also return the report as text (html is the Google Docs format)."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    handler(
+      "export_report",
+      async ({ client, reportId, formats, narrative, inline, ...runArgs }, { signal }) => {
+        const c = await resolveClient(client);
+        let report;
+        if (reportId) {
+          const given = (["template", "month", "quarter", "startDate", "endDate", "include", "allowPaid"] as const).filter((k) => runArgs[k] !== undefined);
+          if (given.length) throw new Error(`With reportId, leave out ${given.join(", ")}: the stored report already fixes the template and period.`);
+          report = getStoredReport(reportId);
+          if (report.client.slug !== c.slug) throw new Error(`Report ${reportId} is for ${report.client.domain}, not ${c.domain}.`);
+        } else {
+          report = await runTemplate(c, { ...runArgs, homeDir: HOME.dir }, await loadDefaultRunDeps());
+        }
+        const loaded = loadTemplates({ homeDir: HOME.dir, clientSlug: c.slug });
+        const out = await exportReport(report, {
+          formats: formats ?? loaded.defaults.formats,
+          narrative,
+          inline,
+          reportsDir: env.REPORTS_DIR,
+          branding: loaded.branding,
+          version: packageVersion(new URL("../index.js", import.meta.url).href),
+          printer: chromePdfPrinter,
+          signal,
+          warnings: templateFileWarnings(loaded),
+        });
+        return { reportId: report.reportId, ...out };
+      },
+      { timeoutMs: TIMEOUTS.auditMs },
+    ),
+  );
+
+  server.registerTool(
     "run_audit",
     {
       title: "Run SEO + accessibility audit",
@@ -114,6 +261,14 @@ export function registerReportTools(server: McpServer) {
           .boolean()
           .optional()
           .describe("Default true: every check runs live, so the audit is a true snapshot (the on-page check is a paid call per page). false reuses cached results up to a day old."),
+        cruxHistory: z
+          .boolean()
+          .optional()
+          .describe("Also add real-user Core Web Vitals history (CrUX, free with CRUX_API_KEY or PSI_API_KEY) as site.cruxHistory, with findings for poor or needs-improvement LCP, INP and CLS in the latest period. Default false."),
+        includeTagManager: z
+          .boolean()
+          .optional()
+          .describe("Also audit the client's Tag Manager container (as gtm_audit does) as site.tagManager, with its findings (source gtm, medium or low; never alerts). Only when the user asks; default false."),
       },
       annotations: READ_ONLY,
     },

@@ -39,6 +39,7 @@ const EXPECTED_PROMPTS: Record<string, { required: string[]; optional: string[] 
   "opportunity-review": { required: ["client"], optional: [] },
   "client-health-check": { required: ["client"], optional: [] },
   "getting-started": { required: [], optional: [] },
+  "template-report": { required: ["client"], optional: ["period", "template"] },
 };
 
 /** Prompts with no client argument. */
@@ -100,7 +101,8 @@ describe("tool names mentioned in templates", () => {
 
   it("the health check and audit/opportunity prompts name the tools they depend on", () => {
     const need: Record<string, string[]> = {
-      "monthly-report-writeup": ["monthly_report"],
+      "monthly-report-writeup": ["monthly_report", "export_report"],
+      "template-report": ["list_report_templates", "run_report_template", "export_report"],
       "audit-findings": ["list_audits", "get_audit", "run_audit", "compare_audits"],
       "opportunity-review": ["striking_distance", "quick_wins", "low_ctr", "cannibalization", "declining_pages", "list_competitors", "ranked_keywords", "suggest_competitors"],
       "client-health-check": ["list_clients", "gsc_query", "ga4_report", "render_check", "dataforseo_status"],
@@ -161,5 +163,48 @@ describe("prompt templates", () => {
     // Paid fallback for sparse Search Console data only after the user agrees.
     expect(text.indexOf("ask me whether to spend")).toBeGreaterThan(-1);
     expect(text.indexOf("ask me whether to spend")).toBeLessThan(text.indexOf("allowPaid: true"));
+  });
+});
+
+describe("report prompts (Phase 12)", () => {
+  const textOf = async (name: string, args: Record<string, string>) => ((await (await connect()).getPrompt({ name, arguments: args })).messages[0]!.content as { text: string }).text;
+
+  it("template-report: asks for the template when none is given, passes the period, never allowPaid unasked", async () => {
+    const pick = await textOf("template-report", { client: "example.com" });
+    expect(pick).toContain("`list_report_templates`");
+    expect(pick).toContain("ask which one to use");
+    expect(pick).toContain("never pass `allowPaid` unless I asked");
+    const q = await textOf("template-report", { client: "example.com", template: "quarterly", period: "2026-q3" });
+    expect(q).toContain('`template: "quarterly"`, `quarter: "2026-Q3"`');
+    expect(q).not.toContain("ask which one to use");
+    expect(await textOf("template-report", { client: "example.com", period: "2026-09" })).toContain('`month: "2026-09"`');
+    expect(await textOf("template-report", { client: "example.com", period: "2026-07-01..2026-09-30" })).toContain('`startDate: "2026-07-01"`, `endDate: "2026-09-30"`');
+    await expect(textOf("template-report", { client: "example.com", period: "last month" })).rejects.toThrow();
+    expect(q).toContain("default Markdown and PDF");
+    expect(q).toContain("`export_report`");
+  });
+
+  it("both report prompts share one copy of the number rules and the Docs offer, which is conditional and consent-first", async () => {
+    const { NUMBER_RULES, DOCS_OFFER } = await import("../src/prompts/index.js");
+    const monthly = await textOf("monthly-report-writeup", { client: "example.com" });
+    const tpl = await textOf("template-report", { client: "example.com", template: "monthly" });
+    for (const t of [monthly, tpl]) {
+      expect(t).toContain(NUMBER_RULES);
+      expect(t).toContain(DOCS_OFFER);
+    }
+    expect(DOCS_OFFER).toMatch(/^\*\*Google Docs \(only if available\)\.\*\* Only if this conversation has a Google Drive tool that can create files/);
+    expect(DOCS_OFFER).toContain("Only after a yes");
+    expect(DOCS_OFFER).toContain("If no such tool is available, don't mention Google Docs.");
+    expect(DOCS_OFFER).toContain("Don't share the file or change its permissions.");
+    expect(DOCS_OFFER).toContain('`inline: "html"`');
+    // R-2: the Docs export writes no files (without formats, export_report would fall back to the default formats).
+    expect(DOCS_OFFER).toContain("`formats: []`");
+  });
+
+  it("monthly-report-writeup keeps steps 1 to 5 and adds the export and Docs steps", async () => {
+    const t = await textOf("monthly-report-writeup", { client: "example.com", month: "2026-09" });
+    for (const h of ["1. **Get the data.**", "2. **Read the numbers correctly.**", "3. **Write the report**", "4. **Style rules.**", "5. **Unavailable data.**", "6. **Offer to save it.**", "7. **Google Docs (only if available).**"]) expect(t).toContain(h);
+    expect(t.indexOf("5. **Unavailable data.**")).toBeLessThan(t.indexOf("6. **Offer to save it.**"));
+    expect(t).toContain('`template: "monthly"`, `month: "2026-09"`');
   });
 });

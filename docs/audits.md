@@ -42,7 +42,15 @@ A sub-check that could not finish (fetch error, a cap reached, or the time budge
 | Variables and triggers no tag uses | low |
 | Custom HTML tags (listed for review) | low |
 
-It also counts unpublished changes per workspace. The Consent Mode check is a heuristic: it runs only when some tag requires consent or a Consent Initialization trigger exists, and skips tag types with built-in consent checks. Tag Manager findings are not part of `run_audit` yet.
+It also counts unpublished changes per workspace. The Consent Mode check is a heuristic: it runs only when some tag requires consent or a Consent Initialization trigger exists, and skips tag types with built-in consent checks.
+
+**In `run_audit` (opt-in).** `run_audit` with `includeTagManager: true` (or `crawlmark-cli audit --include-tag-manager`) adds the container audit as `site.tagManager` and its findings with source `gtm`, URL `gtm://<publicId>/<kind>/<id>`. They are medium or low, so scheduled audits never alert on them. A later audit run without the option lists earlier Tag Manager findings as `unverified`, never `resolved`. Default audits, `monthly_report` and the starter report template leave Tag Manager out.
+
+## Core Web Vitals history (CrUX)
+
+`crux_history` reads the Chrome UX Report History API: the 75th percentile of LCP, INP, CLS, FCP and TTFB for each weekly period (a 28-day window, updated Mondays), 25 periods by default and up to 40. Each period gets a rating (LCP good up to 2,500 ms and poor above 4,000; INP 200 / 500 ms; CLS 0.1 / 0.25; FCP 1,800 / 3,000 ms; TTFB 800 / 1,800 ms) and each metric a trend: the mean of the last 4 periods with data against the first 4, flat within 5%. `available: false` means Chrome has too little traffic data for that origin or URL. Cached for a day.
+
+`run_audit` with `cruxHistory: true` adds it for the client's origin as `site.cruxHistory` and adds `crux` findings from the latest period: `field-lcp-poor` (high), `field-lcp-needs-improvement` (medium), and the same for INP and CLS. Off by default.
 
 ## Opportunities
 

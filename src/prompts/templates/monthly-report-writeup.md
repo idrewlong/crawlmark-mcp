@@ -16,9 +16,7 @@ The report is for the client, so write it in plain language. Prefer free tools: 
    - **Top 3 opportunities.** From `opportunities` (striking-distance queries, low-CTR top results and cannibalized queries), pick the three with the most estimated extra clicks. Treat cannibalization with care: if many of the client's other pages show the same tiny impression count and zero clicks for a query, that is usually site links under the home page's result, not real competition between pages, so say so rather than telling the client to merge pages. For each give the query or page, where it ranks now and the specific action. If `opportunities` has an `error`, say so instead.
    - **Next month's priorities.** Three to five concrete actions drawn from the above.
 4. **Style rules.**
-   - No jargon without a one-line explanation the first time it appears (impressions, CTR, average position, striking distance).
-   - Round numbers sensibly (whole clicks, one decimal for position and rates).
-   - Every percentage change goes next to the absolute numbers it comes from, for example "clicks rose 12% (from 1,000 to 1,120)". Never give a percent change on its own.
-   - Say "average position" went from 8.2 to 7.5 (lower is better) rather than calling it a rise or fall.
-   - Search Console counts anonymized queries in the totals but not in the query-level tables, so the query tables (and the branded split) won't add up to the totals. Mention this once if you quote both.
+{{numberRules}}
 5. **Unavailable data.** If a source failed or a section is missing, put one line in the report saying which section is unavailable and why, and write nothing for it. Never fill a gap with a guess. If `monthly_report` itself fails, tell me the error and stop.
+6. **Offer to save it.** Ask which formats the user wants (Markdown, HTML, PDF, Word). Then call `export_report` with `client: "{{client}}"`, `template: "monthly"`{{exportMonthArg}}, those `formats`, and your text as `narrative` (keep the `reportId` it returns): `summary` is your Summary, and `sections` holds the rest keyed by the template's section ids (`search` for what went up and down, `brand` for branded vs non-branded, `traffic` for organic traffic, `opportunities` for the top 3 opportunities and `audit` for issues fixed). Tell the user the file paths it returns, and any `warnings` (for example a PDF that needs Chrome).
+7. {{docsOffer}}

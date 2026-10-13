@@ -95,6 +95,21 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - "Try asking Claude" in the final summary: three ready-made questions using up to three of your own clients, read from your local `clients.yaml` and shown only in your terminal (example.com when you have none; CI and piped runs don't show them at all).
 - A daily "Update available" notice from `init`, `--help` and `--version`: one request for the latest version number, no data about you or your clients, never in CI, and off with `CRAWLMARK_NO_UPDATE_CHECK=1`. The MCP server itself never checks.
 
+**Report files and templates** (Shipped)
+- Branded report files in Markdown, HTML, PDF and Word from reusable YAML templates (global and per client), with your agency name, logo, colours and footer. *"Write the September report for example.com and save it as a PDF and a Word file."*
+- From Claude, with written commentary next to the numbers it discusses; from cron, data only and labelled that way.
+- Save it as a Google Doc with your own Google Drive connector, only after you say yes. crawlmark itself never writes to Google.
+- New tools: `list_report_templates`, `get_report_template`, `validate_report_template`, `run_report_template`, `export_report`.
+- New prompt: `template-report`; `monthly-report-writeup` now offers to save files and a Google Doc.
+- New commands: `crawlmark-cli report --client example.com|--all [--format md,html,pdf,docx]` and `crawlmark-cli report templates list|validate|init`.
+
+**Core Web Vitals history** (Shipped)
+- Real-user LCP, INP and CLS week by week for up to 40 weeks, with ratings and a trend, from the Chrome UX Report (free with a Google key). *"Has example.com's LCP improved since spring?"*
+- New tool `crux_history`, setup step `setup --step crux`, an optional `cwv` report section, and `run_audit` with `cruxHistory`.
+
+**Tag Manager findings in audits** (Shipped, opt-in)
+- `run_audit` with `includeTagManager` and `crawlmark-cli audit --include-tag-manager` add Tag Manager findings to saved audits and diffs; an optional `gtm` report section. Never on by default, never an alert.
+
 ## 6. How to use it (a 5-minute walkthrough)
 
 1. Install: `npx crawlmark-mcp@latest init`.

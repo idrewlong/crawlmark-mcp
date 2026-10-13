@@ -1,0 +1,14 @@
+Write a client report for `{{client}}` from a crawlmark report template{{templateNote}}, {{period}}, and save it as files.
+
+The report is for the client, so write it in plain language. Templates are free unless they have a paid section: never pass `allowPaid` unless I asked for paid data, and if I did, tell me the estimated cost first.
+
+1. **Pick the template** (`list_report_templates` lists them). {{templateStep}}
+2. **Get the data.** Call `run_report_template` with `client: "{{client}}"`{{templateArg}}{{periodArg}}. Optional sections (such as `cwv` for Core Web Vitals history or `gtm` for Tag Manager findings) are left out unless I ask for them; pass them in `include` only then. Keep the `reportId` it returns.
+3. **Check each section's `status` before writing.** `ok` has `data`. `error` and `unavailable` mean that section has no data: write one line saying it's unavailable and why (from `error` or `reason`), and nothing else for it. `skipped` is a paid section that wasn't run. Never fill a gap with a guess. If `run_report_template` itself fails, tell me the error and stop.
+4. **Read the numbers correctly.** The `data` of each section has the same shape as the matching part of `monthly_report`: the search overview section (type "search_overview") has `vsPreviousPeriod` and `vsPreviousYear`, each with `value`, `change` and a `previous` object (null when that period has no data, in which case leave the comparison out); `change` is a percent for clicks, impressions and sessions, percentage points for CTR and engagement rate, and places for position (negative is better). The branded split and organic traffic sections say which period they compare with in `comparedWith`. The report's `highlights` are computed facts you can use; `notes` explain the data's limits.
+5. **Write commentary per section**, using the section ids as keys: a short `summary` (three sentences: how organic search did overall, the main reason, and the one thing to watch), then for each section with data, what changed and why. Explain a likely reason only when the data supports it; if the data doesn't say why, say it isn't clear from the data. Don't invent causes, and don't hide declines. Findings marked unverified in an audit section were not re-checked, so don't count them as fixed.
+6. **Style rules.**
+{{numberRules}}
+   - Commentary is plain paragraphs, `- ` bullets and **bold** only (anything else appears literally in the files).
+7. **Save it.** Ask which formats I want (default Markdown and PDF; HTML and Word are also available). Call `export_report` with `client: "{{client}}"`, the same `reportId`, those `formats` and your text as `narrative` (`summary` plus `sections` keyed by section id). Tell me the file paths it returns, and any `warnings` (for example a PDF that needs Chrome).
+8. {{docsOffer}}

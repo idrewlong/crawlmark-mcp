@@ -1,0 +1,1717 @@
+{
+  "default": {
+    "client": {
+      "slug": "example.com",
+      "name": "Example Co",
+      "domain": "example.com"
+    },
+    "month": "2026-09",
+    "periods": {
+      "current": {
+        "startDate": "2026-09-01",
+        "endDate": "2026-09-30"
+      },
+      "previous": {
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-31"
+      },
+      "yearAgo": {
+        "startDate": "2025-09-01",
+        "endDate": "2025-09-30"
+      }
+    },
+    "search": {
+      "vsPreviousMonth": {
+        "clicks": {
+          "value": 1120,
+          "change": 17.6
+        },
+        "impressions": {
+          "value": 20000,
+          "change": 17.6
+        },
+        "ctr": {
+          "value": 5.6,
+          "change": 0
+        },
+        "position": {
+          "value": 7.5,
+          "change": -0.7
+        },
+        "previous": {
+          "clicks": 952,
+          "impressions": 17000,
+          "ctr": 5.6,
+          "position": 8.2
+        }
+      },
+      "vsLastYear": {
+        "clicks": {
+          "value": 1120,
+          "change": 66.7
+        },
+        "impressions": {
+          "value": 20000,
+          "change": 66.7
+        },
+        "ctr": {
+          "value": 5.6,
+          "change": 0
+        },
+        "position": {
+          "value": 7.5,
+          "change": -0.7
+        },
+        "previous": {
+          "clicks": 672,
+          "impressions": 12000,
+          "ctr": 5.6,
+          "position": 8.2
+        }
+      },
+      "branded": {
+        "current": {
+          "queries": 1,
+          "clicks": 300,
+          "impressions": 1200,
+          "ctr": 25,
+          "position": 1.2
+        },
+        "previous": {
+          "queries": 1,
+          "clicks": 255,
+          "impressions": 1020,
+          "ctr": 25,
+          "position": 1.9
+        },
+        "change": {
+          "clicks": 17.6,
+          "impressions": 17.6,
+          "ctr": 0,
+          "position": -0.7
+        }
+      },
+      "nonBranded": {
+        "current": {
+          "queries": 6,
+          "clicks": 459,
+          "impressions": 13960,
+          "ctr": 3.29,
+          "position": 8.8
+        },
+        "previous": {
+          "queries": 6,
+          "clicks": 492,
+          "impressions": 11866,
+          "ctr": 4.15,
+          "position": 9.5
+        },
+        "change": {
+          "clicks": -6.7,
+          "impressions": 17.6,
+          "ctr": -0.86,
+          "position": -0.7
+        }
+      },
+      "brandedShareOfClicks": {
+        "current": 39.5,
+        "previous": 34.1
+      },
+      "queryRows": {
+        "current": 7,
+        "previous": 7,
+        "limit": 5000
+      },
+      "note": "Branded and non-branded totals are built from Search Console query rows, which leave out anonymized queries (rare queries Google withholds), so branded + non-branded will not add up to the site totals in vsPreviousMonth. Use them for the split, not as site totals.",
+      "brandTerms": [
+        "example co"
+      ]
+    },
+    "organicTraffic": {
+      "sessions": {
+        "value": 1500,
+        "change": 17.6
+      },
+      "users": {
+        "value": 1200,
+        "change": 17.6
+      },
+      "engagementRate": {
+        "value": 61.2,
+        "change": 2.8
+      },
+      "keyEvents": {
+        "value": 40,
+        "change": 17.6
+      }
+    },
+    "topQueries": [
+      {
+        "keys": [
+          "example co"
+        ],
+        "clicks": 300,
+        "impressions": 1200,
+        "ctr": 25,
+        "position": 1.2,
+        "branded": true
+      },
+      {
+        "keys": [
+          "emergency plumber"
+        ],
+        "clicks": 180,
+        "impressions": 4200,
+        "ctr": 4.29,
+        "position": 6.4,
+        "branded": false
+      },
+      {
+        "keys": [
+          "water heater repair"
+        ],
+        "clicks": 120,
+        "impressions": 3100,
+        "ctr": 3.87,
+        "position": 8.1,
+        "branded": false
+      },
+      {
+        "keys": [
+          "drain cleaning near me"
+        ],
+        "clicks": 90,
+        "impressions": 5200,
+        "ctr": 1.73,
+        "position": 11.3,
+        "branded": false
+      },
+      {
+        "keys": [
+          "leak detection"
+        ],
+        "clicks": 60,
+        "impressions": 900,
+        "ctr": 6.67,
+        "position": 4.2,
+        "branded": false
+      },
+      {
+        "keys": [
+          "<img src=x onerror=alert(1)>"
+        ],
+        "clicks": 5,
+        "impressions": 300,
+        "ctr": 1.67,
+        "position": 15,
+        "branded": false
+      },
+      {
+        "keys": [
+          "pipe | fitting"
+        ],
+        "clicks": 4,
+        "impressions": 260,
+        "ctr": 1.54,
+        "position": 12.5,
+        "branded": false
+      }
+    ],
+    "queryMovers": {
+      "gainers": [
+        {
+          "key": "example co",
+          "clicks": 300,
+          "clicksDelta": 45,
+          "position": 1.2,
+          "positionDelta": -0.7,
+          "branded": true
+        },
+        {
+          "key": "emergency plumber",
+          "clicks": 180,
+          "clicksDelta": 27,
+          "position": 6.4,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "water heater repair",
+          "clicks": 120,
+          "clicksDelta": 18,
+          "position": 8.1,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "drain cleaning near me",
+          "clicks": 90,
+          "clicksDelta": 13,
+          "position": 11.3,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "<img src=x onerror=alert(1)>",
+          "clicks": 5,
+          "clicksDelta": 1,
+          "position": 15,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "pipe | fitting",
+          "clicks": 4,
+          "clicksDelta": 1,
+          "position": 12.5,
+          "positionDelta": -0.7,
+          "branded": false
+        }
+      ],
+      "losers": [
+        {
+          "key": "leak detection",
+          "clicks": 60,
+          "clicksDelta": -93,
+          "position": 4.2,
+          "positionDelta": -0.7,
+          "branded": false
+        }
+      ]
+    },
+    "topPages": [
+      {
+        "keys": [
+          "https://example.com/"
+        ],
+        "clicks": 420,
+        "impressions": 6000,
+        "ctr": 7,
+        "position": 3.1
+      },
+      {
+        "keys": [
+          "https://example.com/services/emergency"
+        ],
+        "clicks": 200,
+        "impressions": 5100,
+        "ctr": 3.92,
+        "position": 6
+      },
+      {
+        "keys": [
+          "https://example.com/blog/water-heaters"
+        ],
+        "clicks": 110,
+        "impressions": 4100,
+        "ctr": 2.68,
+        "position": 9.2
+      },
+      {
+        "keys": [
+          "https://example.com/contact"
+        ],
+        "clicks": 40,
+        "impressions": 800,
+        "ctr": 5,
+        "position": 5.5
+      }
+    ],
+    "pageMovers": {
+      "gainers": [
+        {
+          "key": "https://example.com/",
+          "clicks": 420,
+          "clicksDelta": 63,
+          "position": 3.1,
+          "positionDelta": -0.4
+        },
+        {
+          "key": "https://example.com/services/emergency",
+          "clicks": 200,
+          "clicksDelta": 30,
+          "position": 6,
+          "positionDelta": -0.4
+        },
+        {
+          "key": "https://example.com/blog/water-heaters",
+          "clicks": 110,
+          "clicksDelta": 16,
+          "position": 9.2,
+          "positionDelta": -0.4
+        },
+        {
+          "key": "https://example.com/contact",
+          "clicks": 40,
+          "clicksDelta": 6,
+          "position": 5.5,
+          "positionDelta": -0.4
+        }
+      ],
+      "losers": []
+    },
+    "topLandingPages": {
+      "ok": true,
+      "data": [
+        {
+          "landingPagePlusQueryString": "/",
+          "sessions": 700,
+          "engagementRate": 0.64,
+          "keyEvents": 20
+        },
+        {
+          "landingPagePlusQueryString": "/services/emergency",
+          "sessions": 400,
+          "engagementRate": 0.58,
+          "keyEvents": 15
+        },
+        {
+          "landingPagePlusQueryString": "/blog/water-heaters",
+          "sessions": 210,
+          "engagementRate": 0.49,
+          "keyEvents": 2
+        }
+      ]
+    },
+    "trackedKeywords": {
+      "ok": true,
+      "data": [
+        {
+          "keyword": "emergency plumber",
+          "branded": false,
+          "gscPosition": 6.4,
+          "gscClicks": 180,
+          "gscImpressions": 4200,
+          "liveRank": null,
+          "liveUrl": null
+        },
+        {
+          "keyword": "example co",
+          "branded": true,
+          "gscPosition": 1.2,
+          "gscClicks": 300,
+          "gscImpressions": 1200,
+          "liveRank": null,
+          "liveUrl": null
+        },
+        {
+          "keyword": "water heater repair",
+          "branded": false,
+          "gscPosition": 8.1,
+          "gscClicks": 120,
+          "gscImpressions": 3100,
+          "liveRank": null,
+          "liveUrl": null
+        }
+      ]
+    },
+    "opportunities": {
+      "window": {
+        "startDate": "2026-09-01",
+        "endDate": "2026-09-30"
+      },
+      "method": "Non-branded queries only, default thresholds (at least 100 impressions in the month). striking_distance: position 5-20, upside vs position 3 CTR. low_ctr: position 1-5 with CTR under 60% of expected. cannibalization: 2+ pages each with at least 10% of a query's impressions. Run the individual tools for other windows, lower thresholds or more rows.",
+      "strikingDistance": {
+        "total": 3,
+        "top": [
+          {
+            "query": "drain cleaning near me",
+            "topPage": "https://example.com/services/emergency",
+            "position": 11.3,
+            "impressions": 5200,
+            "clicks": 90,
+            "ctr": 1.73,
+            "estimatedExtraClicks": 430
+          },
+          {
+            "query": "emergency plumber",
+            "topPage": "https://example.com/services/emergency",
+            "position": 6.7,
+            "impressions": 4200,
+            "clicks": 180,
+            "ctr": 4.29,
+            "estimatedExtraClicks": 240
+          },
+          {
+            "query": "water heater repair",
+            "topPage": "https://example.com/blog/water-heaters",
+            "position": 8.1,
+            "impressions": 3100,
+            "clicks": 120,
+            "ctr": 3.87,
+            "estimatedExtraClicks": 190
+          }
+        ]
+      },
+      "lowCtr": {
+        "total": 1,
+        "top": [
+          {
+            "query": "leak detection",
+            "page": "https://example.com/",
+            "position": 2.2,
+            "impressions": 900,
+            "clicks": 10,
+            "ctr": 1.11,
+            "expectedCtr": 15,
+            "estimatedExtraClicks": 125
+          }
+        ]
+      },
+      "cannibalization": {
+        "total": 1,
+        "top": [
+          {
+            "query": "emergency plumber",
+            "totalImpressions": 4200,
+            "totalClicks": 180,
+            "pages": [
+              {
+                "page": "https://example.com/services/emergency",
+                "impressionShare": 71.43,
+                "impressions": 3000,
+                "clicks": 150,
+                "position": 6.2
+              },
+              {
+                "page": "https://example.com/",
+                "impressionShare": 28.57,
+                "impressions": 1200,
+                "clicks": 30,
+                "position": 7.9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "audit": {
+      "auditId": "aud_latest",
+      "ranAt": "2026-09-25T10:00:00.000Z",
+      "summary": {
+        "avgScores": {
+          "performance": 78,
+          "accessibility": 90,
+          "bestPractices": 92,
+          "seo": 92
+        }
+      },
+      "diff": {
+        "base": {
+          "auditId": "aud_before",
+          "ranAt": "2026-08-20T10:00:00.000Z"
+        },
+        "target": {
+          "auditId": "aud_latest",
+          "ranAt": "2026-09-25T10:00:00.000Z"
+        },
+        "new": [
+          {
+            "id": "is_broken",
+            "source": "onpage",
+            "rule": "is_broken",
+            "url": "https://example.com/",
+            "severity": "high",
+            "title": "On-page check failed: is broken"
+          }
+        ],
+        "resolved": [
+          {
+            "id": "no_description",
+            "source": "onpage",
+            "rule": "no_description",
+            "url": "https://example.com/",
+            "severity": "medium",
+            "title": "On-page check failed: no description"
+          }
+        ],
+        "persistent": [
+          {
+            "id": "no_h1_tag",
+            "source": "onpage",
+            "rule": "no_h1_tag",
+            "url": "https://example.com/",
+            "severity": "medium",
+            "title": "On-page check failed: no h1 tag"
+          }
+        ],
+        "unverified": [
+          {
+            "id": "gone",
+            "source": "axe",
+            "rule": "gone",
+            "url": "https://example.com/",
+            "severity": "low",
+            "title": "Old low issue"
+          }
+        ],
+        "scoreChanges": [
+          {
+            "url": "https://example.com",
+            "category": "performance",
+            "from": 71,
+            "to": 78
+          },
+          {
+            "url": "https://example.com",
+            "category": "seo",
+            "from": 90,
+            "to": 92
+          }
+        ],
+        "warnings": [],
+        "counts": {
+          "new": 1,
+          "resolved": 1,
+          "persistent": 1,
+          "unverified": 1
+        }
+      }
+    },
+    "dataSpendThisMonthUsd": 0.1235
+  },
+  "liveRanks": {
+    "client": {
+      "slug": "example.com",
+      "name": "Example Co",
+      "domain": "example.com"
+    },
+    "month": "2026-09",
+    "periods": {
+      "current": {
+        "startDate": "2026-09-01",
+        "endDate": "2026-09-30"
+      },
+      "previous": {
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-31"
+      },
+      "yearAgo": {
+        "startDate": "2025-09-01",
+        "endDate": "2025-09-30"
+      }
+    },
+    "search": {
+      "vsPreviousMonth": {
+        "clicks": {
+          "value": 1120,
+          "change": 17.6
+        },
+        "impressions": {
+          "value": 20000,
+          "change": 17.6
+        },
+        "ctr": {
+          "value": 5.6,
+          "change": 0
+        },
+        "position": {
+          "value": 7.5,
+          "change": -0.7
+        },
+        "previous": {
+          "clicks": 952,
+          "impressions": 17000,
+          "ctr": 5.6,
+          "position": 8.2
+        }
+      },
+      "vsLastYear": {
+        "clicks": {
+          "value": 1120,
+          "change": 66.7
+        },
+        "impressions": {
+          "value": 20000,
+          "change": 66.7
+        },
+        "ctr": {
+          "value": 5.6,
+          "change": 0
+        },
+        "position": {
+          "value": 7.5,
+          "change": -0.7
+        },
+        "previous": {
+          "clicks": 672,
+          "impressions": 12000,
+          "ctr": 5.6,
+          "position": 8.2
+        }
+      },
+      "branded": {
+        "current": {
+          "queries": 1,
+          "clicks": 300,
+          "impressions": 1200,
+          "ctr": 25,
+          "position": 1.2
+        },
+        "previous": {
+          "queries": 1,
+          "clicks": 255,
+          "impressions": 1020,
+          "ctr": 25,
+          "position": 1.9
+        },
+        "change": {
+          "clicks": 17.6,
+          "impressions": 17.6,
+          "ctr": 0,
+          "position": -0.7
+        }
+      },
+      "nonBranded": {
+        "current": {
+          "queries": 6,
+          "clicks": 459,
+          "impressions": 13960,
+          "ctr": 3.29,
+          "position": 8.8
+        },
+        "previous": {
+          "queries": 6,
+          "clicks": 492,
+          "impressions": 11866,
+          "ctr": 4.15,
+          "position": 9.5
+        },
+        "change": {
+          "clicks": -6.7,
+          "impressions": 17.6,
+          "ctr": -0.86,
+          "position": -0.7
+        }
+      },
+      "brandedShareOfClicks": {
+        "current": 39.5,
+        "previous": 34.1
+      },
+      "queryRows": {
+        "current": 7,
+        "previous": 7,
+        "limit": 5000
+      },
+      "note": "Branded and non-branded totals are built from Search Console query rows, which leave out anonymized queries (rare queries Google withholds), so branded + non-branded will not add up to the site totals in vsPreviousMonth. Use them for the split, not as site totals.",
+      "brandTerms": [
+        "example co"
+      ]
+    },
+    "organicTraffic": {
+      "sessions": {
+        "value": 1500,
+        "change": 17.6
+      },
+      "users": {
+        "value": 1200,
+        "change": 17.6
+      },
+      "engagementRate": {
+        "value": 61.2,
+        "change": 2.8
+      },
+      "keyEvents": {
+        "value": 40,
+        "change": 17.6
+      }
+    },
+    "topQueries": [
+      {
+        "keys": [
+          "example co"
+        ],
+        "clicks": 300,
+        "impressions": 1200,
+        "ctr": 25,
+        "position": 1.2,
+        "branded": true
+      },
+      {
+        "keys": [
+          "emergency plumber"
+        ],
+        "clicks": 180,
+        "impressions": 4200,
+        "ctr": 4.29,
+        "position": 6.4,
+        "branded": false
+      },
+      {
+        "keys": [
+          "water heater repair"
+        ],
+        "clicks": 120,
+        "impressions": 3100,
+        "ctr": 3.87,
+        "position": 8.1,
+        "branded": false
+      },
+      {
+        "keys": [
+          "drain cleaning near me"
+        ],
+        "clicks": 90,
+        "impressions": 5200,
+        "ctr": 1.73,
+        "position": 11.3,
+        "branded": false
+      },
+      {
+        "keys": [
+          "leak detection"
+        ],
+        "clicks": 60,
+        "impressions": 900,
+        "ctr": 6.67,
+        "position": 4.2,
+        "branded": false
+      },
+      {
+        "keys": [
+          "<img src=x onerror=alert(1)>"
+        ],
+        "clicks": 5,
+        "impressions": 300,
+        "ctr": 1.67,
+        "position": 15,
+        "branded": false
+      },
+      {
+        "keys": [
+          "pipe | fitting"
+        ],
+        "clicks": 4,
+        "impressions": 260,
+        "ctr": 1.54,
+        "position": 12.5,
+        "branded": false
+      }
+    ],
+    "queryMovers": {
+      "gainers": [
+        {
+          "key": "example co",
+          "clicks": 300,
+          "clicksDelta": 45,
+          "position": 1.2,
+          "positionDelta": -0.7,
+          "branded": true
+        },
+        {
+          "key": "emergency plumber",
+          "clicks": 180,
+          "clicksDelta": 27,
+          "position": 6.4,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "water heater repair",
+          "clicks": 120,
+          "clicksDelta": 18,
+          "position": 8.1,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "drain cleaning near me",
+          "clicks": 90,
+          "clicksDelta": 13,
+          "position": 11.3,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "<img src=x onerror=alert(1)>",
+          "clicks": 5,
+          "clicksDelta": 1,
+          "position": 15,
+          "positionDelta": -0.7,
+          "branded": false
+        },
+        {
+          "key": "pipe | fitting",
+          "clicks": 4,
+          "clicksDelta": 1,
+          "position": 12.5,
+          "positionDelta": -0.7,
+          "branded": false
+        }
+      ],
+      "losers": [
+        {
+          "key": "leak detection",
+          "clicks": 60,
+          "clicksDelta": -93,
+          "position": 4.2,
+          "positionDelta": -0.7,
+          "branded": false
+        }
+      ]
+    },
+    "topPages": [
+      {
+        "keys": [
+          "https://example.com/"
+        ],
+        "clicks": 420,
+        "impressions": 6000,
+        "ctr": 7,
+        "position": 3.1
+      },
+      {
+        "keys": [
+          "https://example.com/services/emergency"
+        ],
+        "clicks": 200,
+        "impressions": 5100,
+        "ctr": 3.92,
+        "position": 6
+      },
+      {
+        "keys": [
+          "https://example.com/blog/water-heaters"
+        ],
+        "clicks": 110,
+        "impressions": 4100,
+        "ctr": 2.68,
+        "position": 9.2
+      },
+      {
+        "keys": [
+          "https://example.com/contact"
+        ],
+        "clicks": 40,
+        "impressions": 800,
+        "ctr": 5,
+        "position": 5.5
+      }
+    ],
+    "pageMovers": {
+      "gainers": [
+        {
+          "key": "https://example.com/",
+          "clicks": 420,
+          "clicksDelta": 63,
+          "position": 3.1,
+          "positionDelta": -0.4
+        },
+        {
+          "key": "https://example.com/services/emergency",
+          "clicks": 200,
+          "clicksDelta": 30,
+          "position": 6,
+          "positionDelta": -0.4
+        },
+        {
+          "key": "https://example.com/blog/water-heaters",
+          "clicks": 110,
+          "clicksDelta": 16,
+          "position": 9.2,
+          "positionDelta": -0.4
+        },
+        {
+          "key": "https://example.com/contact",
+          "clicks": 40,
+          "clicksDelta": 6,
+          "position": 5.5,
+          "positionDelta": -0.4
+        }
+      ],
+      "losers": []
+    },
+    "topLandingPages": {
+      "ok": true,
+      "data": [
+        {
+          "landingPagePlusQueryString": "/",
+          "sessions": 700,
+          "engagementRate": 0.64,
+          "keyEvents": 20
+        },
+        {
+          "landingPagePlusQueryString": "/services/emergency",
+          "sessions": 400,
+          "engagementRate": 0.58,
+          "keyEvents": 15
+        },
+        {
+          "landingPagePlusQueryString": "/blog/water-heaters",
+          "sessions": 210,
+          "engagementRate": 0.49,
+          "keyEvents": 2
+        }
+      ]
+    },
+    "trackedKeywords": {
+      "ok": true,
+      "data": [
+        {
+          "keyword": "emergency plumber",
+          "branded": false,
+          "gscPosition": 6.4,
+          "gscClicks": 180,
+          "gscImpressions": 4200,
+          "liveRank": 3,
+          "liveUrl": "https://example.com/"
+        },
+        {
+          "keyword": "example co",
+          "branded": true,
+          "gscPosition": 1.2,
+          "gscClicks": 300,
+          "gscImpressions": 1200,
+          "liveRank": 3,
+          "liveUrl": "https://example.com/"
+        },
+        {
+          "keyword": "water heater repair",
+          "branded": false,
+          "gscPosition": 8.1,
+          "gscClicks": 120,
+          "gscImpressions": 3100,
+          "liveRank": 5,
+          "liveUrl": "https://example.com/"
+        }
+      ],
+      "liveRanks": {
+        "available": true
+      }
+    },
+    "opportunities": {
+      "window": {
+        "startDate": "2026-09-01",
+        "endDate": "2026-09-30"
+      },
+      "method": "Non-branded queries only, default thresholds (at least 100 impressions in the month). striking_distance: position 5-20, upside vs position 3 CTR. low_ctr: position 1-5 with CTR under 60% of expected. cannibalization: 2+ pages each with at least 10% of a query's impressions. Run the individual tools for other windows, lower thresholds or more rows.",
+      "strikingDistance": {
+        "total": 3,
+        "top": [
+          {
+            "query": "drain cleaning near me",
+            "topPage": "https://example.com/services/emergency",
+            "position": 11.3,
+            "impressions": 5200,
+            "clicks": 90,
+            "ctr": 1.73,
+            "estimatedExtraClicks": 430
+          },
+          {
+            "query": "emergency plumber",
+            "topPage": "https://example.com/services/emergency",
+            "position": 6.7,
+            "impressions": 4200,
+            "clicks": 180,
+            "ctr": 4.29,
+            "estimatedExtraClicks": 240
+          },
+          {
+            "query": "water heater repair",
+            "topPage": "https://example.com/blog/water-heaters",
+            "position": 8.1,
+            "impressions": 3100,
+            "clicks": 120,
+            "ctr": 3.87,
+            "estimatedExtraClicks": 190
+          }
+        ]
+      },
+      "lowCtr": {
+        "total": 1,
+        "top": [
+          {
+            "query": "leak detection",
+            "page": "https://example.com/",
+            "position": 2.2,
+            "impressions": 900,
+            "clicks": 10,
+            "ctr": 1.11,
+            "expectedCtr": 15,
+            "estimatedExtraClicks": 125
+          }
+        ]
+      },
+      "cannibalization": {
+        "total": 1,
+        "top": [
+          {
+            "query": "emergency plumber",
+            "totalImpressions": 4200,
+            "totalClicks": 180,
+            "pages": [
+              {
+                "page": "https://example.com/services/emergency",
+                "impressionShare": 71.43,
+                "impressions": 3000,
+                "clicks": 150,
+                "position": 6.2
+              },
+              {
+                "page": "https://example.com/",
+                "impressionShare": 28.57,
+                "impressions": 1200,
+                "clicks": 30,
+                "position": 7.9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "audit": {
+      "auditId": "aud_latest",
+      "ranAt": "2026-09-25T10:00:00.000Z",
+      "summary": {
+        "avgScores": {
+          "performance": 78,
+          "accessibility": 90,
+          "bestPractices": 92,
+          "seo": 92
+        }
+      },
+      "diff": {
+        "base": {
+          "auditId": "aud_before",
+          "ranAt": "2026-08-20T10:00:00.000Z"
+        },
+        "target": {
+          "auditId": "aud_latest",
+          "ranAt": "2026-09-25T10:00:00.000Z"
+        },
+        "new": [
+          {
+            "id": "is_broken",
+            "source": "onpage",
+            "rule": "is_broken",
+            "url": "https://example.com/",
+            "severity": "high",
+            "title": "On-page check failed: is broken"
+          }
+        ],
+        "resolved": [
+          {
+            "id": "no_description",
+            "source": "onpage",
+            "rule": "no_description",
+            "url": "https://example.com/",
+            "severity": "medium",
+            "title": "On-page check failed: no description"
+          }
+        ],
+        "persistent": [
+          {
+            "id": "no_h1_tag",
+            "source": "onpage",
+            "rule": "no_h1_tag",
+            "url": "https://example.com/",
+            "severity": "medium",
+            "title": "On-page check failed: no h1 tag"
+          }
+        ],
+        "unverified": [
+          {
+            "id": "gone",
+            "source": "axe",
+            "rule": "gone",
+            "url": "https://example.com/",
+            "severity": "low",
+            "title": "Old low issue"
+          }
+        ],
+        "scoreChanges": [
+          {
+            "url": "https://example.com",
+            "category": "performance",
+            "from": 71,
+            "to": 78
+          },
+          {
+            "url": "https://example.com",
+            "category": "seo",
+            "from": 90,
+            "to": 92
+          }
+        ],
+        "warnings": [],
+        "counts": {
+          "new": 1,
+          "resolved": 1,
+          "persistent": 1,
+          "unverified": 1
+        }
+      }
+    },
+    "dataSpendThisMonthUsd": 0.1235
+  },
+  "july": {
+    "client": {
+      "slug": "example.com",
+      "name": "Example Co",
+      "domain": "example.com"
+    },
+    "month": "2026-07",
+    "periods": {
+      "current": {
+        "startDate": "2026-07-01",
+        "endDate": "2026-07-31"
+      },
+      "previous": {
+        "startDate": "2026-06-01",
+        "endDate": "2026-06-30"
+      },
+      "yearAgo": {
+        "startDate": "2025-07-01",
+        "endDate": "2025-07-31"
+      }
+    },
+    "search": {
+      "vsPreviousMonth": {
+        "clicks": {
+          "value": 896,
+          "change": -11.1
+        },
+        "impressions": {
+          "value": 16000,
+          "change": -11.1
+        },
+        "ctr": {
+          "value": 5.6,
+          "change": 0
+        },
+        "position": {
+          "value": 8.2,
+          "change": 0
+        },
+        "previous": {
+          "clicks": 1008,
+          "impressions": 18000,
+          "ctr": 5.6,
+          "position": 8.2
+        }
+      },
+      "vsLastYear": {
+        "clicks": {
+          "value": 896,
+          "change": 60
+        },
+        "impressions": {
+          "value": 16000,
+          "change": 60
+        },
+        "ctr": {
+          "value": 5.6,
+          "change": 0
+        },
+        "position": {
+          "value": 8.2,
+          "change": 0
+        },
+        "previous": {
+          "clicks": 560,
+          "impressions": 10000,
+          "ctr": 5.6,
+          "position": 8.2
+        }
+      },
+      "branded": {
+        "current": {
+          "queries": 1,
+          "clicks": 240,
+          "impressions": 960,
+          "ctr": 25,
+          "position": 1.9
+        },
+        "previous": {
+          "queries": 1,
+          "clicks": 270,
+          "impressions": 1080,
+          "ctr": 25,
+          "position": 1.9
+        },
+        "change": {
+          "clicks": -11.1,
+          "impressions": -11.1,
+          "ctr": 0,
+          "position": 0
+        }
+      },
+      "nonBranded": {
+        "current": {
+          "queries": 6,
+          "clicks": 367,
+          "impressions": 11168,
+          "ctr": 3.29,
+          "position": 9.5
+        },
+        "previous": {
+          "queries": 6,
+          "clicks": 414,
+          "impressions": 12564,
+          "ctr": 3.3,
+          "position": 9.5
+        },
+        "change": {
+          "clicks": -11.4,
+          "impressions": -11.1,
+          "ctr": -0.01,
+          "position": 0
+        }
+      },
+      "brandedShareOfClicks": {
+        "current": 39.5,
+        "previous": 39.5
+      },
+      "queryRows": {
+        "current": 7,
+        "previous": 7,
+        "limit": 5000
+      },
+      "note": "Branded and non-branded totals are built from Search Console query rows, which leave out anonymized queries (rare queries Google withholds), so branded + non-branded will not add up to the site totals in vsPreviousMonth. Use them for the split, not as site totals.",
+      "brandTerms": [
+        "example co"
+      ]
+    },
+    "organicTraffic": {
+      "sessions": {
+        "value": 1200,
+        "change": -11.1
+      },
+      "users": {
+        "value": 960,
+        "change": -11.1
+      },
+      "engagementRate": {
+        "value": 58.4,
+        "change": 0
+      },
+      "keyEvents": {
+        "value": 32,
+        "change": -11.1
+      }
+    },
+    "topQueries": [
+      {
+        "keys": [
+          "example co"
+        ],
+        "clicks": 240,
+        "impressions": 960,
+        "ctr": 25,
+        "position": 1.9,
+        "branded": true
+      },
+      {
+        "keys": [
+          "emergency plumber"
+        ],
+        "clicks": 144,
+        "impressions": 3360,
+        "ctr": 4.29,
+        "position": 7.1000000000000005,
+        "branded": false
+      },
+      {
+        "keys": [
+          "water heater repair"
+        ],
+        "clicks": 96,
+        "impressions": 2480,
+        "ctr": 3.87,
+        "position": 8.799999999999999,
+        "branded": false
+      },
+      {
+        "keys": [
+          "drain cleaning near me"
+        ],
+        "clicks": 72,
+        "impressions": 4160,
+        "ctr": 1.73,
+        "position": 12,
+        "branded": false
+      },
+      {
+        "keys": [
+          "leak detection"
+        ],
+        "clicks": 48,
+        "impressions": 720,
+        "ctr": 6.67,
+        "position": 4.9,
+        "branded": false
+      },
+      {
+        "keys": [
+          "<img src=x onerror=alert(1)>"
+        ],
+        "clicks": 4,
+        "impressions": 240,
+        "ctr": 1.67,
+        "position": 15.7,
+        "branded": false
+      },
+      {
+        "keys": [
+          "pipe | fitting"
+        ],
+        "clicks": 3,
+        "impressions": 208,
+        "ctr": 1.44,
+        "position": 13.2,
+        "branded": false
+      }
+    ],
+    "queryMovers": {
+      "gainers": [],
+      "losers": [
+        {
+          "key": "example co",
+          "clicks": 240,
+          "clicksDelta": -30,
+          "position": 1.9,
+          "positionDelta": 0,
+          "branded": true
+        },
+        {
+          "key": "emergency plumber",
+          "clicks": 144,
+          "clicksDelta": -18,
+          "position": 7.1000000000000005,
+          "positionDelta": 0,
+          "branded": false
+        },
+        {
+          "key": "water heater repair",
+          "clicks": 96,
+          "clicksDelta": -12,
+          "position": 8.799999999999999,
+          "positionDelta": 0,
+          "branded": false
+        },
+        {
+          "key": "drain cleaning near me",
+          "clicks": 72,
+          "clicksDelta": -9,
+          "position": 12,
+          "positionDelta": 0,
+          "branded": false
+        },
+        {
+          "key": "leak detection",
+          "clicks": 48,
+          "clicksDelta": -6,
+          "position": 4.9,
+          "positionDelta": 0,
+          "branded": false
+        },
+        {
+          "key": "pipe | fitting",
+          "clicks": 3,
+          "clicksDelta": -1,
+          "position": 13.2,
+          "positionDelta": 0,
+          "branded": false
+        },
+        {
+          "key": "<img src=x onerror=alert(1)>",
+          "clicks": 4,
+          "clicksDelta": -1,
+          "position": 15.7,
+          "positionDelta": 0,
+          "branded": false
+        }
+      ]
+    },
+    "topPages": [
+      {
+        "keys": [
+          "https://example.com/"
+        ],
+        "clicks": 336,
+        "impressions": 4800,
+        "ctr": 7,
+        "position": 3.5
+      },
+      {
+        "keys": [
+          "https://example.com/services/emergency"
+        ],
+        "clicks": 160,
+        "impressions": 4080,
+        "ctr": 3.92,
+        "position": 6.4
+      },
+      {
+        "keys": [
+          "https://example.com/blog/water-heaters"
+        ],
+        "clicks": 88,
+        "impressions": 3280,
+        "ctr": 2.68,
+        "position": 9.6
+      },
+      {
+        "keys": [
+          "https://example.com/contact"
+        ],
+        "clicks": 32,
+        "impressions": 640,
+        "ctr": 5,
+        "position": 5.9
+      }
+    ],
+    "pageMovers": {
+      "gainers": [],
+      "losers": [
+        {
+          "key": "https://example.com/",
+          "clicks": 336,
+          "clicksDelta": -42,
+          "position": 3.5,
+          "positionDelta": 0
+        },
+        {
+          "key": "https://example.com/services/emergency",
+          "clicks": 160,
+          "clicksDelta": -20,
+          "position": 6.4,
+          "positionDelta": 0
+        },
+        {
+          "key": "https://example.com/blog/water-heaters",
+          "clicks": 88,
+          "clicksDelta": -11,
+          "position": 9.6,
+          "positionDelta": 0
+        },
+        {
+          "key": "https://example.com/contact",
+          "clicks": 32,
+          "clicksDelta": -4,
+          "position": 5.9,
+          "positionDelta": 0
+        }
+      ]
+    },
+    "topLandingPages": {
+      "ok": true,
+      "data": [
+        {
+          "landingPagePlusQueryString": "/",
+          "sessions": 700,
+          "engagementRate": 0.64,
+          "keyEvents": 20
+        },
+        {
+          "landingPagePlusQueryString": "/services/emergency",
+          "sessions": 400,
+          "engagementRate": 0.58,
+          "keyEvents": 15
+        },
+        {
+          "landingPagePlusQueryString": "/blog/water-heaters",
+          "sessions": 210,
+          "engagementRate": 0.49,
+          "keyEvents": 2
+        }
+      ]
+    },
+    "trackedKeywords": {
+      "ok": true,
+      "data": [
+        {
+          "keyword": "emergency plumber",
+          "branded": false,
+          "gscPosition": 7.1000000000000005,
+          "gscClicks": 144,
+          "gscImpressions": 3360,
+          "liveRank": null,
+          "liveUrl": null
+        },
+        {
+          "keyword": "example co",
+          "branded": true,
+          "gscPosition": 1.9,
+          "gscClicks": 240,
+          "gscImpressions": 960,
+          "liveRank": null,
+          "liveUrl": null
+        },
+        {
+          "keyword": "water heater repair",
+          "branded": false,
+          "gscPosition": 8.799999999999999,
+          "gscClicks": 96,
+          "gscImpressions": 2480,
+          "liveRank": null,
+          "liveUrl": null
+        }
+      ]
+    },
+    "opportunities": {
+      "window": {
+        "startDate": "2026-07-01",
+        "endDate": "2026-07-31"
+      },
+      "method": "Non-branded queries only, default thresholds (at least 100 impressions in the month). striking_distance: position 5-20, upside vs position 3 CTR. low_ctr: position 1-5 with CTR under 60% of expected. cannibalization: 2+ pages each with at least 10% of a query's impressions. Run the individual tools for other windows, lower thresholds or more rows.",
+      "strikingDistance": {
+        "total": 3,
+        "top": [
+          {
+            "query": "drain cleaning near me",
+            "topPage": "https://example.com/services/emergency",
+            "position": 11.3,
+            "impressions": 4160,
+            "clicks": 72,
+            "ctr": 1.73,
+            "estimatedExtraClicks": 344
+          },
+          {
+            "query": "emergency plumber",
+            "topPage": "https://example.com/services/emergency",
+            "position": 6.7,
+            "impressions": 3360,
+            "clicks": 144,
+            "ctr": 4.29,
+            "estimatedExtraClicks": 192
+          },
+          {
+            "query": "water heater repair",
+            "topPage": "https://example.com/blog/water-heaters",
+            "position": 8.1,
+            "impressions": 2480,
+            "clicks": 96,
+            "ctr": 3.87,
+            "estimatedExtraClicks": 152
+          }
+        ]
+      },
+      "lowCtr": {
+        "total": 1,
+        "top": [
+          {
+            "query": "leak detection",
+            "page": "https://example.com/",
+            "position": 2.2,
+            "impressions": 720,
+            "clicks": 8,
+            "ctr": 1.11,
+            "expectedCtr": 15,
+            "estimatedExtraClicks": 100
+          }
+        ]
+      },
+      "cannibalization": {
+        "total": 1,
+        "top": [
+          {
+            "query": "emergency plumber",
+            "totalImpressions": 3360,
+            "totalClicks": 144,
+            "pages": [
+              {
+                "page": "https://example.com/services/emergency",
+                "impressionShare": 71.43,
+                "impressions": 2400,
+                "clicks": 120,
+                "position": 6.2
+              },
+              {
+                "page": "https://example.com/",
+                "impressionShare": 28.57,
+                "impressions": 960,
+                "clicks": 24,
+                "position": 7.9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "audit": {
+      "auditId": "aud_latest",
+      "ranAt": "2026-09-25T10:00:00.000Z",
+      "summary": {
+        "avgScores": {
+          "performance": 78,
+          "accessibility": 90,
+          "bestPractices": 92,
+          "seo": 92
+        }
+      },
+      "diff": {
+        "base": {
+          "auditId": "aud_before",
+          "ranAt": "2026-08-20T10:00:00.000Z"
+        },
+        "target": {
+          "auditId": "aud_latest",
+          "ranAt": "2026-09-25T10:00:00.000Z"
+        },
+        "new": [
+          {
+            "id": "is_broken",
+            "source": "onpage",
+            "rule": "is_broken",
+            "url": "https://example.com/",
+            "severity": "high",
+            "title": "On-page check failed: is broken"
+          }
+        ],
+        "resolved": [
+          {
+            "id": "no_description",
+            "source": "onpage",
+            "rule": "no_description",
+            "url": "https://example.com/",
+            "severity": "medium",
+            "title": "On-page check failed: no description"
+          }
+        ],
+        "persistent": [
+          {
+            "id": "no_h1_tag",
+            "source": "onpage",
+            "rule": "no_h1_tag",
+            "url": "https://example.com/",
+            "severity": "medium",
+            "title": "On-page check failed: no h1 tag"
+          }
+        ],
+        "unverified": [
+          {
+            "id": "gone",
+            "source": "axe",
+            "rule": "gone",
+            "url": "https://example.com/",
+            "severity": "low",
+            "title": "Old low issue"
+          }
+        ],
+        "scoreChanges": [
+          {
+            "url": "https://example.com",
+            "category": "performance",
+            "from": 71,
+            "to": 78
+          },
+          {
+            "url": "https://example.com",
+            "category": "seo",
+            "from": 90,
+            "to": 92
+          }
+        ],
+        "warnings": [],
+        "counts": {
+          "new": 1,
+          "resolved": 1,
+          "persistent": 1,
+          "unverified": 1
+        }
+      }
+    },
+    "dataSpendThisMonthUsd": 0.1235
+  }
+}

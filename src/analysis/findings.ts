@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import type { AuditResult } from "../reports/audit.js";
+import { stripControl } from "../lib/terminal-text.js";
+import { cruxCheckUrl, cruxFindings } from "./crux.js";
 
 /**
  * Normalised audit findings. Pure: no I/O, so it is tested with hand-built
  * fixtures. `crawl` is part of the type for a later phase; nothing emits it yet.
+ * `crux` and `gtm` (Phase 12) appear only when run_audit is asked for them.
  */
-export type FindingSource = "lighthouse" | "axe" | "indexing" | "onpage" | "rendering" | "crawl" | "site";
+export type FindingSource = "lighthouse" | "axe" | "indexing" | "onpage" | "rendering" | "crawl" | "site" | "crux" | "gtm";
 export type Severity = "critical" | "high" | "medium" | "low";
 
 export interface Finding {
@@ -68,12 +71,20 @@ export function siteCheckUrl(rule: string, url: string): string {
 
 const siteKeyUrl = (u: string) => (u.startsWith("site") ? u : normalizeUrl(u));
 
+/** A Tag Manager finding's container key: `gtm://<publicId>/<kind>/<id>` → `gtm://<publicId>`. */
+export const gtmContainerKey = (url: string) => url.replace(/^(gtm:\/\/[^/]+).*$/, "$1");
+
 /** The {url, source} a finding depends on having run, for the diff's resolved/unverified decision. */
 export function checkOf(f: Pick<Finding, "source" | "url"> & { rule?: string }): CheckedPair {
-  return { url: f.source === "site" ? siteCheckUrl(f.rule ?? "", f.url) : normalizeUrl(f.url), source: f.source };
+  if (f.source === "site") return { url: siteCheckUrl(f.rule ?? "", f.url), source: f.source };
+  if (f.source === "crux") return { url: cruxCheckUrl(normalizeUrl(f.url)), source: f.source };
+  // Every GTM finding depends on its container having been audited (D13).
+  if (f.source === "gtm") return { url: gtmContainerKey(f.url), source: f.source };
+  return { url: normalizeUrl(f.url), source: f.source };
 }
 
-export const checkKey = (c: CheckedPair) => `${c.source}\n${c.source === "site" ? siteKeyUrl(c.url) : normalizeUrl(c.url)}`;
+/** crux and gtm check keys are already canonical (not page URLs), so they are compared as written. */
+export const checkKey = (c: CheckedPair) => `${c.source}\n${c.source === "site" ? siteKeyUrl(c.url) : c.source === "crux" || c.source === "gtm" ? c.url : normalizeUrl(c.url)}`;
 
 const AXE_SEVERITY: Record<string, Severity> = { critical: "critical", serious: "high", moderate: "medium", minor: "low" };
 
@@ -229,6 +240,24 @@ export function extractFindings(audit: AuditResult): Finding[] {
     }
   }
 
+  // Phase 12: only present when run_audit was asked for them.
+  if (audit.site.cruxHistory?.ok) for (const f of cruxFindings(audit.site.cruxHistory.data)) add(f);
+  const gtm = audit.site.tagManager;
+  if (gtm?.ok) {
+    const publicId = gtm.data.container.publicId;
+    for (const f of gtm.data.findings) {
+      // Entity names and evidence come from the container, so they are untrusted text.
+      add({
+        source: "gtm",
+        rule: f.rule,
+        url: `gtm://${publicId}/${f.entity.kind}/${f.entity.id}`,
+        severity: f.severity,
+        title: stripControl(f.title),
+        ...(f.evidence ? { evidence: stripControl(f.evidence) } : {}),
+      });
+    }
+  }
+
   return [...out.values()];
 }
 
@@ -247,5 +276,10 @@ export function checkedPairs(audit: AuditResult): CheckedPair[] {
   }
   if (audit.site.sitemaps.ok) out.push({ url: SITE_CHECK_URL, source: "site" });
   if (audit.site.hygiene?.ok) for (const url of audit.site.hygiene.data.checked) out.push({ url, source: "site" });
+  const crux = audit.site.cruxHistory;
+  // No CrUX data for the origin means nothing was verified.
+  if (crux?.ok && crux.data.available) out.push({ url: cruxCheckUrl(normalizeUrl(crux.data.key.origin ?? crux.data.key.url ?? "")), source: "crux" });
+  // A container that was audited verifies every GTM finding of that container (D13).
+  if (audit.site.tagManager?.ok) out.push({ url: `gtm://${audit.site.tagManager.data.container.publicId}`, source: "gtm" });
   return out;
 }

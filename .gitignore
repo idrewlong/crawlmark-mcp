@@ -13,3 +13,5 @@ config/competitor-denylist.txt
 recordings/
 secrets/
 build/
+# Phase 12: report files (a source checkout's config home is the repo root)
+/reports/

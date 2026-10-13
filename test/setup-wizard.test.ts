@@ -7,7 +7,10 @@ import { autoPrompter, type Choice, type Prompter } from "../src/setup/prompter.
 import type { IntegrationId, IntegrationStatus, SetupStatusReport } from "../src/setup/status.js";
 import {
   buildState,
+  runPlan,
   runWizard,
+  STEP_NAMES,
+  stepCrux,
   stepDataForSeo,
   stepDiscovery,
   stepGoogle,
@@ -457,5 +460,37 @@ describe("runWizard", () => {
     const old = fake([]);
     old.ctx.node.version = "v18.0.0";
     expect((await runWizard(old.ctx)).map((r) => r.step)).toEqual(["node"]);
+  });
+});
+
+describe("wizard: crux step (Phase 12, --step crux only)", () => {
+  const cruxOk = () => new Response('{"record":{}}', { status: 200 });
+
+  it("checks a new key with one free query for a public origin and saves it to .env (0600)", async () => {
+    const f = fake([true, "AIza-new-crux-key"]);
+    f.fetch.mockResolvedValue(cruxOk());
+    expect(await stepCrux(f.ctx)).toMatchObject({ step: "crux", outcome: "done", message: "CrUX History key works." });
+    const [url, init] = f.fetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("records:queryHistoryRecord");
+    expect(JSON.parse(String(init.body))).toMatchObject({ origin: "https://developer.chrome.com" });
+    expect(readEnvFile(join(f.home, ".env")).CRUX_API_KEY).toBe("AIza-new-crux-key");
+    expect(mode(join(f.home, ".env"))).toBe(0o600);
+    expect(f.lines.join("\n")).not.toContain("AIza-new-crux-key");
+  });
+
+  it("blank uses PSI_API_KEY when it works for CrUX, saving nothing; declining skips", async () => {
+    const f = fake([true, ""]);
+    writeFileSync(join(f.home, ".env"), "PSI_API_KEY=AIza-psi\n", { mode: 0o600 });
+    f.fetch.mockResolvedValue(cruxOk());
+    expect(await stepCrux(f.ctx)).toMatchObject({ outcome: "done", message: expect.stringContaining("PSI_API_KEY works") });
+    expect(readEnvFile(join(f.home, ".env")).CRUX_API_KEY).toBeUndefined();
+    const g = fake([false]);
+    expect(await stepCrux(g.ctx)).toMatchObject({ outcome: "skipped" });
+  });
+
+  it("is not in the default plan or the printed step list", () => {
+    expect(runPlan()).not.toContain("crux");
+    expect(runPlan("crux")).toEqual(["crux"]);
+    expect(STEP_NAMES).not.toContain("crux");
   });
 });

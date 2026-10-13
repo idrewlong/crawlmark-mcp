@@ -1,6 +1,6 @@
 # Scheduled audits and alerts
 
-`crawlmark-cli audit` and `crawlmark-cli check-traffic` are meant for cron or another scheduler. The MCP server stays stateless; these commands are separate runs that print JSON to stdout. The [README](../README.md#scheduled-audits-and-alerts) has the summary.
+`crawlmark-cli audit`, `crawlmark-cli check-traffic` and `crawlmark-cli report` are meant for cron or another scheduler. The MCP server stays stateless; these commands are separate runs that print JSON to stdout. The [README](../README.md#scheduled-audits-and-alerts) has the summary.
 
 ## What each command does
 
@@ -8,6 +8,8 @@
 - **`check-traffic`** compares the last 7 complete Search Console days (ending 3 days ago, because Search Console lags) with the 7 days before, split into branded and non-branded with the same matching as the monthly report. It uses Search Console only, so it is free. Clients without a Search Console property are skipped.
 - **Skipping.** A client that is ignored, has no Search Console property (for `check-traffic`) or fails with an error is listed under `skipped` and never fails the run. Only when every client that was tried fails, or an explicit `--client` can't be found, does the run count as an error.
 - **`--dry-run`** lists what would run and calls nothing but discovery.
+- **`audit --include-tag-manager`** also audits each client's Tag Manager container and adds its findings. They are medium or low, so they never raise an alert. Without the flag, Tag Manager is left out (and earlier Tag Manager findings show as `unverified` in the diff, never `resolved`).
+- **`report`** writes report files (Markdown, HTML, PDF, Word) from a template, data only, one client at a time. See [Report files](#report-files) below.
 
 ## Alerts
 
@@ -120,3 +122,21 @@ jobs:
 ```
 
 The `schedule` above runs both jobs daily; for weekly audits use a second workflow with its own `cron`. A job that exits 2 skips the cache save, so add a separate `actions/cache/save` step with `if: always()` if you want the snapshot kept when alerts fire. Exit code 2 fails the job, which is a handy second notification; append `|| [ $? -eq 2 ]` to the command if you only want the webhook.
+
+## Report files
+
+`crawlmark-cli report` writes data-only report files from a template ([docs/reports.md](reports.md)) for one client (`--client`) or every client (`--all`, discovery first, ignored clients skipped):
+
+```cron
+0 6 3 * *  cd /path/to/crawlmark-mcp && /usr/local/bin/node --disable-warning=ExperimentalWarning dist/cli.js report --all --template monthly --format pdf,docx >> /var/log/crawlmark-report.json 2>> /var/log/crawlmark-report.err
+```
+
+On the 3rd of each month (Search Console data for the previous month is complete by then) this writes `<home>/reports/<client>/<YYYY-MM>/monthly-<YYYY-MM>.pdf` and `.docx` for each client. Re-running overwrites the same files. `--dry-run` resolves the template, period and file paths and fetches and writes nothing. With `--all` it lists the clients in `clients.yaml` without running discovery, so domains Google added since the last discovery aren't shown.
+
+Output is `{ command: "report", ranAt, dryRun, results, skipped, errors, discovery, exitCode }`. A client whose every section is unavailable or failed is listed in `skipped` and gets no file. Unavailable (for example no Search Console or GA4 property) is a normal state; failed sections (for example an expired Google sign-in) count the client as failed.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Every requested report was written and no section failed |
+| 1 | Error: bad usage, an invalid template, unknown `--client`, every client failed, a client failed and no report was written, or a file couldn't be written |
+| 2 | Written, but a section had `status: "error"`, a requested format failed (for example a PDF without Chrome), or another client failed. Unavailable sources don't count |

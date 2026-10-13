@@ -24,8 +24,8 @@ import { autoPrompter, PromptAbortedError, terminalPrompter, type Prompter } fro
 import { chooseRenderer, plainUi, type Ui } from "./ui.js";
 import { INTEGRATIONS, type IntegrationId, type SetupStatusReport } from "./status.js";
 import { cliPrefix, isCheckout, onPath, setupStatus } from "./status-providers.js";
-import { renderStatus, statusWidth, supportsColor, supportsUnicode } from "./status-render.js";
-import { runWizard, STEP_NAMES, type ExecResult, type StepName, type WizardContext } from "./wizard.js";
+import { forHumans, renderStatus, statusWidth, supportsColor, supportsUnicode } from "./status-render.js";
+import { EXTRA_STEP_NAMES, runWizard, STEP_NAMES, type ExecResult, type StepName, type WizardContext } from "./wizard.js";
 
 export interface SetupFlags {
   step?: string | undefined;
@@ -175,7 +175,7 @@ async function statusCommand(flags: SetupFlags): Promise<number> {
     out(JSON.stringify(report, null, 2));
     return 0;
   }
-  const lines = renderStatus(report, {
+  const lines = renderStatus(forHumans(report), {
     width: statusWidth(process.stdout.columns, process.stdout.isTTY),
     color: supportsColor(process.env, process.stdout.isTTY),
     unicode: supportsUnicode(process.env),
@@ -232,8 +232,8 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
     return 2;
   }
   const step = flags.step;
-  if (step !== undefined && !(STEP_NAMES as readonly string[]).includes(step)) {
-    warn(`Unknown step: ${step}. Steps: ${STEP_NAMES.join(", ")}.`);
+  if (step !== undefined && ![...STEP_NAMES, ...EXTRA_STEP_NAMES].includes(step as StepName)) {
+    warn(`Unknown step: ${step}. Steps: ${[...STEP_NAMES, ...EXTRA_STEP_NAMES].join(", ")}.`);
     return 2;
   }
   const renderer = chooseRenderer({ stdinTTY: process.stdin.isTTY, stdoutTTY: process.stdout.isTTY, env: process.env, yes: flags.yes });

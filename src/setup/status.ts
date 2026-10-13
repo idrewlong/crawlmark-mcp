@@ -15,7 +15,7 @@ import { displayProviderValue, invalidProviderMessage, PROVIDER_LABELS, type Def
 
 export type IntegrationState = "configured" | "working" | "missing" | "error";
 
-export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "chrome", "clients"] as const;
+export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "chrome", "clients"] as const;
 export type IntegrationId = (typeof INTEGRATIONS)[number];
 
 export interface IntegrationStatus {
@@ -111,6 +111,8 @@ export interface StatusProviders {
   ga4Properties(refresh: boolean): Promise<Listing<{ id: string; name: string }>>;
   gtmContainers(refresh: boolean): Promise<Listing<{ publicId: string; name: string }>>;
   psiKeySet(): boolean;
+  /** Phase 12: which key CrUX History would use (CRUX_API_KEY, else PSI_API_KEY) and a free live check of it; absent means no row data. */
+  crux?(): Promise<{ source: "CRUX_API_KEY" | "PSI_API_KEY" | null; check: { ok: true } | { ok: false; problem: string } | null }>;
   chrome(): Promise<{ ok: true; version: string } | { ok: false; error: string }>;
   clients(): { count: number; ignored: number; file: string; exists: boolean };
 }
@@ -124,6 +126,7 @@ export const LINKS = {
   enableAnalyticsAdmin: "https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com",
   enableTagManager: "https://console.cloud.google.com/apis/library/tagmanager.googleapis.com",
   enablePageSpeed: "https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com",
+  enableCrux: "https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com",
   credentials: "https://console.cloud.google.com/apis/credentials",
   searchConsoleUsers: "https://search.google.com/search-console/users",
   ga4Access: "https://analytics.google.com/analytics/web/#/admin",
@@ -466,6 +469,26 @@ export async function collectSetupStatus(
         ? { id: "psi", label: "PageSpeed Insights", state: "configured", detail: "PSI_API_KEY is set (not checked here, to keep this call fast); lighthouse adds real-user field data.", next: null }
         : { id: "psi", label: "PageSpeed Insights", state: "missing", detail: "Optional. Without a key, Lighthouse still runs locally but without real-user (CrUX) field data.", next: step("psi") },
     );
+  }
+
+  if (want("crux")) {
+    // Phase 12: always in --json; human output shows it only when a key is set (status-render.ts).
+    const c = p.crux ? await p.crux() : { source: null, check: null };
+    const label = "CrUX History";
+    if (!c.source) {
+      out.push({ id: "crux", label, state: "missing", detail: "Optional. Adds real-user Core Web Vitals history (crux_history and the cwv report section).", next: step("crux"), data: { keySource: null } });
+    } else if (!c.check || c.check.ok) {
+      out.push({
+        id: "crux",
+        label,
+        state: c.check ? "working" : "configured",
+        detail: c.check ? `${c.source} works with the Chrome UX Report API.` : `${c.source} is set (not checked here).`,
+        next: null,
+        data: { keySource: c.source },
+      });
+    } else {
+      out.push({ id: "crux", label, state: "configured", detail: `${c.source} is set but the Chrome UX Report API refused it: ${c.check.problem}`.slice(0, 400), next: step("crux"), data: { keySource: c.source } });
+    }
   }
 
   if (chrome) {

@@ -38,3 +38,10 @@ process.env.DATAFORSEO_LOGIN = "test@example.com";
 process.env.DATAFORSEO_PASSWORD = "test-password";
 process.env.DATAFORSEO_BASE_URL = "http://127.0.0.1:9/v3";
 delete process.env.DATAFORSEO_LIVE;
+// Phase 12: report files go to a temp folder; CrUX, PSI, Bing, AI-visibility and log settings from a
+// developer's shell never reach a test, and the new base URLs point at the closed local port.
+process.env.REPORTS_DIR = join(dir, "reports");
+for (const k of ["CRUX_API_KEY", "PSI_API_KEY", "BING_WEBMASTER_API_KEY", "AI_VISIBILITY_ENABLED", "LOG_DIRS"]) delete process.env[k];
+process.env.CRUX_BASE_URL = "http://127.0.0.1:9";
+process.env.BING_BASE_URL = "http://127.0.0.1:9";
+process.env.CRAWLER_IPRANGES_BASE_URL = "http://127.0.0.1:9";

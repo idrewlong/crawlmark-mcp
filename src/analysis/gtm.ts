@@ -5,9 +5,8 @@ import { createHash } from "node:crypto";
  * hand-built container-version fixture. The provider (src/providers/gtm.ts)
  * fetches the live version and workspace statuses; this file only analyses them.
  *
- * Findings use a local type with source "gtm". They are NOT wired into
- * run_audit or analysis/findings.ts yet (follow-up: add "gtm" to FindingSource
- * and a `gtm` audit section).
+ * Findings use a local type with source "gtm". run_audit adds them to its
+ * findings (analysis/findings.ts) only with includeTagManager (Phase 12, opt-in).
  */
 
 // ---------------------------------------------------------------- input shapes (a subset of the API's ContainerVersion)

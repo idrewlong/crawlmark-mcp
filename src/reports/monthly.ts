@@ -14,7 +14,7 @@ import { opportunitiesForMonth } from "./opportunities.js";
 import { dataOf, section } from "./section.js";
 
 /** Query rows fetched per month. The branded split sums these, so the limit is well above the old 500 (Search Console allows up to 25,000). */
-const QUERY_ROW_LIMIT = 5000;
+export const QUERY_ROW_LIMIT = 5000;
 
 export interface MonthlyReportOptions {
   month?: string;
@@ -47,7 +47,7 @@ export function compare(cur: PeriodTotals, prev: PeriodTotals) {
 }
 
 /** Rows that gained or lost the most clicks between two periods. */
-function movers(cur: GscRow[], prev: GscRow[], n = 10, branded?: (key: string) => boolean) {
+export function movers(cur: GscRow[], prev: GscRow[], n = 10, branded?: (key: string) => boolean) {
   const prevMap = new Map(prev.map((r) => [r.keys[0], r]));
   const deltas = cur.map((r) => {
     const p = prevMap.get(r.keys[0]);
@@ -72,6 +72,76 @@ function brandSplitFields(split: { error: string } | { branded: unknown; nonBran
   if ("error" in split) return { brandedSplit: split };
   const { branded, nonBranded, ...rest } = split;
   return { branded, nonBranded, ...rest };
+}
+
+/** The branded vs non-branded comparison monthly_report puts under `search` (both periods' query rows). */
+export function brandedSplitFor(client: Client, qCur: GscRow[], qPrev: GscRow[]) {
+  const c = splitBranded(qCur, client);
+  const p = splitBranded(qPrev, client);
+  return {
+    branded: compareSplit(c.branded, p.branded),
+    nonBranded: compareSplit(c.nonBranded, p.nonBranded),
+    brandedShareOfClicks: {
+      current: c.branded.clicks + c.nonBranded.clicks ? Number(((c.branded.clicks / (c.branded.clicks + c.nonBranded.clicks)) * 100).toFixed(1)) : null,
+      previous: p.branded.clicks + p.nonBranded.clicks ? Number(((p.branded.clicks / (p.branded.clicks + p.nonBranded.clicks)) * 100).toFixed(1)) : null,
+    },
+    queryRows: { current: qCur.length, previous: qPrev.length, limit: QUERY_ROW_LIMIT },
+    note:
+      QUERY_TOTALS_NOTE +
+      (qCur.length >= QUERY_ROW_LIMIT || qPrev.length >= QUERY_ROW_LIMIT ? ` Search Console returned the row limit (${QUERY_ROW_LIMIT}) of queries for a month, so the long tail is missing too.` : ""),
+    brandTerms: client.brandTerms,
+  };
+}
+
+export interface Ga4Summary {
+  sessions: number;
+  users: number;
+  engagementRate: number;
+  keyEvents: number;
+}
+
+/** GA4 organic metrics with their change against an earlier period (percent; engagement rate in points). */
+export function organicTrafficCompare(ac: Ga4Summary, ap: Ga4Summary) {
+  return {
+    sessions: { value: ac.sessions, change: pctChange(ac.sessions, ap.sessions) },
+    users: { value: ac.users, change: pctChange(ac.users, ap.users) },
+    engagementRate: { value: ac.engagementRate, change: Number((ac.engagementRate - ap.engagementRate).toFixed(1)) },
+    keyEvents: { value: ac.keyEvents, change: pctChange(ac.keyEvents, ap.keyEvents) },
+  };
+}
+
+/** Whether a paid live SERP check can run for this client (DataForSEO only); the reason when it can't. */
+export function liveRanksAvailability(client: Client): { available: true } | { available: false; reason: string } {
+  try {
+    requireDataForSeo("serpLive", client);
+    return { available: true };
+  } catch (err) {
+    if (!(err instanceof ProviderUnavailableError)) throw err;
+    return { available: false, reason: err.message };
+  }
+}
+
+/** Tracked keywords with their Search Console position for the period, and a live rank when `liveSerp` is given (paid). */
+export async function trackedKeywordRows(
+  client: Client,
+  qCur: GscRow[],
+  liveSerp?: (client: Client, keyword: string) => Promise<{ clientRank: number | null; clientUrl: string | null }>,
+) {
+  return Promise.all(
+    client.trackedKeywords.map(async (kw) => {
+      const row = qCur.find((r) => r.keys[0]?.toLowerCase() === kw.toLowerCase());
+      const live = liveSerp ? await liveSerp(client, kw) : undefined;
+      return {
+        keyword: kw,
+        branded: isBranded(kw, client),
+        gscPosition: row?.position ?? null,
+        gscClicks: row?.clicks ?? 0,
+        gscImpressions: row?.impressions ?? 0,
+        liveRank: live?.clientRank ?? null,
+        liveUrl: live?.clientUrl ?? null,
+      };
+    }),
+  );
 }
 
 export async function monthlyReport(client: Client, opts: MonthlyReportOptions = {}) {
@@ -100,33 +170,8 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
   // DataForSEO-only: when no SERP provider is available, every row keeps its GSC values (liveRank null)
   // and the section says why, instead of the whole section failing.
   const qCur = dataOf(queriesCur) ?? [];
-  let liveRanks: { available: true } | { available: false; reason: string } | undefined;
-  if (opts.liveRanks) {
-    try {
-      requireDataForSeo("serpLive", client);
-      liveRanks = { available: true };
-    } catch (err) {
-      if (!(err instanceof ProviderUnavailableError)) throw err;
-      liveRanks = { available: false, reason: err.message };
-    }
-  }
-  const trackedRows = await section(async () =>
-    Promise.all(
-      client.trackedKeywords.map(async (kw) => {
-        const row = qCur.find((r) => r.keys[0]?.toLowerCase() === kw.toLowerCase());
-        const live = liveRanks?.available ? await serp(client, kw) : undefined;
-        return {
-          keyword: kw,
-          branded: isBranded(kw, client),
-          gscPosition: row?.position ?? null,
-          gscClicks: row?.clicks ?? 0,
-          gscImpressions: row?.impressions ?? 0,
-          liveRank: live?.clientRank ?? null,
-          liveUrl: live?.clientUrl ?? null,
-        };
-      }),
-    ),
-  );
+  const liveRanks = opts.liveRanks ? liveRanksAvailability(client) : undefined;
+  const trackedRows = await section(async () => trackedKeywordRows(client, qCur, liveRanks?.available ? serp : undefined));
   const tracked = liveRanks ? { ...trackedRows, liveRanks } : trackedRows;
 
   // Latest saved audit, diffed against the most recent one from before the report month.
@@ -143,23 +188,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
   const qPrev = dataOf(queriesPrev);
   const brandSplit =
     qPrev && queriesCur.ok
-      ? (() => {
-          const c = splitBranded(qCur, client);
-          const p = splitBranded(qPrev, client);
-          return {
-            branded: compareSplit(c.branded, p.branded),
-            nonBranded: compareSplit(c.nonBranded, p.nonBranded),
-            brandedShareOfClicks: {
-              current: c.branded.clicks + c.nonBranded.clicks ? Number(((c.branded.clicks / (c.branded.clicks + c.nonBranded.clicks)) * 100).toFixed(1)) : null,
-              previous: p.branded.clicks + p.nonBranded.clicks ? Number(((p.branded.clicks / (p.branded.clicks + p.nonBranded.clicks)) * 100).toFixed(1)) : null,
-            },
-            queryRows: { current: qCur.length, previous: qPrev.length, limit: QUERY_ROW_LIMIT },
-            note:
-              QUERY_TOTALS_NOTE +
-              (qCur.length >= QUERY_ROW_LIMIT || qPrev.length >= QUERY_ROW_LIMIT ? ` Search Console returned the row limit (${QUERY_ROW_LIMIT}) of queries for a month, so the long tail is missing too.` : ""),
-            brandTerms: client.brandTerms,
-          };
-        })()
+      ? brandedSplitFor(client, qCur, qPrev)
       : { error: !queriesCur.ok ? queriesCur.error : !queriesPrev.ok ? queriesPrev.error : "unknown" };
   const ac = dataOf(gaCur);
   const ap = dataOf(gaPrev);
@@ -176,12 +205,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
         }
       : { error: !gscCur.ok ? gscCur.error : !gscPrev.ok ? gscPrev.error : "unknown", ...brandSplitFields(brandSplit) },
     organicTraffic: ac && ap
-      ? {
-          sessions: { value: ac.sessions, change: pctChange(ac.sessions, ap.sessions) },
-          users: { value: ac.users, change: pctChange(ac.users, ap.users) },
-          engagementRate: { value: ac.engagementRate, change: Number((ac.engagementRate - ap.engagementRate).toFixed(1)) },
-          keyEvents: { value: ac.keyEvents, change: pctChange(ac.keyEvents, ap.keyEvents) },
-        }
+      ? organicTrafficCompare(ac, ap)
       : { error: !gaCur.ok ? gaCur.error : !gaPrev.ok ? gaPrev.error : "unknown" },
     topQueries: markBranded(qCur.slice(0, 20), client),
     queryMovers: queriesCur.ok && queriesPrev.ok ? movers(queriesCur.data, queriesPrev.data, 10, (q) => isBranded(q, client)) : null,

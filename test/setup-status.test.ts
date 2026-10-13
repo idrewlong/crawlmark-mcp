@@ -35,7 +35,8 @@ describe("setup_status", () => {
   it("everything working: states, counts, mode, balance and email; no next steps", async () => {
     const r = await collectSetupStatus(providers());
     const s = Object.fromEntries(r.integrations.map((i) => [i.id, i]));
-    expect(r.integrations.map((i) => i.id)).toEqual(["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "chrome", "clients"]);
+    // Phase 12 adds the crux row (missing here: the fake providers have no CrUX key).
+    expect(r.integrations.map((i) => i.id)).toEqual(["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "chrome", "clients"]);
     expect(s.dataforseo).toMatchObject({ state: "working", next: null, data: { mode: "sandbox", balanceUsd: 12.5 } });
     expect(s.dataforseo!.detail).toContain("$12.50");
     expect(s.google).toMatchObject({ state: "working", data: { mode: "service_account", email: "svc@proj.iam.gserviceaccount.com" } });
@@ -46,7 +47,7 @@ describe("setup_status", () => {
     expect(s.chrome!.state).toBe("working");
     expect(s.clients).toMatchObject({ state: "working", data: { count: 2, ignored: 1 } });
     // Phase 9: the data-provider row works (DataForSEO by default); the optional Ahrefs and Semrush rows are "missing".
-    expect(r.summary).toEqual({ working: 9, configured: 0, missing: 3, error: 0 });
+    expect(r.summary).toEqual({ working: 9, configured: 0, missing: 4, error: 0 });
     expect(r.costUsd).toBe(0);
     expect(JSON.stringify(r)).not.toMatch(/password|secret/i);
   });

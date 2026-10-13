@@ -215,7 +215,7 @@ describe("SEC-2: provider URL overrides", () => {
       env: { ...process.env, CRAWLMARK_HOME: home },
     });
     expect(r.status, r.stderr).toBe(0);
-    expect(r.stderr).toContain("crawlmark: test-only provider URL override in use: AHREFS_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BALANCE_URL -> http://127.0.0.1:9.");
+    expect(r.stderr).toContain("crawlmark: test-only provider URL override in use: AHREFS_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BALANCE_URL -> http://127.0.0.1:9, CRUX_BASE_URL -> http://127.0.0.1:9.");
   }, 60_000);
 });
 
