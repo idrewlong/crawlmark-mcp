@@ -3,11 +3,17 @@
  * what to add, what to remove and why anything was skipped. src/clients.ts
  * applies the plans to clients.yaml through src/lib/clients-file.ts.
  */
+import { normalizeBrandTerm, squash } from "./brand.js";
 import {
+  brandTermText,
   normalizeCompetitorDomain,
   normalizeKeyword,
   toCompetitorEntries,
+  toBrandTermEntries,
   toKeywordEntries,
+  type BrandTermEntry,
+  type BrandTermItem,
+  type BrandTermSource,
   type CompetitorEntry,
   type CompetitorItem,
   type EntrySource,
@@ -146,6 +152,48 @@ function planRemove<T>(
 
 export function planRemoveCompetitors(existing: CompetitorItem[] | undefined, inputs: string[]): RemovePlan {
   return planRemove(existing, inputs, (c) => normalizeCompetitorDomain(typeof c === "string" ? c : c.domain), normalizeCompetitorDomain, "domain");
+}
+
+/**
+ * Plan adding brand terms: normalised (single spaces), skipping ones with no
+ * letters or digits, ones already listed and repeats (both ignoring case,
+ * spacing and punctuation). New entries are `{ term, source, addedAt }`.
+ */
+export function planAddBrandTerms(
+  existing: BrandTermItem[] | undefined,
+  inputs: string[],
+  m: { source?: BrandTermSource | undefined; addedAt: string },
+): AddPlan<BrandTermEntry> {
+  const listed = new Set(toBrandTermEntries(existing).map((b) => squash(b.term)));
+  const plan: AddPlan<BrandTermEntry> = { add: [], inputs: [], skipped: [] };
+  const seen = new Set<string>();
+  for (const input of inputs) {
+    const term = normalizeBrandTerm(input);
+    if (!term) {
+      plan.skipped.push({ input, reason: "invalid", detail: "A brand term needs a letter or digit and at most 100 characters." });
+    } else if (listed.has(squash(term))) {
+      plan.skipped.push({ input, value: term, reason: "already-listed", detail: `"${term}" is already a brand term.` });
+    } else if (seen.has(squash(term))) {
+      plan.skipped.push({ input, value: term, reason: "duplicate-input", detail: `"${term}" appears more than once in this request.` });
+    } else {
+      seen.add(squash(term));
+      plan.add.push({ term, source: m.source ?? "manual", addedAt: m.addedAt });
+      plan.inputs.push(input);
+    }
+  }
+  return plan;
+}
+
+/** Plan removing brand terms, matched ignoring case, spacing and punctuation; every written form goes. */
+export function planRemoveBrandTerms(existing: BrandTermItem[] | undefined, inputs: string[]): RemovePlan {
+  const key = (s: string) => {
+    const t = normalizeBrandTerm(s);
+    return t ? squash(t) : undefined;
+  };
+  const plan = planRemove(existing, inputs, (b) => key(brandTermText(b)), key, "brand term");
+  // Report the term as typed, not its squashed key.
+  plan.removed = plan.removed.map((k) => normalizeBrandTerm(inputs.find((i) => key(i) === k) ?? k) ?? k);
+  return plan;
 }
 
 export function planRemoveKeywords(existing: KeywordItem[] | undefined, inputs: string[]): RemovePlan {

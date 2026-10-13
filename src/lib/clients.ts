@@ -6,7 +6,7 @@
  * edits in src/lib/clients-file.ts; assembly and file I/O in src/clients.ts.
  */
 import { z } from "zod";
-import { normalizeBrandTerm, toBrandTerms } from "./brand.js";
+import { normalizeBrandTerm, squash } from "./brand.js";
 
 // ---------------------------------------------------------------- normalisation
 
@@ -251,6 +251,45 @@ const CompetitorItemSchema = z.union([z.string().min(1), z.object({ domain: z.st
 /** A tracked keyword is a plain string or `{ keyword, note?, source?, addedAt? }`. */
 const KeywordItemSchema = z.union([z.string().min(1), z.object({ keyword: z.string().min(1), ...entryMeta })]);
 
+/** Who added a brand term: a person, a confirmed suggestion, or automatic inference (Search Console or DataForSEO). */
+export const BRAND_TERM_SOURCES = ["manual", "auto-gsc", "auto-dataforseo", "suggested"] as const;
+export type BrandTermSource = (typeof BRAND_TERM_SOURCES)[number];
+
+export interface BrandTermEntry {
+  /** Normalised term (single spaces; case as written). */
+  term: string;
+  source?: BrandTermSource;
+  addedAt?: string;
+}
+
+/** A brand term is a plain string or `{ term, source?, addedAt? }`. */
+const BrandTermItemSchema = z.union([
+  z.string(),
+  z.object({ term: z.string(), source: z.enum(BRAND_TERM_SOURCES).optional(), addedAt: z.string().optional() }),
+]);
+export type BrandTermItem = z.infer<typeof BrandTermItemSchema>;
+
+/** The text of a brand-term item, whichever form it is written in. */
+export const brandTermText = (item: BrandTermItem): string => (typeof item === "string" ? item : item.term);
+
+/** clients.yaml brand-term items -> normalised entries, de-duplicated ignoring case, spacing and punctuation. The first wins; invalid ones are dropped. */
+export function toBrandTermEntries(items: BrandTermItem[] | undefined): BrandTermEntry[] {
+  const seen = new Set<string>();
+  const out: BrandTermEntry[] = [];
+  for (const item of items ?? []) {
+    const term = normalizeBrandTerm(brandTermText(item));
+    if (!term || seen.has(squash(term))) continue;
+    seen.add(squash(term));
+    const e: BrandTermEntry = { term };
+    if (typeof item !== "string") {
+      if (item.source) e.source = item.source;
+      if (item.addedAt) e.addedAt = item.addedAt;
+    }
+    out.push(e);
+  }
+  return out;
+}
+
 export type CompetitorItem = z.infer<typeof CompetitorItemSchema>;
 export type KeywordItem = z.infer<typeof KeywordItemSchema>;
 
@@ -329,8 +368,8 @@ const OverrideSchema = z.object({
   area: z.string().optional(),
   /** What the client does, in a few words, e.g. "emergency plumber". */
   niche: z.string().optional(),
-  /** Names people search for the brand. Add to the built-in domain and name matching; see src/lib/brand.ts. */
-  brandTerms: z.array(z.string()).optional(),
+  /** Names people search for the brand: a string or { term, source?, addedAt? }. Add to the built-in domain and name matching; see src/lib/brand.ts. */
+  brandTerms: z.array(BrandTermItemSchema).optional(),
   keyPages: z.array(z.string().url()).optional(),
   monthlyBudgetUsd: z.number().positive().optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
@@ -376,7 +415,7 @@ export function parseOverrides(raw: unknown, source = "clients.yaml"): ClientOve
       }
     });
     entry.brandTerms?.forEach((t, i) => {
-      if (!normalizeBrandTerm(t)) throw new Error(`Invalid ${source}: clients.${slug}.brandTerms[${i}] must contain a letter or digit and be at most 100 characters.`);
+      if (!normalizeBrandTerm(brandTermText(t))) throw new Error(`Invalid ${source}: clients.${slug}.brandTerms[${i}] must contain a letter or digit and be at most 100 characters.`);
     });
     return { ...entry, domain: host, slug };
   });
@@ -412,6 +451,8 @@ export interface Client {
   niche?: string;
   /** Explicit brand terms (normalised, de-duplicated). They add to the domain and name matching in isBranded. */
   brandTerms: string[];
+  /** Brand terms with their source and date. */
+  brandTermEntries: BrandTermEntry[];
   /** The GA4 property's display name, when it differs from `name`. */
   ga4Name?: string;
   keyPages: string[];
@@ -444,6 +485,7 @@ export function mergeClients(
       const homepage = d?.homepage ?? `https://${domain}/`;
       const competitorEntries = toCompetitorEntries(y?.competitors);
       const keywordEntries = toKeywordEntries(y?.trackedKeywords);
+      const brandTermEntries = toBrandTermEntries(y?.brandTerms);
       const client: Client = {
         slug: domain,
         domain,
@@ -454,7 +496,8 @@ export function mergeClients(
         competitorEntries,
         trackedKeywords: keywordEntries.map((k) => k.keyword),
         keywordEntries,
-        brandTerms: toBrandTerms(y?.brandTerms),
+        brandTerms: brandTermEntries.map((b) => b.term),
+        brandTermEntries,
         keyPages: y?.keyPages?.length ? y.keyPages : [homepage],
         monthlyBudgetUsd: y?.monthlyBudgetUsd ?? defaults.monthlyBudgetUsd,
         aliases: y && normalizeHost(y.slug) !== domain ? [y.slug] : [],

@@ -33,4 +33,21 @@ export function registerPrompts(server: McpServer) {
       messages: [{ role: "user", content: { type: "text", text: template("find-competitors", { client: client.trim() }) } }],
     }),
   );
+
+  server.registerPrompt(
+    "review-brand-terms",
+    {
+      title: "Review brand terms",
+      description:
+        "Walk through automatically inferred brand terms for one client (or every client), confirm the uncertain ones with you, and save the ones you accept.",
+      argsSchema: { client: z.string().optional().describe("Client domain or clients.yaml slug. Leave empty to review every client.") },
+    },
+    ({ client }) => {
+      const c = client?.trim();
+      const scope = c
+        ? `the client \`${c}\``
+        : "every client (call `list_clients` first and take them one at a time, in the order listed)";
+      return { messages: [{ role: "user", content: { type: "text", text: template("review-brand-terms", { scope, client: c ?? "each client" }) } }] };
+    },
+  );
 }

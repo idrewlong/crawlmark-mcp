@@ -19,7 +19,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 
 | Tool | Does |
 |---|---|
-| `list_clients` | Every client: domain, name, sources, GSC property, GA4 property, alternates, what's missing, what was just added to `clients.yaml`, and discovery status. `refresh: true` re-lists from Google |
+| `list_clients` | Every client: domain, name, sources, GSC property, GA4 property, alternates, what's missing, what was just added to `clients.yaml`, and discovery status (its notes include brand terms added automatically for new clients). `refresh: true` re-lists from Google |
 | `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions, an [`opportunities`](#opportunities) section (top 5 each of striking distance, low CTR and cannibalization), a [branded vs non-branded split](#branded-queries) (`search.branded`, `search.nonBranded`; query rows and tracked keywords carry `branded: boolean`), and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
 | `striking_distance` | Queries at positions 5-20 with top page and estimated extra clicks if they reached position 3. Free, Search Console only; see [Opportunities](#opportunities) |
 | `quick_wins` | Pages at positions 11-20 with their top 3 queries |
@@ -35,7 +35,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `spend_summary` | Paid API spend this month by client |
 | `purge_cache` | Drop expired cache entries |
 
-**Competitors and keywords** (free and local, except `suggest_competitors`)
+**Competitors, keywords and brand terms** (free and local, except `suggest_competitors` and the DataForSEO fallback in `suggest_brand_terms`)
 
 | Tool | Does |
 |---|---|
@@ -44,6 +44,9 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `remove_competitors` | Removes domains, in any URL or `www.` form |
 | `list_keywords`, `add_keywords`, `remove_keywords` | The same for tracked keywords (saved lowercase with single spaces). `monthly_report` reports their positions |
 | `set_client_profile` | Sets or clears (`""`) a client's `area` (a DataForSEO location name, e.g. `Austin,Texas,United States`), `niche` (e.g. `emergency plumber`) and `name`; `brandTerms` (a list; replaces the stored one, `[]` clears it) feeds the [branded split](#branded-queries) |
+| `add_brand_terms` | Adds [brand terms](#branded-queries) to one client (saved as `{ term, source, addedAt }`). Skips terms already listed (ignoring case, spacing and punctuation) and repeats. Takes `source`: `manual` (default) or `suggested` |
+| `remove_brand_terms` | Removes brand terms, matched ignoring case, spacing and punctuation, including ones added automatically |
+| `suggest_brand_terms` | Infers how people search for the client by name from its own Search Console queries (free), or DataForSEO ranked keywords for its domain only when it has no Search Console property (paid, about $0.02; `allowPaid: true` also allows it for sparse Search Console data, `false` never). Returns candidates with confidence, score, evidence and source, plus the top remaining non-branded queries. Read-only unless `apply: true` (saves candidates at or above `minConfidence`, default `high`). See [Automatic brand terms](#automatic-brand-terms) |
 | `suggest_competitors` | **Paid, read-only.** Ranked candidate competitors with evidence, from DataForSEO organic keyword overlap and live Google results for up to 5 seed keywords in the client's area. Never saves; the agent shows you the candidates and adds only the ones you confirm. See [Competitor suggestions](#competitor-suggestions) |
 
 **Prompts**
@@ -51,6 +54,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | Prompt | Args | Does |
 |---|---|---|
 | `find-competitors` | `client` | Confirms or sets the client's area and niche, runs `suggest_competitors`, presents the candidates with evidence, asks which to add, then adds them |
+| `review-brand-terms` | `client` (optional; empty = every client) | Runs `suggest_brand_terms`, presents the candidates and remaining non-branded queries, asks which uncertain ones to add, then adds them with `source: "suggested"` |
 
 Prompt text lives in `src/prompts/templates/*.md` (copied to `dist/` by `npm run build`), so wording can be edited without touching code.
 
@@ -167,11 +171,13 @@ It prints the mode (`auto → service_account` when auto-detected, or `auto → 
 | `crawlmark-cli clients list [--refresh]` | Runs discovery (when Google is set up), adds any new domains to `clients.yaml`, then prints every client: domain, name, sources, GSC property, GA4 ID, what's missing, aliases and alternate properties, followed by what was added, ignored domains, and discovery warnings and notes. `--refresh` skips the one-day discovery cache. Exits 0 when Google isn't set up; non-zero only if a configured Google fails entirely. |
 | `crawlmark-cli clients add <domain>... [--name <name>]` | Adds clients to `clients.yaml`, keyed by their normalised domains. No Google needed. If a domain is there with `ignore: true`, removes the `ignore`. `--name` only with one domain. |
 | `crawlmark-cli clients remove <domain>... [--ignore]` | Deletes the clients' entries. If Google still lists the domain, discovery adds it back on the next run; `--ignore` instead keeps the entry with `ignore: true`, which hides it and stops discovery re-adding it. |
-| `crawlmark-cli clients set <client> [--area <location>] [--niche <text>] [--name <name>]` | Sets a client's area (DataForSEO location name, e.g. `--area "Austin,Texas,United States"`), niche and display name. `--niche ""` clears one. |
+| `crawlmark-cli clients set <client> [--area <location>] [--niche <text>] [--name <name>] [--brand-terms "a,b"]` | Sets a client's area (DataForSEO location name, e.g. `--area "Austin,Texas,United States"`), niche, display name and brand terms (replaces the list). `--niche ""` clears one. |
 | `crawlmark-cli competitors list <client>` | Lists the client's competitors with source, date added and note, plus its area and niche. |
 | `crawlmark-cli competitors add <client> <domain>... [--note <text>]` | Adds competitors (URLs and `www.` forms become bare domains) and prints what was skipped and why. Exits 1 only if nothing valid was given. |
 | `crawlmark-cli competitors remove <client> <domain>...` | Removes competitors. Exits 1 if none were listed. |
 | `crawlmark-cli keywords list\|add\|remove <client> [keyword...] [--note <text>]` | The same for tracked keywords. Quote keywords with spaces: `keywords add example.com "emergency plumber"`. |
+| `crawlmark-cli brand list\|add\|remove <client> [term...]` | Lists, adds or removes a client's brand terms (with source and date). Quote terms with spaces. |
+| `crawlmark-cli brand suggest <client>\|--all [--apply] [--min-confidence high\|medium] [--paid] [--paid-sparse] [--no-paid]` | Infers brand terms and prints a table of candidates (term, confidence, score, source, signals, `AUTO`: `yes` or why it needs review, saved) and any `other-client-brand` exclusions. **`--all` makes no paid calls** unless you pass `--paid` (DataForSEO, about $0.02 a client, for clients that still have no candidates and no Search Console property, including when Google isn't set up) or `--paid-sparse` (also clients whose Search Console returned under 20 rows). For a single client, DataForSEO is used when it has no Search Console property, also for sparse data with `--paid-sparse`, never with `--no-paid`. A Search Console error is reported and never retried on the paid source. `--apply` saves only candidates at or above `--min-confidence` (default `high`) that match the distinctive part of the client's name (see strict auto-add below). |
 
 The server reads the token on demand and picks up a new login without a restart. Refreshed access tokens are written back to the same file. Never commit or share `google-token.json`; it's gitignored.
 
@@ -211,8 +217,11 @@ Add them whenever you like, with the tools above, the CLI (`crawlmark-cli compet
       - emergency plumber
     area: Austin,Texas,United States  # DataForSEO location name, for local searches
     niche: emergency plumber
-    brandTerms:                       # see Branded queries
+    brandTerms:                       # see Branded queries; usually filled automatically
       - example plumbing
+      - term: ex plumbing
+        source: auto-gsc              # manual, suggested, auto-gsc or auto-dataforseo
+        addedAt: 2026-10-12
 ```
 
 Competitors are stored as bare domains (`https://www.rival.example/page` becomes `rival.example`), keywords lowercase with single spaces, and duplicates are skipped. The client's own domain can't be a competitor.
@@ -310,7 +319,23 @@ A query counts as branded when, ignoring case, spacing, punctuation and accents,
 - matches the domain stem, the client name or the GA4 property name (`exampleplumbing.com` matches "example plumbing", "Example-Plumbing hours" and "exampleplumbing");
 - uses spaced initials or a generic suffix ("a b building", "ab building inc"), or the short brand token alone ("ab construction").
 
-`brandTerms` add to this built-in matching; they never replace it. Set them with `set_client_profile` (`brandTerms: ["example plumbing", "ex plumbing"]`, `[]` to clear), `crawlmark-cli clients set <client> --brand-terms "example plumbing,ex plumbing"`, or in `clients.yaml`. Add misspellings, old names and product names the client is known by. Terms of 4+ characters match across word boundaries (a squashed "ex co" would match inside longer words), so prefer distinctive terms.
+`brandTerms` add to this built-in matching; they never replace it, and each client's terms apply only to that client. You don't have to type them: crawlmark [infers them](#automatic-brand-terms) from how people actually search. To set them by hand, use `add_brand_terms` / `remove_brand_terms`, `crawlmark-cli brand add|remove <client> <term>...`, `set_client_profile` (`brandTerms: ["example plumbing", "ex plumbing"]` replaces the list, `[]` clears it; terms you keep keep their source and date), or edit `clients.yaml`. Each entry is a plain string or `{ term, source, addedAt }`, where `source` is `manual`, `suggested`, `auto-gsc` or `auto-dataforseo`. Add misspellings, old names and product names the client is known by. Terms of 4+ characters match across word boundaries (a squashed "ex co" would match inside longer words), so prefer distinctive terms.
+
+#### Automatic brand terms
+
+A domain often isn't how people search for a business: `bellafornino.example` gets searched as "bella forno pizza" and "bella forno menu", which the domain-stem matching misses. `suggest_brand_terms` finds those names in the client's own queries:
+
+1. **Data.** Search Console query rows for the last 90 days (up to 1,000; free). Only when Search Console isn't usable at all (Google isn't set up, or the client has no property) does it use DataForSEO ranked keywords for the client's own domain (top 100, paid, about $0.02, cached 7 days, through the budget cap). If Search Console returns fewer than 20 rows, the paid fallback runs only with `allowPaid: true` (the `review-brand-terms` prompt asks you first); `allowPaid: false` turns it off. A Search Console error is reported and never falls back to the paid source. Each candidate says which `source` it came from.
+2. **Candidates.** 1-3 word phrases from queries the client's current matching doesn't already cover. Generic words never start or end a candidate: stop words, intent words ("near", "best", "how"), navigational modifiers ("menu", "hours", "reviews"), the niche, the area, US state names, and trade words seen in the queries (words used in "near me"/"best" searches that don't name the client, or words whose queries mostly rank below position 3); niche, area and trade words also match their plurals and endings ("plumber"/"plumbing"). So "pizza near me" never becomes a brand term, however well the site does for it. A phrase made only of generic words is dropped unless it strongly resembles the distinctive part of a name ("la forna" for `lafornina.example`, even though "forna" also shows up in "forna near me").
+3. **Signals.** (a) Name similarity to the *distinctive part* of the domain stem, client name or GA4 name: the name minus trade words, places and company suffixes (co, inc, llc, company, corp, ltd, group, services, pros, team, solutions). For a client with no `area`, a part of the name next to a trade word counts as a probable place, so `austinplumbing.example` and `austinplumbingco.example` have no distinctive part and "austin plumber" never matches them. Similarity is edit-distance based ("la forna" scores 0.86 against "lafornina"); a phrase that is only the end of the name, like "building systems" in "AB Building Systems", counts as weak. (b) Navigational behaviour, Search Console only: the phrase's queries average position 2 or better with CTR at least 1.5x the [CTR curve](#opportunities). (c) Concentration: the phrase recurs across several queries that carry a real share of the site's clicks (or impressions, or estimated traffic), on page one.
+4. **Confidence.** `high` needs strong name similarity plus navigational behaviour or concentration, at an average position of 3 or better; DataForSEO-only candidates (no CTR) are `high` only with very strong similarity. Behaviour without name similarity is at most `medium`. A similar name the site ranks poorly for is usually another business, so it stays `low`. The response's `method` string has every threshold.
+5. **Other clients.** A phrase that matches any other client's domain, name or brand terms is never proposed (it's listed under `excluded` with reason `other-client-brand`), so an agency site whose queries mention its clients' names doesn't adopt them, and each client's terms stay its own. Fragments and misspellings count too: a phrase is excluded when every distinctive word is within one edit of a word of the other client's names or terms ("bela", "fornos") or a fuzzy substring of them ("belaforno"), unless the phrase is clearly closer to this client's own name.
+
+**Strict auto-add.** A candidate is only ever saved automatically (by discovery, `apply: true` or `--apply`) when one of its words (4+ letters, not the niche, area, a place, a company suffix or a filler word) matches the distinctive part of the client's name (`autoQualified: true`). Everything else, including a strong-looking match against a generic name, comes back as a suggestion with a `reviewReason`: `needs-review: generic-name-match`, `needs-review: no-distinctive-name` (a pure exact-match domain, where nothing is ever auto-added), or `needs-review: confidence`. Candidates that fail the check are capped at `medium`.
+
+The response also lists the top 20 non-branded queries no candidate covers, so the AI can spot misspellings or old names. With `apply: true` it saves the auto-qualified candidates at or above `minConfidence` (default `high`) with `source: "auto-gsc"` or `"auto-dataforseo"`; otherwise nothing is saved, and the AI should confirm medium and low candidates with you before calling `add_brand_terms` with `source: "suggested"`. The `review-brand-terms` prompt walks through that for one client or all of them, and `crawlmark-cli brand suggest --all` does it in bulk.
+
+**Automatically for new clients.** When discovery adds a new client that has a Search Console property, crawlmark runs the free Search Console inference for it and saves the `high` candidates that pass the strict auto-add check (`source: auto-gsc`). It never calls DataForSEO here, and a failure never affects the sync; `list_clients` notes what was added. Remove any you disagree with with `remove_brand_terms` or `crawlmark-cli brand remove`.
 
 The split sums query-level rows (up to 5,000 per month), which leave out anonymized queries, so branded + non-branded will be lower than the site totals in the same report; the report says so in `search.note`. Matching is heuristic: a client whose name is a common word can have a few non-brand queries marked branded, so spot-check `topQueries` and add terms where it misses.
 
@@ -333,11 +358,13 @@ Estimates use the expected-CTR-by-position curve in `src/analysis/ctr-curve.ts`,
 ```
 src/
   index.ts              server entry (stdio)
-  cli.ts                crawlmark-cli: auth, clients list | add | remove | set, competitors, keywords
+  cli.ts                crawlmark-cli: auth, clients list | add | remove | set, competitors, keywords, brand
   config.ts             env loading and validation (paths resolved from project root), client defaults
   clients.ts            resolveClient()/loadRegistry(): discovery, clients.yaml sync (atomic, serialised), add/remove,
                         competitor/keyword edits, set_client_profile
   competitors.ts        suggest_competitors: gathers overlap + seed SERPs, loads the denylist
+  brand-inference.ts    fetches one client's query rows (GSC, DataForSEO fallback) and infers brand-term candidates
+  brand-terms.ts        suggest_brand_terms: inference plus optional apply
   lib/
     store.ts            SQLite (cache, spend ledger, saved audits)
     audits.ts           save/list/get saved audits, sortable audit IDs
@@ -348,7 +375,7 @@ src/
     env.ts              empty env values count as unset (pure)
     clients.ts          host normaliser, GSC/GA4 join, clients.yaml schema + merge, sync plan, resolution (pure)
     clients-file.ts     comment-preserving clients.yaml edits via the yaml Document API (pure)
-    client-lists.ts     competitor/keyword add and remove planning with skip reasons (pure)
+    client-lists.ts     competitor/keyword/brand-term add and remove planning with skip reasons (pure)
     brand.ts            isBranded(): branded-query classifier and the name/domain normalisers (pure)
     competitor-denylist.ts  built-in platform denylist and rule matching (pure)
     spend.ts            spend-ledger key and alias merging (pure)
@@ -365,6 +392,7 @@ src/
   analysis/
     competitor-suggestions.ts  seed picking, merge, filter and score for suggest_competitors (pure)
     branded.ts          branded vs non-branded totals from query rows (pure)
+    brand-terms.ts      brand-term candidates from query rows: n-grams, signals, confidence, other-client exclusion (pure)
     ctr-curve.ts        expected CTR by position (editable constant)
     opportunities.ts    striking distance, quick wins, low CTR, cannibalization, declining pages (pure)
     findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
@@ -382,6 +410,7 @@ src/
     raw.ts              lower-level tool registrations
     opportunities.ts    striking_distance, quick_wins, low_ctr, cannibalization, declining_pages
     competitors.ts      competitor, keyword, profile and suggestion tool registrations
+    brand.ts            add_brand_terms, remove_brand_terms, suggest_brand_terms
 scripts/
   record-fixtures.ts    records raw DataForSEO sandbox responses (refuses non-sandbox); scrub before committing
 test/

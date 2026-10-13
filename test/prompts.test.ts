@@ -17,4 +17,19 @@ describe("prompt templates", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(text).toContain('source: "suggested"');
   });
+
+  it("review-brand-terms suggests, asks, then adds with source suggested, never across clients", () => {
+    const raw = readFileSync(new URL("../src/prompts/templates/review-brand-terms.md", import.meta.url), "utf8");
+    const text = renderTemplate(raw, { scope: "the client `example.com`", client: "example.com" });
+    expect(text).not.toContain("{{");
+    const order = ["suggest_brand_terms", "Ask", "add_brand_terms"].map((t) => text.indexOf(t));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(text).toContain('source: "suggested"');
+    expect(text).toContain("other-client-brand");
+    expect(text).toContain("remove_brand_terms");
+    // Paid fallback for sparse Search Console data only after the user agrees.
+    expect(text.indexOf("ask me whether to spend")).toBeGreaterThan(-1);
+    expect(text.indexOf("ask me whether to spend")).toBeLessThan(text.indexOf("allowPaid: true"));
+  });
 });

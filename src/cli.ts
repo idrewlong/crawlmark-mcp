@@ -5,11 +5,15 @@
  */
 import { parseArgs } from "node:util";
 import { Auth } from "googleapis";
+import { autoAddable, type BrandCandidate } from "./analysis/brand-terms.js";
+import { suggestBrandTerms, suggestBrandTermsForAll, type SuggestBrandResult } from "./brand-terms.js";
 import {
+  addBrandTerms,
   addClient,
   addCompetitors,
   addKeywords,
   loadRegistry,
+  removeBrandTerms,
   removeClient,
   removeCompetitors,
   removeKeywords,
@@ -51,6 +55,19 @@ Commands:
   keywords add <client> <keyword>... [--note <text>]
   keywords remove <client> <keyword>...
                 Manage a client's tracked keywords (quote keywords with spaces)
+  brand list <client>
+  brand add <client> <term>...
+  brand remove <client> <term>...
+                Manage a client's brand terms (quote terms with spaces)
+  brand suggest <client>|--all [--apply] [--min-confidence high|medium] [--paid] [--paid-sparse] [--no-paid]
+                Infer brand terms from Search Console (free). With --all, DataForSEO (paid,
+                ~$0.02 a client) is never used unless --paid (clients with no Search Console
+                property) or --paid-sparse (also clients with under 20 Search Console rows).
+                For one client it is used when the client has no Search Console property,
+                also for sparse data with --paid-sparse, never with --no-paid; never after a
+                Search Console error. --apply saves candidates at or above --min-confidence
+                (default high) that match the distinctive part of the client's name; AUTO shows
+                "yes" for high candidates that qualify, else why it needs review
 `;
 
 // A reader that closes early (e.g. `| head -1`) is not an error.
@@ -305,6 +322,82 @@ async function keywordsCommand(command: string | undefined, args: string[], note
   return usageError(`Unknown command: keywords ${command ?? ""}`);
 }
 
+async function brandCommand(command: string | undefined, args: string[], values: BrandFlags): Promise<number> {
+  if (command === "suggest") return brandSuggest(args, values);
+  const [client, ...terms] = args;
+  if (!client) return usageError(`brand ${command ?? ""} needs a client.`);
+  if (command === "list") {
+    if (terms.length) return usageError("brand list takes only a client.");
+    const c = await resolveClient(client);
+    if (c.brandTermEntries.length === 0) out(`${c.domain} has no brand terms yet (the domain and name are always matched). Try: crawlmark-cli brand suggest ${c.domain}`);
+    else out(formatTable(["TERM", "SOURCE", "ADDED"], c.brandTermEntries.map((e) => [e.term, e.source ?? "-", e.addedAt ?? "-"])));
+    return 0;
+  }
+  if (terms.length === 0) return usageError(`brand ${command} needs at least one term.`);
+  if (command === "add") return printAdded(await addBrandTerms(client, terms), (e) => e.term, "brand term(s)");
+  if (command === "remove") return printRemoved(await removeBrandTerms(client, terms), "brand term(s)");
+  return usageError(`Unknown command: brand ${command ?? ""}`);
+}
+
+const signalText = (c: BrandCandidate) =>
+  [c.signals.nameSimilarity.fired && `name ${c.signals.nameSimilarity.score}`, c.signals.navigational.fired && "navigational", c.signals.concentration.fired && "concentration"]
+    .filter(Boolean)
+    .join(", ") || "-";
+
+type BrandFlags = { all: boolean; apply: boolean; "min-confidence"?: string | undefined; "no-paid": boolean; paid: boolean; "paid-sparse": boolean };
+
+async function brandSuggest(args: string[], values: BrandFlags): Promise<number> {
+  const min = values["min-confidence"] ?? "high";
+  if (values["no-paid"] && values["paid-sparse"]) return usageError("--no-paid and --paid-sparse can't be combined.");
+  if (min !== "high" && min !== "medium") return usageError("--min-confidence must be high or medium.");
+  if (values.all === (args.length > 0)) return usageError("brand suggest takes one client or --all.");
+  if (args.length > 1) return usageError("brand suggest takes one client.");
+  if (values["no-paid"] && values.paid) return usageError("--no-paid and --paid can't be combined.");
+  const targets = values.all ? (await loadRegistry()).clients.map((c) => c.domain) : [args[0]!];
+  let results: Map<string, SuggestBrandResult | Error>;
+  if (values.all) {
+    // No paid calls unless --paid (clients with no usable Search Console) or --paid-sparse (also sparse Search Console).
+    results = await suggestBrandTermsForAll(targets, { apply: values.apply, minConfidence: min, paid: values.paid, paidSparse: values["paid-sparse"] });
+  } else {
+    // One client: DataForSEO only when it has no Search Console property, also for sparse data with --paid-sparse, never with --no-paid.
+    const allowPaid = values["no-paid"] ? false : values["paid-sparse"] ? true : undefined;
+    results = new Map();
+    try {
+      results.set(targets[0]!, await suggestBrandTerms(targets[0]!, { apply: values.apply, minConfidence: min, allowPaid }));
+    } catch (err) {
+      results.set(targets[0]!, err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  const rows: string[][] = [];
+  let cost = 0;
+  let failed = 0;
+  for (const [domain, r] of results) {
+    if (r instanceof Error) {
+      rows.push([domain, "(error)", "-", "-", "-", r.message.slice(0, 80), "-", "-"]);
+      failed++;
+      continue;
+    }
+    cost += r.costUsd;
+    if (r.candidates.length === 0) {
+      const why = r.sources.gsc.skipped ?? (r.sources.gsc.rows !== undefined ? `${r.sources.gsc.rows} GSC rows` : "");
+      rows.push([domain, "(none)", "-", "-", "-", why || "-", "-", "-"]);
+    }
+    const saved = new Set((r.applied?.added ?? []).map((a) => a.term.toLowerCase()));
+    for (const c of r.candidates) {
+      rows.push([domain, c.term, c.confidence, String(c.score), c.source, signalText(c), c.reviewReason === null ? "yes" : c.reviewReason.replace("needs-review: ", "review: "), saved.has(c.term.toLowerCase()) ? "yes" : "-"]);
+    }
+    for (const e of r.excluded) rows.push([domain, e.term, "excluded", "-", "-", `${e.reason} (${e.client})`, "-", "-"]);
+  }
+  out(formatTable(["CLIENT", "TERM", "CONFIDENCE", "SCORE", "SOURCE", "SIGNALS", "AUTO", "SAVED"], rows));
+  out();
+  out(`DataForSEO cost: $${cost.toFixed(4)}.${values.apply ? ` Saved terms at ${min} confidence or above.` : " Nothing saved; re-run with --apply, or add terms with: crawlmark-cli brand add <client> <term>..."}`);
+  const ok = [...results.values()].filter((r): r is SuggestBrandResult => !(r instanceof Error));
+  const auto = ok.reduce((n, r) => n + autoAddable(r.candidates, "high").length, 0);
+  out(`${auto} high-confidence candidate(s) qualify for automatic adding (AUTO yes) across ${results.size} client(s); the rest are suggestions to review.`);
+  return failed && failed === results.size ? 1 : 0;
+}
+
 async function clientsSet(args: string[], values: { area?: string | undefined; niche?: string | undefined; name?: string | undefined; "brand-terms"?: string | undefined }): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
   if (values.area === undefined && values.niche === undefined && values.name === undefined && values["brand-terms"] === undefined) {
@@ -336,6 +429,12 @@ async function main(argv: string[]): Promise<number> {
       area: { type: "string" },
       niche: { type: "string" },
       "brand-terms": { type: "string" },
+      all: { type: "boolean", default: false },
+      apply: { type: "boolean", default: false },
+      "min-confidence": { type: "string" },
+      "no-paid": { type: "boolean", default: false },
+      paid: { type: "boolean", default: false },
+      "paid-sparse": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -349,6 +448,7 @@ async function main(argv: string[]): Promise<number> {
   if (group === "clients" && command === "set") return clientsSet(args, values);
   if (group === "competitors") return competitorsCommand(command, args, values.note);
   if (group === "keywords") return keywordsCommand(command, args, values.note);
+  if (group === "brand") return brandCommand(command, args, values);
   // Every other command takes no further arguments.
   if (args.length) return usageError(`Unexpected argument${args.length > 1 ? "s" : ""}: ${args.join(" ")}`);
   if (group === "clients") {

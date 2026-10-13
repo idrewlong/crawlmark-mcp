@@ -101,7 +101,7 @@ export function setIgnore(text: string, key: string, ignore: boolean): string {
 }
 
 /** List fields crawlmark edits on a client entry. */
-export type ListField = "competitors" | "trackedKeywords";
+export type ListField = "competitors" | "trackedKeywords" | "brandTerms";
 
 function entryMap(doc: Document, key: string): YAMLMap {
   const entry = clientsMap(doc).get(key, true);
@@ -166,8 +166,26 @@ export function setEntryFields(text: string, key: string, fields: Record<string,
 /**
  * Replace a list of plain strings on the entry under `key`. An empty list
  * removes the field. Comments on the entry's other fields are kept.
+ * `same(written, item)` decides whether a written item (a string, or the
+ * `objectKey` field of a mapping item) is the same as a new one; a match keeps
+ * the written item as is, so object-form entries keep their metadata.
  */
-export function setStringList(text: string, key: string, field: string, items: string[]): string {
+export function setStringList(
+  text: string,
+  key: string,
+  field: string,
+  items: string[],
+  opts: { objectKey?: string; same?: (written: string, item: string) => boolean } = {},
+): string {
+  const same = opts.same ?? ((a: string, b: string) => a === b);
+  const valueOf = (node: unknown): string | undefined => {
+    if (isScalar(node) && typeof node.value === "string") return node.value;
+    if (opts.objectKey && isMap(node)) {
+      const v = node.get(opts.objectKey);
+      return typeof v === "string" ? v : undefined;
+    }
+    return undefined;
+  };
   const doc = load(text);
   const entry = entryMap(doc, key);
   if (items.length === 0) entry.delete(field);
@@ -176,7 +194,10 @@ export function setStringList(text: string, key: string, field: string, items: s
     // items that survive (matched by text) keep their own comments, new ones are appended as plain items.
     const old = entry.get(field, true);
     if (isSeq(old)) {
-      const next = items.map((item) => old.items.find((o) => isScalar(o) && o.value === item) ?? doc.createNode(item));
+      const next = items.map((item) => old.items.find((o) => {
+        const v = valueOf(o);
+        return v !== undefined && same(v, item);
+      }) ?? doc.createNode(item));
       old.items = next;
       old.flow = false;
     } else {

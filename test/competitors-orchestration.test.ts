@@ -136,6 +136,7 @@ describe("gatherSeeds", () => {
   it("uses niche then tracked keywords, and skips GSC and ranked keywords once there are 5", async () => {
     m.googleConfigured.mockReturnValue(true);
     const client = { ...(await resolveClient("example.com")), gscProperty: "sc-domain:example.com", trackedKeywords: ["a", "b", "c", "d", "e"] };
+    m.gscQuery.mockClear(); // discovery's automatic brand-term inference may have queried Search Console for a new client
     const seeds = await gatherSeeds(client, "niche term", spend(), []);
     expect(seeds.map((s) => [s.keyword, s.from])).toEqual([["niche term", "niche"], ["a", "tracked"], ["b", "tracked"], ["c", "tracked"], ["d", "tracked"]]);
     expect(m.gscQuery).not.toHaveBeenCalled();

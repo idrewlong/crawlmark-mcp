@@ -3,9 +3,13 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSyn
 import { dirname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { clientDefaults, env } from "./config.js";
+import { autoAddable } from "./analysis/brand-terms.js";
+import { inferClientBrandTerms } from "./brand-inference.js";
 import {
+  planAddBrandTerms,
   planAddCompetitors,
   planAddKeywords,
+  planRemoveBrandTerms,
   planRemoveCompetitors,
   planRemoveKeywords,
   today,
@@ -29,9 +33,12 @@ import {
   normalizeHost,
   parseOverrides,
   planSync,
+  toBrandTermEntries,
   toCompetitorEntries,
   toKeywordEntries,
   unknownClientMessage,
+  type BrandTermEntry,
+  type BrandTermSource,
   type Client,
   type ClientOverride,
   type ClientRegistry,
@@ -42,7 +49,8 @@ import {
   type DiscoverySkipped,
   type Settled,
 } from "./lib/clients.js";
-import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, toBrandTerms } from "./lib/brand.js";
+import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, squash, toBrandTerms } from "./lib/brand.js";
+import { mapLimit } from "./lib/concurrency.js";
 import { GOOGLE_NOT_CONFIGURED_MESSAGE } from "./lib/google-auth.js";
 import { listGa4Properties, listGscSites } from "./providers/discovery.js";
 import { googleAuthModeNote, googleConfigured } from "./providers/google.js";
@@ -135,6 +143,8 @@ interface DiscoveryRun {
   outcome: DiscoveryOutcome | DiscoverySkipped;
   fromCache: boolean;
   sync: SyncResult;
+  /** What automatic brand-term inference did for clients this run added. */
+  brandNotes: string[];
 }
 
 async function settle<T>(p: Promise<T>): Promise<Settled<T>> {
@@ -153,6 +163,7 @@ async function runDiscovery(refresh: boolean): Promise<DiscoveryRun> {
       outcome: { skipped: `${GOOGLE_NOT_CONFIGURED_MESSAGE} Clients come from clients.yaml only.` },
       fromCache: false,
       sync: NO_SYNC,
+      brandNotes: [],
     };
   }
   const [gsc, ga4] = await Promise.all([settle(listGscSites({ refresh })), settle(listGa4Properties({ refresh }))]);
@@ -188,7 +199,68 @@ async function runDiscovery(refresh: boolean): Promise<DiscoveryRun> {
     ...(sync.error ? [`could not update ${env.CLIENTS_FILE}: ${sync.error}`] : []),
   ];
   for (const p of problems) console.error(`crawlmark: client discovery: ${p}`);
-  return { outcome, fromCache, sync };
+  const brandNotes = sync.added.length ? await autoBrandTermsForNewClients(outcome, sync.added) : [];
+  return { outcome, fromCache, sync, brandNotes };
+}
+
+// ---------------------------------------------------------------- automatic brand terms for new clients
+
+/** How long a discovery run waits for brand-term inference before returning; the rest finishes in the background. */
+const AUTO_BRAND_WAIT_MS = 20_000;
+/** Notes from inference that finished after its discovery run returned; shown by the next list_clients. */
+const lateBrandNotes: string[] = [];
+
+/**
+ * For clients discovery just added that have a Search Console property: infer
+ * brand terms from their own Search Console queries (free; never DataForSEO)
+ * and save the high-confidence ones with source auto-gsc. Best-effort: a
+ * failure becomes a note and never affects the sync. Waits up to
+ * AUTO_BRAND_WAIT_MS, then lets the rest finish in the background.
+ */
+async function autoBrandTermsForNewClients(outcome: DiscoveryOutcome, added: string[]): Promise<string[]> {
+  let clients: Client[];
+  try {
+    clients = assembleRegistry(outcome, loadOverrides(), clientDefaults).clients;
+  } catch (err) {
+    return [`Automatic brand terms skipped: ${(err as Error).message}`];
+  }
+  const fresh = clients.filter((c) => added.includes(c.domain) && c.gscProperty);
+  if (fresh.length === 0) return [];
+  const notes: string[] = [];
+  let finished = false;
+  const work = mapLimit(fresh, 2, async (client) => {
+    let note: string;
+    try {
+      const r = await inferClientBrandTerms(client, clients, { allowPaid: false });
+      // Strict: only high candidates that match the distinctive part of the client's name.
+      const high = autoAddable(r.candidates, "high");
+      if (high.length === 0) {
+        note = `${client.domain}: no brand terms qualified for automatic adding (${r.candidates.length} suggestion(s) to review; run suggest_brand_terms).`;
+      } else {
+        const res = await addBrandTermsTo(client, high.map((c) => c.term), { source: "auto-gsc" });
+        note = res.added.length
+          ? `${client.domain}: added brand terms ${res.added.map((a) => `"${a.term}"`).join(", ")} (auto-gsc, high confidence). Undo with remove_brand_terms.`
+          : `${client.domain}: high-confidence brand terms were already listed.`;
+      }
+    } catch (err) {
+      note = `${client.domain}: automatic brand terms failed: ${(err as Error).message}`;
+    }
+    if (finished) lateBrandNotes.push(note);
+    else notes.push(note);
+  });
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, AUTO_BRAND_WAIT_MS);
+    timer.unref();
+  });
+  await Promise.race([work.then(() => undefined), timeout]);
+  clearTimeout(timer);
+  if (notes.length < fresh.length) {
+    finished = true;
+    notes.push("Automatic brand terms are still running for some new clients; list_clients will show the result.");
+  }
+  work.catch(() => undefined);
+  return notes;
 }
 
 /**
@@ -219,6 +291,7 @@ export async function loadRegistry(opts: { refresh?: boolean } = {}): Promise<Lo
   const overrides = loadOverrides();
   const registry = assembleRegistry(run.outcome, overrides, clientDefaults);
   if (run.sync.error) registry.discovery.warnings.push(`Could not update ${env.CLIENTS_FILE}: ${run.sync.error}`);
+  registry.discovery.notes.push(...run.brandNotes, ...lateBrandNotes.splice(0));
   const modeNote = googleAuthModeNote();
   if (modeNote) registry.discovery.info = [registry.discovery.info, modeNote].filter(Boolean).join(" ");
   return {
@@ -389,6 +462,47 @@ export async function removeKeywords(idOrDomain: string, keywords: string[]): Pr
   });
 }
 
+export interface BrandAddOptions {
+  source?: BrandTermSource | undefined;
+}
+
+/** Add brand terms to an already-resolved client. Only ever writes that client's own entry. */
+function addBrandTermsTo(client: Client, terms: string[], opts: BrandAddOptions = {}): Promise<ListAddResult<BrandTermEntry>> {
+  return editClientsFile((text, path) => {
+    const { text: base, entry } = entryFor(text, path, client);
+    const plan = planAddBrandTerms(entry.brandTerms, terms, { source: opts.source, addedAt: today() });
+    const result: ListAddResult<BrandTermEntry> = {
+      client: client.domain,
+      added: plan.add.map((e, i) => ({ ...e, input: plan.inputs[i]! })),
+      skipped: plan.skipped,
+      list: [...toBrandTermEntries(entry.brandTerms), ...plan.add],
+      clientsFile: path,
+    };
+    return plan.add.length ? { text: appendListItems(base, entry.slug, "brandTerms", plan.add), result } : { result };
+  });
+}
+
+/**
+ * Add brand terms to a client (saved as `{ term, source, addedAt }`). Skips
+ * terms already listed (ignoring case, spacing and punctuation), repeats and
+ * unusable ones, with a reason.
+ */
+export async function addBrandTerms(idOrDomain: string, terms: string[], opts: BrandAddOptions = {}): Promise<ListAddResult<BrandTermEntry>> {
+  return addBrandTermsTo(await resolveClient(idOrDomain), terms, opts);
+}
+
+/** Remove brand terms from a client (matched ignoring case, spacing and punctuation). */
+export async function removeBrandTerms(idOrDomain: string, terms: string[]): Promise<ListRemoveResult<BrandTermEntry>> {
+  const client = await resolveClient(idOrDomain);
+  return editClientsFile((text, path) => {
+    const entry = parseText(text, path).find((o) => o.domain === client.domain);
+    const plan = planRemoveBrandTerms(entry?.brandTerms, terms);
+    const kept = (entry?.brandTerms ?? []).filter((_, i) => !plan.indexes.includes(i));
+    const result = { client: client.domain, removed: plan.removed, skipped: plan.skipped, list: toBrandTermEntries(kept), clientsFile: path };
+    return entry && plan.indexes.length ? { text: removeListItems(text!, entry.slug, "brandTerms", plan.indexes), result } : { result };
+  });
+}
+
 export interface ProfileUpdate {
   /** DataForSEO location_name, e.g. "Austin,Texas,United States". Empty string clears it. */
   area?: string | undefined;
@@ -436,7 +550,8 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
   await editClientsFile((text, path) => {
     const { text: base, entry } = entryFor(text, path, client);
     let next = setEntryFields(base, entry.slug, fields);
-    if (brandTerms !== undefined) next = setStringList(next, entry.slug, "brandTerms", brandTerms);
+    // Terms already listed (in either form, ignoring case and spacing) keep their written form and metadata.
+    if (brandTerms !== undefined) next = setStringList(next, entry.slug, "brandTerms", brandTerms, { objectKey: "term", same: (a, b) => squash(a) === squash(b) });
     return { text: next, result: undefined };
   });
   const updated = await resolveClient(client.domain);

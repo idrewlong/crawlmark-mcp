@@ -8,8 +8,8 @@
 #
 # Each entry is keyed by a name you pass as `client` (crawlmark uses the domain).
 # Only `domain` is required. Tools also accept the domain in any URL or www. form.
-# Manage competitors, tracked keywords, area and niche with the MCP tools
-# (add_competitors, add_keywords, set_client_profile, ...) or the CLI
+# Manage competitors, tracked keywords, brand terms, area and niche with the MCP tools
+# (add_competitors, add_keywords, add_brand_terms, set_client_profile, ...) or the CLI
 # (`crawlmark-cli competitors add example.com rival.example`), or edit them here.
 
 clients:
@@ -25,7 +25,9 @@ clients:
     niche: emergency plumber # what the client does, in a few words; first seed keyword for suggest_competitors
     brandTerms: # default: none. Names people search for this brand; used to split branded from non-branded queries
       - example co # adds to, never replaces, the built-in matching on the domain name, client name and GA4 name
-      - ex co
+      - term: ex co # or an object; suggest_brand_terms and add_brand_terms write this form
+        source: auto-gsc # manual, suggested (confirmed by you), auto-gsc or auto-dataforseo (inferred automatically)
+        addedAt: 2026-10-12
     competitors: # default: none. A domain, or an object; URLs and www. forms are saved as the bare domain
       - competitor.example
       - domain: other-competitor.example
