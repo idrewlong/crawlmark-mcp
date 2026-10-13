@@ -1,0 +1,291 @@
+/**
+ * Pure helpers for Google auth (no I/O): mode selection, the OAuth consent URL,
+ * callback validation, token-file parsing/merging, and error messages.
+ * The I/O lives in src/providers/google.ts, src/providers/google-oauth-client.ts,
+ * src/providers/google-login.ts and src/lib/token-store.ts.
+ */
+import { z } from "zod";
+
+export const GOOGLE_AUTH_MODES = ["oauth", "service_account"] as const;
+export type GoogleAuthMode = (typeof GOOGLE_AUTH_MODES)[number];
+
+/** Read-only data scopes. GSC and GA4 fail without these. */
+export const DATA_SCOPES = [
+  "https://www.googleapis.com/auth/webmasters.readonly",
+  "https://www.googleapis.com/auth/analytics.readonly",
+] as const;
+
+/**
+ * OAuth scopes: the data scopes plus `openid email`, the minimum needed to
+ * learn which account signed in (Google returns it in the ID token).
+ */
+export const OAUTH_SCOPES = [...DATA_SCOPES, "openid", "email"] as const;
+
+export const LOGIN_COMMAND = "crawlmark-cli auth login";
+export const CALLBACK_PATH = "/oauth2callback";
+
+// ---------------------------------------------------------------- mode selection
+
+export interface GoogleAuthEnv {
+  GOOGLE_AUTH_MODE: GoogleAuthMode;
+  GOOGLE_OAUTH_CLIENT_ID?: string | undefined;
+  GOOGLE_OAUTH_CLIENT_SECRET?: string | undefined;
+  /** Already resolved to an absolute path. */
+  GOOGLE_APPLICATION_CREDENTIALS?: string | undefined;
+}
+
+export type GoogleAuthConfig =
+  | { mode: "oauth"; clientId: string; clientSecret: string }
+  | { mode: "service_account"; keyFile: string };
+
+/** Pick the auth config for the active mode, or throw a message that says exactly what's missing. */
+export function selectGoogleAuthConfig(e: GoogleAuthEnv): GoogleAuthConfig {
+  if (e.GOOGLE_AUTH_MODE === "service_account") {
+    if (!e.GOOGLE_APPLICATION_CREDENTIALS) {
+      throw new Error(
+        "GOOGLE_AUTH_MODE=service_account but GOOGLE_APPLICATION_CREDENTIALS is not set. " +
+          "Point it at a service-account JSON key (see README), or set GOOGLE_AUTH_MODE=oauth.",
+      );
+    }
+    return { mode: "service_account", keyFile: e.GOOGLE_APPLICATION_CREDENTIALS };
+  }
+  const missing = [
+    !e.GOOGLE_OAUTH_CLIENT_ID && "GOOGLE_OAUTH_CLIENT_ID",
+    !e.GOOGLE_OAUTH_CLIENT_SECRET && "GOOGLE_OAUTH_CLIENT_SECRET",
+  ].filter((v): v is string => Boolean(v));
+  if (missing.length) {
+    throw new Error(
+      `Google OAuth is not configured: ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not set. ` +
+        `Create a Desktop app OAuth client in Google Cloud (see README), add the values to .env, then run \`${LOGIN_COMMAND}\`. ` +
+        "Or set GOOGLE_AUTH_MODE=service_account to use a service-account key instead.",
+    );
+  }
+  return {
+    mode: "oauth",
+    clientId: e.GOOGLE_OAUTH_CLIENT_ID!,
+    clientSecret: e.GOOGLE_OAUTH_CLIENT_SECRET!,
+  };
+}
+
+export function serviceAccountKeyMissingMessage(keyFile: string): string {
+  return (
+    `Service-account key file not found at ${keyFile} (from GOOGLE_APPLICATION_CREDENTIALS). ` +
+    "Download a JSON key for the service account to that path (see README), or set GOOGLE_AUTH_MODE=oauth."
+  );
+}
+
+export function noTokenMessage(tokenFile: string): string {
+  return `Not signed in to Google (no token at ${tokenFile}). Run \`${LOGIN_COMMAND}\` to sign in.`;
+}
+
+// ---------------------------------------------------------------- consent URL + callback
+
+export interface AuthUrlParams {
+  redirectUri: string;
+  state: string;
+  codeChallenge: string;
+}
+
+/**
+ * Options for OAuth2Client.generateAuthUrl. `access_type=offline` + `prompt=consent`
+ * make Google return a refresh token every time, including on re-login.
+ */
+export function authUrlOptions(p: AuthUrlParams): {
+  access_type: "offline";
+  prompt: "consent";
+  scope: string[];
+  state: string;
+  redirect_uri: string;
+  code_challenge: string;
+  code_challenge_method: "S256";
+  include_granted_scopes: false;
+} {
+  return {
+    access_type: "offline",
+    prompt: "consent",
+    scope: [...OAUTH_SCOPES],
+    state: p.state,
+    redirect_uri: p.redirectUri,
+    code_challenge: p.codeChallenge,
+    code_challenge_method: "S256",
+    include_granted_scopes: false,
+  };
+}
+
+export type CallbackResult =
+  | { kind: "code"; code: string }
+  /** Google redirected back with our state but no usable code: the sign-in is over. */
+  | { kind: "error"; message: string }
+  /**
+   * Callback path with a missing or wrong state (stale tab, local probe). Answer
+   * 400 and keep waiting: only a request carrying our state may settle the flow.
+   */
+  | { kind: "reject" }
+  /** Not the callback (e.g. /favicon.ico, unparseable target); answer 404 and keep waiting. */
+  | { kind: "ignore" };
+
+/** Validate the loopback redirect. `requestUrl` is the raw request target (path + query). */
+export function parseCallback(requestUrl: string, expectedState: string): CallbackResult {
+  let url: URL;
+  try {
+    url = new URL(requestUrl, "http://127.0.0.1");
+  } catch {
+    return { kind: "ignore" };
+  }
+  if (url.pathname !== CALLBACK_PATH) return { kind: "ignore" };
+  const q = url.searchParams;
+  if (q.get("state") !== expectedState) return { kind: "reject" };
+  const error = q.get("error");
+  if (error) {
+    const msg =
+      error === "access_denied"
+        ? "Sign-in was cancelled or access was denied."
+        : `Google returned an error: ${error}.`;
+    return { kind: "error", message: msg };
+  }
+  const code = q.get("code");
+  if (!code) return { kind: "error", message: "The OAuth callback had no authorization code." };
+  return { kind: "code", code };
+}
+
+/** Scopes the app needs for data access that weren't granted (users can untick scopes on the consent screen). */
+export function missingDataScopes(granted: string | readonly string[] | undefined | null): string[] {
+  const set = new Set(typeof granted === "string" ? granted.split(/\s+/) : (granted ?? []));
+  return DATA_SCOPES.filter((s) => !set.has(s));
+}
+
+/** Email claim from an ID token. Display only: the token came straight from Google's token endpoint over TLS. */
+export function emailFromIdToken(idToken: string | null | undefined): string | undefined {
+  const payload = idToken?.split(".")[1];
+  if (!payload) return undefined;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { email?: unknown };
+    return typeof claims.email === "string" ? claims.email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------- token file
+
+export const StoredTokenSchema = z.object({
+  refresh_token: z.string().min(1),
+  access_token: z.string().optional(),
+  expiry_date: z.number().optional(),
+  scope: z.string().optional(),
+  token_type: z.string().optional(),
+  id_token: z.string().optional(),
+  /** Signed-in account, captured at login for display. */
+  email: z.string().optional(),
+});
+export type StoredToken = z.infer<typeof StoredTokenSchema>;
+
+/** Parse the token file's text. Throws a readable error if it's corrupt. */
+export function parseTokenFile(text: string, path: string): StoredToken {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Google token file at ${path} is not valid JSON. Run \`${LOGIN_COMMAND}\` again.`);
+  }
+  const parsed = StoredTokenSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new Error(`Google token file at ${path} has no refresh token. Run \`${LOGIN_COMMAND}\` again.`);
+  }
+  return parsed.data;
+}
+
+/** Shape of the OAuth2Client `tokens` event / getToken result (fields may be null). */
+export interface IncomingTokens {
+  refresh_token?: string | null;
+  access_token?: string | null;
+  expiry_date?: number | null;
+  scope?: string | null;
+  token_type?: string | null;
+  id_token?: string | null;
+}
+
+/**
+ * Merge freshly issued tokens into the stored ones. Google usually omits
+ * `refresh_token` (and sometimes `id_token`) on refresh, so absent/null fields
+ * keep their stored value instead of wiping it.
+ */
+export function mergeTokens(existing: StoredToken | undefined, incoming: IncomingTokens): StoredToken {
+  const out: Record<string, unknown> = { ...existing };
+  for (const [k, v] of Object.entries(incoming)) {
+    if (v !== null && v !== undefined && v !== "") out[k] = v;
+  }
+  const email = emailFromIdToken(incoming.id_token);
+  if (email) out.email = email;
+  return StoredTokenSchema.parse(out);
+}
+
+// ---------------------------------------------------------------- errors
+
+export function googleErrorCode(err: unknown): string | undefined {
+  if (!err || typeof err !== "object") return undefined;
+  const data = (err as { response?: { data?: unknown } }).response?.data;
+  if (data && typeof data === "object" && typeof (data as { error?: unknown }).error === "string") {
+    return (data as { error: string }).error;
+  }
+  return undefined;
+}
+
+export function isInvalidGrant(err: unknown): boolean {
+  if (googleErrorCode(err) === "invalid_grant") return true;
+  return err instanceof Error && /\binvalid_grant\b/.test(err.message);
+}
+
+export const INVALID_GRANT_MESSAGE =
+  "Google sign-in expired or was revoked (invalid_grant). " +
+  `Run \`${LOGIN_COMMAND}\` to sign in again. ` +
+  "Note: if the OAuth consent screen is External with publishing status Testing (personal Gmail), " +
+  "Google expires sign-ins after 7 days, so this is expected weekly.";
+
+/** Map a token-refresh failure to a user-facing error. Non-auth errors pass through unchanged. */
+export function mapTokenError(err: unknown): unknown {
+  if (err instanceof Error && err.message === INVALID_GRANT_MESSAGE) return err;
+  if (isInvalidGrant(err)) return new Error(INVALID_GRANT_MESSAGE, { cause: err });
+  return err;
+}
+
+/**
+ * Failure exchanging the authorization code at login (expired or reused code,
+ * PKCE mismatch, bad client). Not a refresh failure, so no 7-day expiry hint.
+ */
+export function loginExchangeErrorMessage(err: unknown): string {
+  const code = googleErrorCode(err);
+  const detail = code ?? (err instanceof Error ? err.message : String(err));
+  const hint =
+    code === "invalid_client" || code === "unauthorized_client"
+      ? " Check GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET (the client must be a Desktop app)."
+      : "";
+  return `Sign-in failed: Google rejected the authorization code (${detail}).${hint} Run \`${LOGIN_COMMAND}\` again.`;
+}
+
+// ---------------------------------------------------------------- status
+
+export type GoogleAuthStatus =
+  | {
+      mode: "oauth";
+      configured: boolean;
+      signedIn: boolean;
+      email?: string;
+      scopes?: string[];
+      tokenFile: string;
+      problem?: string;
+    }
+  | {
+      mode: "service_account";
+      configured: boolean;
+      email?: string;
+      keyFile?: string;
+      problem?: string;
+    };
+
+/** One-line summary of the active Google identity, e.g. for a health check. */
+export function describeAuthStatus(s: GoogleAuthStatus): string {
+  if (s.problem) return `Google auth (${s.mode}): ${s.problem}`;
+  if (s.mode === "oauth") return `Google auth: OAuth, signed in as ${s.email ?? "an unknown account"}`;
+  return `Google auth: service account ${s.email ?? "(email unknown)"}`;
+}

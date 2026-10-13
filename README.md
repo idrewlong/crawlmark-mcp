@@ -44,22 +44,93 @@ cp config/clients.example.yaml config/clients.yaml
 npm run build
 ```
 
-Scripts: `npm run dev` (tsx), `npm run build`, `npm start` (runs `dist/` with the SQLite ExperimentalWarning silenced), `npm run typecheck` (source and tests), `npm test` (vitest), `npm run inspect`.
+Scripts: `npm run dev` (tsx), `npm run build`, `npm start` (runs `dist/` with the SQLite ExperimentalWarning silenced), `npm run cli -- <command>` (the `crawlmark-cli` admin CLI), `npm run typecheck` (source and tests), `npm test` (vitest), `npm run inspect`.
 
 ### Config and paths
 
-Settings come from environment variables, with `.env` in the project root loaded automatically (a missing `.env` is fine). `.env.example` lists every variable. Relative `CLIENTS_FILE`, `DATA_DIR` and `GOOGLE_APPLICATION_CREDENTIALS` values resolve against the project root (the directory above `src/` or `dist/`), not the working directory, so the server works no matter where a client launches it. Absolute paths are used as-is.
+Settings come from environment variables, with `.env` in the project root loaded automatically (a missing `.env` is fine). `.env.example` lists every variable. Relative `CLIENTS_FILE`, `DATA_DIR` (which also holds the Google OAuth token) and `GOOGLE_APPLICATION_CREDENTIALS` values resolve against the project root (the directory above `src/` or `dist/`), not the working directory, so the server works no matter where a client launches it. Absolute paths are used as-is.
 
-### Google service account (GSC + GA4)
+### Google (GSC + GA4)
 
-1. In Google Cloud, create a project and enable the **Google Search Console API** and **Google Analytics Data API**.
-2. Create a service account and download its JSON key to `secrets/google-service-account.json`.
-3. Add the service account's email address:
-   - in each **Search Console** property as a user (Restricted permission is enough)
-   - in each **GA4** property as a Viewer
-4. Set `GOOGLE_APPLICATION_CREDENTIALS` in `.env`.
+The server signs in to Google one of two ways, set by `GOOGLE_AUTH_MODE` in `.env`. Switching modes is only an `.env` change; the tools are the same.
 
-One service account covers every client; you just add it to each property.
+#### Choose a setup
+
+| Option | Mode | You need | Pros | Cons | Steps |
+|---|---|---|---|---|---|
+| **A. OAuth, Google Workspace** | `oauth` | A Workspace (business) account, with the Cloud project inside that organization | Sign in once; the server sees every property you can already open; sign-ins don't expire on a schedule | Requires Workspace | 1, 2 (Internal), CLI check |
+| **B. OAuth, personal Gmail** | `oauth` | Any Google account | Same property access as A, no Workspace needed | Sign-in expires every 7 days while the app is in Testing; Google shows an "unverified app" screen | 1, 2 (External + Testing), CLI check |
+| **C. Service account** | `service_account` | Any Google account that can create a Cloud project | Never expires, no sign-in, works for unattended jobs | You must add the service account's email to every client's Search Console and GA4 property | 1, 3, CLI check |
+
+**Which one?** With Workspace, use A. Without it, use C for daily work and unattended jobs, and B if you'd rather not share each property with a service account. You can set up more than one and switch with `GOOGLE_AUTH_MODE`. The default is `oauth`.
+
+All options request read-only scopes only: `webmasters.readonly` and `analytics.readonly`. OAuth also requests `openid email` so it can show which account is signed in.
+
+#### 1. Google Cloud project and APIs
+
+In the [Google Cloud console](https://console.cloud.google.com/), create (or pick) a project. Under **APIs & Services > Library**, enable:
+
+- **Google Search Console API**
+- **Google Analytics Data API**
+- **PageSpeed Insights API** (only for `PSI_API_KEY`, see below)
+
+#### 2. OAuth mode setup
+
+1. **Configure the consent screen.** Open **Google Auth Platform** (APIs & Services > OAuth consent screen) and fill in the app name and support email. Pick the audience:
+   - **Internal**: for a Google Workspace organization. Only accounts in that organization can sign in, Google doesn't review the app, and sign-ins don't expire on a schedule. The Cloud project must belong to the Workspace organization.
+   - **External**, publishing status **Testing**: for personal Gmail accounts. Under **Audience > Test users**, add the Google account of everyone who will sign in (up to 100). During sign-in Google shows a "Google hasn't verified this app" screen; test users click **Continue**. No app review is needed, but **Google expires Testing-mode sign-ins after 7 days**, so each person re-runs `crawlmark-cli auth login` about once a week. When a sign-in expires, tools return an error saying so. For unattended jobs on a personal account, use `service_account` mode instead.
+2. **Create the OAuth client.** In **Google Auth Platform > Clients**, create a client of type **Desktop app**. Copy its client ID and secret into `.env`:
+
+   ```bash
+   GOOGLE_AUTH_MODE=oauth
+   GOOGLE_OAUTH_CLIENT_ID=1234567890-abc.apps.googleusercontent.com
+   GOOGLE_OAUTH_CLIENT_SECRET=...
+   ```
+
+   Desktop clients accept any `http://127.0.0.1:<port>` redirect, so there's nothing else to register.
+3. **Sign in** once per machine (after `npm run build`):
+
+   ```bash
+   npm run cli -- auth login        # or: crawlmark-cli auth login (after npm link)
+   ```
+
+   Your browser opens Google's consent page; if it doesn't, open the URL printed in the terminal. Leave every permission ticked. The command prints the signed-in email and the granted scopes.
+
+#### 3. Service-account mode setup
+
+1. In **IAM & Admin > Service accounts**, create a service account (no project roles needed). Under **Keys**, add a JSON key and save it as `secrets/google-service-account.json` (`secrets/` is gitignored). If key creation is blocked, your Workspace organization enforces the `iam.disableServiceAccountKeyCreation` policy; ask an admin to allow it for this project, or use option A.
+2. Add the service account's email (`...@<project>.iam.gserviceaccount.com`):
+   - in each **Search Console** property: **Settings > Users and permissions > Add user** (Restricted is enough)
+   - in each **GA4** property: **Admin > Property access management > Add users**, role **Viewer**
+3. In `.env`:
+
+   ```bash
+   GOOGLE_AUTH_MODE=service_account
+   GOOGLE_APPLICATION_CREDENTIALS=./secrets/google-service-account.json
+   ```
+
+One service account covers every client; you just add it to each property. Add it to the exact Search Console property named in `gscProperty` (a `sc-domain:` domain property and a `https://` URL-prefix property are separate). The GA4 property ID is under **Admin > Property details**.
+
+#### Check it works
+
+```bash
+npm run build
+npm run cli -- auth status
+```
+
+It prints the mode, the account in use, and `Token check: OK` (OAuth) or `Key check: OK` (service account). If something is missing, it says what to set or run. A tool that returns a 403 for one client usually means that account or service account hasn't been added to that client's property.
+
+#### CLI
+
+`crawlmark-cli` (`dist/cli.js`, or `npm run cli -- <command>`) handles local admin tasks. Unlike the MCP server, it prints to stdout.
+
+| Command | Does |
+|---|---|
+| `crawlmark-cli auth login` | OAuth loopback sign-in (`127.0.0.1`, random port, PKCE, state check, 5-minute timeout). Stores the token at `DATA_DIR/google-token.json` with mode `0600`. |
+| `crawlmark-cli auth status` | Shows the active mode and account (OAuth email or service-account email), then checks the token or key against Google and lists the granted scopes. Exits non-zero with setup guidance if something is missing. |
+| `crawlmark-cli auth logout` | Revokes the stored token with Google and deletes the file. If revoking fails it still deletes the file and warns. |
+
+The server reads the token on demand and picks up a new login without a restart. Refreshed access tokens are written back to the same file. Never commit or share `google-token.json`; it's gitignored.
 
 ### DataForSEO
 
@@ -119,6 +190,7 @@ npm run inspect
 ```
 src/
   index.ts              server entry (stdio)
+  cli.ts                crawlmark-cli: auth login | status | logout
   config.ts             env + clients.yaml loading (paths resolved from project root)
   lib/
     store.ts            SQLite (cache + spend ledger)
@@ -127,8 +199,13 @@ src/
     dates.ts            month ranges and comparisons
     paths.ts            project-root path resolution (pure)
     env.ts              empty env values count as unset (pure)
+    google-auth.ts      Google auth mode selection, consent URL, callback check, token merge, error messages (pure)
+    token-store.ts      OAuth token file: atomic 0600 write, read, delete
   providers/            one file per data source
-    gsc.ts  ga4.ts  dataforseo.ts  lighthouse.ts  axe.ts  google.ts  browser.ts
+    gsc.ts  ga4.ts  dataforseo.ts  lighthouse.ts  axe.ts  browser.ts
+    google.ts           googleAuth(): OAuth client or service account, by GOOGLE_AUTH_MODE; googleAuthStatus()
+    google-login.ts     OAuth loopback login flow
+    google-oauth-client.ts  OAuth2Client that maps invalid_grant; token-file client loader (refresh persistence)
     dataforseo-shape.ts pure mappers: raw DataForSEO results -> typed compact objects
   reports/
     monthly.ts          monthly_report composer
@@ -154,4 +231,4 @@ Candidates: Bing Webmaster Tools, Google Business Profile, a rank tracker, or th
 
 ## Status
 
-Scaffold. It typechecks and the server starts and serves all tools. It has not yet been run against live Google, DataForSEO or Chrome. DataForSEO ranked keywords, competitors, backlinks and instant page results are shaped into compact typed objects, but the mapping fixtures are scrubbed sandbox recordings (see `test/fixtures/dataforseo/README.md`).
+Scaffold. It typechecks and the server starts and serves all tools. It has not yet been run against live Google, DataForSEO or Chrome. Google OAuth login is unit tested but not yet run end to end against a real account. DataForSEO ranked keywords, competitors, backlinks and instant page results are shaped into compact typed objects, but the mapping fixtures are scrubbed sandbox recordings (see `test/fixtures/dataforseo/README.md`).

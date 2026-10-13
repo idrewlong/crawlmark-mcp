@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { stripEmptyValues } from "./lib/env.js";
+import { GOOGLE_AUTH_MODES } from "./lib/google-auth.js";
 import { projectRoot, resolveFromRoot } from "./lib/paths.js";
 
 /** Directory above src/ or dist/. Relative paths in config resolve from here, not the cwd. */
@@ -13,6 +14,9 @@ const envFile = resolve(PROJECT_ROOT, ".env");
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const EnvSchema = z.object({
+  GOOGLE_AUTH_MODE: z.enum(GOOGLE_AUTH_MODES).default("oauth"),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
   DATAFORSEO_LOGIN: z.string().optional(),
   DATAFORSEO_PASSWORD: z.string().optional(),
@@ -25,10 +29,14 @@ const EnvSchema = z.object({
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
 
+const dataDir = resolveFromRoot(PROJECT_ROOT, parsedEnv.DATA_DIR);
+
 export const env = {
   ...parsedEnv,
   CLIENTS_FILE: resolveFromRoot(PROJECT_ROOT, parsedEnv.CLIENTS_FILE),
-  DATA_DIR: resolveFromRoot(PROJECT_ROOT, parsedEnv.DATA_DIR),
+  DATA_DIR: dataDir,
+  /** OAuth refresh token written by `crawlmark-cli auth login` (mode 0600). */
+  GOOGLE_TOKEN_FILE: resolve(dataDir, "google-token.json"),
   GOOGLE_APPLICATION_CREDENTIALS: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS
     ? resolveFromRoot(PROJECT_ROOT, parsedEnv.GOOGLE_APPLICATION_CREDENTIALS)
     : undefined,

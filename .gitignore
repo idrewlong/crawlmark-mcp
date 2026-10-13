@@ -6,6 +6,8 @@ dist/
 data/
 *.db
 google-token.json
+google-token.json.*.tmp
 config/clients.yaml
 .DS_Store
 recordings/
+secrets/
