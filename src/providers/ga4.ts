@@ -2,7 +2,13 @@ import { google } from "googleapis";
 import type { Client } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
-import { assertGoogleConfigured, googleAuth, googleAuthIdentity } from "./google.js";
+import { ga4Error } from "../lib/google-access.js";
+import { assertGoogleConfigured, googleAuth, googleAuthIdentity, googleAuthStatus } from "./google.js";
+
+function whoAmI() {
+  const s = googleAuthStatus();
+  return s.mode === "none" ? { mode: "none" as const } : { mode: s.mode, email: s.email };
+}
 
 export interface Ga4ReportOptions extends DateRange {
   metrics: string[];
@@ -30,23 +36,28 @@ export async function ga4Report(client: Client, opts: Ga4ReportOptions): Promise
   const property = requireProperty(client);
   const { value } = await cached(cacheKey("ga4", googleAuthIdentity(), property, opts), TTL.day, async () => {
     const data = google.analyticsdata({ version: "v1beta", auth: googleAuth() });
-    const res = await data.properties.runReport({
-      property,
-      requestBody: {
-        dateRanges: [{ startDate: opts.startDate, endDate: opts.endDate }],
-        metrics: opts.metrics.map((name) => ({ name })),
-        dimensions: (opts.dimensions ?? []).map((name) => ({ name })),
-        limit: String(opts.limit ?? 1000),
-        dimensionFilter: opts.organicOnly
-          ? {
-              filter: {
-                fieldName: "sessionDefaultChannelGroup",
-                stringFilter: { value: "Organic Search", matchType: "EXACT" },
-              },
-            }
-          : undefined,
-      },
-    });
+    let res;
+    try {
+      res = await data.properties.runReport({
+        property,
+        requestBody: {
+          dateRanges: [{ startDate: opts.startDate, endDate: opts.endDate }],
+          metrics: opts.metrics.map((name) => ({ name })),
+          dimensions: (opts.dimensions ?? []).map((name) => ({ name })),
+          limit: String(opts.limit ?? 1000),
+          dimensionFilter: opts.organicOnly
+            ? {
+                filter: {
+                  fieldName: "sessionDefaultChannelGroup",
+                  stringFilter: { value: "Organic Search", matchType: "EXACT" },
+                },
+              }
+            : undefined,
+        },
+      });
+    } catch (err) {
+      throw ga4Error(err, property, whoAmI());
+    }
     const dimNames = res.data.dimensionHeaders?.map((h) => h.name!) ?? [];
     const metNames = res.data.metricHeaders?.map((h) => h.name!) ?? [];
     return (res.data.rows ?? []).map((row) => {

@@ -24,6 +24,8 @@ export interface RawFetch {
   redirects: number;
   contentType: string | null;
   xRobotsTag: string | null;
+  /** The `Link` response header(s), comma-joined. Absent in responses cached before this field existed. */
+  link?: string | null;
   /** True when the body was cut at the size cap. */
   truncated: boolean;
   html: string;
@@ -137,6 +139,7 @@ export async function fetchRaw(url: string, opts: { refresh?: boolean; signal?: 
           redirects,
           contentType: header(res, "content-type"),
           xRobotsTag: header(res, "x-robots-tag"),
+          link: header(res, "link"),
           truncated,
           html: text,
         } satisfies RawFetch;

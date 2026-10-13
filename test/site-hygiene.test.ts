@@ -58,7 +58,7 @@ Sitemap: https://example.com/sitemap.xml
 
 describe("sitemap parsing", () => {
   it("reads urlsets and indexes in xml mode", () => {
-    expect(parseSitemapXml('<?xml version="1.0"?><urlset xmlns="x"><url><loc> https://example.com/a </loc></url><url><loc>https://example.com/b</loc></url></urlset>')).toEqual({ kind: "urlset", locs: ["https://example.com/a", "https://example.com/b"], lastmods: {} });
+    expect(parseSitemapXml('<?xml version="1.0"?><urlset xmlns="x"><url><loc> https://example.com/a </loc></url><url><loc>https://example.com/b</loc></url></urlset>')).toEqual({ kind: "urlset", locs: ["https://example.com/a", "https://example.com/b"], lastmods: {}, alternates: {} });
     expect(parseSitemapXml("<sitemapindex><sitemap><loc>https://example.com/s1.xml</loc></sitemap></sitemapindex>").kind).toBe("index");
     expect(() => parseSitemapXml("<html></html>")).toThrow(/Not a sitemap/);
   });

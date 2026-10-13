@@ -326,7 +326,7 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 
 | Tool | Description |
 |---|---|
-| `site_hygiene` | robots.txt, sitemaps, structured data, hreflang and orphan pages. Free |
+| `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers) and orphan pages. Free |
 | `render_check` | Compares a page's raw HTML with what Chrome renders and flags SEO elements that only appear after JavaScript. Free |
 | `gtm_audit` | Audits the live Tag Manager container: paused, unfired and legacy tags, duplicate GA4 tags, unused variables, custom HTML, consent gaps and unpublished changes. Free |
 | `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |

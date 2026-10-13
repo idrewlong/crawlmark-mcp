@@ -2,7 +2,22 @@ import { google } from "googleapis";
 import type { Client } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
-import { assertGoogleConfigured, googleAuth, googleAuthIdentity } from "./google.js";
+import { gscError } from "../lib/google-access.js";
+import { assertGoogleConfigured, googleAuth, googleAuthIdentity, googleAuthStatus } from "./google.js";
+
+function whoAmI() {
+  const s = googleAuthStatus();
+  return s.mode === "none" ? { mode: "none" as const } : { mode: s.mode, email: s.email };
+}
+
+/** Run a Search Console call, turning a permission denial into an actionable error. */
+async function guarded<T>(siteUrl: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    throw gscError(err, siteUrl, whoAmI());
+  }
+}
 
 export type GscDimension = "query" | "page" | "country" | "device" | "date";
 
@@ -45,7 +60,7 @@ export async function gscQuery(client: Client, opts: GscQueryOptions): Promise<G
   const key = cacheKey("gsc", googleAuthIdentity(), siteUrl, opts);
   const { value } = await cached(key, TTL.day, async () => {
     const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
-    const res = await sc.searchanalytics.query({
+    const res = await guarded(siteUrl, () => sc.searchanalytics.query({
       siteUrl,
       requestBody: {
         startDate: opts.startDate,
@@ -54,7 +69,7 @@ export async function gscQuery(client: Client, opts: GscQueryOptions): Promise<G
         rowLimit: opts.rowLimit ?? 1000,
         dimensionFilterGroups: filters.length ? [{ filters }] : undefined,
       },
-    });
+    }));
     return (res.data.rows ?? []).map((r) => ({
       keys: r.keys ?? [],
       clicks: r.clicks ?? 0,
@@ -77,9 +92,9 @@ export async function gscInspectUrl(client: Client, url: string, opts: { refresh
   const siteUrl = requireProperty(client);
   const { value } = await cached(cacheKey("gsc-inspect", googleAuthIdentity(), siteUrl, url), TTL.day, async () => {
     const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
-    const res = await sc.urlInspection.index.inspect({
+    const res = await guarded(siteUrl, () => sc.urlInspection.index.inspect({
       requestBody: { inspectionUrl: url, siteUrl },
-    });
+    }));
     const r = res.data.inspectionResult;
     return {
       url,
@@ -99,7 +114,7 @@ export async function gscInspectUrl(client: Client, url: string, opts: { refresh
 export async function gscSitemaps(client: Client) {
   const siteUrl = requireProperty(client);
   const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
-  const res = await sc.sitemaps.list({ siteUrl });
+  const res = await guarded(siteUrl, () => sc.sitemaps.list({ siteUrl }));
   return (res.data.sitemap ?? []).map((s) => ({
     path: s.path,
     lastSubmitted: s.lastSubmitted,

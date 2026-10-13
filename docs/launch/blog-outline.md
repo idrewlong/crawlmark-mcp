@@ -56,6 +56,7 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 **Audits** (Shipped)
 - Lighthouse, accessibility (axe), rendered-vs-raw HTML (what Google sees before JavaScript), index status, on-page checks. *"Audit the homepage and pricing page."*
 - Site hygiene: robots.txt, sitemaps, structured data, hreflang, orphan pages.
+- hreflang read from page tags, sitemap entries and `Link` headers, with conflict detection.
 - Saved audits with diffs: what's new, fixed or still open since last time. *"What did we fix since the last audit?"*
 - Tag Manager audit: paused, unfired and legacy tags, duplicate GA4 tags, consent gaps, unpublished changes.
 

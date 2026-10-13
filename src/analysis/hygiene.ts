@@ -1,6 +1,6 @@
 import type { Severity } from "./findings.js";
 import { normalizeUrl } from "./findings.js";
-import type { HreflangIssue } from "./hreflang.js";
+import type { HreflangIssue, HreflangSource } from "./hreflang.js";
 import { blocksEverything, isAllowed, parseRobots, pathOf, rulesFor } from "./robots.js";
 import type { SchemaResult } from "./structured-data.js";
 
@@ -141,6 +141,7 @@ const HREFLANG_META: Record<HreflangIssue["rule"], { severity: Severity; title: 
   "hreflang-not-reciprocal": { severity: "medium", title: "hreflang alternates do not link back to this page" },
   "hreflang-missing-self": { severity: "medium", title: "hreflang set has no self-reference" },
   "hreflang-missing-x-default": { severity: "low", title: "Multiple languages but no hreflang x-default" },
+  "hreflang-conflict": { severity: "medium", title: "hreflang declarations conflict between HTML, sitemap and HTTP header" },
 };
 
 export const hreflangFlags = (url: string, issues: HreflangIssue[]): HygieneFlag[] =>
@@ -185,7 +186,7 @@ export interface SiteHygiene {
   structuredData:
     | { pages: { url: string; source: "rendered" | "raw"; blocks: number; types: string[]; issues: SchemaResult["issues"] }[]; errors: { url: string; error: string }[] }
     | { error: string };
-  hreflang: { pages: { url: string; alternates: number; issues: string[] }[]; errors: { url: string; error: string }[] } | { error: string };
+  hreflang: { pages: { url: string; alternates: number; issues: string[]; sources?: Partial<Record<HreflangSource, number>> }[]; errors: { url: string; error: string }[] } | { error: string };
   orphans: { available: false; reason: string } | { available: true; crawlTaskId: string; crawledUrls: number; orphanCount: number; orphans: string[] };
   flags: HygieneFlag[];
   /** Check keys of the sub-checks that ran to completion (see siteCheckUrl in findings.ts); they feed the audit diff. */

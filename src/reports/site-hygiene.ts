@@ -13,7 +13,7 @@ import {
   type SiteHygiene,
 } from "../analysis/hygiene.js";
 import { extractHygieneIsolated, parseSitemapIsolated } from "../analysis/extract-isolated.js";
-import { checkHreflang, type HreflangEntry } from "../analysis/hreflang.js";
+import { checkHreflang, mergeHreflang, parseLinkHeader, type HreflangEntry, type HreflangSource } from "../analysis/hreflang.js";
 import { normalizeUrl } from "../analysis/findings.js";
 import { validateJsonLd } from "../analysis/structured-data.js";
 import { cacheKey, peekCache, putCache, TTL } from "../lib/cache.js";
@@ -33,6 +33,8 @@ const SITEMAP_ROOT_LIMIT = 10;
 const SITEMAP_URL_LIMIT = 200_000;
 const CONCURRENCY = 4;
 const HREFLANG_FETCH_LIMIT = 20;
+/** Most sitemap `xhtml:link` entries kept in memory per run; the rest are dropped and the run says so. */
+export const SITEMAP_HREFLANG_LIMIT = 50_000;
 const PAGE_LIMIT = 20;
 /** A stored crawl older than this no longer describes the site, so orphans are not judged from it. */
 export const ORPHAN_MAX_CRAWL_AGE_DAYS = 30;
@@ -47,6 +49,8 @@ export interface HygieneOptions {
   gscSitemapPaths?: string[];
   /** Key pages whose rendered DOM to use for JSON-LD/hreflang (read from the cache the render check filled); the rest use raw HTML. */
   renderedUrls?: Iterable<string>;
+  /** Test hook: cap on sitemap hreflang entries kept (default SITEMAP_HREFLANG_LIMIT). */
+  sitemapHreflangLimit?: number;
   /** Test hook: the site origin (default https://<client domain>). */
   origin?: string;
 }
@@ -110,6 +114,13 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
   }
   const sitemapUrlSet = new Set<string>();
   const lastmods = new Map<string, number>();
+  /** hreflang declared in sitemaps (`xhtml:link`), by normalized page URL. Filled by the sitemap pass above; no extra fetches. */
+  const sitemapHreflang = new Map<string, HreflangEntry[]>();
+  const hreflangLimit = opts.sitemapHreflangLimit ?? SITEMAP_HREFLANG_LIMIT;
+  let sitemapHreflangCount = 0;
+  let sitemapHreflangCapped = false;
+  /** A sitemap file could not be read or parsed, so sitemap-declared hreflang may be missing from this run. */
+  let sitemapReadFailed = false;
   let sitemaps: SiteHygiene["sitemaps"];
   let sitemapsComplete = false;
   try {
@@ -150,6 +161,9 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
         if ("error" in r) {
           files.push({ url: r.f.url, error: r.error });
           complete = false;
+          // A 404/410 means the file doesn't exist, which is the same every run (stale sitemaps listed in
+          // robots.txt or Search Console are common). Only transient failures leave hreflang unverified.
+          if (!/^HTTP (404|410)$/.test(r.error ?? "")) sitemapReadFailed = true;
         } else if (r.parsed.kind === "index") {
           files.push({ url: r.f.url, kind: "index", urls: r.parsed.locs.length });
           for (const loc of r.parsed.locs) {
@@ -165,6 +179,19 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
           files.push({ url: r.f.url, kind: "urlset", urls: r.parsed.locs.length });
           totalLocs += r.parsed.locs.length;
           for (const [loc, ms] of Object.entries(r.parsed.lastmods)) lastmods.set(loc, ms);
+          for (const [loc, list] of Object.entries(r.parsed.alternates ?? {})) {
+            const k = normalizeUrl(loc);
+            let kept = sitemapHreflang.get(k);
+            for (const entry of list) {
+              if (sitemapHreflangCount >= hreflangLimit) {
+                sitemapHreflangCapped = true;
+                break;
+              }
+              if (!kept) sitemapHreflang.set(k, (kept = []));
+              kept.push(entry);
+              sitemapHreflangCount++;
+            }
+          }
           for (const loc of r.parsed.locs) {
             if (sitemapUrlSet.size >= SITEMAP_URL_LIMIT) {
               complete = false;
@@ -176,6 +203,8 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
       }
       level = next;
     }
+    if (sitemapHreflangCapped) notes.push(`Sitemap hreflang entries were capped at ${hreflangLimit}; hreflang findings that depend on sitemap declarations are not counted as checked.`);
+    if (sitemapReadFailed) notes.push("A sitemap could not be read, so hreflang findings that depend on sitemap declarations are not counted as checked.");
     if (!complete) notes.push("The sitemap URL set is partial (a cap was reached or a sitemap could not be read), so 'key page not in sitemap' and orphan checks were skipped.");
     const anyUrlset = files.some((f) => f.kind === "urlset");
     sitemapsComplete = complete && anyUrlset;
@@ -227,6 +256,7 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
     };
   } catch (err) {
     sitemaps = { error: (err as Error).message };
+    sitemapReadFailed = true;
   }
 
   // ----------------------------------------------- structured data and hreflang
@@ -241,6 +271,7 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
     let source: "rendered" | "raw" = "raw";
     let html: string | undefined;
     let finalUrl = url;
+    let headerEntries: HreflangEntry[] = [];
     if (rendered.has(normalizeUrl(url))) {
       try {
         const r = await fetchRendered(url, { refresh: false, signal });
@@ -260,6 +291,7 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
         if (!isHtml(r.contentType)) throw new Error(`not HTML (${r.contentType})`);
         html = r.html;
         finalUrl = r.finalUrl;
+        headerEntries = parseLinkHeader(r.link, r.finalUrl);
       }
       const page = await extractHygieneIsolated(html, finalUrl);
 
@@ -270,8 +302,14 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
 
       // hreflang: fetch each distinct alternate other than the page itself (max 20), read its own hreflang set.
       const selfKeys = new Set([normalizeUrl(url), normalizeUrl(finalUrl), ...(page.canonical ? [normalizeUrl(page.canonical)] : [])]);
-      const targets = [...new Set(page.hreflang.map((e) => normalizeUrl(e.href)))].filter((k) => !selfKeys.has(k));
-      const hrefByKey = new Map(page.hreflang.map((e) => [normalizeUrl(e.href), e.href]));
+      const sitemapOf = (urls: string[]) => [...new Set(urls.map(normalizeUrl))].flatMap((k) => sitemapHreflang.get(k) ?? []);
+      const { entries: own, conflicts } = mergeHreflang([
+        { source: "html", entries: page.hreflang },
+        { source: "sitemap", entries: sitemapOf([url, finalUrl, ...(page.canonical ? [page.canonical] : [])]) },
+        { source: "header", entries: headerEntries },
+      ]);
+      const targets = [...new Set(own.map((e) => normalizeUrl(e.href)))].filter((k) => !selfKeys.has(k));
+      const hrefByKey = new Map(own.map((e) => [normalizeUrl(e.href), e.href]));
       const toFetch = targets.slice(0, HREFLANG_FETCH_LIMIT);
       let complete = targets.length <= HREFLANG_FETCH_LIMIT;
       for (const k of toFetch) {
@@ -288,18 +326,26 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
         try {
           const r = await get(href);
           if (r.status >= 400 || !isHtml(r.contentType)) throw new Error(`HTTP ${r.status}`);
-          alternateCache.set(k, (await extractHygieneIsolated(r.html, r.finalUrl)).hreflang);
+          // The alternate's own set merges its HTML and Link header; the sitemap's entries for it are added below.
+          alternateCache.set(k, [...(await extractHygieneIsolated(r.html, r.finalUrl)).hreflang, ...parseLinkHeader(r.link, r.finalUrl)]);
         } catch {
           alternateCache.set(k, null);
           complete = false;
         }
       }
-      const alternates = new Map(toFetch.map((k) => [k, alternateCache.get(k) ?? null]));
-      const issues = checkHreflang([url, finalUrl, ...(page.canonical ? [page.canonical] : [])], page.hreflang, alternates);
-      hlPages.push({ url, alternates: page.hreflang.length, issues: issues.map((i) => i.rule) });
+      const alternates = new Map(
+        toFetch.map((k) => {
+          const fetched = alternateCache.get(k);
+          return [k, fetched ? [...fetched, ...(sitemapHreflang.get(k) ?? [])] : null] as const;
+        }),
+      );
+      const issues = checkHreflang([url, finalUrl, ...(page.canonical ? [page.canonical] : [])], own, alternates, conflicts);
+      const sources: Partial<Record<HreflangSource, number>> = {};
+      for (const e of own) for (const src of e.sources ?? []) sources[src] = (sources[src] ?? 0) + 1;
+      hlPages.push({ url, alternates: own.length, issues: issues.map((i) => i.rule), sources });
       flags.push(...hreflangFlags(url, issues));
       // A page whose alternates could not all be read cannot clear a reciprocity finding.
-      if (complete) checked.push(`site:hreflang ${normalizeUrl(url)}`);
+      if (complete && !sitemapHreflangCapped && !sitemapReadFailed) checked.push(`site:hreflang ${normalizeUrl(url)}`);
     } catch (err) {
       sdErrors.push({ url, error: (err as Error).message });
       hlErrors.push({ url, error: (err as Error).message });
@@ -307,6 +353,7 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
   });
   if (rendered.size) notes.push("Key pages with a rendering result were read from their rendered DOM; the others from raw HTML.");
   else notes.push("JSON-LD and hreflang were read from raw HTML (no rendering section in this run).");
+  notes.push("hreflang is merged from page HTML, sitemap xhtml:link entries and HTTP Link headers (headers are read from the raw fetch, so not for pages read from their rendered DOM).");
 
   // -------------------------------------------------------------------- orphans
   let orphans: SiteHygiene["orphans"] = { available: false, reason: "not available: no full crawl" };
