@@ -6,7 +6,7 @@
 import { basename } from "node:path";
 import { styleText } from "node:util";
 
-export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "report", "crawl"] as const;
+export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "report", "crawl", "logs"] as const;
 export type HelpGroup = (typeof HELP_GROUPS)[number];
 
 export function isHelpGroup(name: string | undefined): name is HelpGroup {
@@ -51,6 +51,7 @@ export function topHelp(o: HelpOptions): string {
     "  report                Report files (Markdown, HTML, PDF, Word) from templates",
     heading("Site checks", o),
     "  crawl                 Crawl a client's site from this machine (free)",
+    "  logs                  Crawler hits in your server logs (local, never uploaded)",
     "",
     heading("Examples", o),
     "  npx crawlmark-mcp@latest init",
@@ -255,6 +256,21 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
   "                          homepage and the client's key pages)",
   "  Prints JSON to stdout and a summary to stderr. Exit code: 0 saved, 1 error.",
 ],
+  logs: (p) => [
+    `Usage: ${p} logs --client <domain|slug> <file>... [--since <date>]`,
+    "                [--until <date>] [--bots <name,name>] [--no-verify]",
+    "",
+    "  Reads access logs on this machine (Apache/Nginx combined or common format,",
+    "  .gz too) and summarises crawler hits: Googlebot, Bingbot, GPTBot, ClaudeBot,",
+    "  PerplexityBot and other AI crawlers, with statuses, top paths, 404s and",
+    "  5xx. Logs never leave the machine; the output has no IP addresses or user",
+    "  agents. Googlebot hits are checked against Google's published IP ranges.",
+    "  --client <domain|slug>  The client the logs belong to",
+    "  --since, --until <date> YYYY-MM-DD, the days to count (UTC)",
+    "  --bots <name,name>      Only these bots",
+    "  --no-verify             Don't download Google's IP ranges (no network)",
+    "  Prints JSON to stdout and a summary to stderr. Exit code: 0 done, 1 error.",
+  ],
   report: (p) => [
     `Usage: ${p} report --client <domain|slug> | --all [--template <id>]`,
     "                [--month YYYY-MM | --quarter YYYY-Qn |",

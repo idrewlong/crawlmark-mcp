@@ -1,0 +1,8 @@
+{
+  "creationTime": "2026-10-01T00:00:00.000000",
+  "prefixes": [
+    { "ipv4Prefix": "192.0.2.0/25" },
+    { "ipv6Prefix": "2001:db8:1::/48" },
+    { "ipv4Prefix": "not-a-prefix" }
+  ]
+}

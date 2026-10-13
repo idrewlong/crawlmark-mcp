@@ -40,6 +40,7 @@ import { printUpdateNotice, updateCacheFile } from "./lib/update-check.js";
 import { reportCommand, templatesCommand, type ReportCliDeps } from "./report-cli.js";
 import { closeEgressProxy } from "./lib/egress-proxy.js";
 import { crawlCommand } from "./crawl-cli.js";
+import { logsCommand } from "./logs-cli.js";
 
 /** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
 async function updateNoticeAfterHelp(json = false): Promise<void> {
@@ -551,6 +552,10 @@ async function main(argv: string[]): Promise<number> {
       "user-agent": { type: "string" },
       "include-subdomains": { type: "boolean", default: false },
       "start-url": { type: "string" },
+      since: { type: "string" },
+      until: { type: "string" },
+      bots: { type: "string" },
+      "no-verify": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -568,6 +573,15 @@ async function main(argv: string[]): Promise<number> {
       run: async (client, opts) => {
         const { runLocalCrawl, loadLocalCrawlDeps } = await import("./reports/local-crawl.js");
         return (await runLocalCrawl(client, opts, await loadLocalCrawlDeps())).result;
+      },
+    });
+  }
+  if (group === "logs") {
+    return logsCommand(command ? [command, ...args] : args, values, { out, warn, usage: scheduledUsage }, {
+      resolveClient,
+      analyze: async (client, files, opts) => {
+        const [{ analyzeLogs }, { googleCrawlerRanges }] = await Promise.all([import("./reports/log-analysis.js"), import("./providers/crawler-ipranges.js")]);
+        return analyzeLogs(client.slug, files, opts, { googleRanges: (signal) => googleCrawlerRanges({ signal }) });
       },
     });
   }

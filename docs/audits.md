@@ -75,6 +75,18 @@ It also counts unpublished changes per workspace. The Consent Mode check is a he
 
 `run_audit` with `cruxHistory: true` adds it for the client's origin as `site.cruxHistory` and adds `crux` findings from the latest period: `field-lcp-poor` (high), `field-lcp-needs-improvement` (medium), and the same for INP and CLS. Off by default.
 
+## Server logs
+
+`log_analysis` (and `crawlmark-cli logs`) reads web server access logs on your machine and counts what crawlers asked for. **Logs never leave the machine**: nothing is uploaded, nothing is written to crawlmark's database, and the result holds aggregates only. IP addresses, full user agents, referrers and raw lines are never returned or stored; paths are shown without query strings or `;`-parameters (such as `;jsessionid=`), anything from an encoded `%3F` on is dropped, and token-like segments (UUIDs and long mixed letter-and-digit strings) appear as `:token`. Only regular files are read: symlinks that point outside the allowed folders, FIFOs and hard-linked files are refused, and every name that can't be read gets the same message, so nothing is revealed about files outside them.
+
+- **Which files.** The tool reads only regular files inside the directories in `LOG_DIRS` (comma-separated absolute paths) or the `logs` folder in your crawlmark home. Name files relative to one of them, with `*` and `?` allowed in the file name (`access.log*`, `nginx/example.com.access.log`). `..`, absolute paths elsewhere and symlinks that point outside are refused. Without `LOG_DIRS` or a `logs` folder the tool is unavailable and says how to set it up. `crawlmark-cli logs --client example.com /var/log/nginx/access.log` reads the files you type, with no setting needed.
+- **Formats.** Apache and Nginx `combined` and `common`, detected per file, plain or `.gz`. Other lines are counted as skipped. The common format has no user agent, so its hits can't be attributed to bots.
+- **Limits.** At most 50 files, 2 GB (after decompression) and 20 million lines per call; lines over 16 KB are skipped.
+- **Bots.** Googlebot, Google-InspectionTool, GoogleOther, Bingbot, GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, Claude-User, PerplexityBot, Perplexity-User, CCBot, Applebot, Amazonbot, Bytespider and Meta-ExternalAgent, each with a family: `search`, `ai-training`, `ai-search`, `ai-user` or `other`. Google-Extended is a robots.txt token only and never appears in logs. The table is in `src/analysis/bots.ts`.
+- **Verification.** Googlebot, Google-InspectionTool and GoogleOther hits are checked against Google's published crawler IP ranges (`common-crawlers.json` and `special-crawlers.json`), downloaded at most once a week. The download is a plain request for a public file and sends nothing about you or your logs. A hit from inside the ranges is `verified`, outside is `unverified` (someone using Googlebot's name). Other bots are `unknownVerification`; there is no reverse-DNS lookup. `verify: false` (`--no-verify`) makes no network request at all.
+
+Per bot it returns hits, verified / unverified / unknown counts, 2xx/3xx/4xx/5xx counts, the top 20 paths, top 404 and 5xx paths, hits per day, the share of hits on URLs with a query string, and when it was last seen.
+
 ## Opportunities
 
 Free Search Console tools that find where more clicks are likely. Each takes `client`, optional `startDate`/`endDate` (both or neither; default is the last 28 days ending 3 days ago, since Search Console lags 2-3 days), `includeBranded` (default false), `limit` (default 25) and the thresholds below. Each returns the window used, `total` found, and a `method` string describing the thresholds.

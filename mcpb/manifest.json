@@ -220,6 +220,10 @@
       "description": "Real-user Core Web Vitals history (Chrome UX Report): weekly 75th percentile LCP, INP, CLS, FCP and TTFB with ratings and a trend. Free with a Google API key."
     },
     {
+      "name": "log_analysis",
+      "description": "Crawler hits from local server access logs: Googlebot (verified against Google's published IP ranges), Bingbot and AI crawlers, with statuses, top paths, 404s, 5xx and hits per day. Aggregates only; logs never leave the machine."
+    },
+    {
       "name": "ga4_report",
       "description": "Run a GA4 Data API report for a client."
     },

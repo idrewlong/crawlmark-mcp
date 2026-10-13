@@ -15,6 +15,7 @@ export const CLI_SUBCOMMANDS: readonly string[] = [
   "check-traffic",
   "check-ranks",
   "crawl",
+  "logs",
   "help",
 ];
 

@@ -347,6 +347,7 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |
 | `accessibility_check` | axe-core WCAG checks on one page |
 | `crux_history` | Real-user Core Web Vitals (LCP, INP, CLS, FCP, TTFB) per week for up to 40 weeks, with ratings and a trend, for a client, an origin or a URL. Free with a key ([CrUX History](#crux-history-optional)) |
+| `log_analysis` | Crawler hits from your server's access logs (Apache/Nginx, `.gz` too): Googlebot (checked against Google's published IP ranges), Bingbot and AI crawlers such as GPTBot, ClaudeBot and PerplexityBot, with statuses, top paths, 404s and 5xx, hits per day and parameter URLs. Reads only `LOG_DIRS` or `<home>/logs`; logs never leave your machine and no IP addresses or user agents are returned. Free |
 
 ### Rank history
 
@@ -504,6 +505,7 @@ The config home holds `.env`, `config/clients.yaml`, `config/report-templates.ya
 | `CLIENTS_FILE` | `./config/clients.yaml` | The client list |
 | `DATA_DIR` | `./data` | SQLite cache, saved audits, spend ledger and OAuth token |
 | `REPORTS_DIR` | `./reports` | Report files from `export_report` and `crawlmark-cli report` |
+| `LOG_DIRS` | | Directories `log_analysis` may read (comma-separated absolute paths); `<home>/logs` is always allowed |
 | `DEFAULT_LOCATION_CODE`, `DEFAULT_LANGUAGE_CODE` | `2840`, `en` | DataForSEO market for clients that don't set one |
 | `DEFAULT_CLIENT_MONTHLY_BUDGET_USD` | `5` | Per-client monthly cap |
 | `GLOBAL_MONTHLY_BUDGET_USD` | `50` | Monthly cap across all clients |
@@ -541,6 +543,7 @@ CLI
 | `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format md,html,pdf,docx] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
 | `crawl --client <domain> [--max-pages <n>] [--max-depth <n>] [--concurrency <n>] [--user-agent crawlmark\|googlebot] [--include-subdomains] [--start-url <url,url>]` | Free local crawl of a client's site, saved like `local_crawl`. Exit 0 saved, 1 error |
+| `logs --client <domain> <file>... [--since <date>] [--until <date>] [--bots <name,name>] [--no-verify]` | Crawler hits in access logs you name (local only, aggregates only). Exit 0 done, 1 error |
 
 Results and errors
 ------------------

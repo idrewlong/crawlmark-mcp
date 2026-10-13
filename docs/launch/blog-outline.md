@@ -125,6 +125,10 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - Crawl a client's own site from your machine, free: broken links, redirect chains, missing and duplicate titles and descriptions, canonicals, depth, noindex pages and orphans against the sitemaps. Polite (robots.txt, Crawl-delay, an honest user agent) and capped. *"Crawl example.com and tell me what's broken."*
 - Orphan detection in `site_hygiene` no longer needs a paid DataForSEO crawl (that path still works).
 - New tools: `local_crawl`, `local_crawl_pages`. New command: `crawlmark-cli crawl --client example.com [--max-pages 500]`. `run_audit` with `localCrawl`, and a `site_crawl` report section.
+**Server-log analysis** (Shipped)
+- See what Googlebot and AI crawlers (GPTBot, ClaudeBot, PerplexityBot and others) actually request from your site, from your own access logs: hits, 404s, 5xx, top paths, parameter URLs. Googlebot is checked against Google's published IP ranges. *"How often did Googlebot and the AI crawlers hit example.com in the last two weeks, and what 404'd?"*
+- Logs never leave your machine; only counts come back, never IP addresses or user agents.
+- New tool: `log_analysis` (reads only the folders you allow with `LOG_DIRS`). New command: `crawlmark-cli logs --client example.com /var/log/nginx/access.log`.
 
 ## 6. How to use it (a 5-minute walkthrough)
 

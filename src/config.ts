@@ -80,6 +80,8 @@ const EnvSchema = z.object({
   SEMRUSH_MONTHLY_UNIT_CAP: z.coerce.number().int().positive().default(20_000),
   DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS: z.coerce.number().int().positive().default(10_000),
   DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS: z.coerce.number().int().positive().default(5_000),
+  // Phase 12 C2: directories log_analysis may read (comma-separated absolute paths); <home>/logs is always allowed.
+  LOG_DIRS: z.string().optional(),
 });
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
@@ -88,6 +90,8 @@ export const AHREFS_DEFAULT_BASE_URL = "https://api.ahrefs.com/v3";
 export const SEMRUSH_DEFAULT_BASE_URL = "https://api.semrush.com";
 export const SEMRUSH_DEFAULT_BALANCE_URL = "https://www.semrush.com/users/countapiunits.html";
 export const CRUX_DEFAULT_BASE_URL = "https://chromeuxreport.googleapis.com/v1";
+/** Google's published crawler IP range files (common-crawlers.json, special-crawlers.json) live here. */
+export const CRAWLER_IPRANGES_DEFAULT_BASE_URL = "https://developers.google.com/static/crawling/ipranges";
 /** Test-only base URL overrides, honoured only from the shell (never .env). */
 const urlOverride = (key: string, fallback: string) => shellUrlOverride(process.env[key], ENV_FILE_KEYS.has(key), fallback);
 
@@ -123,6 +127,7 @@ export const env = {
   SEMRUSH_BASE_URL: urlOverride("SEMRUSH_BASE_URL", SEMRUSH_DEFAULT_BASE_URL),
   SEMRUSH_BALANCE_URL: urlOverride("SEMRUSH_BALANCE_URL", SEMRUSH_DEFAULT_BALANCE_URL),
   CRUX_BASE_URL: urlOverride("CRUX_BASE_URL", CRUX_DEFAULT_BASE_URL),
+  CRAWLER_IPRANGES_BASE_URL: urlOverride("CRAWLER_IPRANGES_BASE_URL", CRAWLER_IPRANGES_DEFAULT_BASE_URL),
 };
 
 export type { Client } from "./lib/clients.js";
@@ -141,4 +146,5 @@ export const providerUrlNotice: string | undefined = urlOverrideNotice([
   { name: "SEMRUSH_BASE_URL", value: env.SEMRUSH_BASE_URL, fallback: SEMRUSH_DEFAULT_BASE_URL },
   { name: "SEMRUSH_BALANCE_URL", value: env.SEMRUSH_BALANCE_URL, fallback: SEMRUSH_DEFAULT_BALANCE_URL },
   { name: "CRUX_BASE_URL", value: env.CRUX_BASE_URL, fallback: CRUX_DEFAULT_BASE_URL },
+  { name: "CRAWLER_IPRANGES_BASE_URL", value: env.CRAWLER_IPRANGES_BASE_URL, fallback: CRAWLER_IPRANGES_DEFAULT_BASE_URL },
 ]);
