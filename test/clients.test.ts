@@ -270,6 +270,7 @@ describe("mergeClients", () => {
       competitorEntries: [],
       trackedKeywords: [],
       keywordEntries: [],
+      brandTerms: [],
       keyPages: ["https://www.example.com/"],
       monthlyBudgetUsd: 5,
       aliases: [],

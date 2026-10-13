@@ -18,6 +18,7 @@ import {
   removeEntry,
   removeListItems,
   setEntryFields,
+  setStringList,
   setIgnore,
 } from "./lib/clients-file.js";
 import {
@@ -41,6 +42,7 @@ import {
   type DiscoverySkipped,
   type Settled,
 } from "./lib/clients.js";
+import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, toBrandTerms } from "./lib/brand.js";
 import { GOOGLE_NOT_CONFIGURED_MESSAGE } from "./lib/google-auth.js";
 import { listGa4Properties, listGscSites } from "./providers/discovery.js";
 import { googleAuthModeNote, googleConfigured } from "./providers/google.js";
@@ -394,13 +396,15 @@ export interface ProfileUpdate {
   niche?: string | undefined;
   /** Display name. Empty string clears it (back to the GA4 name or the domain). */
   name?: string | undefined;
+  /** Brand terms replacing the stored list; an empty array clears it. */
+  brandTerms?: string[] | undefined;
 }
 
 export interface ProfileResult {
   client: string;
   set: Record<string, string>;
   cleared: string[];
-  profile: { name: string; area: string | null; niche: string | null };
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[] };
   clientsFile: string;
 }
 
@@ -421,18 +425,29 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
       fields[key] = trimmed;
     }
   }
-  if (Object.keys(fields).length === 0) throw new Error("Nothing to set: pass area, niche or name.");
+  let brandTerms: string[] | undefined;
+  if (update.brandTerms !== undefined) {
+    brandTerms = toBrandTerms(update.brandTerms);
+    const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
+    if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
+  }
+  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name or brandTerms.");
   const client = await resolveClient(idOrDomain);
   await editClientsFile((text, path) => {
     const { text: base, entry } = entryFor(text, path, client);
-    return { text: setEntryFields(base, entry.slug, fields), result: undefined };
+    let next = setEntryFields(base, entry.slug, fields);
+    if (brandTerms !== undefined) next = setStringList(next, entry.slug, "brandTerms", brandTerms);
+    return { text: next, result: undefined };
   });
   const updated = await resolveClient(client.domain);
   return {
     client: client.domain,
-    set: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== "")) as Record<string, string>,
-    cleared: Object.entries(fields).filter(([, v]) => v === "").map(([k]) => k),
-    profile: { name: updated.name, area: updated.area ?? null, niche: updated.niche ?? null },
+    set: {
+      ...(Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== "")) as Record<string, string>),
+      ...(brandTerms?.length ? { brandTerms: brandTerms.join(", ") } : {}),
+    },
+    cleared: [...Object.entries(fields).filter(([, v]) => v === "").map(([k]) => k), ...(brandTerms?.length === 0 ? ["brandTerms"] : [])],
+    profile: { name: updated.name, area: updated.area ?? null, niche: updated.niche ?? null, brandTerms: updated.brandTerms },
     clientsFile: env.CLIENTS_FILE,
   };
 }

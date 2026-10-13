@@ -6,7 +6,6 @@ import {
   brandToken,
   cleanSampleUrl,
   isBrandLookalike,
-  looksBranded,
   mergeCandidates,
   pickSeeds,
   positionWeight,
@@ -14,6 +13,7 @@ import {
   type Candidate,
   type SeedSerp,
 } from "../src/analysis/competitor-suggestions.js";
+import { isBranded } from "../src/lib/brand.js";
 import { buildDenylist } from "../src/lib/competitor-denylist.js";
 import { lastDays } from "../src/lib/dates.js";
 import { mapCompetitors, mapSerpOrganic } from "../src/providers/dataforseo-shape.js";
@@ -33,18 +33,18 @@ describe("seeds", () => {
   });
 
   it("flags branded queries ignoring spaces and punctuation", () => {
-    expect(looksBranded("example plumbing reviews", client)).toBe(true);
-    expect(looksBranded("Example-Plumbing hours", client)).toBe(true);
-    expect(looksBranded("emergency plumber", client)).toBe(false);
+    expect(isBranded("example plumbing reviews", client)).toBe(true);
+    expect(isBranded("Example-Plumbing hours", client)).toBe(true);
+    expect(isBranded("emergency plumber", client)).toBe(false);
   });
 
   it("catches initialism and suffix variants of the brand", () => {
     const c = { domain: "abbuildingsystems.com", name: "AB Building Systems" };
     for (const q of ["a b building", "ab building", "ab building solutions", "ab building inc", "AB Building, LLC", "ab building systems reviews", "ab"]) {
-      expect(looksBranded(q, c), q).toBe(true);
+      expect(isBranded(q, c), q).toBe(true);
     }
     for (const q of ["modular home installation", "building contractor near me", "construction company springfield", "", "prefab homes", "systems integrator"]) {
-      expect(looksBranded(q, c), q).toBe(false);
+      expect(isBranded(q, c), q).toBe(false);
     }
   });
 
@@ -266,9 +266,9 @@ describe("brand lookalikes and AI seeds", () => {
   });
 
   it("counts a standalone brand initialism as branded", () => {
-    expect(looksBranded("ab construction", ab)).toBe(true);
-    expect(looksBranded("modular home installation", ab)).toBe(false);
-    expect(looksBranded("abc roofing", ab)).toBe(false);
+    expect(isBranded("ab construction", ab)).toBe(true);
+    expect(isBranded("modular home installation", ab)).toBe(false);
+    expect(isBranded("abc roofing", ab)).toBe(false);
   });
 
   it("orders explicit seeds, niche, tracked, then GSC, and gates GSC on relevance", () => {
@@ -355,7 +355,7 @@ describe("brand token edge cases", () => {
     expect(brandToken(d)).toBe("muller");
     expect(isBrandLookalike("mullerbuild.example", "muller")).toBe(true);
     expect(isBrandLookalike("muscle.example", brandToken(d))).toBe(false);
-    expect(looksBranded("müller bau reviews", d)).toBe(true);
+    expect(isBranded("müller bau reviews", d)).toBe(true);
   });
 
   it("requires a 3+ letter token to start the domain stem", () => {

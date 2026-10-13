@@ -5,10 +5,13 @@
  * src/competitors.ts fetches the data and calls these.
  */
 import { normalizeCompetitorDomain } from "../lib/clients.js";
+import { brandToken, brandTokens, domainStem, isBranded, squash, type BrandClient } from "../lib/brand.js";
 import { isOwnDomain } from "../lib/client-lists.js";
 import { isDenied, type Denylist } from "../lib/competitor-denylist.js";
 
 // ---------------------------------------------------------------- seeds
+
+export { brandToken, domainStem };
 
 export type SeedSource = "explicit" | "niche" | "tracked" | "gsc" | "ranked";
 
@@ -18,87 +21,6 @@ export interface Seed {
 }
 
 export const DEFAULT_SEED_CAP = 5;
-
-const squash = (s: string) => s.toLowerCase().normalize("NFKD").replace(/\p{M}+/gu, "").replace(/[^a-z0-9]/g, "");
-
-/**
- * The distinctive part of a domain: the last label before the public suffix,
- * where any trailing labels of 3 characters or fewer count as suffix
- * (`shop.example.co.uk` gives `example`).
- */
-export function domainStem(domain: string): string {
-  const labels = domain.split(".");
-  labels.pop();
-  while (labels.length > 1 && labels[labels.length - 1]!.length <= 3) labels.pop();
-  return labels[labels.length - 1] ?? domain;
-}
-
-const GENERIC_SUFFIXES = new Set(["inc", "llc", "co", "company", "corp", "corporation", "ltd", "limited", "group", "solutions"]);
-
-/** Lowercase, punctuation to spaces, spaced-out initials collapsed ("j c building" gives ["jc", "building"]), generic company suffixes dropped. */
-function brandTokens(text: string): string[] {
-  const raw = text.toLowerCase().normalize("NFKD").replace(/\p{M}+/gu, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
-  const merged: string[] = [];
-  let run = "";
-  for (const t of raw) {
-    if (t.length === 1) {
-      run += t;
-      continue;
-    }
-    if (run) merged.push(run);
-    run = "";
-    merged.push(t);
-  }
-  if (run) merged.push(run);
-  const kept = merged.filter((t) => !GENERIC_SUFFIXES.has(t));
-  return kept.length ? kept : merged;
-}
-
-/**
- * Rough branded-query check until Phase 3's isBranded. After normalising (see
- * brandTokens), a query is branded when either:
- * - its de-spaced form (at least 4 characters) is a substring of the domain stem
- *   or the de-spaced client name, or contains the stem or name; or
- * - its first tokens match the client name's leading tokens (two, or the whole
- *   query when it is shorter), which catches short initialisms like "jc".
- */
-export function looksBranded(query: string, client: { domain: string; name: string }): boolean {
-  const q = brandTokens(query);
-  if (q.length === 0) return false;
-  const nameTokens = brandTokens(client.name);
-  const despaced = q.join("");
-  const stem = squash(domainStem(client.domain));
-  const name = nameTokens.join("");
-  if (despaced.length >= 4 && (stem.includes(despaced) || name.includes(despaced))) return true;
-  const squashed = squash(query);
-  if ([stem, squash(client.name)].some((t) => t.length >= 4 && squashed.includes(t))) return true;
-  const brand = brandToken(client);
-  if (brand && q.includes(brand)) return true;
-  if (nameTokens.length === 0) return false;
-  const k = Math.min(2, nameTokens.length, q.length);
-  return q.slice(0, k).every((t, i) => t === nameTokens[i]) && q.slice(0, k).join("").length >= 2;
-}
-
-const BRAND_STOPLIST = new Set([
-  "the", "a", "an", "and", "best", "top", "pro", "pros", "home", "homes", "my", "our", "your", "new", "all", "first", "one",
-  "general", "american", "national", "local", "premier", "quality", "express", "united", "city", "great", "good", "better",
-]);
-
-/**
- * The client's distinctive brand token: the first name token (after generic
- * suffixes and leading stop words), when it is a 2-letter initialism or the
- * domain stem starts with it. Null when there is none or it
- * is a common word.
- */
-export function brandToken(client: { domain: string; name: string }): string | null {
-  const stem = squash(domainStem(client.domain));
-  const tokens = brandTokens(client.name);
-  const first = tokens.find((t) => !BRAND_STOPLIST.has(t));
-  if (!first || first.length < 2 || BRAND_STOPLIST.has(first)) return null;
-  // A 2-letter initialism is distinctive on its own; longer tokens must also start the domain stem, so a common word like "sun" isn't taken for a brand.
-  if (first.length === 2 || stem.startsWith(first)) return first;
-  return null;
-}
 
 /**
  * True when the domain's stem starts with the brand token, or ends with it when
@@ -142,7 +64,7 @@ export interface SeedInputs {
  * given. When explicit seeds or a niche exist, a Search Console or ranked query
  * is used only if it shares a meaningful (non-stop-word, non-brand) token with them.
  */
-export function pickSeeds(inputs: SeedInputs, client: { domain: string; name: string }, cap = DEFAULT_SEED_CAP): Seed[] {
+export function pickSeeds(inputs: SeedInputs, client: BrandClient, cap = DEFAULT_SEED_CAP): Seed[] {
   const out: Seed[] = [];
   const seen = new Set<string>();
   const explicit = (inputs.seeds ?? []).map((k) => k.trim()).filter(Boolean);
@@ -153,7 +75,7 @@ export function pickSeeds(inputs: SeedInputs, client: { domain: string; name: st
     const keyword = raw.replace(/\s+/g, " ").trim().toLowerCase();
     if (!keyword || seen.has(keyword) || out.length >= cap) return;
     if (from === "gsc" || from === "ranked") {
-      if (looksBranded(keyword, client)) return;
+      if (isBranded(keyword, client)) return;
       if (given.length > 0 && !contentTokens(keyword, brand).some((t) => topic.has(t))) return;
     }
     seen.add(keyword);

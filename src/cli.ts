@@ -39,9 +39,10 @@ Commands:
                 --name only with a single domain
   clients remove <domain>... [--ignore]
                 Delete clients' entries from clients.yaml; --ignore hides them for good instead
-  clients set <client> [--area <location>] [--niche <text>] [--name <name>]
+  clients set <client> [--area <location>] [--niche <text>] [--name <name>] [--brand-terms "a,b"]
                 Set a client's area (DataForSEO location name, e.g. "Austin,Texas,United States"),
-                niche and display name; pass "" to clear one
+                niche, display name and brand terms (comma-separated; replaces the list; they add to the
+                built-in domain/name matching for the branded split); pass "" to clear one
   competitors list <client>
   competitors add <client> <domain>... [--note <text>]
   competitors remove <client> <domain>...
@@ -304,15 +305,16 @@ async function keywordsCommand(command: string | undefined, args: string[], note
   return usageError(`Unknown command: keywords ${command ?? ""}`);
 }
 
-async function clientsSet(args: string[], values: { area?: string | undefined; niche?: string | undefined; name?: string | undefined }): Promise<number> {
+async function clientsSet(args: string[], values: { area?: string | undefined; niche?: string | undefined; name?: string | undefined; "brand-terms"?: string | undefined }): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
-  if (values.area === undefined && values.niche === undefined && values.name === undefined) {
-    return usageError("clients set needs --area, --niche or --name.");
+  if (values.area === undefined && values.niche === undefined && values.name === undefined && values["brand-terms"] === undefined) {
+    return usageError("clients set needs --area, --niche, --name or --brand-terms.");
   }
-  const r = await setClientProfile(args[0]!, values);
+  const brandTerms = values["brand-terms"] === undefined ? undefined : values["brand-terms"].split(",");
+  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms });
   for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
   for (const k of r.cleared) out(`Cleared ${k}.`);
-  out(`${r.client}: name ${r.profile.name}; area ${r.profile.area ?? "(not set)"}; niche ${r.profile.niche ?? "(not set)"}. File: ${r.clientsFile}`);
+  out(`${r.client}: name ${r.profile.name}; area ${r.profile.area ?? "(not set)"}; niche ${r.profile.niche ?? "(not set)"}; brand terms ${r.profile.brandTerms.join(", ") || "(none)"}. File: ${r.clientsFile}`);
   return 0;
 }
 
@@ -333,6 +335,7 @@ async function main(argv: string[]): Promise<number> {
       note: { type: "string" },
       area: { type: "string" },
       niche: { type: "string" },
+      "brand-terms": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });

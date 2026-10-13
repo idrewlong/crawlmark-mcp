@@ -98,16 +98,34 @@ describe("list edits on clients.yaml", () => {
 
   it("sets and clears the profile", async () => {
     const set = await setClientProfile("example.com", { area: "Austin, Texas, United States", niche: " emergency  plumber ", name: "Example Co" });
-    expect(set.profile).toEqual({ name: "Example Co", area: "Austin,Texas,United States", niche: "emergency plumber" });
+    expect(set.profile).toEqual({ name: "Example Co", area: "Austin,Texas,United States", niche: "emergency plumber", brandTerms: [] });
     expect(entry("example.com")).toMatchObject({ area: "Austin,Texas,United States", niche: "emergency plumber", name: "Example Co" });
 
     const cleared = await setClientProfile("example.com", { niche: "", name: "" });
     expect(cleared.cleared).toEqual(["niche", "name"]);
-    expect(cleared.profile).toEqual({ name: "example.com", area: "Austin,Texas,United States", niche: null });
+    expect(cleared.profile).toEqual({ name: "example.com", area: "Austin,Texas,United States", niche: null, brandTerms: [] });
     expect(entry("example.com").niche).toBeUndefined();
 
     await expect(setClientProfile("example.com", { area: "Austin,,Texas" })).rejects.toThrow(/not a location name/);
     await expect(setClientProfile("example.com", {})).rejects.toThrow(/Nothing to set/);
+  });
+
+  it("sets, replaces and clears brand terms", async () => {
+    const set = await setClientProfile("example.com", { brandTerms: [" Pipe  Masters ", "pipe-masters", "ex co"] });
+    expect(set.profile.brandTerms).toEqual(["Pipe Masters", "ex co"]);
+    expect(set.set).toEqual({ brandTerms: "Pipe Masters, ex co" });
+    expect(entry("example.com").brandTerms).toEqual(["Pipe Masters", "ex co"]);
+    expect(read()).toContain("domain: example.com # inline");
+
+    const replaced = await setClientProfile("example.com", { brandTerms: ["only one"] });
+    expect(replaced.profile.brandTerms).toEqual(["only one"]);
+
+    const cleared = await setClientProfile("example.com", { brandTerms: [] });
+    expect(cleared.cleared).toEqual(["brandTerms"]);
+    expect(cleared.profile.brandTerms).toEqual([]);
+    expect(entry("example.com").brandTerms).toBeUndefined();
+
+    await expect(setClientProfile("example.com", { brandTerms: ["--"] })).rejects.toThrow(/Not a usable brand term/);
   });
 });
 

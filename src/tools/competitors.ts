@@ -75,7 +75,7 @@ export function registerCompetitorTools(server: McpServer) {
     },
     handler(async ({ client }) => {
       const c = await resolveClient(client);
-      return { client: c.domain, area: c.area ?? null, niche: c.niche ?? null, count: c.competitorEntries.length, competitors: c.competitorEntries };
+      return { client: c.domain, area: c.area ?? null, niche: c.niche ?? null, brandTerms: c.brandTerms, count: c.competitorEntries.length, competitors: c.competitorEntries };
     }),
   );
 
@@ -126,7 +126,7 @@ export function registerCompetitorTools(server: McpServer) {
     {
       title: "Set client profile",
       description:
-        "Set a client's area, niche or display name in clients.yaml. area is a DataForSEO location_name (City,Region,Country, " +
+        "Set a client's area, niche, display name or brand terms in clients.yaml. brandTerms are names people search for the brand (e.g. [\"example plumbing\", \"ex plumbing\"]); they add to the built-in domain and name matching used to split branded from non-branded queries, and the list you pass replaces the stored one ([] clears it). area is a DataForSEO location_name (City,Region,Country, " +
         'e.g. "Austin,Texas,United States") used for local SERP searches; niche is a few words on what the client does ' +
         '(e.g. "emergency plumber"). Pass an empty string to clear a field. Free, local.',
       inputSchema: {
@@ -134,10 +134,11 @@ export function registerCompetitorTools(server: McpServer) {
         area: z.string().max(200).optional(),
         niche: z.string().max(200).optional(),
         name: z.string().max(200).optional(),
+        brandTerms: z.array(z.string().max(100)).max(50).optional().describe("Replaces the client's brand terms; an empty array clears them."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    handler(({ client, area, niche, name }) => setClientProfile(client, { area, niche, name })),
+    handler(({ client, area, niche, name, brandTerms }) => setClientProfile(client, { area, niche, name, brandTerms })),
   );
 
   // ------------------------------------------------------------ suggestions (paid, read-only)

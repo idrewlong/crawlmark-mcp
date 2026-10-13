@@ -20,7 +20,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | Tool | Does |
 |---|---|
 | `list_clients` | Every client: domain, name, sources, GSC property, GA4 property, alternates, what's missing, what was just added to `clients.yaml`, and discovery status. `refresh: true` re-lists from Google |
-| `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions, and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
+| `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions, a [branded vs non-branded split](#branded-queries) (`search.branded`, `search.nonBranded`; query rows and tracked keywords carry `branded: boolean`), and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
 | `run_audit` | Lighthouse + axe + GSC index status + on-page check per key page, sitemap health; optional full crawl and backlinks. Every run is saved and returns an `auditId`. Runs are fresh by default (the response cache is skipped, so the on-page check is a paid call per page); `fresh: false` reuses results up to a day old, and `compare_audits` warns when the later audit was not fresh |
 | `list_audits` | A client's saved audits, newest first: ID, run time, page count, average scores, finding count |
 | `get_audit` | One saved audit's full result and normalised findings, by ID |
@@ -38,7 +38,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `add_competitors` | Adds domains (bare, `www.` or full URLs; saved as the bare domain). Skips the client's own domain and subdomains, ones already listed, repeats and non-domains, and says why. Takes `note` and `source` |
 | `remove_competitors` | Removes domains, in any URL or `www.` form |
 | `list_keywords`, `add_keywords`, `remove_keywords` | The same for tracked keywords (saved lowercase with single spaces). `monthly_report` reports their positions |
-| `set_client_profile` | Sets or clears (`""`) a client's `area` (a DataForSEO location name, e.g. `Austin,Texas,United States`), `niche` (e.g. `emergency plumber`) and `name` |
+| `set_client_profile` | Sets or clears (`""`) a client's `area` (a DataForSEO location name, e.g. `Austin,Texas,United States`), `niche` (e.g. `emergency plumber`) and `name`; `brandTerms` (a list; replaces the stored one, `[]` clears it) feeds the [branded split](#branded-queries) |
 | `suggest_competitors` | **Paid, read-only.** Ranked candidate competitors with evidence, from DataForSEO organic keyword overlap and live Google results for up to 5 seed keywords in the client's area. Never saves; the agent shows you the candidates and adds only the ones you confirm. See [Competitor suggestions](#competitor-suggestions) |
 
 **Prompts**
@@ -206,6 +206,8 @@ Add them whenever you like, with the tools above, the CLI (`crawlmark-cli compet
       - emergency plumber
     area: Austin,Texas,United States  # DataForSEO location name, for local searches
     niche: emergency plumber
+    brandTerms:                       # see Branded queries
+      - example plumbing
 ```
 
 Competitors are stored as bare domains (`https://www.rival.example/page` becomes `rival.example`), keywords lowercase with single spaces, and duplicates are skipped. The client's own domain can't be a competitor.
@@ -293,6 +295,20 @@ npm run inspect
 - `monthly_report` is free by default. Live rank checks (`liveRanks: true`), full crawls and backlinks are opt-in.
 - The pre-flight estimates in `src/providers/dataforseo.ts` are conservative placeholders. Tune them against DataForSEO's pricing page.
 
+#### Branded queries
+
+`monthly_report` splits Search Console queries into branded (people looking for the client by name) and non-branded (people looking for what the client sells). Non-branded is the number that shows SEO growth; branded mostly tracks existing awareness. The report gives clicks, impressions, CTR and average position for each group (position weighted by impressions) for the report month and the one before, with the change, and marks every query row, mover and tracked keyword with `branded: true | false`.
+
+A query counts as branded when, ignoring case, spacing, punctuation and accents, it:
+
+- contains one of the client's `brandTerms` (4+ characters anywhere in the query; shorter terms such as initials only as a whole word);
+- matches the domain stem, the client name or the GA4 property name (`exampleplumbing.com` matches "example plumbing", "Example-Plumbing hours" and "exampleplumbing");
+- uses spaced initials or a generic suffix ("a b building", "ab building inc"), or the short brand token alone ("ab construction").
+
+`brandTerms` add to this built-in matching; they never replace it. Set them with `set_client_profile` (`brandTerms: ["example plumbing", "ex plumbing"]`, `[]` to clear), `crawlmark-cli clients set <client> --brand-terms "example plumbing,ex plumbing"`, or in `clients.yaml`. Add misspellings, old names and product names the client is known by. Terms of 4+ characters match across word boundaries (a squashed "ex co" would match inside longer words), so prefer distinctive terms.
+
+The split sums query-level rows (up to 5,000 per month), which leave out anonymized queries, so branded + non-branded will be lower than the site totals in the same report; the report says so in `search.note`. Matching is heuristic: a client whose name is a common word can have a few non-brand queries marked branded, so spot-check `topQueries` and add terms where it misses.
+
 ## Layout
 
 ```
@@ -314,6 +330,7 @@ src/
     clients.ts          host normaliser, GSC/GA4 join, clients.yaml schema + merge, sync plan, resolution (pure)
     clients-file.ts     comment-preserving clients.yaml edits via the yaml Document API (pure)
     client-lists.ts     competitor/keyword add and remove planning with skip reasons (pure)
+    brand.ts            isBranded(): branded-query classifier and the name/domain normalisers (pure)
     competitor-denylist.ts  built-in platform denylist and rule matching (pure)
     spend.ts            spend-ledger key and alias merging (pure)
     concurrency.ts      mapLimit: bounded-concurrency map (pure)
@@ -328,6 +345,7 @@ src/
     dataforseo-shape.ts pure mappers: raw DataForSEO results -> typed compact objects
   analysis/
     competitor-suggestions.ts  seed picking, merge, filter and score for suggest_competitors (pure)
+    branded.ts          branded vs non-branded totals from query rows (pure)
     findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
     diff.ts             diffAudits: new / resolved / persistent / unverified, score changes (pure)
   prompts/

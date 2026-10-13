@@ -6,6 +6,7 @@
  * edits in src/lib/clients-file.ts; assembly and file I/O in src/clients.ts.
  */
 import { z } from "zod";
+import { normalizeBrandTerm, toBrandTerms } from "./brand.js";
 
 // ---------------------------------------------------------------- normalisation
 
@@ -328,6 +329,8 @@ const OverrideSchema = z.object({
   area: z.string().optional(),
   /** What the client does, in a few words, e.g. "emergency plumber". */
   niche: z.string().optional(),
+  /** Names people search for the brand. Add to the built-in domain and name matching; see src/lib/brand.ts. */
+  brandTerms: z.array(z.string()).optional(),
   keyPages: z.array(z.string().url()).optional(),
   monthlyBudgetUsd: z.number().positive().optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
@@ -372,6 +375,9 @@ export function parseOverrides(raw: unknown, source = "clients.yaml"): ClientOve
         throw new Error(`Invalid ${source}: clients.${slug}.trackedKeywords[${i}] is empty or longer than ${MAX_KEYWORD_LENGTH} characters.`);
       }
     });
+    entry.brandTerms?.forEach((t, i) => {
+      if (!normalizeBrandTerm(t)) throw new Error(`Invalid ${source}: clients.${slug}.brandTerms[${i}] must contain a letter or digit and be at most 100 characters.`);
+    });
     return { ...entry, domain: host, slug };
   });
 }
@@ -404,6 +410,10 @@ export interface Client {
   /** DataForSEO location_name for local searches; when unset, locationCode is used. */
   area?: string;
   niche?: string;
+  /** Explicit brand terms (normalised, de-duplicated). They add to the domain and name matching in isBranded. */
+  brandTerms: string[];
+  /** The GA4 property's display name, when it differs from `name`. */
+  ga4Name?: string;
   keyPages: string[];
   monthlyBudgetUsd: number;
   /** clients.yaml slugs that also resolve to this client. */
@@ -444,6 +454,7 @@ export function mergeClients(
         competitorEntries,
         trackedKeywords: keywordEntries.map((k) => k.keyword),
         keywordEntries,
+        brandTerms: toBrandTerms(y?.brandTerms),
         keyPages: y?.keyPages?.length ? y.keyPages : [homepage],
         monthlyBudgetUsd: y?.monthlyBudgetUsd ?? defaults.monthlyBudgetUsd,
         aliases: y && normalizeHost(y.slug) !== domain ? [y.slug] : [],
@@ -457,6 +468,7 @@ export function mergeClients(
       const area = y?.area && normalizeArea(y.area);
       if (area) client.area = area;
       if (y?.niche?.trim()) client.niche = y.niche.trim();
+      if (d?.ga4DisplayName && d.ga4DisplayName !== client.name) client.ga4Name = d.ga4DisplayName;
       return client;
     });
 }

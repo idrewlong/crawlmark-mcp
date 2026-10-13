@@ -162,3 +162,26 @@ export function setEntryFields(text: string, key: string, fields: Record<string,
   }
   return serialize(doc);
 }
+
+/**
+ * Replace a list of plain strings on the entry under `key`. An empty list
+ * removes the field. Comments on the entry's other fields are kept.
+ */
+export function setStringList(text: string, key: string, field: string, items: string[]): string {
+  const doc = load(text);
+  const entry = entryMap(doc, key);
+  if (items.length === 0) entry.delete(field);
+  else {
+    // Edit an existing list in place so the key-line comment and the list's own comments stay put;
+    // items that survive (matched by text) keep their own comments, new ones are appended as plain items.
+    const old = entry.get(field, true);
+    if (isSeq(old)) {
+      const next = items.map((item) => old.items.find((o) => isScalar(o) && o.value === item) ?? doc.createNode(item));
+      old.items = next;
+      old.flow = false;
+    } else {
+      entry.set(field, doc.createNode(items));
+    }
+  }
+  return serialize(doc);
+}

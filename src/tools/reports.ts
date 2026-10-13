@@ -45,6 +45,7 @@ export function registerReportTools(server: McpServer) {
           missing: missingPieces(c),
           ...(c.area ? { area: c.area } : {}),
           ...(c.niche ? { niche: c.niche } : {}),
+          ...(c.brandTerms.length ? { brandTerms: c.brandTerms } : {}),
           competitors: c.competitors.length,
           trackedKeywords: c.trackedKeywords.length,
           keyPages: c.keyPages.length,
@@ -63,7 +64,7 @@ export function registerReportTools(server: McpServer) {
       title: "Monthly SEO report",
       description:
         "Build the data for a client's monthly SEO report: GSC clicks/impressions/CTR/position vs previous month and last year, " +
-        "GA4 organic sessions and key events, top and moving queries and pages, top organic landing pages, and tracked keyword positions, plus an `audit` section: the latest saved audit and its diff against the most recent audit from before the month (`null` unless there is one from before the month and a newer one; a back-dated month still diffs against the latest audit). " +
+        "GA4 organic sessions and key events, top and moving queries and pages (each query row carries `branded: boolean`), a branded vs non-branded split of clicks, impressions, CTR and impression-weighted position for the month and the previous one (query-level, so anonymized queries are excluded), top organic landing pages, and tracked keyword positions, plus an `audit` section: the latest saved audit and its diff against the most recent audit from before the month (`null` unless there is one from before the month and a newer one; a back-dated month still diffs against the latest audit). " +
         "Free by default (Google APIs only); set liveRanks for a paid live SERP check per tracked keyword. " +
         "Returns structured JSON for you to write up; each section reports its own error if a source is unavailable.",
       inputSchema: {

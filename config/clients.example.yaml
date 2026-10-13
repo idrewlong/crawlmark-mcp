@@ -23,6 +23,9 @@ clients:
     languageCode: en # default DEFAULT_LANGUAGE_CODE
     area: Austin,Texas,United States # DataForSEO location_name for local searches (suggest_competitors); default: use locationCode
     niche: emergency plumber # what the client does, in a few words; first seed keyword for suggest_competitors
+    brandTerms: # default: none. Names people search for this brand; used to split branded from non-branded queries
+      - example co # adds to, never replaces, the built-in matching on the domain name, client name and GA4 name
+      - ex co
     competitors: # default: none. A domain, or an object; URLs and www. forms are saved as the bare domain
       - competitor.example
       - domain: other-competitor.example
