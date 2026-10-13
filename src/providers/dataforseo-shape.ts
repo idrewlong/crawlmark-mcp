@@ -6,6 +6,11 @@
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+/** Like str, with runs of whitespace (including newlines) collapsed to one space. */
+const text = (v: unknown): string | null => {
+  const s = str(v)?.replace(/\s+/g, " ").trim();
+  return s ? s : null;
+};
 const round = (v: number | null, digits = 2): number | null =>
   v === null ? null : Math.round(v * 10 ** digits) / 10 ** digits;
 
@@ -221,9 +226,9 @@ export function mapInstantPage(raw: RawInstantPages | undefined): InstantPage | 
   return {
     url: str(item.url),
     status: num(item.status_code),
-    title: str(item.meta?.title),
-    description: str(item.meta?.description),
-    h1: str(item.meta?.htags?.h1?.[0]),
+    title: text(item.meta?.title),
+    description: text(item.meta?.description),
+    h1: text(item.meta?.htags?.h1?.[0]),
     canonical: str(item.meta?.canonical),
     wordCount: num(item.meta?.content?.plain_text_word_count),
     failedChecks,

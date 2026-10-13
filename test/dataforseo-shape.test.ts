@@ -103,6 +103,13 @@ describe("mapInstantPage", () => {
     });
   });
 
+  it("collapses repeated whitespace in title, description and h1", () => {
+    const page = mapInstantPage({
+      items: [{ url: "https://example.com/", meta: { title: " Example \n  Co ", description: "A  B", htags: { h1: ["Example   Systems"] } } }],
+    });
+    expect(page).toMatchObject({ title: "Example Co", description: "A B", h1: "Example Systems" });
+  });
+
   it("handles missing meta, h1 and checks", () => {
     expect(mapInstantPage({ items: [{ url: "https://example.com/", status_code: 404, meta: null, checks: null }] })).toEqual({
       url: "https://example.com/",

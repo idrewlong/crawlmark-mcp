@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   domainStem,
   filterCandidates,
+  cleanSampleUrl,
   looksBranded,
   mergeCandidates,
   pickSeeds,
@@ -33,6 +34,16 @@ describe("seeds", () => {
     expect(looksBranded("example plumbing reviews", client)).toBe(true);
     expect(looksBranded("Example-Plumbing hours", client)).toBe(true);
     expect(looksBranded("emergency plumber", client)).toBe(false);
+  });
+
+  it("catches initialism and suffix variants of the brand", () => {
+    const c = { domain: "abbuildingsystems.com", name: "AB Building Systems" };
+    for (const q of ["a b building", "ab building", "ab building solutions", "ab building inc", "AB Building, LLC", "ab building systems reviews", "ab"]) {
+      expect(looksBranded(q, c), q).toBe(true);
+    }
+    for (const q of ["modular home installation", "building contractor near me", "construction company springfield", "", "prefab homes", "systems integrator"]) {
+      expect(looksBranded(q, c), q).toBe(false);
+    }
   });
 
   it("orders niche, tracked, then non-branded GSC, de-duplicated and capped", () => {
@@ -195,5 +206,18 @@ describe("merge, filter and rank", () => {
     // Overlap rows with null intersections contribute nothing either.
     const nulls = mergeCandidates([{ domain: "x.example", intersectingKeywords: null, avgPosition: null, estimatedTraffic: null }], both);
     expect(rankCandidates(nulls, { seedsSearched: 2 }).find((c) => c.domain === "leader.example")!.score).toBe(100);
+  });
+});
+
+describe("cleanSampleUrl", () => {
+  it("drops tracking parameters and fragments but keeps real ones", () => {
+    expect(cleanSampleUrl("https://example.com/?srsltid=abc")).toBe("https://example.com/");
+    expect(cleanSampleUrl("https://example.com/a?utm_source=x&page=2&gclid=1&fbclid=2#top")).toBe("https://example.com/a?page=2");
+    expect(cleanSampleUrl("not a url")).toBe("not a url");
+  });
+
+  it("is applied to merged sample URLs", () => {
+    const [c] = mergeCandidates([], [{ seed: "s", hits: [{ domain: "rival.example", position: 1, url: "https://rival.example/?srsltid=z" }] }]);
+    expect(c!.evidence.sampleUrl).toBe("https://rival.example/");
   });
 });

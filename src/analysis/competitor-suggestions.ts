@@ -33,15 +33,48 @@ export function domainStem(domain: string): string {
   return labels[labels.length - 1] ?? domain;
 }
 
+const GENERIC_SUFFIXES = new Set(["inc", "llc", "co", "company", "corp", "corporation", "ltd", "limited", "group", "solutions"]);
+
+/** Lowercase, punctuation to spaces, spaced-out initials collapsed ("j c building" gives ["jc", "building"]), generic company suffixes dropped. */
+function brandTokens(text: string): string[] {
+  const raw = text.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  const merged: string[] = [];
+  let run = "";
+  for (const t of raw) {
+    if (t.length === 1) {
+      run += t;
+      continue;
+    }
+    if (run) merged.push(run);
+    run = "";
+    merged.push(t);
+  }
+  if (run) merged.push(run);
+  const kept = merged.filter((t) => !GENERIC_SUFFIXES.has(t));
+  return kept.length ? kept : merged;
+}
+
 /**
- * Rough branded-query check until Phase 3's isBranded: the query contains the
- * domain stem or the client name, ignoring case, spaces and punctuation.
- * Terms shorter than 4 characters are ignored to avoid false positives.
+ * Rough branded-query check until Phase 3's isBranded. After normalising (see
+ * brandTokens), a query is branded when either:
+ * - its de-spaced form (at least 4 characters) is a substring of the domain stem
+ *   or the de-spaced client name, or contains the stem or name; or
+ * - its first tokens match the client name's leading tokens (two, or the whole
+ *   query when it is shorter), which catches short initialisms like "jc".
  */
 export function looksBranded(query: string, client: { domain: string; name: string }): boolean {
-  const q = squash(query);
-  const terms = [squash(domainStem(client.domain)), squash(client.name)].filter((t) => t.length >= 4);
-  return terms.some((t) => q.includes(t));
+  const q = brandTokens(query);
+  if (q.length === 0) return false;
+  const nameTokens = brandTokens(client.name);
+  const despaced = q.join("");
+  const stem = squash(domainStem(client.domain));
+  const name = nameTokens.join("");
+  if (despaced.length >= 4 && (stem.includes(despaced) || name.includes(despaced))) return true;
+  const squashed = squash(query);
+  if ([stem, squash(client.name)].some((t) => t.length >= 4 && squashed.includes(t))) return true;
+  if (nameTokens.length === 0) return false;
+  const k = Math.min(2, nameTokens.length, q.length);
+  return q.slice(0, k).every((t, i) => t === nameTokens[i]) && q.slice(0, k).join("").length >= 2;
 }
 
 export interface SeedInputs {
@@ -125,6 +158,20 @@ export interface ScoredCandidate extends Candidate {
   score: number;
 }
 
+const TRACKING_PARAM = /^(utm_.*|srsltid|gclid|fbclid|msclkid|dclid|gbraid|wbraid)$/i;
+
+/** A ranking URL without its fragment or tracking parameters; other query parameters are kept. Unparseable input is returned as is. */
+export function cleanSampleUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    for (const k of [...u.searchParams.keys()]) if (TRACKING_PARAM.test(k)) u.searchParams.delete(k);
+    u.hash = "";
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 /**
  * Merge both sources per normalised domain (`www.` and URL forms collapse).
  * A domain that appears several times in one SERP counts once for that seed,
@@ -181,9 +228,9 @@ export function mergeCandidates(overlap: OverlapRow[], serps: SeedSerp[]): Candi
       e.serpAppearances++;
       if (e.bestSerpPosition === null || hit.position < e.bestSerpPosition) {
         e.bestSerpPosition = hit.position;
-        e.sampleUrl = hit.url ?? e.sampleUrl;
+        e.sampleUrl = hit.url ? cleanSampleUrl(hit.url) : e.sampleUrl;
       } else if (!e.sampleUrl && hit.url) {
-        e.sampleUrl = hit.url;
+        e.sampleUrl = cleanSampleUrl(hit.url);
       }
     }
   }
