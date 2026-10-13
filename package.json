@@ -1,8 +1,46 @@
 {
   "name": "crawlmark-mcp",
   "version": "0.1.0",
-  "description": "MCP server for automated SEO audits and reports (GSC, GA4, DataForSEO, Lighthouse, axe)",
+  "description": "MCP server for automated SEO audits and reports: Google Search Console, GA4, Tag Manager, DataForSEO, Lighthouse and axe-core",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "seo",
+    "seo-audit",
+    "google-search-console",
+    "ga4",
+    "dataforseo",
+    "lighthouse",
+    "axe-core",
+    "claude"
+  ],
+  "homepage": "https://github.com/idrewlong/crawlmark-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idrewlong/crawlmark-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/idrewlong/crawlmark-mcp/issues"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "crawlmark-mcp": "dist/index.js",
+    "crawlmark-cli": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE",
+    ".env.example",
+    "config/clients.example.yaml"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc && node -e \"require('node:fs').cpSync('src/prompts/templates', 'dist/prompts/templates', { recursive: true })\"",
@@ -10,10 +48,10 @@
     "cli": "node --disable-warning=ExperimentalWarning dist/cli.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "inspect": "npx @modelcontextprotocol/inspector tsx src/index.ts"
+    "inspect": "npx @modelcontextprotocol/inspector tsx src/index.ts",
+    "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
+    "prepublishOnly": "node scripts/prepublish-guard.mjs && node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && npm run build && npm run typecheck && npm test"
   },
-  "author": "",
-  "license": "UNLICENSED",
   "dependencies": {
     "@axe-core/puppeteer": "^4.13.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -30,14 +68,5 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.4"
-  },
-  "type": "module",
-  "bin": {
-    "crawlmark-mcp": "dist/index.js",
-    "crawlmark-cli": "dist/cli.js"
-  },
-  "engines": {
-    "node": ">=22.13"
-  },
-  "private": true
+  }
 }

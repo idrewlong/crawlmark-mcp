@@ -1,3 +1,4 @@
+import { isUnsetValue } from "./env.js";
 import { isAbsolute, join, resolve, sep } from "node:path";
 
 /**
@@ -66,7 +67,7 @@ export function isAnchoredPath(p: string): boolean {
 }
 
 export function resolveHome(i: HomeInputs): HomeInfo {
-  const fromEnv = i.crawlmarkHome?.trim();
+  const fromEnv = isUnsetValue(i.crawlmarkHome) ? undefined : i.crawlmarkHome!.trim();
   if (fromEnv) {
     if (!isAnchoredPath(fromEnv)) throw new InvalidHomeError(fromEnv);
     return { dir: expandPath(fromEnv, i.userHome, i.cwd), source: "env", reason: "CRAWLMARK_HOME is set" };

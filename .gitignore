@@ -12,3 +12,4 @@ config/competitor-denylist.txt
 .DS_Store
 recordings/
 secrets/
+build/

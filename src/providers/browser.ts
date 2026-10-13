@@ -1,18 +1,25 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Options as ChromeLauncherOptions } from "chrome-launcher";
 import puppeteer, { type Browser, type HTTPResponse, type Page } from "puppeteer";
+import { chooseChrome, systemChromeCandidates } from "../lib/chrome.js";
 import { BLOCKED_HEADER, egressProxy, proxyChromeFlags } from "../lib/egress-proxy.js";
 import { onAbort, TIMEOUTS, withTimeout } from "../lib/timeout.js";
 import { assertSafeUrl, UrlRefusedError } from "../lib/url-guard.js";
 
 /**
- * Chrome path shared by Lighthouse and axe. Uses CHROME_PATH if set,
- * otherwise the Chrome that puppeteer downloaded on install.
+ * Chrome path shared by Lighthouse and axe. Uses CHROME_PATH if set, else the Chrome
+ * puppeteer downloaded on install, else a system Chrome (the Claude Desktop bundle ships without one).
  */
 export async function chromePath(): Promise<string> {
-  return process.env.CHROME_PATH || (await puppeteer.executablePath());
+  return chooseChrome({
+    chromePathEnv: process.env.CHROME_PATH,
+    puppeteerPath: await puppeteer.executablePath(),
+    candidates: systemChromeCandidates(process.platform, process.env, homedir()),
+    exists: existsSync,
+  });
 }
 
 /** Chrome's sandbox stays on unless it cannot work (Linux as root, typical in containers) or CHROME_NO_SANDBOX is set. */

@@ -15,14 +15,14 @@ import { expandPath, sourceCheckoutMarker, type HomeSource } from "../lib/home.j
 import { checkDataForSeoCredentials } from "../providers/dataforseo.js";
 import { checkPsiKey } from "./checks.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
+import { DFS_LIVE_URL, DFS_SANDBOX_URL } from "../lib/env.js";
 import { LINKS, type IntegrationId, type IntegrationStatus, type SetupStatusReport } from "./status.js";
 
 export const STEP_NAMES = ["node", "dataforseo", "google", "psi", "discovery", "register"] as const;
 export type StepName = (typeof STEP_NAMES)[number];
 
+export { DFS_LIVE_URL, DFS_SANDBOX_URL };
 export const MIN_NODE = [22, 13] as const;
-export const DFS_SANDBOX_URL = "https://sandbox.dataforseo.com/v3";
-export const DFS_LIVE_URL = "https://api.dataforseo.com/v3";
 /** Where option C copies the key, relative to the home. */
 export const KEY_FILE_REL = join("secrets", "google-service-account.json");
 

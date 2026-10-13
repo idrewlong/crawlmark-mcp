@@ -22,6 +22,10 @@ describe("resolveHome", () => {
     expect(isAnchoredPath("x")).toBe(false);
   });
 
+  it("a leftover ${user_config.crawlmark_home} placeholder counts as unset instead of throwing", () => {
+    expect(resolveHome({ ...base, crawlmarkHome: "${user_config.crawlmark_home}", exists: existing(".git") }).source).toBe("project");
+  });
+
   it("an empty CRAWLMARK_HOME counts as unset", () => {
     expect(resolveHome({ ...base, crawlmarkHome: "  ", exists: existing(".git") }).source).toBe("project");
   });

@@ -13,9 +13,56 @@ An MCP server for automated SEO audits and monthly reports. It combines:
 
 On top of the raw sources it adds a client list in `config/clients.yaml` that fills itself from Google (every Search Console site and GA4 property your Google account can see is added automatically) and that you can add to by hand, so the DataForSEO, Lighthouse and axe tools work even without Google, a SQLite response cache, a per-client and global monthly spend cap, and report-shaped tools.
 
+## Install
+
+Requires Node 22.13+ (crawlmark uses the built-in `node:sqlite`). Pick one.
+
+### With npx (Claude Code, or any MCP client)
+
+```bash
+npx crawlmark-mcp setup
+```
+
+The wizard checks Node, asks for each credential (every one is checked live), discovers your clients and registers crawlmark with Claude Code (`claude mcp add`) or Claude Desktop's config file, showing the change first. Your files live in `~/.crawlmark` (override with `CRAWLMARK_HOME`). When run from the npx cache it registers `npx -y crawlmark-mcp`, never the temporary cache path.
+
+`crawlmark-mcp` with no arguments is the stdio MCP server, which is what clients launch. With a CLI subcommand it runs the admin CLI instead: `npx crawlmark-mcp setup`, `npx crawlmark-mcp setup status`, `npx crawlmark-mcp auth login`, `npx crawlmark-mcp clients list`, and so on (the same as `crawlmark-cli …`). `--version` and `--help` work too. To register by hand:
+
+```bash
+claude mcp add crawlmark -s user -- npx -y crawlmark-mcp
+```
+
+Installing the package downloads a Chrome build for Lighthouse and axe through puppeteer (about 570 MB in `~/.cache/puppeteer`: Chrome plus the headless shell). To skip it, set `PUPPETEER_SKIP_DOWNLOAD=true` before installing and either install Google Chrome or point `CHROME_PATH` at a Chrome or Chromium binary. Without a download, crawlmark also finds a Chrome in its usual system location (macOS `/Applications`, `/usr/bin/google-chrome` or `chromium` on Linux, `Program Files` on Windows). `setup_status` reports whether Chrome works.
+
+### Claude Desktop (bundle)
+
+Download `crawlmark.mcpb` (built by `npm run build:mcpb`, see [Publishing](#publishing)) and double-click it, or drag it onto Claude Desktop (Settings, Extensions). Claude Desktop shows a form; every field is optional, so you can fill in only what you use:
+
+| Field | What it is |
+|---|---|
+| DataForSEO API login / password | The API credentials from the DataForSEO API access page (the password is kept in the OS keychain). Leave empty to skip the paid tools |
+| Use the live DataForSEO API | Off (default) is the free sandbox with sample data. On is real data billed to your balance |
+| Google service-account key file | A file picker for the JSON key (see [Choose a setup](#choose-a-setup)) |
+| Google OAuth client ID / secret | Only for signing in with your own Google account. After installing, run `CRAWLMARK_HOME=<data folder> npx crawlmark-mcp setup --step google` once in a terminal to sign in |
+| PageSpeed Insights API key | Adds real-user field data |
+| Chrome executable | Optional path to Chrome or Chromium |
+| Crawlmark data folder | Where the client list, cache and spend log live. Default `~/.crawlmark` |
+
+The bundle ships the server and its dependencies but not a Chrome download (hundreds of MB). Audits (`lighthouse`, `accessibility_check`, `render_check`, `run_audit`) use the Chrome field if set, else the Chrome installed on the machine. Install Google Chrome if `setup_status` reports Chrome as missing. Settings from the form arrive as environment variables, so there is no `.env` file to write; `setup_status` reports the config home as working in that case. In Claude, ask it to run `setup_status` (or use the `getting-started` prompt) to see what is configured.
+
+### From source
+
+```bash
+git clone https://github.com/idrewlong/crawlmark-mcp.git && cd crawlmark-mcp
+npm install            # also downloads a Chrome build for Lighthouse + axe
+npm run build
+npm run cli -- setup
+```
+
+A source checkout keeps its config in the project root (existing setups keep working); see [Config home](#config-home-crawlmark_home).
+
 ## Quick start
 
-Requires Node 22.13+ (crawlmark uses the built-in `node:sqlite`).
+From a source checkout (for the npx and Claude Desktop installs see [Install](#install)):
 
 ```bash
 npm install            # also downloads a Chrome build for Lighthouse + axe
@@ -374,7 +421,7 @@ Give the `traffic` job the same `CLIENTS_YAML` step. (The `schedule` above runs 
 `crawlmark-cli setup --step dataforseo` does this and checks the credentials. By hand:
 
 1. Create an account and copy the API login and API password from [API access](https://app.dataforseo.com/api-access) into `.env` (the API password is not your account password).
-2. Leave `DATAFORSEO_BASE_URL` on the **sandbox** while building. It's free and returns fake data in the real response shape.
+2. Leave `DATAFORSEO_BASE_URL` on the **sandbox** while building (unset, it defaults to the sandbox; `DATAFORSEO_LIVE=true` selects the live API when no URL is set). It's free and returns fake data in the real response shape.
 3. Switch to `https://api.dataforseo.com/v3` when you're ready, and fund the account.
 
 ### PageSpeed Insights (optional)
@@ -574,11 +621,35 @@ Estimates use the expected-CTR-by-position curve in `src/analysis/ctr-curve.ts`,
 
 A sub-check that could not finish (fetch error, a cap reached, a page whose HTML could not be parsed, or the time budget running out) is not recorded as checked, so `compare_audits` shows its old findings as `unverified` instead of `resolved`. Sitemap URLs and child sitemaps are only followed on the client's domain and its subdomains. hreflang alternates may be on other public hosts unless `RESTRICT_TO_CLIENT_DOMAINS=true`, which limits them to the client's domain.
 
+## Publishing
+
+For the maintainer. Nothing here runs automatically.
+
+**npm package.** `package.json` is releasable, but `prepublishOnly` refuses unless you confirm with `CRAWLMARK_PUBLISH_OK=1`:
+
+```bash
+npm login                                              # once
+git switch main && git pull                            # release from a clean, merged main
+npm version patch                                      # or minor; then set the same version in mcpb/manifest.json
+CRAWLMARK_PUBLISH_OK=1 npm publish --access public
+```
+
+`prepublishOnly` checks the variable, deletes and rebuilds `dist/`, then runs the typecheck and the tests; any failure stops the release. Only `dist/` (no source maps), `README.md`, `.env.example` and `config/clients.example.yaml` ship, plus `package.json` and a `LICENSE` file if one exists. The guard is a lifecycle script, so publishing with `--ignore-scripts`, or publishing a pre-built tarball, skips it; do neither. `npm pack` does not run the guard either and ships whatever `dist/` is on disk, so run `npm run build` first. Check the contents with `npm pack` and `tar tzf crawlmark-mcp-*.tgz`. The `license` field is currently `UNLICENSED`, which means nobody else may use the package: choose a license (and add a `LICENSE` file) before releasing it publicly.
+
+**Claude Desktop bundle.**
+
+```bash
+npm run build:mcpb     # builds dist/, then writes build/crawlmark.mcpb
+```
+
+`scripts/build-mcpb.mjs` stages `dist/`, `package.json` and the production `node_modules` (installed with `npm ci --omit=dev --ignore-scripts` and no Chrome download; the unused googleapis API clients are pruned), adds `mcpb/manifest.json` and zips it with the system `zip` to `build/crawlmark.mcpb` (about 41 MB; `build/` is gitignored). The official packer works on the same staging directory: `npx @anthropic-ai/mcpb pack build/mcpb-stage build/crawlmark.mcpb`. The manifest follows the [MCPB manifest spec](https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md) (version 0.3) and is checked by `test/mcpb-manifest.test.ts`. `scripts/mcp-list.mjs` starts any install over stdio and prints its tools, which is how to smoke-test an unzipped bundle: `CRAWLMARK_HOME=$(mktemp -d) node scripts/mcp-list.mjs node <unzipped>/dist/index.js`. Attach `crawlmark.mcpb` to a GitHub release by hand.
+
 ## Layout
 
 ```
 src/
-  index.ts              server entry (stdio)
+  index.ts              entry: no args starts the stdio server (server.ts); a CLI subcommand, --help or --version runs the CLI
+  server.ts             the stdio MCP server
   cli.ts                crawlmark-cli: setup, auth, clients, competitors, keywords, brand, audit, check-traffic
   scheduled.ts          scheduled audits and traffic checks: per-client loop, skipping, alerts, webhook, exit code
   config.ts             config home, env loading and validation (paths resolved from the home), client defaults
@@ -667,7 +738,12 @@ src/
     brand.ts            add_brand_terms, remove_brand_terms, suggest_brand_terms
     gtm.ts              gtm_audit
     setup.ts            setup_status
+mcpb/
+  manifest.json         Claude Desktop bundle manifest (user_config form, env mapping, tools and prompts lists)
 scripts/
+  build-mcpb.mjs        builds build/crawlmark.mcpb (stage dist + production node_modules, zip)
+  mcp-list.mjs          starts an MCP server over stdio and lists its tools and prompts (smoke test)
+  prepublish-guard.mjs  fails the release unless CRAWLMARK_PUBLISH_OK=1
   record-fixtures.ts    records raw DataForSEO sandbox responses (refuses non-sandbox); scrub before committing
 test/
   *.test.ts             vitest unit tests (pure functions)

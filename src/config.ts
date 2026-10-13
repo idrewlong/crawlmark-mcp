@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { z } from "zod";
 import type { ClientDefaults } from "./lib/clients.js";
-import { stripEmptyValues } from "./lib/env.js";
+import { dataForSeoBaseUrl, stripEmptyValues } from "./lib/env.js";
 import { GOOGLE_AUTH_MODES } from "./lib/google-auth.js";
 import { resolveHome, type HomeInfo } from "./lib/home.js";
 import { projectRoot, resolveFromRoot } from "./lib/paths.js";
@@ -42,7 +42,10 @@ const EnvSchema = z.object({
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
   DATAFORSEO_LOGIN: z.string().optional(),
   DATAFORSEO_PASSWORD: z.string().optional(),
-  DATAFORSEO_BASE_URL: z.string().url().default("https://sandbox.dataforseo.com/v3"),
+  // Set explicitly, or DATAFORSEO_LIVE=true for the live API; unset means the free sandbox.
+  DATAFORSEO_BASE_URL: z.string().url().optional(),
+  // true/false/1/0/yes/no; normalised by dataForSeoBaseUrl (an unrecognised value counts as unset).
+  DATAFORSEO_LIVE: z.string().optional(),
   PSI_API_KEY: z.string().optional(),
   CLIENTS_FILE: z.string().default("./config/clients.yaml"),
   DATA_DIR: z.string().default("./data"),
@@ -66,6 +69,12 @@ const dataDir = resolveFromRoot(HOME.dir, parsedEnv.DATA_DIR);
 
 export const env = {
   ...parsedEnv,
+  DATAFORSEO_BASE_URL: dataForSeoBaseUrl({
+    baseUrl: parsedEnv.DATAFORSEO_BASE_URL,
+    baseUrlFromFile: ENV_FILE_KEYS.has("DATAFORSEO_BASE_URL"),
+    live: parsedEnv.DATAFORSEO_LIVE,
+    liveFromFile: ENV_FILE_KEYS.has("DATAFORSEO_LIVE"),
+  }),
   CLIENTS_FILE: resolveFromRoot(HOME.dir, parsedEnv.CLIENTS_FILE),
   DATA_DIR: dataDir,
   COMPETITOR_DENYLIST_FILE: resolveFromRoot(HOME.dir, parsedEnv.COMPETITOR_DENYLIST_FILE),

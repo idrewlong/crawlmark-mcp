@@ -31,6 +31,7 @@ import { checkGoogleAuthLive, googleAuthMode, googleAuthModeNote, googleAuthStat
 import { loopbackLogin } from "./providers/google-login.js";
 import { runAudits, runTrafficChecks, type Skipped } from "./scheduled.js";
 import { assertSafeUrl } from "./lib/url-guard.js";
+import { packageVersion } from "./lib/entry.js";
 import { setupCommand } from "./setup/cli-setup.js";
 
 const USAGE = `Usage: crawlmark-cli <command>
@@ -488,6 +489,10 @@ function usageError(problem: string): number {
 }
 
 async function main(argv: string[]): Promise<number> {
+  if (argv[0] === "--version" || argv[0] === "-v") {
+    out(packageVersion(import.meta.url));
+    return 0;
+  }
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
