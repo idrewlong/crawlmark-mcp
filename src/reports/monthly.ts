@@ -21,13 +21,27 @@ export interface MonthlyReportOptions {
   liveRanks?: boolean;
 }
 
-function compare(cur: { clicks: number; impressions: number; ctr: number; position: number }, prev: typeof cur) {
+export interface PeriodTotals {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+/**
+ * Current vs an earlier period. `previous` carries the earlier absolute values, so a percent change can be
+ * reported beside the numbers it comes from. When the earlier period has no data (0 impressions) every
+ * `change` is null: a change against an empty period is meaningless, not 0 or the raw value.
+ */
+export function compare(cur: PeriodTotals, prev: PeriodTotals) {
+  const hasPrev = prev.impressions > 0;
   return {
-    clicks: { value: cur.clicks, change: pctChange(cur.clicks, prev.clicks) },
-    impressions: { value: cur.impressions, change: pctChange(cur.impressions, prev.impressions) },
-    ctr: { value: cur.ctr, change: Number((cur.ctr - prev.ctr).toFixed(2)) },
+    clicks: { value: cur.clicks, change: hasPrev ? pctChange(cur.clicks, prev.clicks) : null },
+    impressions: { value: cur.impressions, change: hasPrev ? pctChange(cur.impressions, prev.impressions) : null },
+    ctr: { value: cur.ctr, change: hasPrev ? Number((cur.ctr - prev.ctr).toFixed(2)) : null },
     // Lower is better for position, so a negative delta is an improvement.
-    position: { value: cur.position, change: Number((cur.position - prev.position).toFixed(1)) },
+    position: { value: cur.position, change: hasPrev ? Number((cur.position - prev.position).toFixed(1)) : null },
+    previous: hasPrev ? { clicks: prev.clicks, impressions: prev.impressions, ctr: prev.ctr, position: prev.position } : null,
   };
 }
 

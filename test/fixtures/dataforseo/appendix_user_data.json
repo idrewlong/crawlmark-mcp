@@ -1,0 +1,33 @@
+{
+  "version": "0.1.20250526",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.0100 sec.",
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.0020 sec.",
+      "path": ["v3", "appendix", "user_data"],
+      "data": { "api": "appendix", "function": "user_data" },
+      "result": [
+        {
+          "login": "login@example.com",
+          "timezone": "Europe/Kyiv",
+          "rates": { "limits": { "day": { "total": 0 }, "minute": { "total": 0 } } },
+          "money": {
+            "total": 250.5,
+            "balance": 42.125,
+            "limits": { "day": { "serp": { "live": { "regular": 0 } }, "total": 0 } },
+            "statistics": { "day": { "serp": { "live": { "regular": 0 } }, "total": 0 } }
+          },
+          "price": { "pricing_factor": 1 },
+          "backlinks_subscription_expiry_date": null,
+          "llm_mentions_subscription_expiry_date": null
+        }
+      ]
+    }
+  ]
+}

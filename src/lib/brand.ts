@@ -87,6 +87,46 @@ export function toBrandTerms(items: string[] | undefined): string[] {
   return out;
 }
 
+import { ARTICLES, distinctiveRemainder, LOCATION_WORDS } from "./name-parts.js";
+
+/** Common trade words, so they are never taken for the distinctive part of a name ("austinplumbing" has none). A client's own niche and area words are added. */
+const TRADE_WORDS = new Set([
+  "plumbing", "plumber", "plumbers", "roofing", "roofer", "roofers", "electric", "electrical", "electrician", "hvac", "heating", "cooling",
+  "construction", "contractor", "contractors", "building", "builders", "remodeling", "landscaping", "lawn", "cleaning", "painting", "paving",
+  "pizza", "pizzeria", "restaurant", "restaurants", "cafe", "coffee", "bakery", "bar", "grill", "kitchen", "diner", "catering", "food",
+  "dental", "dentist", "medical", "clinic", "health", "law", "lawyer", "lawyers", "attorney", "legal", "realty", "homes", "insurance",
+  "auto", "repair", "motors", "salon", "spa", "fitness", "gym", "studio", "design", "marketing", "consulting", "software", "tech",
+  "aviation", "storage", "moving", "towing", "pest", "flooring", "windows", "doors", "fencing", "photography", "film", "films",
+]);
+
+/** The client's distinctive name, after removing trade words, places and company suffixes from its domain stem; "" when it has none (an exact-match domain). */
+function distinctiveName(client: BrandClient): string {
+  const extra = (text: string | undefined) => new Set(brandTokens((text ?? "").replace(/,/g, " ")));
+  const niche = extra(client.niche);
+  const area = extra(client.area);
+  const kindOf = (piece: string): "trade" | "place" | null =>
+    area.has(piece) || LOCATION_WORDS.has(piece) ? "place" : TRADE_WORDS.has(piece) || niche.has(piece) ? "trade" : null;
+  return distinctiveRemainder(squash(domainStem(client.domain)), kindOf, area.size > 0);
+}
+
+/** Shortest distinctive name (or name without its article) that counts as a brand on its own ("fornino"). */
+const MIN_DISTINCTIVE_CHARS = 5;
+
+/**
+ * Does a query token name the client's distinctive part? It must be at least 5 characters, not a
+ * trade word, place or filler, and be the whole distinctive name or that name without a leading
+ * article ("lafornino" gives "fornino"). A mere tail of a name is deliberately not enough: it would
+ * make common words brands ("summit" for bluesummit). Such cases go through review-brand-terms.
+ */
+function matchesDistinctiveName(tokens: string[], client: BrandClient): boolean {
+  const name = distinctiveName(client);
+  if (name.length < MIN_DISTINCTIVE_CHARS) return false;
+  const bare = [...ARTICLES].find((a) => name.startsWith(a) && name.length - a.length >= MIN_DISTINCTIVE_CHARS);
+  const forms = new Set([name, ...(bare ? [name.slice(bare.length)] : [])]);
+  const generic = new Set([...TRADE_WORDS, ...LOCATION_WORDS, ...BRAND_STOPLIST, ...brandTokens(client.niche ?? ""), ...brandTokens((client.area ?? "").replace(/,/g, " "))]);
+  return tokens.some((t) => t.length >= MIN_DISTINCTIVE_CHARS && !generic.has(t) && forms.has(t));
+}
+
 /** What isBranded needs from a client. */
 export interface BrandClient {
   domain: string;
@@ -95,6 +135,10 @@ export interface BrandClient {
   ga4Name?: string | undefined;
   /** Explicit brand terms; they add to the default heuristics. */
   brandTerms?: string[] | undefined;
+  /** What the client does; its words are never taken for a brand. */
+  niche?: string | undefined;
+  /** DataForSEO location name; its words are never taken for a brand. */
+  area?: string | undefined;
 }
 
 /** A term of 4+ characters matches anywhere in the de-spaced query; a shorter one (an initialism) only as a whole token, so "ab" doesn't match "about". */
@@ -114,6 +158,8 @@ function matchesTerm(term: string, squashedQuery: string, queryTokens: string[])
  * - its de-spaced form (4+ characters) is a prefix of the domain stem or the
  *   de-spaced client or GA4 name (so a truncated brand like "exampl" matches, but a
  *   trade word inside the name, like "plumbing", does not), or contains the stem or a name; or
+ * - it contains, as a whole word, the distinctive part of the domain stem (5+ characters; also without its
+ *   leading article: "fornino" for lafornino) unless that is a trade word or place; or
  * - it contains the client's short brand token (e.g. "ab" in "ab construction"); or
  * - its first tokens match the client name's leading tokens (two, or the whole
  *   query when shorter), which catches initialisms like "a b building".
@@ -133,6 +179,7 @@ export function isBranded(query: string, client: BrandClient): boolean {
   if ([stem, ...names.map(squash)].some((t) => t.length >= 4 && squashed.includes(t))) return true;
   const brand = brandToken(client);
   if (brand && q.includes(brand)) return true;
+  if (matchesDistinctiveName(q, client)) return true;
   if (nameTokens.length === 0) return false;
   const k = Math.min(2, nameTokens.length, q.length);
   return q.slice(0, k).every((t, i) => t === nameTokens[i]) && q.slice(0, k).join("").length >= 2;

@@ -50,4 +50,60 @@ export function registerPrompts(server: McpServer) {
       return { messages: [{ role: "user", content: { type: "text", text: template("review-brand-terms", { scope, client: c ?? "each client" }) } }] };
     },
   );
+
+  const clientArg = z.string().describe("Client domain, e.g. example.com, or a clients.yaml slug.");
+  const text = (t: string) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text: t } }] });
+
+  server.registerPrompt(
+    "monthly-report-writeup",
+    {
+      title: "Monthly report write-up",
+      description:
+        "Pull a client's monthly_report and write a plain-language, client-facing report: summary, what went up and down and why, branded vs non-branded, issues fixed, top 3 opportunities and next month's priorities.",
+      argsSchema: { client: clientArg, month: z.string().regex(/^\d{4}-\d{2}$/, "Use YYYY-MM.").optional().describe("YYYY-MM. Defaults to the last complete month.") },
+    },
+    ({ client, month }) => {
+      const m = month?.trim();
+      return text(
+        template("monthly-report-writeup", {
+          client: client.trim(),
+          period: m ? `for ${m}` : "for the last complete month",
+          monthArg: m ? ` and \`month: "${m}"\`` : " and no `month` (it defaults to the last complete month)",
+        }),
+      );
+    },
+  );
+
+  server.registerPrompt(
+    "audit-findings",
+    {
+      title: "Audit findings",
+      description:
+        "Use the latest stored audit (if under 7 days old) or run a new one, compare it with the previous audit, and write findings by severity with affected URLs, why they matter, fixes and a prioritized fix list.",
+      argsSchema: { client: clientArg },
+    },
+    ({ client }) => text(template("audit-findings", { client: client.trim() })),
+  );
+
+  server.registerPrompt(
+    "opportunity-review",
+    {
+      title: "Opportunity review",
+      description:
+        "Run the free Search Console opportunity tools (striking distance, quick wins, low CTR, cannibalization, declining pages) and write a prioritized action list with estimated click upside. Paid competitor checks are only offered, not run.",
+      argsSchema: { client: clientArg },
+    },
+    ({ client }) => text(template("opportunity-review", { client: client.trim() })),
+  );
+
+  server.registerPrompt(
+    "client-health-check",
+    {
+      title: "Client health check",
+      description:
+        "Check a client's setup: its sources and missing pieces, then one cheap live check each for Search Console, GA4, Chrome and DataForSEO, and what to fix. Useful when onboarding.",
+      argsSchema: { client: clientArg },
+    },
+    ({ client }) => text(template("client-health-check", { client: client.trim() })),
+  );
 }

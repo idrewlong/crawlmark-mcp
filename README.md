@@ -20,7 +20,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | Tool | Does |
 |---|---|
 | `list_clients` | Every client: domain, name, sources, GSC property, GA4 property, alternates, what's missing, what was just added to `clients.yaml`, and discovery status (its notes include brand terms added automatically for new clients). `refresh: true` re-lists from Google |
-| `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions, an [`opportunities`](#opportunities) section (top 5 each of striking distance, low CTR and cannibalization), a [branded vs non-branded split](#branded-queries) (`search.branded`, `search.nonBranded`; query rows and tracked keywords carry `branded: boolean`), and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
+| `monthly_report` | GSC + GA4 month vs previous month and last year (`vsPreviousMonth` and `vsLastYear` include a `previous` object, and `change` is null when the earlier period has no impressions), top/moving queries and pages, landing pages, tracked keyword positions, an [`opportunities`](#opportunities) section (top 5 each of striking distance, low CTR and cannibalization), a [branded vs non-branded split](#branded-queries) (`search.branded`, `search.nonBranded`; query rows and tracked keywords carry `branded: boolean`), and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
 | `striking_distance` | Queries at positions 5-20 with top page and estimated extra clicks if they reached position 3. Free, Search Console only; see [Opportunities](#opportunities) |
 | `quick_wins` | Pages at positions 11-20 with their top 3 queries |
 | `low_ctr` | Queries at positions 1-5 with CTR under 60% of expected (title and meta rewrite candidates) |
@@ -56,12 +56,18 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 |---|---|---|
 | `find-competitors` | `client` | Confirms or sets the client's area and niche, runs `suggest_competitors`, presents the candidates with evidence, asks which to add, then adds them |
 | `review-brand-terms` | `client` (optional; empty = every client) | Runs `suggest_brand_terms`, presents the candidates and remaining non-branded queries, asks which uncertain ones to add, then adds them with `source: "suggested"` |
+| `monthly-report-writeup` | `client`, `month` (optional, `YYYY-MM`) | Calls `monthly_report` and writes a client-facing report: 3-sentence summary, what went up and down and why, branded vs non-branded, issues fixed since the last audit, top 3 opportunities, next month's priorities. Plain language, percentages always beside absolute numbers; unavailable sections are named, not guessed |
+| `audit-findings` | `client` | Uses the latest stored audit if it's under 7 days old (`list_audits`, `get_audit`), otherwise runs `run_audit`; then `compare_audits` (or says there's nothing to compare against). Findings by severity with URLs, why it matters and a fix, a prioritized fix list, and the manual accessibility review caveat |
+| `opportunity-review` | `client` | Runs the five free opportunity tools, reads competitors from `list_competitors`, and writes a prioritized action list with estimated click upside. Paid checks (`ranked_keywords`, `suggest_competitors`) are offered with their approximate cost, never run unasked |
+| `client-health-check` | `client` | `list_clients`, then one cheap check per source: a small `gsc_query`, a small `ga4_report`, a `render_check` of the homepage (proves Chrome works) and `dataforseo_status`; ends with a status table and a fix list. Useful when onboarding |
+
+Every prompt says to prefer free tools and to say so when a section was unavailable instead of guessing.
 
 Prompt text lives in `src/prompts/templates/*.md` (copied to `dist/` by `npm run build`), so wording can be edited without touching code.
 
 **Lower-level tools** (for follow-up questions)
 
-`gsc_query`, `gsc_inspect_url`, `ga4_report`, `keyword_volume`, `serp_check`, `ranked_keywords`, `competitor_domains`, `backlinks_summary`, `lighthouse`, `accessibility_check`, `render_check`
+`gsc_query`, `gsc_inspect_url`, `ga4_report`, `dataforseo_status` (free: credentials check, sandbox or live mode, balance), `keyword_volume`, `serp_check`, `ranked_keywords`, `competitor_domains`, `backlinks_summary`, `lighthouse`, `accessibility_check`, `render_check`
 
 Tools that take a `client` accept its domain (`example.com`), any URL or `www.` form of it, or its `clients.yaml` key. See [Clients](#clients).
 

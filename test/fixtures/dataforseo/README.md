@@ -14,6 +14,8 @@ Hand-added edge cases (not part of the recordings), so the mapper tests cover th
 
 To refresh, re-run the recorder (sandbox only; it refuses any other base URL), scrub, and re-apply the edge cases.
 
+- user data: `appendix_user_data.json` is the real response's structure trimmed by hand (the `rates`, `money.limits` and `money.statistics` trees cut down to a few keys), with the login replaced by `login@example.com` and the money values replaced by round placeholders (the sandbox returns canned, meaningless balances)
+
 | File | Endpoint |
 |---|---|
 | `dataforseo_labs_google_ranked_keywords_live.json` | `/dataforseo_labs/google/ranked_keywords/live` |
@@ -21,3 +23,4 @@ To refresh, re-run the recorder (sandbox only; it refuses any other base URL), s
 | `backlinks_summary_live.json` | `/backlinks/summary/live` |
 | `on_page_instant_pages.json` | `/on_page/instant_pages` |
 | `serp_google_organic_live_regular.json` | `/serp/google/organic/live/regular` (with `location_name`, depth 20) |
+| `appendix_user_data.json` | `/appendix/user_data` (GET) |

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { resolveClient } from "../clients.js";
 import { lastCompleteMonth, monthRange } from "../lib/dates.js";
 import { runAxe } from "../providers/axe.js";
-import { backlinksSummary, competitorDomains, rankedKeywords, searchVolume, serp } from "../providers/dataforseo.js";
+import { backlinksSummary, competitorDomains, dataForSeoStatus, rankedKeywords, searchVolume, serp } from "../providers/dataforseo.js";
 import { ga4Report } from "../providers/ga4.js";
 import { gscInspectUrl, gscQuery } from "../providers/gsc.js";
 import { runLighthouse } from "../providers/lighthouse.js";
@@ -144,6 +144,19 @@ export function registerRawTools(server: McpServer) {
       annotations: READ_ONLY,
     },
     handler(async ({ client, target }) => backlinksSummary(await resolveClient(client), target)),
+  );
+
+  server.registerTool(
+    "dataforseo_status",
+    {
+      title: "DataForSEO status",
+      description:
+        "Check the DataForSEO account: whether the credentials work, the mode (`sandbox` = canned free data, `live` = billed) from the configured base URL, and the account balance in USD. " +
+        "Free, never cached, records no spend, and never shows the credentials. A missing or rejected login is reported in the result, not as a tool error.",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    handler(() => dataForSeoStatus()),
   );
 
   // ---------------------------------------------------- browser checks (free)

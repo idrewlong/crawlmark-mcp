@@ -181,3 +181,36 @@ describe("setStringList", () => {
     expect(() => setStringList(file, "nope.example", "brandTerms", ["x"])).toThrow(/no entry/);
   });
 });
+
+describe("isBranded: distinctive part of the domain stem", () => {
+  const bella = { domain: "bellafornino.example", name: "bellafornino.example", brandTerms: ["bella forno"] };
+  const el = { domain: "lafornino.example", name: "lafornino.example", brandTerms: ["la forno"] };
+
+  it("counts the name without its leading article as the brand, but not a tail of the name", () => {
+    expect(isBranded("fornino pizza", el)).toBe(true);
+    expect(isBranded("fornino pizza", bella)).toBe(false); // "bella" is not an article; left to review-brand-terms
+    expect(isBranded("bellafornino pizza", bella)).toBe(true);
+    expect(isBranded("pizza near me", bella)).toBe(false);
+    expect(isBranded("pizza near me", el)).toBe(false);
+  });
+
+  it("does not make a common word a brand because it ends a two-word name", () => {
+    expect(isBranded("summit hotel", { domain: "bluesummit.example", name: "bluesummit.example" })).toBe(false);
+    expect(isBranded("capital gains tax", { domain: "redwoodcapital.example", name: "redwoodcapital.example" })).toBe(false);
+    expect(isBranded("harbor freight", { domain: "goldenharbor.example", name: "goldenharbor.example" })).toBe(false);
+    expect(isBranded("bluesummit hotel", { domain: "bluesummit.example", name: "bluesummit.example" })).toBe(true);
+  });
+
+  it("needs a whole token of 5+ characters", () => {
+    expect(isBranded("forninos", bella)).toBe(false);
+    expect(isBranded("nino", bella)).toBe(false);
+  });
+
+  it("never turns a trade word or place of an exact-match domain into a brand", () => {
+    const exact = { domain: "austinplumbing.example", name: "austinplumbing.example" };
+    for (const q of ["plumbing", "plumber near me", "austin plumbers", "emergency plumbing", "plumbing repair austin"]) expect(isBranded(q, exact), q).toBe(false);
+    const niche = { domain: "pipewellplumbing.example", name: "pipewellplumbing.example", niche: "emergency plumber" };
+    expect(isBranded("pipewell", niche)).toBe(true);
+    expect(isBranded("emergency plumber", niche)).toBe(false);
+  });
+});

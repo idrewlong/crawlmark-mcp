@@ -5,6 +5,9 @@ import {
   mapCompetitors,
   mapInstantPage,
   mapRankedKeywords,
+  mapUserData,
+  dataForSeoMode,
+  isAuthRejection,
 } from "../src/providers/dataforseo-shape.js";
 
 function fixture(name: string) {
@@ -123,5 +126,44 @@ describe("mapInstantPage", () => {
     });
     expect(mapInstantPage({ items: [] })).toBeNull();
     expect(mapInstantPage(undefined)).toBeNull();
+  });
+});
+
+describe("mapUserData", () => {
+  const raw = fixture("appendix_user_data");
+
+  it("keeps only mode, host, balance, total and timezone, never the login", () => {
+    const out = mapUserData(raw, "https://sandbox.dataforseo.com/v3");
+    expect(out).toEqual({ mode: "sandbox", apiHost: "sandbox.dataforseo.com", balanceUsd: 42.125, totalUsd: 250.5, timezone: "Europe/Kyiv" });
+    expect(JSON.stringify(out)).not.toContain("example.com/");
+    expect(JSON.stringify(out)).not.toContain("login@");
+  });
+
+  it("is live for the production host", () => {
+    expect(mapUserData(raw, "https://api.dataforseo.com/v3").mode).toBe("live");
+  });
+
+  it("returns nulls for a missing or odd result", () => {
+    expect(mapUserData(undefined, "https://api.dataforseo.com/v3")).toMatchObject({ balanceUsd: null, totalUsd: null, timezone: null });
+    expect(mapUserData({ money: { balance: "x" as unknown as number } }, "https://api.dataforseo.com/v3").balanceUsd).toBeNull();
+  });
+});
+
+describe("dataForSeoMode", () => {
+  it("treats sandbox hosts as sandbox and anything else (including junk) as live", () => {
+    expect(dataForSeoMode("https://sandbox.dataforseo.com/v3")).toBe("sandbox");
+    expect(dataForSeoMode("https://api.dataforseo.com/v3")).toBe("live");
+    expect(dataForSeoMode("not a url")).toBe("live");
+  });
+});
+
+describe("isAuthRejection", () => {
+  it("is true only for an auth rejection", () => {
+    expect(isAuthRejection("DataForSEO /appendix/user_data HTTP 401: Unauthorized")).toBe(true);
+    expect(isAuthRejection("DataForSEO /appendix/user_data HTTP 403: Forbidden")).toBe(true);
+    expect(isAuthRejection("DataForSEO /appendix/user_data 40101: Authentication failed")).toBe(true);
+    for (const m of ["fetch failed", "DataForSEO /x HTTP 500: boom", "DataForSEO /x HTTP 429: slow down", "The operation was aborted due to timeout", "DataForSEO /x 40200: Payment required"]) {
+      expect(isAuthRejection(m), m).toBe(false);
+    }
   });
 });

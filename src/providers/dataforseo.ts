@@ -7,11 +7,16 @@ import {
   mapInstantPage,
   mapRankedKeywords,
   mapSerpOrganic,
+  mapUserData,
+  dataForSeoMode,
+  isAuthRejection,
   type RawBacklinksSummary,
   type RawCompetitors,
   type RawInstantPages,
   type RawRankedKeywords,
   type RawSerp,
+  type RawUserData,
+  type DataForSeoStatus,
 } from "./dataforseo-shape.js";
 
 export type {
@@ -278,4 +283,52 @@ export async function instantPage(client: Client, url: string, opts: { refresh?:
     opts,
   );
   return { page: mapInstantPage(result[0]), costUsd, fromCache };
+}
+
+// ------------------------------------------------------------------- status
+
+export type DataForSeoStatusResult =
+  | ({ credentialsConfigured: true; credentialsWork: true; reachable: true } & DataForSeoStatus & { costUsd: 0 })
+  | {
+      credentialsConfigured: boolean;
+      /** false only when the login is missing or DataForSEO rejected it; null when the API couldn't be reached, so the credentials are untested. */
+      credentialsWork: false | null;
+      reachable: boolean;
+      mode: "sandbox" | "live";
+      apiHost: string;
+      error: string;
+      costUsd: 0;
+    };
+
+/**
+ * Free account check: `GET /appendix/user_data`. Reports the mode (from the base
+ * URL), the balance and whether the credentials work. Not cached (the balance
+ * should be current) and nothing is recorded to the spend ledger. A missing or
+ * rejected login (`credentialsWork: false`) and an unreachable API (network
+ * error, 5xx, 429, timeout: `credentialsWork: null`, `reachable: false`) are
+ * reported in the result, not thrown, so a health check can show them. The
+ * error text never includes the credentials.
+ */
+export async function dataForSeoStatus(): Promise<DataForSeoStatusResult> {
+  const mode = dataForSeoMode(env.DATAFORSEO_BASE_URL);
+  const apiHost = new URL(env.DATAFORSEO_BASE_URL).hostname;
+  if (!env.DATAFORSEO_LOGIN || !env.DATAFORSEO_PASSWORD) {
+    return { credentialsConfigured: false, credentialsWork: false, reachable: true, mode, apiHost, error: "DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD are not set.", costUsd: 0 };
+  }
+  try {
+    const task = await request<RawUserData>("GET", "/appendix/user_data");
+    return { credentialsConfigured: true, credentialsWork: true, reachable: true, ...mapUserData(task.result?.[0], env.DATAFORSEO_BASE_URL), costUsd: 0 };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const rejected = isAuthRejection(message);
+    return {
+      credentialsConfigured: true,
+      credentialsWork: rejected ? false : null,
+      reachable: rejected,
+      mode,
+      apiHost,
+      error: rejected ? "DataForSEO rejected the credentials (check DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD)." : message.slice(0, 300),
+      costUsd: 0,
+    };
+  }
 }

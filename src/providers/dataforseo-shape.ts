@@ -278,3 +278,54 @@ export function mapSerpOrganic(raw: RawSerp | undefined): SerpOrganicResult {
   items.sort((a, b) => a.position - b.position);
   return { keyword: str(raw?.keyword), locationCode: num(raw?.location_code), items };
 }
+
+// ------------------------------------------------------------ account status
+
+export interface DataForSeoStatus {
+  /** From the base URL: `sandbox` hosts return canned data and cost nothing, anything else is live and billed. */
+  mode: "sandbox" | "live";
+  /** Hostname of the API the server is pointed at (never includes credentials). */
+  apiHost: string;
+  /** The account's remaining balance in USD. In sandbox mode this is the account balance, not spend. */
+  balanceUsd: number | null;
+  /** The account's lifetime deposits in USD, when reported. */
+  totalUsd: number | null;
+  /** The account's own timezone, when reported. */
+  timezone: string | null;
+}
+
+export interface RawUserData {
+  timezone?: string | null;
+  money?: { balance?: number | null; total?: number | null } | null;
+}
+
+/** `sandbox` when the API host is a sandbox host, else `live`. */
+export function dataForSeoMode(baseUrl: string): "sandbox" | "live" {
+  try {
+    return new URL(baseUrl).hostname.split(".").includes("sandbox") ? "sandbox" : "live";
+  } catch {
+    return "live";
+  }
+}
+
+/** Map the `/appendix/user_data` result. Only mode, balance and timezone are kept; the login, rates and limits are dropped. */
+export function mapUserData(raw: RawUserData | undefined, baseUrl: string): DataForSeoStatus {
+  let apiHost = "";
+  try {
+    apiHost = new URL(baseUrl).hostname;
+  } catch {
+    /* leave empty */
+  }
+  return {
+    mode: dataForSeoMode(baseUrl),
+    apiHost,
+    balanceUsd: num(raw?.money?.balance),
+    totalUsd: num(raw?.money?.total),
+    timezone: str(raw?.timezone),
+  };
+}
+
+/** Did DataForSEO reject the login (HTTP 401/403 or a 4010x task code)? Anything else (network, 5xx, 429, timeout) says nothing about the credentials. */
+export function isAuthRejection(message: string): boolean {
+  return /HTTP 40[13]\b|\b4010\d\b/.test(message);
+}

@@ -8,4 +8,4 @@ Brand terms are the names people search a client by (for example "bella forn" fo
 4. **Save.** Call `add_brand_terms` for the client with the terms I chose: `source: "suggested"` for the candidates and for terms you spotted, and `source: "manual"` for terms I typed myself. Report what was added and anything skipped, with the reason. If I want to drop a term that's already saved, including one added automatically, call `remove_brand_terms`.
 5. **Next client.** If you're reviewing every client, move on to the next one and repeat. Skip a client quickly when there's nothing new, and give me a one-line summary per client at the end.
 
-Keep it brief, and never add one client's brand name to another client.
+Prefer free tools, and if any data is unavailable (a tool failed, or a client has no Search Console property), say so plainly instead of guessing. Keep it brief, and never add one client's brand name to another client.

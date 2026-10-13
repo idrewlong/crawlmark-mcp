@@ -14,4 +14,4 @@ Work through these steps in order, and wait for my answer where a step says to a
 5. **Ask.** Ask me which candidates to add. Don't add any until I answer. I may also name competitors that weren't suggested.
 6. **Save.** Call `add_competitors` for `{{client}}` with the domains I chose and `source: "suggested"` (use `source: "manual"` for ones I named myself), adding a short `note` with the evidence if useful. Report what was added and anything skipped, with the reason.
 
-Prefer free tools where they answer the question, and keep the conversation brief.
+Prefer free tools where they answer the question. If any data is unavailable (a tool failed, or the client has no Search Console property), say so plainly instead of guessing. Keep the conversation brief.
