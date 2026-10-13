@@ -38,7 +38,7 @@ export function registerOpportunityTools(server: McpServer) {
       inputSchema: { ...common, minPosition: position("Minimum", 5), maxPosition: position("Maximum", 20), minImpressions: minImpressions(100) },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, ...o }) => runStrikingDistance(await resolveClient(client), o)),
+    handler("striking_distance", async ({ client, ...o }) => runStrikingDistance(await resolveClient(client), o)),
   );
 
   server.registerTool(
@@ -49,7 +49,7 @@ export function registerOpportunityTools(server: McpServer) {
       inputSchema: { ...common, minPosition: position("Minimum", 11), maxPosition: position("Maximum", 20), minImpressions: minImpressions(100) },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, ...o }) => runQuickWins(await resolveClient(client), o)),
+    handler("quick_wins", async ({ client, ...o }) => runQuickWins(await resolveClient(client), o)),
   );
 
   server.registerTool(
@@ -68,7 +68,7 @@ export function registerOpportunityTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, ...o }) => runLowCtr(await resolveClient(client), o)),
+    handler("low_ctr", async ({ client, ...o }) => runLowCtr(await resolveClient(client), o)),
   );
 
   server.registerTool(
@@ -85,7 +85,7 @@ export function registerOpportunityTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, ...o }) => runCannibalization(await resolveClient(client), o)),
+    handler("cannibalization", async ({ client, ...o }) => runCannibalization(await resolveClient(client), o)),
   );
 
   server.registerTool(
@@ -102,6 +102,6 @@ export function registerOpportunityTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, ...o }) => runDecliningPages(await resolveClient(client), o)),
+    handler("declining_pages", async ({ client, ...o }) => runDecliningPages(await resolveClient(client), o)),
   );
 }

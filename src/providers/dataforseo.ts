@@ -1,4 +1,5 @@
 import { env, type Client } from "../config.js";
+import { TIMEOUTS } from "../lib/timeout.js";
 import { assertBudget, recordSpend } from "../lib/budget.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import {
@@ -75,6 +76,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
     method,
     headers: { Authorization: authHeader(), "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(TIMEOUTS.networkMs),
   });
   if (!res.ok) throw new Error(`DataForSEO ${path} HTTP ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as DfsResponse<T>;
@@ -85,6 +87,27 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
     throw new Error(`DataForSEO ${path} ${task.status_code}: ${task.status_message}`);
   }
   return task;
+}
+
+/** A fetch that gave up (our 30s timeout) or was aborted: DataForSEO may still have run, and billed, the task. */
+function isTimeoutOrAbort(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name;
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+/**
+ * Run a paid request. If it times out or is aborted, the call may still have been
+ * billed, so the pre-flight estimate is written to the ledger (endpoint
+ * "<path> (timeout, estimated)") to keep the budget cap honest, then the error is rethrown.
+ */
+async function billedRequest<T>(clientSlug: string, path: string, body: unknown, estimateUsd: number, what: string): Promise<DfsTask<T>> {
+  try {
+    return await request<T>("POST", path, body);
+  } catch (err) {
+    if (!isTimeoutOrAbort(err)) throw err;
+    recordSpend(clientSlug, "dataforseo", `${path} (timeout, estimated)`, estimateUsd);
+    throw new Error(`DataForSEO ${path} timed out after ${TIMEOUTS.networkMs / 1000}s; ${what} The estimated cost ($${estimateUsd}) was recorded against the budget.`);
+  }
 }
 
 /** Cached + budgeted call. Only real (non-cached) calls hit the ledger. */
@@ -102,7 +125,7 @@ async function paid<T>(
     ttl,
     async () => {
       assertBudget(client, ESTIMATE_USD[name]);
-      const task = await request<T>("POST", path, body);
+      const task = await billedRequest<T>(client.slug, path, body, ESTIMATE_USD[name], "DataForSEO may still have billed it.");
       recordSpend(client.slug, "dataforseo", path, task.cost ?? 0);
       return { result: task.result ?? [], costUsd: task.cost ?? 0 };
     },
@@ -223,8 +246,9 @@ export async function backlinksSummary(client: Client, target = client.domain) {
 
 /** Start an async site crawl. Poll with onPageSummary(taskId). */
 export async function onPageStartCrawl(client: Client, maxPages = 100) {
-  assertBudget(client, ESTIMATE_USD.onPageTask * (maxPages / 100));
-  const task = await request<unknown>("POST", "/on_page/task_post", [
+  const estimate = ESTIMATE_USD.onPageTask * (maxPages / 100);
+  assertBudget(client, estimate);
+  const task = await billedRequest<unknown>(client.slug, "/on_page/task_post", [
     {
       target: client.domain,
       max_crawl_pages: maxPages,
@@ -232,7 +256,7 @@ export async function onPageStartCrawl(client: Client, maxPages = 100) {
       enable_javascript: false,
       check_spell: false,
     },
-  ]);
+  ], estimate, "a crawl may have started anyway; check the DataForSEO dashboard before starting another.");
   recordSpend(client.slug, "dataforseo", "/on_page/task_post", task.cost ?? 0);
   return { taskId: task.id, costUsd: task.cost ?? 0 };
 }

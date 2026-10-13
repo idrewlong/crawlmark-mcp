@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { env } from "../config.js";
 
 /**
- * One SQLite file holds the response cache, the spend ledger and saved audits.
+ * One SQLite file holds the response cache, the spend ledger, saved audits and the tool-call log.
  * node:sqlite ships with Node 22.13+, so there is no native module to build.
  */
 mkdirSync(resolve(env.DATA_DIR), { recursive: true });
@@ -37,4 +37,15 @@ db.exec(`
     result   TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS audits_client ON audits (client, ran_at DESC);
+  -- One row per tool call. No arguments beyond the client: URLs and queries can be sensitive.
+  CREATE TABLE IF NOT EXISTS tool_calls (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool        TEXT NOT NULL,
+    client      TEXT,
+    duration_ms INTEGER NOT NULL,
+    ok          INTEGER NOT NULL,
+    error_class TEXT,
+    ts          INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS tool_calls_ts ON tool_calls (ts);
 `);

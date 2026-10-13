@@ -10,6 +10,9 @@ import { purgeExpired } from "../lib/cache.js";
 import { onPagePagesWithIssue, onPageSummary } from "../providers/dataforseo.js";
 import { runAudit } from "../reports/audit.js";
 import { monthlyReport } from "../reports/monthly.js";
+import { TIMEOUTS } from "../lib/timeout.js";
+import { purgeOldToolCalls, summarizeUsage, toolCallsSince } from "../lib/usage.js";
+import { assertUserUrl } from "../user-url.js";
 import { handler, READ_ONLY } from "./util.js";
 
 const clientArg = z
@@ -31,7 +34,7 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    handler(async ({ refresh }) => {
+    handler("list_clients", async ({ refresh }) => {
       const registry = await loadRegistry({ refresh: refresh ?? false });
       return {
         clients: registry.clients.map((c) => ({
@@ -75,7 +78,7 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, month, liveRanks }) => monthlyReport(await resolveClient(client), { month, liveRanks })),
+    handler("monthly_report", async ({ client, month, liveRanks }) => monthlyReport(await resolveClient(client), { month, liveRanks })),
   );
 
   server.registerTool(
@@ -86,7 +89,8 @@ export function registerReportTools(server: McpServer) {
         "Audit a client's key pages: Lighthouse (performance, SEO, best practices, Core Web Vitals), axe-core WCAG checks, " +
         "GSC index status per URL, GSC sitemap health, and a DataForSEO on-page check per URL. " +
         "Optionally start a full-site crawl (paid, async; poll with crawl_status) and include a backlinks summary (paid). " +
-        "Takes ~30-60s per page because Lighthouse and axe run in a real browser.",
+        "Takes ~30-60s per page because Lighthouse and axe run in a real browser; each browser check stops after 90s and the whole audit after 10 minutes. " +
+        "`urls` overrides go through the same URL checks as render_check (private addresses refused; RESTRICT_TO_CLIENT_DOMAINS applies).",
       inputSchema: {
         client: clientArg,
         urls: z.array(z.string().url()).optional().describe("Override the client's keyPages for this run."),
@@ -102,7 +106,16 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, ...opts }) => runAudit(await resolveClient(client), opts)),
+    handler(
+      "run_audit",
+      async ({ client, ...opts }, { signal }) => {
+        const c = await resolveClient(client);
+        // User-supplied overrides are checked up front so a refused URL fails the call, not just one section.
+        for (const url of opts.urls ?? []) await assertUserUrl(url);
+        return runAudit(c, { ...opts, signal });
+      },
+      { timeoutMs: TIMEOUTS.auditMs },
+    ),
   );
 
   server.registerTool(
@@ -118,7 +131,7 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    handler(async ({ client, limit }) => {
+    handler("list_audits", async ({ client, limit }) => {
       const c = await resolveClient(client);
       return {
         client: c.slug,
@@ -141,7 +154,7 @@ export function registerReportTools(server: McpServer) {
       inputSchema: { auditId: z.string().min(1) },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    handler(async ({ auditId }) => {
+    handler("get_audit", async ({ auditId }) => {
       const a = getAudit(auditId);
       if (!a) throw new Error(`No audit with ID "${auditId}". Use list_audits to see saved audits.`);
       return { auditId: a.id, client: a.client, ranAt: new Date(a.ranAt).toISOString(), findings: a.findings, result: a.result };
@@ -163,7 +176,7 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    handler(async ({ client, baseAuditId, targetAuditId }) => {
+    handler("compare_audits", async ({ client, baseAuditId, targetAuditId }) => {
       const c = await resolveClient(client);
       const { base, target } = pickComparison(c.slug, { baseAuditId, targetAuditId }, {
         get: getAudit,
@@ -184,7 +197,7 @@ export function registerReportTools(server: McpServer) {
       inputSchema: { taskId: z.string().describe("taskId from run_audit's site.crawl.") },
       annotations: READ_ONLY,
     },
-    handler(({ taskId }) => onPageSummary(taskId)),
+    handler("crawl_status", ({ taskId }) => onPageSummary(taskId)),
   );
 
   server.registerTool(
@@ -201,7 +214,7 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(({ taskId, check, limit }) => onPagePagesWithIssue(taskId, check, limit)),
+    handler("crawl_issue_pages", ({ taskId, check, limit }) => onPagePagesWithIssue(taskId, check, limit)),
   );
 
   server.registerTool(
@@ -214,7 +227,7 @@ export function registerReportTools(server: McpServer) {
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    handler(async () => {
+    handler("spend_summary", async () => {
       // Merge rows recorded under a clients.yaml slug into that client. If the
       // client list can't be loaded, show the raw ledger rather than failing.
       let canonical = new Map<string, string>();
@@ -228,13 +241,31 @@ export function registerReportTools(server: McpServer) {
   );
 
   server.registerTool(
+    "usage_summary",
+    {
+      title: "Tool usage summary",
+      description:
+        "How the tools have been used over the last N days (default 30): per tool, the number of calls, errors, error rate, " +
+        "error classes (e.g. TimeoutError, UrlRefusedError) and p50/p95 duration in ms. Only the tool, client, duration and outcome are logged, never other arguments. Free and local.",
+      inputSchema: { days: z.number().int().min(1).max(365).optional().describe("Look-back window in days. Default 30.") },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler("usage_summary", async ({ days }) => {
+      const window = days ?? 30;
+      const since = Date.now() - window * 24 * 60 * 60 * 1000;
+      const rows = toolCallsSince(since);
+      return { days: window, since: new Date(since).toISOString(), totalCalls: rows.length, tools: summarizeUsage(rows) };
+    }),
+  );
+
+  server.registerTool(
     "purge_cache",
     {
       title: "Purge expired cache",
-      description: "Delete expired cache entries. Fresh entries are kept.",
+      description: "Delete expired cache entries (fresh entries are kept) and tool-call usage rows older than 365 days.",
       inputSchema: {},
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    handler(async () => ({ removed: purgeExpired() })),
+    handler("purge_cache", async () => ({ removed: purgeExpired(), usageRowsRemoved: purgeOldToolCalls() })),
   );
 }

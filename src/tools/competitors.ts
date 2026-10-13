@@ -51,7 +51,7 @@ export function registerCompetitorTools(server: McpServer) {
       },
       annotations: ADD,
     },
-    handler(({ client, domains, note, source }) => addCompetitors(client, domains, { note, source })),
+    handler("add_competitors", ({ client, domains, note, source }) => addCompetitors(client, domains, { note, source })),
   );
 
   server.registerTool(
@@ -62,7 +62,7 @@ export function registerCompetitorTools(server: McpServer) {
       inputSchema: { client: clientArg, domains: z.array(z.string()).min(1).max(100) },
       annotations: REMOVE,
     },
-    handler(({ client, domains }) => removeCompetitors(client, domains)),
+    handler("remove_competitors", ({ client, domains }) => removeCompetitors(client, domains)),
   );
 
   server.registerTool(
@@ -73,7 +73,7 @@ export function registerCompetitorTools(server: McpServer) {
       inputSchema: { client: clientArg },
       annotations: LIST,
     },
-    handler(async ({ client }) => {
+    handler("list_competitors", async ({ client }) => {
       const c = await resolveClient(client);
       return { client: c.domain, area: c.area ?? null, niche: c.niche ?? null, brandTerms: c.brandTerms, count: c.competitorEntries.length, competitors: c.competitorEntries };
     }),
@@ -91,7 +91,7 @@ export function registerCompetitorTools(server: McpServer) {
       inputSchema: { client: clientArg, keywords: z.array(z.string()).min(1).max(200), note: noteArg, source: sourceArg },
       annotations: ADD,
     },
-    handler(({ client, keywords, note, source }) => addKeywords(client, keywords, { note, source })),
+    handler("add_keywords", ({ client, keywords, note, source }) => addKeywords(client, keywords, { note, source })),
   );
 
   server.registerTool(
@@ -102,7 +102,7 @@ export function registerCompetitorTools(server: McpServer) {
       inputSchema: { client: clientArg, keywords: z.array(z.string()).min(1).max(200) },
       annotations: REMOVE,
     },
-    handler(({ client, keywords }) => removeKeywords(client, keywords)),
+    handler("remove_keywords", ({ client, keywords }) => removeKeywords(client, keywords)),
   );
 
   server.registerTool(
@@ -113,7 +113,7 @@ export function registerCompetitorTools(server: McpServer) {
       inputSchema: { client: clientArg },
       annotations: LIST,
     },
-    handler(async ({ client }) => {
+    handler("list_keywords", async ({ client }) => {
       const c = await resolveClient(client);
       return { client: c.domain, count: c.keywordEntries.length, keywords: c.keywordEntries };
     }),
@@ -138,7 +138,7 @@ export function registerCompetitorTools(server: McpServer) {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    handler(({ client, area, niche, name, brandTerms }) => setClientProfile(client, { area, niche, name, brandTerms })),
+    handler("set_client_profile", ({ client, area, niche, name, brandTerms }) => setClientProfile(client, { area, niche, name, brandTerms })),
   );
 
   // ------------------------------------------------------------ suggestions (paid, read-only)
@@ -163,6 +163,6 @@ export function registerCompetitorTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(({ client, area, niche, seeds, limit }) => suggestCompetitors(client, { area, niche, seeds, limit })),
+    handler("suggest_competitors", ({ client, area, niche, seeds, limit }) => suggestCompetitors(client, { area, niche, seeds, limit })),
   );
 }

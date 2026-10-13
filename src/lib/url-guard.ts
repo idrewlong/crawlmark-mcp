@@ -1,9 +1,19 @@
+import { lookup as dnsLookup } from "node:dns/promises";
+import type { LookupAddress } from "node:dns";
+
 /**
- * Guard for user-supplied URLs. Phase 4 version: scheme allowlist plus a check of
- * literal IP hosts (no DNS resolution yet, so a hostname that resolves to a private
- * address is not caught). Phase 6d extends this with hostname resolution and
- * RESTRICT_TO_CLIENT_DOMAINS. Pure apart from reading the env.
+ * Guard for user-supplied URLs and every outbound connection the browser checks make.
+ * - `assertSafeUrl`: scheme allowlist plus a check of literal hosts (sync, no DNS).
+ * - `assertSafeUrlResolved` / `resolvePublic`: also resolve the hostname and refuse it
+ *   when any A/AAAA record is private, loopback or link-local. Callers then connect to
+ *   the vetted addresses only (`pinnedLookup`), so DNS rebinding cannot swap them.
+ * - `assertOnClientDomain`: the RESTRICT_TO_CLIENT_DOMAINS allowlist (pure).
  */
+
+/** A URL or host was refused by the guard. Its own class so usage stats can count refusals. */
+export class UrlRefusedError extends Error {
+  override name = "UrlRefusedError";
+}
 
 export function privateUrlsAllowed(env: Record<string, string | undefined> = process.env): boolean {
   return (env.ALLOW_PRIVATE_URLS ?? "").trim().toLowerCase() === "true";
@@ -52,7 +62,9 @@ function ipv6Private(g: number[]): boolean {
   if (zeroTo(7) && (g7 === 0 || g7 === 1)) return true; // :: and ::1
   if (zeroTo(5) && g5 === 0) return v4From(g6, g7); // ::x:y (IPv4-compatible)
   if (zeroTo(5) && g5 === 0xffff) return v4From(g6, g7); // IPv4-mapped
+  if (zeroTo(4) && g4 === 0xffff && g5 === 0) return true; // ::ffff:0:0/96 SIIT IPv4-translated
   if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) return v4From(g6, g7); // NAT64
+  if (g0 === 0x64 && g1 === 0xff9b && g2 === 1) return true; // 64:ff9b:1::/48 NAT64 local-use
   if (g0 === 0x2002) return v4From(g1, g2); // 6to4
   if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
   if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
@@ -82,13 +94,116 @@ export function assertSafeUrl(raw: string, env: Record<string, string | undefine
   try {
     u = new URL(raw);
   } catch {
-    throw new Error(`Not a valid URL: ${raw}`);
+    throw new UrlRefusedError(`Not a valid URL: ${raw}`);
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
-    throw new Error(`Only http and https URLs are allowed (got ${u.protocol})`);
+    throw new UrlRefusedError(`Only http and https URLs are allowed (got ${u.protocol})`);
   }
   if (!privateUrlsAllowed(env) && isPrivateHost(u.hostname)) {
-    throw new Error(`Refusing to fetch a private or loopback address (${u.hostname}). Set ALLOW_PRIVATE_URLS=true for local development.`);
+    throw new UrlRefusedError(`Refusing to fetch a private or loopback address (${u.hostname}). Set ALLOW_PRIVATE_URLS=true for local development.`);
   }
   return u;
+}
+
+// ------------------------------------------------------------ DNS-resolving guard
+
+/** Resolve a host to all of its addresses. Injectable so tests can fake DNS. */
+export type LookupFn = (host: string) => Promise<LookupAddress[]>;
+
+export const systemLookup: LookupFn = (host) => dnsLookup(host, { all: true });
+
+const bare = (host: string) => host.replace(/^\[|\]$/g, "");
+
+/**
+ * Resolve `host` (A and AAAA) and refuse it when it is a private literal, a localhost
+ * name, or when ANY resolved address is private, loopback, link-local or otherwise
+ * internal. Returns the vetted addresses; connect to these and nothing else.
+ */
+export async function resolvePublic(
+  host: string,
+  opts: { allowPrivate?: boolean; lookup?: LookupFn } = {},
+): Promise<LookupAddress[]> {
+  const h = bare(host);
+  const allowPrivate = opts.allowPrivate ?? privateUrlsAllowed();
+  if (!allowPrivate && isPrivateHost(h)) {
+    throw new UrlRefusedError(`Refusing to connect to a private or loopback address (${h}). Set ALLOW_PRIVATE_URLS=true for local development.`);
+  }
+  // Unresolvable and private get the same message, so the error never reveals internal addresses
+  // or whether a name exists internally. The detail goes to stderr only.
+  const refuse = (detail: string) => {
+    console.error(`crawlmark: refused ${h}: ${detail}`);
+    return new UrlRefusedError(
+      `Refusing ${h}: it does not resolve to a public address. Set ALLOW_PRIVATE_URLS=true for local development.`,
+    );
+  };
+  let addresses: LookupAddress[];
+  try {
+    addresses = await (opts.lookup ?? systemLookup)(h);
+  } catch (err) {
+    throw refuse(`lookup failed (${(err as NodeJS.ErrnoException).code ?? (err as Error).message})`);
+  }
+  if (!addresses.length) throw refuse("no addresses");
+  if (!allowPrivate) {
+    const bad = addresses.find((a) => isPrivateHost(a.address));
+    if (bad) throw refuse(`resolves to private or loopback address ${bad.address}`);
+  }
+  return addresses;
+}
+
+/** `assertSafeUrl` plus DNS: every A/AAAA record of the hostname must be public. */
+export async function assertSafeUrlResolved(
+  raw: string,
+  opts: { env?: Record<string, string | undefined>; lookup?: LookupFn } = {},
+): Promise<{ url: URL; addresses: LookupAddress[] }> {
+  const env = opts.env ?? process.env;
+  const url = assertSafeUrl(raw, env);
+  const addresses = await resolvePublic(url.hostname, { allowPrivate: privateUrlsAllowed(env), lookup: opts.lookup });
+  return { url, addresses };
+}
+
+type NetLookupCallback = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
+
+/**
+ * A `lookup` for node:net / node:http that only ever returns the given, already vetted
+ * addresses. Pins the connection to what the guard checked, so a second DNS answer
+ * (rebinding) is never used.
+ */
+export function pinnedLookup(addresses: LookupAddress[]) {
+  return (_host: string, options: { all?: boolean } | number | undefined, cb: NetLookupCallback): void => {
+    const all = typeof options === "object" && options?.all;
+    if (all) return cb(null, addresses);
+    const first = addresses[0]!;
+    cb(null, first.address, first.family);
+  };
+}
+
+// ------------------------------------------------------- client-domain allowlist
+
+/**
+ * RESTRICT_TO_CLIENT_DOMAINS: true/1/yes turns it on; empty/false/0/no leaves it off.
+ * Any other value throws, so a typo fails closed instead of silently allowing everything.
+ */
+export function restrictToClientDomains(env: Record<string, string | undefined> = process.env): boolean {
+  const v = (env.RESTRICT_TO_CLIENT_DOMAINS ?? "").trim().toLowerCase();
+  if (v === "" || v === "false" || v === "0" || v === "no") return false;
+  if (v === "true" || v === "1" || v === "yes") return true;
+  throw new UrlRefusedError(`RESTRICT_TO_CLIENT_DOMAINS must be true or false (got "${env.RESTRICT_TO_CLIENT_DOMAINS}")`);
+}
+
+/** True when `host` is one of `domains` or a subdomain of one. Case, brackets and trailing dots are ignored. */
+export function hostInDomains(host: string, domains: string[]): boolean {
+  const h = bare(host).toLowerCase().replace(/\.+$/, "");
+  return domains.some((d) => {
+    const dd = d.toLowerCase().replace(/\.+$/, "");
+    return dd !== "" && (h === dd || h.endsWith(`.${dd}`));
+  });
+}
+
+/** Throw unless `host` is on a client domain (or a subdomain of one). */
+export function assertOnClientDomain(host: string, domains: string[]): void {
+  if (!hostInDomains(host, domains)) {
+    throw new UrlRefusedError(
+      `Refusing ${bare(host)}: RESTRICT_TO_CLIENT_DOMAINS=true and it is not a client domain or a subdomain of one. Add the client with \`crawlmark-cli clients add\`.`,
+    );
+  }
 }

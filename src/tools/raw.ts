@@ -8,6 +8,8 @@ import { ga4Report } from "../providers/ga4.js";
 import { gscInspectUrl, gscQuery } from "../providers/gsc.js";
 import { runLighthouse } from "../providers/lighthouse.js";
 import { checkRender } from "../providers/render.js";
+import { TIMEOUTS } from "../lib/timeout.js";
+import { assertUserUrl } from "../user-url.js";
 import { handler, READ_ONLY } from "./util.js";
 
 /**
@@ -19,6 +21,10 @@ const clientArg = z
   .string()
   .describe("Client domain (e.g. 'example.com'; URL and www. forms also work) or a clients.yaml slug. See list_clients.");
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const BROWSER = { timeoutMs: TIMEOUTS.browserMs };
+const URL_SAFETY =
+  "http/https only; hosts that resolve to a private, loopback or link-local address are refused unless ALLOW_PRIVATE_URLS=true, " +
+  "and with RESTRICT_TO_CLIENT_DOMAINS=true only client domains and their subdomains are allowed. Times out after 90s.";
 
 function rangeOrDefault(startDate?: string, endDate?: string) {
   if (startDate && endDate) return { startDate, endDate };
@@ -46,7 +52,7 @@ export function registerRawTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, startDate, endDate, ...rest }) =>
+    handler("gsc_query", async ({ client, startDate, endDate, ...rest }) =>
       gscQuery(await resolveClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
     ),
   );
@@ -59,7 +65,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, url: z.string().url() },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, url }) => gscInspectUrl(await resolveClient(client), url)),
+    handler("gsc_inspect_url", async ({ client, url }) => gscInspectUrl(await resolveClient(client), url)),
   );
 
   server.registerTool(
@@ -80,7 +86,7 @@ export function registerRawTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, startDate, endDate, ...rest }) =>
+    handler("ga4_report", async ({ client, startDate, endDate, ...rest }) =>
       ga4Report(await resolveClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
     ),
   );
@@ -95,7 +101,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, keywords: z.array(z.string()).min(1).max(1000) },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, keywords }) => searchVolume(await resolveClient(client), keywords)),
+    handler("keyword_volume", async ({ client, keywords }) => searchVolume(await resolveClient(client), keywords)),
   );
 
   server.registerTool(
@@ -106,7 +112,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, keyword: z.string(), depth: z.number().int().min(10).max(100).optional() },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, keyword, depth }) => serp(await resolveClient(client), keyword, depth)),
+    handler("serp_check", async ({ client, keyword, depth }) => serp(await resolveClient(client), keyword, depth)),
   );
 
   server.registerTool(
@@ -121,7 +127,7 @@ export function registerRawTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, target, limit }) => rankedKeywords(await resolveClient(client), target, limit)),
+    handler("ranked_keywords", async ({ client, target, limit }) => rankedKeywords(await resolveClient(client), target, limit)),
   );
 
   server.registerTool(
@@ -132,7 +138,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, limit: z.number().int().min(1).max(100).optional() },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, limit }) => competitorDomains(await resolveClient(client), limit)),
+    handler("competitor_domains", async ({ client, limit }) => competitorDomains(await resolveClient(client), limit)),
   );
 
   server.registerTool(
@@ -143,7 +149,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, target: z.string().optional() },
       annotations: READ_ONLY,
     },
-    handler(async ({ client, target }) => backlinksSummary(await resolveClient(client), target)),
+    handler("backlinks_summary", async ({ client, target }) => backlinksSummary(await resolveClient(client), target)),
   );
 
   server.registerTool(
@@ -156,7 +162,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: {},
       annotations: READ_ONLY,
     },
-    handler(() => dataForSeoStatus()),
+    handler("dataforseo_status", () => dataForSeoStatus()),
   );
 
   // ---------------------------------------------------- browser checks (free)
@@ -167,11 +173,18 @@ export function registerRawTools(server: McpServer) {
       title: "Lighthouse",
       description:
         "Run Lighthouse on any URL: category scores, lab Core Web Vitals and top opportunities. " +
-        "Adds real-user CrUX field data when PSI_API_KEY is set. Free, ~30s.",
+        "Adds real-user CrUX field data when PSI_API_KEY is set. Free, ~30s. " + URL_SAFETY,
       inputSchema: { url: z.string().url(), formFactor: z.enum(["mobile", "desktop"]).optional() },
       annotations: READ_ONLY,
     },
-    handler(({ url, formFactor }) => runLighthouse(url, formFactor)),
+    handler(
+      "lighthouse",
+      async ({ url, formFactor }, { signal }) => {
+        await assertUserUrl(url);
+        return runLighthouse(url, formFactor, { signal });
+      },
+      BROWSER,
+    ),
   );
 
   server.registerTool(
@@ -180,11 +193,18 @@ export function registerRawTools(server: McpServer) {
       title: "Accessibility check (axe)",
       description:
         "Run axe-core WCAG checks on any URL. Returns violations grouped by rule with impact, WCAG criteria and example selectors. " +
-        "Automated checks catch a subset of issues; flag manual review in reports. Free.",
+        "Automated checks catch a subset of issues; flag manual review in reports. Free. " + URL_SAFETY,
       inputSchema: { url: z.string().url(), level: z.enum(["A", "AA", "AAA"]).optional() },
       annotations: READ_ONLY,
     },
-    handler(({ url, level }) => runAxe(url, level)),
+    handler(
+      "accessibility_check",
+      async ({ url, level }, { signal }) => {
+        await assertUserUrl(url);
+        return runAxe(url, level, { signal });
+      },
+      BROWSER,
+    ),
   );
 
   server.registerTool(
@@ -195,10 +215,17 @@ export function registerRawTools(server: McpServer) {
         "Fetch a URL twice, as plain HTML (Googlebot-like user agent, no JavaScript) and as rendered by headless Chrome, then compare title, " +
         "meta description, canonical, robots meta, H1s, links, JSON-LD types, hreflang, Open Graph and visible word count. " +
         "Flags SEO elements that only appear after JavaScript runs (rules like title-js-only, canonical-mismatch, content-js-dependent). " +
-        "http/https only; private and loopback IP literals are refused unless ALLOW_PRIVATE_URLS=true; hostname-resolution checks come in Phase 6d. Free, ~15s, cached 1 day.",
+        "Free, ~15s, cached 1 day. " + URL_SAFETY,
       inputSchema: { url: z.string().url(), refresh: z.boolean().optional().describe("Bypass the one-day cache.") },
       annotations: READ_ONLY,
     },
-    handler(({ url, refresh }) => checkRender(url, { refresh: refresh ?? false })),
+    handler(
+      "render_check",
+      async ({ url, refresh }, { signal }) => {
+        await assertUserUrl(url);
+        return checkRender(url, { refresh: refresh ?? false, signal });
+      },
+      BROWSER,
+    ),
   );
 }

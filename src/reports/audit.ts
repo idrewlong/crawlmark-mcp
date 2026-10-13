@@ -20,6 +20,8 @@ export interface AuditOptions {
   fresh?: boolean;
   /** Include a DataForSEO backlinks summary (paid). */
   backlinks?: boolean;
+  /** Aborts the audit (run_audit's 10-minute limit): the running browser is closed, no further pages start, nothing is saved. */
+  signal?: AbortSignal;
 }
 
 interface PageAudit {
@@ -36,6 +38,7 @@ export type AuditResult = Awaited<ReturnType<typeof collectAudit>>;
 /** Run every check and save the snapshot. The result carries `auditId` for list/get/compare_audits. */
 export async function runAudit(client: Client, opts: AuditOptions = {}) {
   const result = await collectAudit(client, opts);
+  opts.signal?.throwIfAborted();
   const findings = extractFindings(result);
   const ranAt = Date.parse(result.ranAt);
   const auditId = newAuditId(ranAt);
@@ -57,7 +60,8 @@ async function collectAudit(client: Client, opts: AuditOptions) {
   const formFactor = opts.formFactor ?? "mobile";
   const wcagLevel = opts.wcagLevel ?? "AA";
   const fresh = opts.fresh ?? true;
-  const cacheOpts = { refresh: fresh };
+  const signal = opts.signal;
+  const cacheOpts = { refresh: fresh, signal };
 
   // Site-level checks run in parallel; they're all network calls.
   const [sitemaps, crawl, links] = await Promise.all([
@@ -70,6 +74,7 @@ async function collectAudit(client: Client, opts: AuditOptions) {
   // fight over CPU and skew Lighthouse timings.
   const pages: PageAudit[] = [];
   for (const url of urls) {
+    signal?.throwIfAborted();
     const lighthouse = await section(() => runLighthouse(url, formFactor, cacheOpts));
     const accessibility = await section(() => runAxe(url, wcagLevel, cacheOpts));
     const rendering = await section(() => checkRender(url, cacheOpts));

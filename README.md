@@ -30,11 +30,12 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `list_audits` | A client's saved audits, newest first: ID, run time, page count, average scores, finding count |
 | `get_audit` | One saved audit's full result and normalised findings, by ID |
 | `compare_audits` | Diffs two saved audits (default: latest vs the one before): `new`, `resolved`, `persistent` and `unverified` findings plus Lighthouse score changes. A finding is `resolved` only if its check ran in the later audit; otherwise it is `unverified` |
-| `render_check` | Fetches a URL as plain HTML (Googlebot-like user agent) and as rendered by headless Chrome, extracts title, description, canonical, robots, H1s, links, JSON-LD types, hreflang, Open Graph and visible word count from each, and flags SEO elements that only exist after JavaScript runs (`title-js-only`, `canonical-mismatch`, `robots-js-only`, `content-js-dependent`, `jsonld-js-only`, `links-js-only`, ...). http/https only; private and loopback IP literals are refused unless `ALLOW_PRIVATE_URLS=true` (hostname-resolution checks come in Phase 6d). Free, cached 1 day; `refresh` bypasses |
+| `render_check` | Fetches a URL as plain HTML (Googlebot-like user agent) and as rendered by headless Chrome, extracts title, description, canonical, robots, H1s, links, JSON-LD types, hreflang, Open Graph and visible word count from each, and flags SEO elements that only exist after JavaScript runs (`title-js-only`, `canonical-mismatch`, `robots-js-only`, `content-js-dependent`, `jsonld-js-only`, `links-js-only`, ...). See [URL safety](#url-safety-and-timeouts) for what URLs it accepts. Free, cached 1 day; `refresh` bypasses |
 | `crawl_status` | Progress and issue counts for a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check (e.g. `no_description`) |
 | `spend_summary` | Paid API spend this month by client |
-| `purge_cache` | Drop expired cache entries |
+| `usage_summary` | Per-tool calls, errors, error rate, error classes and p50/p95 duration over the last `days` (default 30), from the local tool-call log |
+| `purge_cache` | Drop expired cache entries and usage-log rows older than 365 days |
 
 **Competitors, keywords and brand terms** (free and local, except `suggest_competitors` and the DataForSEO fallback in `suggest_brand_terms`)
 
@@ -360,6 +361,21 @@ Free Search Console tools that find where more clicks are likely. Each takes `cl
 
 Estimates use the expected-CTR-by-position curve in `src/analysis/ctr-curve.ts`, an editable industry-average approximation: treat the numbers as a ranking signal, not a forecast. Positions are impression-weighted averages, and page URLs are normalised (fragment and trailing slash ignored). The first four tools make one Search Console call with `query` + `page` dimensions (up to 25,000 rows); `declining_pages` makes two (current and previous window), or four with `includeBranded`. Query-level rows leave out anonymized queries. Small sites often return nothing at the default thresholds; lower `minImpressions` to see more.
 
+## URL safety and timeouts
+
+`lighthouse`, `accessibility_check`, `render_check` and `run_audit` load URLs you give them, so they guard against being pointed at your own machine or network (SSRF):
+
+- **Schemes.** Only `http:` and `https:`.
+- **Resolved addresses.** The hostname is resolved (A and AAAA) and refused if *any* address is loopback, private (10/8, 172.16/12, 192.168/16), link-local (169.254/16, including cloud metadata), CGNAT, multicast/reserved, or an IPv6 equivalent (`::1`, `fc00::/7`, `fe80::/10`, IPv4-mapped, SIIT `::ffff:0:0/96`, NAT64 `64:ff9b::/96` of a private address, NAT64 local-use `64:ff9b:1::/48`, 6to4 of a private address). So `127.0.0.1.nip.io` is refused like `127.0.0.1`.
+- **Raw fetch.** Every redirect hop is resolved and checked, and the connection goes to the checked address only, so a second DNS answer (rebinding) is never used.
+- **Headless Chrome** (Lighthouse, axe, the rendered fetch) runs behind an in-process forward proxy on `127.0.0.1` (random port, started on first use, closed on exit). Chrome sends every connection through it, loopback included (`--proxy-bypass-list=<-loopback>`), and the proxy resolves each target itself, refuses internal addresses and connects to the vetted address. That covers redirects, subresources, `fetch`, WebSockets, popups and service workers. QUIC is off, and WebRTC is barred from non-proxied UDP by a Chrome profile pref (`webrtc.ip_handling_policy`), because the command-line flag alone is not honoured. When the server shuts down (SIGTERM, SIGHUP, SIGINT or the MCP client closing stdin), open browsers and the proxy are closed. A request-interception check of IP literals stays on as a second layer for axe and the rendered fetch.
+- **`ALLOW_PRIVATE_URLS=true`** turns the address checks off (raw fetch and proxy) for local development.
+- **`RESTRICT_TO_CLIENT_DOMAINS=true`** only accepts URLs on a client's domain or a subdomain of it (from the client list). It checks the first URL passed to the tool (and each `run_audit` `urls` entry), not where it redirects or the resources the page loads; those still pass the address check.
+
+**Timeouts.** Each browser check (Lighthouse, axe, rendered fetch) and each browser tool stops after 90 seconds, `run_audit` after 10 minutes, and each Google, DataForSEO or PageSpeed Insights request after 30 seconds. A timed-out browser is closed (Lighthouse's Chrome is killed), and an MCP client cancelling a call does the same. A DataForSEO call that times out may still have been billed, so its pre-flight estimate is recorded in the spend ledger as `<endpoint> (timeout, estimated)`.
+
+**Usage log.** Every tool call adds one row to the `tool_calls` table in `DATA_DIR/crawlmark.db`: tool name, client (the host or slug), duration, ok/error and error class (e.g. `TimeoutError`, `UrlRefusedError`). No other arguments are stored, since URLs and queries can be sensitive. `usage_summary` reads it, and `purge_cache` deletes rows older than 365 days.
+
 ## Layout
 
 ```
@@ -372,8 +388,12 @@ src/
   competitors.ts        suggest_competitors: gathers overlap + seed SERPs, loads the denylist
   brand-inference.ts    fetches one client's query rows (GSC, DataForSEO fallback) and infers brand-term candidates
   brand-terms.ts        suggest_brand_terms: inference plus optional apply
+  user-url.ts           checks for URLs passed to tools: address guard plus RESTRICT_TO_CLIENT_DOMAINS
   lib/
-    store.ts            SQLite (cache, spend ledger, saved audits)
+    store.ts            SQLite (cache, spend ledger, saved audits, tool_calls usage log)
+    usage.ts            tool-call usage log: write rows, per-tool counts, error rates, p50/p95 (summary is pure)
+    timeout.ts          withTimeout (with cleanup), onAbort, TIMEOUTS (browser 90s, network 30s, audit 10 min)
+    egress-proxy.ts     in-process forward proxy for headless Chrome: resolves and checks every target, pins the connection
     audits.ts           save/list/get saved audits, sortable audit IDs
     cache.ts            TTL cache wrapper
     budget.ts           per-client / global spend caps
@@ -388,11 +408,13 @@ src/
     spend.ts            spend-ledger key and alias merging (pure)
     concurrency.ts      mapLimit: bounded-concurrency map (pure)
     google-auth.ts      Google auth mode selection, consent URL, callback check, token merge, error messages (pure)
-    url-guard.ts        http/https only; refuses loopback/private/link-local IP literals (no DNS resolution until Phase 6d) unless ALLOW_PRIVATE_URLS=true (pure)
+    url-guard.ts        http/https only; resolves hostnames and refuses any loopback/private/link-local address unless
+                        ALLOW_PRIVATE_URLS=true; pinned lookup; RESTRICT_TO_CLIENT_DOMAINS matching
     token-store.ts      OAuth token file: atomic 0600 write, read, delete
   providers/            one file per data source
-    gsc.ts  ga4.ts  dataforseo.ts  lighthouse.ts  axe.ts  browser.ts
-    render.ts           fetchRaw (Googlebot UA, 20s, 5 MB cap, guarded redirects), fetchRendered (headless Chrome), checkRender; both cached 1 day
+    gsc.ts  ga4.ts  dataforseo.ts  lighthouse.ts  axe.ts
+    browser.ts          Chrome path and flags, egress-proxy flags, withChrome/withBrowser (always close, 90s, abortable)
+    render.ts           fetchRaw (Googlebot UA, 20s, 5 MB cap, every hop resolved, checked and pinned), fetchRendered (headless Chrome), checkRender; both cached 1 day
     discovery.ts        lists Search Console sites and GA4 properties + web streams (cached 1 day)
     google.ts           googleAuth(): OAuth client or service account, by GOOGLE_AUTH_MODE or auto-detected; googleAuthStatus()
     google-login.ts     OAuth loopback login flow

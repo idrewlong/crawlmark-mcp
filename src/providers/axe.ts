@@ -1,7 +1,7 @@
 import { AxePuppeteer } from "@axe-core/puppeteer";
-import puppeteer from "puppeteer";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
-import { CHROME_FLAGS, chromePath, guardPage } from "./browser.js";
+import { assertSafeUrlResolved } from "../lib/url-guard.js";
+import { assertNotProxyBlocked, guardPage, withBrowser } from "./browser.js";
 
 export type WcagLevel = "A" | "AA" | "AAA";
 
@@ -34,14 +34,19 @@ export interface AxeResult {
 const IMPACT_ORDER = ["critical", "serious", "moderate", "minor"];
 
 /** Automated WCAG check with axe-core. Catches roughly a third of issues; manual review still needed. */
-export async function runAxe(url: string, level: WcagLevel = "AA", opts: { refresh?: boolean } = {}): Promise<AxeResult> {
-  const { value } = await cached(cacheKey("axe", url, level), TTL.day, async () => {
-    const browser = await puppeteer.launch({ executablePath: await chromePath(), args: CHROME_FLAGS });
-    try {
+export async function runAxe(
+  url: string,
+  level: WcagLevel = "AA",
+  opts: { refresh?: boolean; signal?: AbortSignal } = {},
+): Promise<AxeResult> {
+  await assertSafeUrlResolved(url);
+  const { value } = await cached(cacheKey("axe", url, level), TTL.day, () =>
+    withBrowser(`Accessibility check of ${url}`, opts.signal, async (browser) => {
       const page = await browser.newPage();
       await guardPage(page);
       await page.setViewport({ width: 1366, height: 900 });
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 60_000 });
+      const nav = await page.goto(url, { waitUntil: "networkidle2", timeout: 60_000 });
+      assertNotProxyBlocked(nav, url);
       const res = await new AxePuppeteer(page).withTags(TAGS[level]).analyze();
 
       const violations: AxeViolation[] = res.violations
@@ -62,9 +67,7 @@ export async function runAxe(url: string, level: WcagLevel = "AA", opts: { refre
         counts[k] += v.nodes;
       }
       return { url, level, violations, counts, incomplete: res.incomplete.length, passes: res.passes.length };
-    } finally {
-      await browser.close();
-    }
-  }, opts);
+    }),
+  { refresh: opts.refresh });
   return value;
 }

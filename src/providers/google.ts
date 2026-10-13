@@ -16,7 +16,11 @@ import {
   type GoogleAuthStatus,
 } from "../lib/google-auth.js";
 import { readTokenFile } from "../lib/token-store.js";
+import { TIMEOUTS } from "../lib/timeout.js";
 import { CrawlmarkOAuth2Client, createOAuthClientLoader } from "./google-oauth-client.js";
+
+// Every googleapis request (Search Console, GA4, discovery) gives up after 30s.
+google.options({ timeout: TIMEOUTS.networkMs });
 
 /** A bare OAuth client for the login flow (no stored credentials). */
 export function newOAuthClient(redirectUri?: string): Auth.OAuth2Client {

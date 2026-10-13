@@ -1,17 +1,22 @@
-import puppeteer from "puppeteer";
+import type { LookupAddress } from "node:dns";
+import { request as httpRequest, type IncomingMessage } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { pipeline, type Readable } from "node:stream";
+import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
-import { assertSafeUrl } from "../lib/url-guard.js";
+import { onAbort } from "../lib/timeout.js";
+import { assertSafeUrlResolved, pinnedLookup } from "../lib/url-guard.js";
 import { compareRender, type RenderFlag } from "../analysis/render.js";
 import { extractIsolated } from "../analysis/extract-isolated.js";
 import type { SeoExtract } from "../analysis/render-extract.js";
-import { CHROME_FLAGS, chromePath, guardPage } from "./browser.js";
+import { assertNotProxyBlocked, guardPage, withBrowser } from "./browser.js";
 
 export const GOOGLEBOT_UA =
   "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/120.0.0.0 Safari/537.36";
 const RAW_TIMEOUT_MS = 20_000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 10;
-const NAV_TIMEOUT_MS = 60_000;
+const NAV_TIMEOUT_MS = 60_000; // inside the 90s browser limit (TIMEOUTS.browserMs)
 
 export interface RawFetch {
   status: number;
@@ -30,91 +35,130 @@ export interface RenderedFetch {
   html: string;
 }
 
-async function readCapped(res: Response): Promise<{ text: string; truncated: boolean }> {
-  if (!res.body) return { text: "", truncated: false };
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
+/** Read a body stream up to MAX_BODY_BYTES. */
+async function readCapped(body: Readable): Promise<{ text: string; truncated: boolean }> {
+  const chunks: Buffer[] = [];
   let size = 0;
   let truncated = false;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  for await (const chunk of body as AsyncIterable<Buffer>) {
     const room = MAX_BODY_BYTES - size;
-    if (value.byteLength > room) {
-      chunks.push(value.subarray(0, room));
+    if (chunk.byteLength > room) {
+      chunks.push(chunk.subarray(0, room));
       size += room;
       truncated = true;
-      await reader.cancel();
       break;
     }
-    chunks.push(value);
-    size += value.byteLength;
+    chunks.push(chunk);
+    size += chunk.byteLength;
   }
+  body.destroy();
   return { text: Buffer.concat(chunks).toString("utf8"), truncated };
 }
 
-/** Plain HTTP fetch as a crawler sees it. Redirects are followed by hand so each hop passes the URL guard. */
-export async function fetchRaw(url: string, opts: { refresh?: boolean } = {}): Promise<RawFetch> {
-  assertSafeUrl(url);
+/** Decode gzip/deflate/br like fetch would; other encodings are passed through. */
+function decoded(res: IncomingMessage): Readable {
+  const enc = String(res.headers["content-encoding"] ?? "").trim().toLowerCase();
+  const decoder =
+    enc === "gzip" || enc === "x-gzip"
+      ? createGunzip()
+      : enc === "deflate"
+        ? createInflate()
+        : enc === "br"
+          ? createBrotliDecompress()
+          : undefined;
+  return decoder ? pipeline(res, decoder, () => undefined) : res;
+}
+
+const header = (res: IncomingMessage, name: string): string | null => {
+  const v = res.headers[name];
+  return v == null ? null : Array.isArray(v) ? v.join(", ") : v;
+};
+
+/** One GET, connected only to the vetted `addresses` (no second DNS lookup, so no rebinding). */
+function getPinned(url: URL, addresses: LookupAddress[], signal: AbortSignal): Promise<IncomingMessage> {
+  const send = url.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise((resolve, reject) => {
+    const req = send(url, {
+      method: "GET",
+      agent: false,
+      lookup: pinnedLookup(addresses),
+      signal,
+      headers: {
+        "user-agent": GOOGLEBOT_UA,
+        accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+        "accept-encoding": "gzip, deflate, br",
+      },
+    });
+    req.once("response", resolve);
+    req.once("error", reject);
+    req.end();
+  });
+}
+
+/**
+ * Plain HTTP fetch as a crawler sees it. Redirects are followed by hand: each hop is
+ * resolved, every address checked (assertSafeUrlResolved), and the connection pinned
+ * to those addresses.
+ */
+export async function fetchRaw(url: string, opts: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<RawFetch> {
+  await assertSafeUrlResolved(url);
   const { value } = await cached(cacheKey("render-raw", url), TTL.day, async () => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), RAW_TIMEOUT_MS);
+    const off = onAbort(opts.signal, () => ctrl.abort());
     try {
       let current = url;
       for (let redirects = 0; ; redirects++) {
-        assertSafeUrl(current);
-        const res = await fetch(current, {
-          redirect: "manual",
-          signal: ctrl.signal,
-          headers: { "user-agent": GOOGLEBOT_UA, accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
-        });
-        const location = res.headers.get("location");
-        if (res.status >= 300 && res.status < 400 && location) {
-          await res.body?.cancel();
+        const { url: target, addresses } = await assertSafeUrlResolved(current);
+        const res = await getPinned(target, addresses, ctrl.signal);
+        const location = header(res, "location");
+        const status = res.statusCode ?? 0;
+        if (status >= 300 && status < 400 && location) {
+          res.destroy();
           if (redirects >= MAX_REDIRECTS) throw new Error(`Too many redirects fetching ${url}`);
           current = new URL(location, current).toString();
           continue;
         }
-        const { text, truncated } = await readCapped(res);
+        const { text, truncated } = await readCapped(decoded(res));
         return {
-          status: res.status,
+          status,
           finalUrl: current,
           redirects,
-          contentType: res.headers.get("content-type"),
-          xRobotsTag: res.headers.get("x-robots-tag"),
+          contentType: header(res, "content-type"),
+          xRobotsTag: header(res, "x-robots-tag"),
           truncated,
           html: text,
         } satisfies RawFetch;
       }
     } catch (err) {
+      if (opts.signal?.aborted) throw opts.signal.reason instanceof Error ? opts.signal.reason : err;
       if (ctrl.signal.aborted) throw new Error(`Raw fetch of ${url} timed out after ${RAW_TIMEOUT_MS / 1000}s`);
       throw err;
     } finally {
       clearTimeout(timer);
+      off();
     }
-  }, opts);
+  }, { refresh: opts.refresh });
   return value;
 }
 
-/** The DOM after JavaScript has run, from headless Chrome. */
-export async function fetchRendered(url: string, opts: { refresh?: boolean } = {}): Promise<RenderedFetch> {
-  assertSafeUrl(url);
-  const { value } = await cached(cacheKey("render-dom", url), TTL.day, async () => {
-    const browser = await puppeteer.launch({ executablePath: await chromePath(), args: CHROME_FLAGS });
-    try {
+/** The DOM after JavaScript has run, from headless Chrome behind the egress proxy. */
+export async function fetchRendered(url: string, opts: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<RenderedFetch> {
+  await assertSafeUrlResolved(url);
+  const { value } = await cached(cacheKey("render-dom", url), TTL.day, () =>
+    withBrowser(`Rendered fetch of ${url}`, opts.signal, async (browser) => {
       const page = await browser.newPage();
       await guardPage(page);
       page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
       await page.setUserAgent({ userAgent: GOOGLEBOT_UA });
       const res = await page.goto(url, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT_MS });
+      assertNotProxyBlocked(res, url);
       const html = await page.content();
       // Measured in Node: page JS cannot spoof it, and the DOM may have grown since any in-page check.
       if (html.length > MAX_BODY_BYTES) throw new Error(`Rendered DOM is ${html.length} characters, over the ${MAX_BODY_BYTES} cap`);
       return { status: res?.status() ?? null, finalUrl: page.url(), html } satisfies RenderedFetch;
-    } finally {
-      await browser.close();
-    }
-  }, opts);
+    }),
+  { refresh: opts.refresh });
   return value;
 }
 
@@ -131,8 +175,8 @@ export interface RenderCheck {
 const isHtml = (contentType: string | null) => contentType == null || /html/i.test(contentType);
 
 /** Fetch both versions, extract, and compare. Throws (so the audit section fails) unless both are usable HTML pages. */
-export async function checkRender(url: string, opts: { refresh?: boolean } = {}): Promise<RenderCheck> {
-  assertSafeUrl(url);
+export async function checkRender(url: string, opts: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<RenderCheck> {
+  await assertSafeUrlResolved(url);
   const [raw, rendered] = await Promise.all([fetchRaw(url, opts), fetchRendered(url, opts)]);
   if (raw.status >= 400) throw new Error(`Raw fetch of ${url} returned HTTP ${raw.status}; nothing to compare`);
   if (rendered.status != null && rendered.status >= 400) throw new Error(`Rendered fetch of ${url} returned HTTP ${rendered.status}; nothing to compare`);

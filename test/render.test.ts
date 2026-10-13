@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { brotliCompressSync, gzipSync } from "node:zlib";
 // Isolate the cache/DB before anything imports the store.
 process.env.DATA_DIR ??= mkdtempSync(join(tmpdir(), "crawlmark-render-"));
 
@@ -147,6 +148,9 @@ describe("fetchRaw", () => {
       if (req.url === "/a") return void res.writeHead(301, { location: "/b" }).end();
       if (req.url === "/b") return void res.writeHead(200, { "content-type": "text/html", "x-robots-tag": "noindex", "x-ua": String(req.headers["user-agent"]) }).end("<title>hi</title>" + (req.headers["user-agent"] ?? ""));
       if (req.url === "/big") return void res.writeHead(200, { "content-type": "text/html" }).end("x".repeat(6 * 1024 * 1024));
+      if (req.url === "/gz")
+        return void res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip", "x-accept": String(req.headers["accept-encoding"]) }).end(gzipSync("<title>zipped</title><p>gzip body</p>"));
+      if (req.url === "/br") return void res.writeHead(200, { "content-type": "text/html", "content-encoding": "br" }).end(brotliCompressSync("<title>brotli</title>"));
       if (req.url === "/json") return void res.writeHead(200, { "content-type": "application/json" }).end("{}");
       if (req.url === "/bad") return void res.writeHead(302, { location: "http://169.254.169.254/" }).end();
       res.writeHead(404).end("nope");
@@ -164,6 +168,12 @@ describe("fetchRaw", () => {
     const r = await fetchRaw(`${base}/a`, { refresh: true });
     expect(r).toMatchObject({ status: 200, finalUrl: `${base}/b`, redirects: 1, xRobotsTag: "noindex", truncated: false });
     expect(r.html).toContain("Googlebot");
+  });
+  it("asks for and decodes gzip (and brotli) bodies", async () => {
+    const { fetchRaw } = await import("../src/providers/render.js");
+    const gz = await fetchRaw(`${base}/gz`, { refresh: true });
+    expect(gz).toMatchObject({ status: 200, truncated: false, html: "<title>zipped</title><p>gzip body</p>" });
+    expect((await fetchRaw(`${base}/br`, { refresh: true })).html).toBe("<title>brotli</title>");
   });
   it("caps the body size", async () => {
     const { fetchRaw } = await import("../src/providers/render.js");

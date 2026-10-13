@@ -36,7 +36,7 @@ export function registerBrandTools(server: McpServer) {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    handler(({ client, terms, source }) => addBrandTerms(client, terms, { source })),
+    handler("add_brand_terms", ({ client, terms, source }) => addBrandTerms(client, terms, { source })),
   );
 
   server.registerTool(
@@ -47,7 +47,7 @@ export function registerBrandTools(server: McpServer) {
       inputSchema: { client: clientArg, terms: termsArg },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    handler(({ client, terms }) => removeBrandTerms(client, terms)),
+    handler("remove_brand_terms", ({ client, terms }) => removeBrandTerms(client, terms)),
   );
 
   server.registerTool(
@@ -79,6 +79,6 @@ export function registerBrandTools(server: McpServer) {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    handler(({ client, apply, minConfidence, allowPaid }) => suggestBrandTerms(client, { apply, minConfidence, allowPaid })),
+    handler("suggest_brand_terms", ({ client, apply, minConfidence, allowPaid }) => suggestBrandTerms(client, { apply, minConfidence, allowPaid })),
   );
 }

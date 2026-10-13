@@ -2,7 +2,9 @@ import * as chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
 import { env } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
-import { CHROME_FLAGS, chromePath } from "./browser.js";
+import { TIMEOUTS } from "../lib/timeout.js";
+import { assertSafeUrlResolved } from "../lib/url-guard.js";
+import { lighthouseLaunchOptions, withChrome } from "./browser.js";
 
 export type FormFactor = "mobile" | "desktop";
 
@@ -20,15 +22,19 @@ export interface LighthouseResult {
 
 const score = (v: number | null | undefined) => Math.round((v ?? 0) * 100);
 
-/** Run Lighthouse locally in headless Chrome. Lab data only, free. */
+/**
+ * Run Lighthouse locally in headless Chrome (behind the egress proxy). Lab data only,
+ * free. The chrome-launcher instance is killed on success, error, timeout or abort.
+ */
 export async function runLighthouse(
   url: string,
   formFactor: FormFactor = "mobile",
-  opts: { refresh?: boolean } = {},
+  opts: { refresh?: boolean; signal?: AbortSignal } = {},
 ): Promise<LighthouseResult> {
+  await assertSafeUrlResolved(url);
   const { value } = await cached(cacheKey("lighthouse", url, formFactor), TTL.day, async () => {
-    const chrome = await chromeLauncher.launch({ chromePath: await chromePath(), chromeFlags: CHROME_FLAGS });
-    try {
+    const launchOpts = await lighthouseLaunchOptions();
+    return withChrome(`Lighthouse on ${url}`, opts.signal, () => chromeLauncher.launch(launchOpts), (c) => c.kill(), async (chrome) => {
       const runner = await lighthouse(
         url,
         {
@@ -74,10 +80,8 @@ export async function runLighthouse(
         opportunities,
       };
       return result;
-    } finally {
-      await chrome.kill();
-    }
-  }, opts);
+    });
+  }, { refresh: opts.refresh });
 
   if (env.PSI_API_KEY) value.field = await fetchFieldData(url, formFactor);
   return value;
@@ -96,7 +100,9 @@ async function fetchFieldData(url: string, formFactor: FormFactor): Promise<Ligh
       category: "PERFORMANCE",
       key: env.PSI_API_KEY!,
     });
-    const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${qs}`);
+    const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${qs}`, {
+      signal: AbortSignal.timeout(TIMEOUTS.networkMs),
+    });
     if (!res.ok) return undefined;
     const json = (await res.json()) as {
       loadingExperience?: { overall_category?: string; metrics?: Record<string, CruxMetric> };
