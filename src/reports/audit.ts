@@ -11,6 +11,7 @@ import { newAuditId, saveAudit } from "../lib/audits.js";
 import type { CruxHistoryResult } from "./report-types.js";
 import { section, type Section } from "./section.js";
 import { siteHygiene } from "./site-hygiene.js";
+import type { LocalCrawlAuditData } from "./local-crawl.js";
 
 export interface AuditOptions {
   /** Override the client's keyPages for this run. */
@@ -30,7 +31,14 @@ export interface AuditOptions {
   cruxHistory?: boolean;
   /** Phase 12: the Tag Manager container audit as `site.tagManager`, with `gtm` findings (medium/low, never alerts). Opt-in only; default false. */
   includeTagManager?: boolean;
+  /** Phase 12 C1: run the free local crawl (saved like local_crawl) as `site.localCrawl`, with `crawl` findings; site hygiene's orphan check can then use it. Default false. */
+  localCrawl?: boolean;
+  /** Page cap for that crawl (default 300, max 2000). */
+  maxLocalCrawlPages?: number;
 }
+
+/** The local crawl inside run_audit stops after this long, so the rest of the audit fits in its 10 minutes. */
+export const AUDIT_LOCAL_CRAWL_MS = 4 * 60_000;
 
 interface PageAudit {
   url: string;
@@ -50,6 +58,7 @@ interface SiteChecks {
   hygiene: Section<Awaited<ReturnType<typeof siteHygiene>>>;
   cruxHistory?: Section<CruxHistoryResult>;
   tagManager?: Section<GtmAuditResult>;
+  localCrawl?: Section<LocalCrawlAuditData>;
 }
 
 /** Run every check and save the snapshot. The result carries `auditId` for list/get/compare_audits. */
@@ -89,6 +98,16 @@ async function collectAudit(client: Client, opts: AuditOptions) {
     opts.includeTagManager ? section(() => runGtmAudit(client, { refresh: fresh })) : Promise.resolve(undefined),
   ]);
 
+  // The local crawl (network only) runs alongside the browser checks; hygiene waits for it so its orphan check can use it.
+  const localCrawl = opts.localCrawl
+    ? section(async () => {
+        const { runLocalCrawl, loadLocalCrawlDeps, toAuditData } = await import("./local-crawl.js");
+        return toAuditData(await runLocalCrawl(client, { maxPages: opts.maxLocalCrawlPages, signal, timeLimitMs: AUDIT_LOCAL_CRAWL_MS }, await loadLocalCrawlDeps()));
+      })
+    : Promise.resolve(undefined);
+  // An unhandled rejection can't happen (section() catches), but keep the promise observed while pages run.
+  void localCrawl.catch(() => undefined);
+
   // Page-level browser checks run one page at a time so Chrome instances don't
   // fight over CPU and skew Lighthouse timings.
   const pages: PageAudit[] = [];
@@ -105,6 +124,7 @@ async function collectAudit(client: Client, opts: AuditOptions) {
   }
 
   // Site hygiene runs after the pages so key pages with a rendering result reuse its cached DOM.
+  const crawlSection = await localCrawl;
   signal?.throwIfAborted();
   const hygiene = await section(() =>
     siteHygiene(client, {
@@ -122,7 +142,7 @@ async function collectAudit(client: Client, opts: AuditOptions) {
     settings: { formFactor, wcagLevel, pages: urls.length, fresh },
     summary: summarize(pages),
     // Phase 12 keys appear only when their option is set, so a default result keeps its shape.
-    site: { sitemaps, crawl, backlinks: links, hygiene, ...(crux ? { cruxHistory: crux } : {}), ...(tagManager ? { tagManager } : {}) } as SiteChecks,
+    site: { sitemaps, crawl, backlinks: links, hygiene, ...(crux ? { cruxHistory: crux } : {}), ...(tagManager ? { tagManager } : {}), ...(crawlSection ? { localCrawl: crawlSection } : {}) } as SiteChecks,
     pages,
     next: opts.fullCrawl
       ? "A full crawl was started. Call crawl_status with the taskId in site.crawl; crawls of 100 pages usually finish in a few minutes."

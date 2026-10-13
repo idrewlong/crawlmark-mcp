@@ -28,6 +28,7 @@ import type {
   DataSpendData,
   KeywordGapData,
   RankTrendData,
+  SiteCrawlData,
   LandingPagesData,
   MoversData,
   OpportunityLists,
@@ -44,6 +45,8 @@ import { resolvePeriod, type ResolvedPeriod, type RunPeriodOverride } from "./pe
 import { isPaidSection, SECTION_TITLES, type SectionSpec } from "./schema.js";
 import type { RankHistoryOptions, RankHistoryResult } from "../../ranks.js";
 import type { EstimateResult, KeywordGapRequest, KeywordGapRouted } from "../../providers/seo-data.js";
+import { analyzeCrawl, topFindings } from "../../analysis/crawl.js";
+import type { StoredCrawl } from "../../lib/crawls.js";
 
 /** Rough ceiling per live SERP check (DataForSEO's own estimate for a SERP task). */
 export const LIVE_RANK_ESTIMATE_USD = 0.002;
@@ -72,6 +75,8 @@ export interface RunDeps {
   keywordGap(client: Client, req: KeywordGapRequest, opts: { estimateOnly?: boolean }): Promise<KeywordGapRouted | EstimateResult>;
   /** The competitors a gap section compares (passed ones normalised, else the client's first 3 saved); throws when there are none. */
   gapCompetitors(client: Client, passed: readonly string[] | undefined): string[];
+  /** Phase 12 C1: the client's newest saved local crawl (local, free). */
+  latestLocalCrawl(client: string): StoredCrawl | undefined;
 }
 
 /** The real sources. Modules load on first use, so planning a run (or a dry run) never loads Google clients. */
@@ -89,6 +94,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     import("../../providers/crux.js"),
     import("../../ranks.js"),
   ]);
+  const crawls = await import("../../lib/crawls.js");
   return {
     googleConfigured: google.googleConfigured,
     gscQuery: gsc.gscQuery,
@@ -114,6 +120,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     rankHistory: ranks.rankHistory,
     keywordGap: (c, r, o) => seoData.keywordGap(c, r, o),
     gapCompetitors: seoData.gapCompetitors,
+    latestLocalCrawl: (slug) => crawls.latestCrawl(slug),
   };
 }
 
@@ -359,6 +366,36 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
         throw new SectionUnavailableError(client.trackedKeywords.length ? "no stored rank history for this period yet (run crawlmark-cli check-ranks, free, to start it)" : `no tracked keywords for ${client.domain}`);
       }
       return { since, until, source: s.source ?? "both", keywords };
+    },
+    site_crawl: async (s: Extract<SectionSpec, { type: "site_crawl" }>): Promise<SiteCrawlData> => {
+      const crawl = deps.latestLocalCrawl(client.slug);
+      if (!crawl) throw new SectionUnavailableError(`no local crawl saved for ${client.domain} yet (run crawlmark-cli crawl, free)`);
+      const a = analyzeCrawl(crawl.pages, { exhaustive: crawl.exhaustive });
+      const limit = s.limit ?? 10;
+      const stored = (crawl.summary ?? {}) as { orphans?: { available: boolean; count?: number; reason?: string } };
+      const orphans: SiteCrawlData["summary"]["orphans"] =
+        stored.orphans?.available && typeof stored.orphans.count === "number"
+          ? { available: true, count: stored.orphans.count }
+          : {
+              available: false,
+              // The crawl's own reason, without any error detail in parentheses at the end (client-facing files).
+              reason: stored.orphans?.reason
+                ? stored.orphans.reason.replace(/^not available: /, "").replace(/ \([^()]*\)$/, "")
+                : crawl.exhaustive
+                  ? "the sitemaps couldn't be compared"
+                  : "the crawl stopped at a cap, so unreached URLs can't be called orphans",
+            };
+      const { brokenLinks, redirects, missingTitles, duplicateTitles, missingDescriptions, duplicateDescriptions, canonicalIssues, noindex } = a.summary;
+      return {
+        crawlId: crawl.id,
+        ranAt: new Date(crawl.ranAt).toISOString(),
+        exhaustive: crawl.exhaustive,
+        pages: crawl.pages.filter((p) => p.status !== null).length,
+        summary: { brokenLinks, redirects, missingTitles, duplicateTitles, missingDescriptions, duplicateDescriptions, canonicalIssues, noindex, orphans },
+        limit,
+        findingCount: a.findings.length,
+        issues: topFindings(a.findings, limit).map((f) => ({ severity: f.severity, rule: f.rule, title: f.title, url: f.url })),
+      };
     },
     keyword_gap: async (s: Extract<SectionSpec, { type: "keyword_gap" }>): Promise<KeywordGapData> => {
       let competitors: string[];

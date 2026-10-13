@@ -77,6 +77,7 @@ A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, 
 | `tag_manager` | Tag Manager findings. Must be `optional: true` | `limit` (20, up to 100) |
 | `rank_trend` | Tracked keywords' stored positions, first → latest, with the change (lower is better). Local and free; fill the history with `crawlmark-cli check-ranks` or `check_ranks`. The builtin `monthly` has it as optional section `ranks` | `since` (`90d`, `180d` default, `365d`, counted back from the period's end), `source` (`gsc`, `serp`, `both` default) |
 | `keyword_gap` | Keywords competitors rank for and the client doesn't, from the client's SEO data provider. **Paid**: needs `paid: true` | `limit` (50 per competitor, up to 500), `competitors` (up to 5; default the client's saved ones, at most 3) |
+| `site_crawl` | The newest saved local crawl: pages fetched, broken links, redirects, missing and duplicate titles and descriptions, canonical issues, noindex and orphan counts, and the top issues. Local and free; it never starts a crawl (run `crawlmark-cli crawl` or `local_crawl` first) | `limit` (10 issues listed, up to 50) |
 | `data_spend` | Paid data used this month | |
 | `text` | Your own text | `text` |
 

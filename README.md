@@ -311,7 +311,7 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 | Tool | Description |
 |---|---|
 | `monthly_report` | Search Console and GA4 for the month vs the previous month and last year: top and moving queries and pages, landing pages, tracked keyword positions, top opportunities, the branded vs non-branded split, and what changed since the last audit. Free by default |
-| `run_audit` | Lighthouse, axe, rendered-vs-raw HTML, index status, on-page checks and site hygiene for each key page, with optional full crawl and backlinks, Core Web Vitals history (`cruxHistory`) and Tag Manager findings (`includeTagManager`). Saved, so it can be compared later |
+| `run_audit` | Lighthouse, axe, rendered-vs-raw HTML, index status, on-page checks and site hygiene for each key page, with optional full crawl and backlinks, Core Web Vitals history (`cruxHistory`), Tag Manager findings (`includeTagManager`) and the free local crawl (`localCrawl`). Saved, so it can be compared later |
 | `list_audits` | A client's saved audits, newest first |
 | `get_audit` | One saved audit's full result and findings |
 | `compare_audits` | What's new, resolved, still open or unverified between two audits, plus score changes |
@@ -339,7 +339,9 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 
 | Tool | Description |
 |---|---|
-| `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers) and orphan pages. Free |
+| `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers) and orphan pages (from the newest complete local or DataForSEO crawl). Free |
+| `local_crawl` | Crawls the client's own site from your machine (free): status codes, redirects and chains, titles, meta descriptions, canonicals, H1s, internal links, depth, broken links, noindex pages and orphans against the sitemaps. Obeys robots.txt and Crawl-delay; same host only by default; up to 2,000 pages. Saved for `local_crawl_pages`, `site_hygiene` and audits |
+| `local_crawl_pages` | Pages from a saved local crawl, filtered by issue or status code. Free, local |
 | `render_check` | Compares a page's raw HTML with what Chrome renders and flags SEO elements that only appear after JavaScript. Free |
 | `gtm_audit` | Audits the live Tag Manager container: paused, unfired and legacy tags, duplicate GA4 tags, unused variables, custom HTML, consent gaps and unpublished changes. Free |
 | `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |
@@ -538,6 +540,7 @@ CLI
 | `check-ranks --client <domain>\|--all [--live] [--dry-run]` | Save tracked keyword positions (free); `--live` adds paid live ranks |
 | `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format md,html,pdf,docx] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
+| `crawl --client <domain> [--max-pages <n>] [--max-depth <n>] [--concurrency <n>] [--user-agent crawlmark\|googlebot] [--include-subdomains] [--start-url <url,url>]` | Free local crawl of a client's site, saved like `local_crawl`. Exit 0 saved, 1 error |
 
 Results and errors
 ------------------

@@ -187,7 +187,11 @@ export interface SiteHygiene {
     | { pages: { url: string; source: "rendered" | "raw"; blocks: number; types: string[]; issues: SchemaResult["issues"] }[]; errors: { url: string; error: string }[] }
     | { error: string };
   hreflang: { pages: { url: string; alternates: number; issues: string[]; sources?: Partial<Record<HreflangSource, number>> }[]; errors: { url: string; error: string }[] } | { error: string };
-  orphans: { available: false; reason: string } | { available: true; crawlTaskId: string; crawledUrls: number; orphanCount: number; orphans: string[] };
+  orphans:
+    | { available: false; reason: string }
+    | { available: true; crawlTaskId: string; crawledUrls: number; orphanCount: number; orphans: string[] }
+    /** Phase 12 C1: from an exhaustive local crawl (local_crawl), newer than any stored DataForSEO crawl. */
+    | { available: true; source: "local"; crawlId: string; crawledUrls: number; orphanCount: number; orphans: string[] };
   flags: HygieneFlag[];
   /** Check keys of the sub-checks that ran to completion (see siteCheckUrl in findings.ts); they feed the audit diff. */
   checked: string[];

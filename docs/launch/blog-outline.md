@@ -121,6 +121,11 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 **Tag Manager findings in audits** (Shipped, opt-in)
 - `run_audit` with `includeTagManager` and `crawlmark-cli audit --include-tag-manager` add Tag Manager findings to saved audits and diffs; an optional `gtm` report section. Never on by default, never an alert.
 
+**Free local crawl** (Shipped)
+- Crawl a client's own site from your machine, free: broken links, redirect chains, missing and duplicate titles and descriptions, canonicals, depth, noindex pages and orphans against the sitemaps. Polite (robots.txt, Crawl-delay, an honest user agent) and capped. *"Crawl example.com and tell me what's broken."*
+- Orphan detection in `site_hygiene` no longer needs a paid DataForSEO crawl (that path still works).
+- New tools: `local_crawl`, `local_crawl_pages`. New command: `crawlmark-cli crawl --client example.com [--max-pages 500]`. `run_audit` with `localCrawl`, and a `site_crawl` report section.
+
 ## 6. How to use it (a 5-minute walkthrough)
 
 1. Install: `npx crawlmark-mcp@latest init`.

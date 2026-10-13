@@ -13,6 +13,7 @@ import type {
   LandingPagesData,
   RankTrendData,
   RankTrendSummary,
+  SiteCrawlData,
   MoversData,
   OpportunityLists,
   OrganicTrafficData,
@@ -306,6 +307,34 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
           ),
         ],
       },
+    ];
+  },
+  // Phase 12 C1: the newest saved local crawl.
+  site_crawl: (data: SiteCrawlData) => {
+    const s = data.summary;
+    const rows: [string, string][] = [
+      ["Pages fetched", fmtInt(data.pages)],
+      ["Broken internal links", fmtInt(s.brokenLinks)],
+      ["Redirects", fmtInt(s.redirects)],
+      ["Missing titles", fmtInt(s.missingTitles)],
+      ["Duplicate titles", fmtInt(s.duplicateTitles)],
+      ["Missing meta descriptions", fmtInt(s.missingDescriptions)],
+      ["Duplicate meta descriptions", fmtInt(s.duplicateDescriptions)],
+      ["Canonical issues", fmtInt(s.canonicalIssues)],
+      ["Noindex pages", fmtInt(s.noindex)],
+      ["Orphan pages (in a sitemap, not linked)", s.orphans.available ? fmtInt(s.orphans.count) : "not judged"],
+    ];
+    return [
+      {
+        kind: "paragraph",
+        text: [t(`crawlmark's own crawl of the site on ${data.ranAt.slice(0, 10)}: ${fmtInt(data.pages)} pages, ${data.exhaustive ? "complete (every internal link found was followed)" : "stopped at a cap (not every page was reached)"}. ${fmtInt(data.findingCount)} issues found.`)],
+      },
+      { kind: "table", header: ["Check", "Pages"], rows: rows.map(([k, v]) => [cell(k), cell(v)]), numeric: [false, true] },
+      data.issues.length
+        ? { kind: "table", header: ["Severity", "Issue", "URL"], rows: data.issues.map((i) => [cell(i.severity), cell(i.title), d(i.url)]) }
+        : { kind: "paragraph", text: [t("No issues found.")] },
+      ...(s.orphans.available ? [] : [{ kind: "note" as const, text: [t(`Orphan pages weren't judged: ${s.orphans.reason}.`)] }]),
+      { kind: "note", text: [t("Crawled from this machine without JavaScript rendering, obeying robots.txt. Issue counts are pages.")] },
     ];
   },
   keyword_gap: (data: KeywordGapData) => {

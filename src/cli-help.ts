@@ -6,7 +6,7 @@
 import { basename } from "node:path";
 import { styleText } from "node:util";
 
-export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "report"] as const;
+export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "report", "crawl"] as const;
 export type HelpGroup = (typeof HELP_GROUPS)[number];
 
 export function isHelpGroup(name: string | undefined): name is HelpGroup {
@@ -49,6 +49,8 @@ export function topHelp(o: HelpOptions): string {
     "  audit, check-traffic  Run from cron; exit 2 means alerts",
     "  check-ranks           Save tracked keyword positions (free; --live is paid)",
     "  report                Report files (Markdown, HTML, PDF, Word) from templates",
+    heading("Site checks", o),
+    "  crawl                 Crawl a client's site from this machine (free)",
     "",
     heading("Examples", o),
     "  npx crawlmark-mcp@latest init",
@@ -231,6 +233,28 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  Search Console positions never alert. Exit code: 0 no alerts, 1 error,",
     "  2 alerts.",
   ],
+  crawl: (p) => [
+  `Usage: ${p} crawl --client <domain|slug> [--max-pages <n>]`,
+  "                [--max-depth <n>] [--concurrency <n>]",
+  "                [--user-agent crawlmark|googlebot] [--include-subdomains]",
+  "                [--start-url <url,url>]",
+  "",
+  "  Crawls the client's own site from this machine (free) and saves the result",
+  "  for local_crawl_pages, site_hygiene's orphan check and audits. Obeys",
+  "  robots.txt and Crawl-delay (up to 10 s), else one request per 250 ms per",
+  "  host; same host only (www. included); HTML only, no JavaScript.",
+  "  --client <domain|slug>  The client",
+  "  --max-pages <n>         Most pages to fetch (default 300, max 2000)",
+  "  --max-depth <n>         Most clicks from the homepage and key pages",
+  "                          (default 10, max 20)",
+  "  --concurrency <n>       Requests in flight (default 4, max 8)",
+  "  --user-agent <name>     crawlmark (default) or googlebot (Googlebot's user",
+  "                          agent and robots.txt group)",
+  "  --include-subdomains    Also crawl subdomains",
+  "  --start-url <url,url>   Where to start, on the client's host (default: the",
+  "                          homepage and the client's key pages)",
+  "  Prints JSON to stdout and a summary to stderr. Exit code: 0 saved, 1 error.",
+],
   report: (p) => [
     `Usage: ${p} report --client <domain|slug> | --all [--template <id>]`,
     "                [--month YYYY-MM | --quarter YYYY-Qn |",

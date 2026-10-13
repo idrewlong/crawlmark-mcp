@@ -183,7 +183,10 @@ describe("fetchRaw", () => {
   });
   it("checkRender refuses a 404 page instead of comparing it", async () => {
     const { checkRender } = await import("../src/providers/render.js");
+    const t = performance.now();
     await expect(checkRender(`${base}/missing`, { refresh: true })).rejects.toThrow(/HTTP 404/);
+    // The rendered fetch is aborted, not waited for (no Chrome launch on the critical path).
+    expect(performance.now() - t).toBeLessThan(2000);
   });
   it("checkRender refuses non-HTML content", async () => {
     const { checkRender } = await import("../src/providers/render.js");

@@ -5,8 +5,8 @@ import { cruxCheckUrl, cruxFindings } from "./crux.js";
 
 /**
  * Normalised audit findings. Pure: no I/O, so it is tested with hand-built
- * fixtures. `crawl` is part of the type for a later phase; nothing emits it yet.
- * `crux` and `gtm` (Phase 12) appear only when run_audit is asked for them.
+ * fixtures. `crux`, `gtm` and `crawl` (Phase 12; `crawl` from the local crawler)
+ * appear only when run_audit is asked for them.
  */
 export type FindingSource = "lighthouse" | "axe" | "indexing" | "onpage" | "rendering" | "crawl" | "site" | "crux" | "gtm";
 export type Severity = "critical" | "high" | "medium" | "low";
@@ -71,6 +71,12 @@ export function siteCheckUrl(rule: string, url: string): string {
 
 const siteKeyUrl = (u: string) => (u.startsWith("site") ? u : normalizeUrl(u));
 
+/** Phase 12 C1: every local crawl records this checked key; only an exhaustive one also records CRAWL_COMPLETE_KEY. */
+export const CRAWL_SITE_KEY = "site:crawl";
+export const CRAWL_COMPLETE_KEY = "site:crawl-complete";
+/** Crawl rules that compare pages with each other, so only a complete (exhaustive) crawl can clear them. */
+export const CRAWL_COMPLETE_RULES: ReadonlySet<string> = new Set(["duplicate-title", "duplicate-description", "canonical-to-non-200"]);
+
 /** A Tag Manager finding's container key: `gtm://<publicId>/<kind>/<id>` → `gtm://<publicId>`. */
 export const gtmContainerKey = (url: string) => url.replace(/^(gtm:\/\/[^/]+).*$/, "$1");
 
@@ -80,11 +86,14 @@ export function checkOf(f: Pick<Finding, "source" | "url"> & { rule?: string }):
   if (f.source === "crux") return { url: cruxCheckUrl(normalizeUrl(f.url)), source: f.source };
   // Every GTM finding depends on its container having been audited (D13).
   if (f.source === "gtm") return { url: gtmContainerKey(f.url), source: f.source };
+  // A capped crawl may miss the other page of a duplicate (or the canonical target), so it can't clear those.
+  if (f.source === "crawl" && CRAWL_COMPLETE_RULES.has(f.rule ?? "")) return { url: CRAWL_COMPLETE_KEY, source: f.source };
   return { url: normalizeUrl(f.url), source: f.source };
 }
 
-/** crux and gtm check keys are already canonical (not page URLs), so they are compared as written. */
-export const checkKey = (c: CheckedPair) => `${c.source}\n${c.source === "site" ? siteKeyUrl(c.url) : c.source === "crux" || c.source === "gtm" ? c.url : normalizeUrl(c.url)}`;
+/** crux and gtm check keys (and crawl's site:crawl keys) are already canonical (not page URLs), so they are compared as written. */
+export const checkKey = (c: CheckedPair) =>
+  `${c.source}\n${c.source === "site" ? siteKeyUrl(c.url) : c.source === "crux" || c.source === "gtm" || (c.source === "crawl" && c.url.startsWith("site:")) ? c.url : normalizeUrl(c.url)}`;
 
 const AXE_SEVERITY: Record<string, Severity> = { critical: "critical", serious: "high", moderate: "medium", minor: "low" };
 
@@ -258,6 +267,9 @@ export function extractFindings(audit: AuditResult): Finding[] {
     }
   }
 
+  // Phase 12 C1: the local crawl's findings (already built and sanitised by analyzeCrawl).
+  if (audit.site.localCrawl?.ok) for (const f of audit.site.localCrawl.data.findings) add({ source: "crawl", rule: f.rule, url: f.url, severity: f.severity, title: f.title, ...(f.evidence ? { evidence: f.evidence } : {}) });
+
   return [...out.values()];
 }
 
@@ -281,5 +293,7 @@ export function checkedPairs(audit: AuditResult): CheckedPair[] {
   if (crux?.ok && crux.data.available) out.push({ url: cruxCheckUrl(normalizeUrl(crux.data.key.origin ?? crux.data.key.url ?? "")), source: "crux" });
   // A container that was audited verifies every GTM finding of that container (D13).
   if (audit.site.tagManager?.ok) out.push({ url: `gtm://${audit.site.tagManager.data.container.publicId}`, source: "gtm" });
+  // Every URL the local crawl checked, plus site:crawl (and site:crawl-complete when it was exhaustive).
+  if (audit.site.localCrawl?.ok) for (const url of audit.site.localCrawl.data.checked) out.push({ url, source: "crawl" });
   return out;
 }

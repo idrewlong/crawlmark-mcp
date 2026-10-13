@@ -18,6 +18,8 @@ import { normalizeUrl } from "../analysis/findings.js";
 import { validateJsonLd } from "../analysis/structured-data.js";
 import { cacheKey, peekCache, putCache, TTL } from "../lib/cache.js";
 import { latestCrawlTask } from "../lib/audits.js";
+import { crawledUrls } from "../analysis/crawl.js";
+import { latestCrawl, type StoredCrawl } from "../lib/crawls.js";
 import { mapLimit } from "../lib/concurrency.js";
 import { hostInDomains, restrictToClientDomains } from "../lib/url-guard.js";
 import { onPageCrawlUrls, type CrawlUrls } from "../providers/dataforseo.js";
@@ -61,6 +63,131 @@ const isHtml = (ct: string | null) => ct == null || /html/i.test(ct);
 export function evenSample<T>(items: T[], n: number): T[] {
   if (items.length <= n) return items;
   return Array.from({ length: n }, (_, i) => items[Math.floor((i * items.length) / n)]!);
+}
+
+export interface CollectedSitemaps {
+  /** Every <loc> of every urlset read (up to the URL cap). */
+  urls: Set<string>;
+  lastmods: Map<string, number>;
+  /** hreflang declared in sitemaps (`xhtml:link`), by normalized page URL. */
+  hreflang: Map<string, HreflangEntry[]>;
+  hreflangCapped: boolean;
+  /** A sitemap file could not be read for a reason other than 404/410. */
+  readFailed: boolean;
+  /** Every listed sitemap was read within the caps and at least one urlset was found. */
+  complete: boolean;
+  anyUrlset: boolean;
+  files: { url: string; kind?: "index" | "urlset"; urls?: number; error?: string }[];
+  totalLocs: number;
+  /** The /sitemap.xml tried when no sitemap was listed, else null. */
+  fallback: string | null;
+}
+
+/**
+ * Read the site's sitemaps: the listed roots (robots.txt and Search Console, on the client's host only),
+ * else /sitemap.xml; indexes followed to SITEMAP_MAX_DEPTH and SITEMAP_MAX_CHILDREN. Shared by site_hygiene
+ * and the local crawl's orphan check (Phase 12 C1). Notes are appended to `notes`.
+ */
+export async function collectSitemaps(o: {
+  roots: string[];
+  siteOrigin: string;
+  get: (url: string) => Promise<RawFetch>;
+  onClientHost: (url: string) => boolean;
+  hreflangLimit?: number;
+  notes: string[];
+}): Promise<CollectedSitemaps> {
+  const { get, onClientHost, notes } = o;
+  const hreflangLimit = o.hreflangLimit ?? SITEMAP_HREFLANG_LIMIT;
+  const sitemapUrlSet = new Set<string>();
+  const lastmods = new Map<string, number>();
+  const sitemapHreflang = new Map<string, HreflangEntry[]>();
+  let sitemapHreflangCount = 0;
+  let sitemapHreflangCapped = false;
+  let sitemapReadFailed = false;
+  const seen = new Set<string>();
+  let roots = o.roots.filter((u) => {
+    const k = normalizeUrl(u);
+    if (seen.has(k) || !onClientHost(u)) return false;
+    seen.add(k);
+    return true;
+  });
+  let fallback: string | null = null;
+  if (roots.length === 0) {
+    fallback = `${o.siteOrigin}/sitemap.xml`;
+    roots = [fallback];
+    notes.push("No sitemap listed in robots.txt or Search Console; tried /sitemap.xml.");
+  }
+  if (roots.length > SITEMAP_ROOT_LIMIT) notes.push(`Only the first ${SITEMAP_ROOT_LIMIT} listed sitemaps were followed.`);
+
+  const files: CollectedSitemaps["files"] = [];
+  let complete = true;
+  let totalLocs = 0;
+  let children = 0;
+  let level = roots.slice(0, SITEMAP_ROOT_LIMIT).map((u) => ({ url: u }));
+  if (roots.length > SITEMAP_ROOT_LIMIT) complete = false;
+  for (let depth = 0; depth <= SITEMAP_MAX_DEPTH && level.length; depth++) {
+    const next: { url: string }[] = [];
+    const results = await mapLimit(level, CONCURRENCY, async (f) => {
+      try {
+        const r = await get(f.url);
+        if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+        if (r.truncated) throw new Error("larger than the 5 MB cap (after decompression)");
+        return { f, parsed: await parseSitemapIsolated(r.html) };
+      } catch (err) {
+        return { f, error: (err as Error).message };
+      }
+    });
+    for (const r of results) {
+      if ("error" in r) {
+        files.push({ url: r.f.url, error: r.error });
+        complete = false;
+        // A 404/410 means the file doesn't exist, which is the same every run (stale sitemaps listed in
+        // robots.txt or Search Console are common). Only transient failures leave hreflang unverified.
+        if (!/^HTTP (404|410)$/.test(r.error ?? "")) sitemapReadFailed = true;
+      } else if (r.parsed.kind === "index") {
+        files.push({ url: r.f.url, kind: "index", urls: r.parsed.locs.length });
+        for (const loc of r.parsed.locs) {
+          if (!onClientHost(loc)) continue;
+          if (depth === SITEMAP_MAX_DEPTH || children >= SITEMAP_MAX_CHILDREN) {
+            complete = false;
+            continue;
+          }
+          children++;
+          next.push({ url: loc });
+        }
+      } else {
+        files.push({ url: r.f.url, kind: "urlset", urls: r.parsed.locs.length });
+        totalLocs += r.parsed.locs.length;
+        for (const [loc, ms] of Object.entries(r.parsed.lastmods)) lastmods.set(loc, ms);
+        for (const [loc, list] of Object.entries(r.parsed.alternates ?? {})) {
+          const k = normalizeUrl(loc);
+          let kept = sitemapHreflang.get(k);
+          for (const entry of list) {
+            if (sitemapHreflangCount >= hreflangLimit) {
+              sitemapHreflangCapped = true;
+              break;
+            }
+            if (!kept) sitemapHreflang.set(k, (kept = []));
+            kept.push(entry);
+            sitemapHreflangCount++;
+          }
+        }
+        for (const loc of r.parsed.locs) {
+          if (sitemapUrlSet.size >= SITEMAP_URL_LIMIT) {
+            complete = false;
+            break;
+          }
+          sitemapUrlSet.add(loc);
+        }
+      }
+    }
+    level = next;
+  }
+  if (sitemapHreflangCapped) notes.push(`Sitemap hreflang entries were capped at ${hreflangLimit}; hreflang findings that depend on sitemap declarations are not counted as checked.`);
+  if (sitemapReadFailed) notes.push("A sitemap could not be read, so hreflang findings that depend on sitemap declarations are not counted as checked.");
+  if (!complete) notes.push("The sitemap URL set is partial (a cap was reached or a sitemap could not be read), so 'key page not in sitemap' and orphan checks were skipped.");
+  const anyUrlset = files.some((f) => f.kind === "urlset");
+  return { urls: sitemapUrlSet, lastmods, hreflang: sitemapHreflang, hreflangCapped: sitemapHreflangCapped, readFailed: sitemapReadFailed, complete: complete && anyUrlset, anyUrlset, files, totalLocs, fallback };
 }
 
 export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Promise<SiteHygiene> {
@@ -112,102 +239,19 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
       gscPaths = []; // GSC not configured or failed: robots.txt is the other source
     }
   }
-  const sitemapUrlSet = new Set<string>();
-  const lastmods = new Map<string, number>();
+  let sitemapUrlSet = new Set<string>();
+  let lastmods = new Map<string, number>();
   /** hreflang declared in sitemaps (`xhtml:link`), by normalized page URL. Filled by the sitemap pass above; no extra fetches. */
-  const sitemapHreflang = new Map<string, HreflangEntry[]>();
-  const hreflangLimit = opts.sitemapHreflangLimit ?? SITEMAP_HREFLANG_LIMIT;
-  let sitemapHreflangCount = 0;
+  let sitemapHreflang = new Map<string, HreflangEntry[]>();
   let sitemapHreflangCapped = false;
   /** A sitemap file could not be read or parsed, so sitemap-declared hreflang may be missing from this run. */
   let sitemapReadFailed = false;
   let sitemaps: SiteHygiene["sitemaps"];
   let sitemapsComplete = false;
   try {
-    const seen = new Set<string>();
-    let roots = [...robotsSitemaps, ...gscPaths].filter((u) => {
-      const k = normalizeUrl(u);
-      if (seen.has(k) || !onClientHost(u)) return false;
-      seen.add(k);
-      return true;
-    });
-    let fallback: string | null = null;
-    if (roots.length === 0) {
-      fallback = `${siteOrigin}/sitemap.xml`;
-      roots = [fallback];
-      notes.push("No sitemap listed in robots.txt or Search Console; tried /sitemap.xml.");
-    }
-    if (roots.length > SITEMAP_ROOT_LIMIT) notes.push(`Only the first ${SITEMAP_ROOT_LIMIT} listed sitemaps were followed.`);
-
-    const files: { url: string; kind?: "index" | "urlset"; urls?: number; error?: string }[] = [];
-    let complete = true;
-    let totalLocs = 0;
-    let children = 0;
-    let level = roots.slice(0, SITEMAP_ROOT_LIMIT).map((u) => ({ url: u }));
-    if (roots.length > SITEMAP_ROOT_LIMIT) complete = false;
-    for (let depth = 0; depth <= SITEMAP_MAX_DEPTH && level.length; depth++) {
-      const next: { url: string }[] = [];
-      const results = await mapLimit(level, CONCURRENCY, async (f) => {
-        try {
-          const r = await get(f.url);
-          if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
-          if (r.truncated) throw new Error("larger than the 5 MB cap (after decompression)");
-          return { f, parsed: await parseSitemapIsolated(r.html) };
-        } catch (err) {
-          return { f, error: (err as Error).message };
-        }
-      });
-      for (const r of results) {
-        if ("error" in r) {
-          files.push({ url: r.f.url, error: r.error });
-          complete = false;
-          // A 404/410 means the file doesn't exist, which is the same every run (stale sitemaps listed in
-          // robots.txt or Search Console are common). Only transient failures leave hreflang unverified.
-          if (!/^HTTP (404|410)$/.test(r.error ?? "")) sitemapReadFailed = true;
-        } else if (r.parsed.kind === "index") {
-          files.push({ url: r.f.url, kind: "index", urls: r.parsed.locs.length });
-          for (const loc of r.parsed.locs) {
-            if (!onClientHost(loc)) continue;
-            if (depth === SITEMAP_MAX_DEPTH || children >= SITEMAP_MAX_CHILDREN) {
-              complete = false;
-              continue;
-            }
-            children++;
-            next.push({ url: loc });
-          }
-        } else {
-          files.push({ url: r.f.url, kind: "urlset", urls: r.parsed.locs.length });
-          totalLocs += r.parsed.locs.length;
-          for (const [loc, ms] of Object.entries(r.parsed.lastmods)) lastmods.set(loc, ms);
-          for (const [loc, list] of Object.entries(r.parsed.alternates ?? {})) {
-            const k = normalizeUrl(loc);
-            let kept = sitemapHreflang.get(k);
-            for (const entry of list) {
-              if (sitemapHreflangCount >= hreflangLimit) {
-                sitemapHreflangCapped = true;
-                break;
-              }
-              if (!kept) sitemapHreflang.set(k, (kept = []));
-              kept.push(entry);
-              sitemapHreflangCount++;
-            }
-          }
-          for (const loc of r.parsed.locs) {
-            if (sitemapUrlSet.size >= SITEMAP_URL_LIMIT) {
-              complete = false;
-              break;
-            }
-            sitemapUrlSet.add(loc);
-          }
-        }
-      }
-      level = next;
-    }
-    if (sitemapHreflangCapped) notes.push(`Sitemap hreflang entries were capped at ${hreflangLimit}; hreflang findings that depend on sitemap declarations are not counted as checked.`);
-    if (sitemapReadFailed) notes.push("A sitemap could not be read, so hreflang findings that depend on sitemap declarations are not counted as checked.");
-    if (!complete) notes.push("The sitemap URL set is partial (a cap was reached or a sitemap could not be read), so 'key page not in sitemap' and orphan checks were skipped.");
-    const anyUrlset = files.some((f) => f.kind === "urlset");
-    sitemapsComplete = complete && anyUrlset;
+    const collected = await collectSitemaps({ roots: [...robotsSitemaps, ...gscPaths], siteOrigin, get, onClientHost, hreflangLimit: opts.sitemapHreflangLimit ?? SITEMAP_HREFLANG_LIMIT, notes });
+    ({ urls: sitemapUrlSet, lastmods, hreflang: sitemapHreflang, hreflangCapped: sitemapHreflangCapped, readFailed: sitemapReadFailed, complete: sitemapsComplete } = collected);
+    const { files, totalLocs, fallback, anyUrlset } = collected;
 
     const candidates = [...sitemapUrlSet].filter(onClientHost);
     const sampled: SampleResult[] = [];
@@ -356,12 +400,32 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
   notes.push("hreflang is merged from page HTML, sitemap xhtml:link entries and HTTP Link headers (headers are read from the raw fetch, so not for pages read from their rendered DOM).");
 
   // -------------------------------------------------------------------- orphans
+  // The newest exhaustive crawl within ORPHAN_MAX_CRAWL_AGE_DAYS decides: a local crawl (Phase 12 C1, free)
+  // or the stored DataForSEO crawl. Neither is ever started here.
   let orphans: SiteHygiene["orphans"] = { available: false, reason: "not available: no full crawl" };
   const task = latestCrawlTask(client.slug);
-  if (task) {
+  // Only a complete crawl that started at the homepage can say a sitemap URL is unlinked.
+  const local = latestCrawl(client.slug, { exhaustiveOnly: true, seededFromHomepageOnly: true });
+  const ageOf = (ranAt: number) => (Date.now() - ranAt) / 86_400_000;
+  const useLocal = (crawl: StoredCrawl): SiteHygiene["orphans"] => {
+    const ageDays = ageOf(crawl.ranAt);
+    if (!sitemapsComplete) return { available: false, reason: "not available: the sitemap URL set is incomplete" };
+    if (ageDays > ORPHAN_MAX_CRAWL_AGE_DAYS) {
+      return { available: false, reason: `not available: the newest complete local crawl is ${Math.floor(ageDays)} days old (limit ${ORPHAN_MAX_CRAWL_AGE_DAYS}); run local_crawl again` };
+    }
+    const list = orphanUrls(sitemapUrlSet, crawledUrls(crawl.pages), { crawlAtMs: crawl.ranAt, lastmods });
+    flags.push(...orphanFlags(list));
+    checked.push("site:orphans");
+    notes.push(`Orphans were judged from the local crawl ${crawl.id} (${new Date(crawl.ranAt).toISOString().slice(0, 10)}, complete).`);
+    notes.push("Sitemap URLs with a <lastmod> after the crawl started were not counted as orphans.");
+    return { available: true, source: "local", crawlId: crawl.id, crawledUrls: crawl.pages.length, orphanCount: list.length, orphans: list.slice(0, 100) };
+  };
+  if (local && (!task || local.ranAt >= task.ranAt)) {
+    orphans = useLocal(local);
+  } else if (task) {
     try {
       const key = cacheKey("crawl-urls", task.taskId);
-      const ageDays = (Date.now() - task.ranAt) / 86_400_000;
+      const ageDays = ageOf(task.ranAt);
       if (!sitemapsComplete) {
         orphans = { available: false, reason: "not available: the sitemap URL set is incomplete" };
       } else if (ageDays > ORPHAN_MAX_CRAWL_AGE_DAYS) {
@@ -384,6 +448,11 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
       }
     } catch (err) {
       orphans = { available: false, reason: `not available: the stored crawl could not be read (${(err as Error).message})` };
+    }
+    // The DataForSEO crawl couldn't be used, but an older complete local crawl can.
+    if (!orphans.available && local && sitemapsComplete && ageOf(local.ranAt) <= ORPHAN_MAX_CRAWL_AGE_DAYS) {
+      notes.push(`The stored DataForSEO crawl couldn't be used for orphans (${orphans.reason.replace(/^not available: /, "")}), so the local crawl was.`);
+      orphans = useLocal(local);
     }
   }
 

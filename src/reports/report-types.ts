@@ -223,6 +223,29 @@ export interface KeywordGapData {
   notes?: string[];
 }
 
+/** Phase 12 C1: the newest saved local crawl, summarised (site_crawl section). */
+export interface SiteCrawlData {
+  crawlId: string;
+  ranAt: string;
+  exhaustive: boolean;
+  /** Pages fetched. */
+  pages: number;
+  summary: {
+    brokenLinks: number;
+    redirects: number;
+    missingTitles: number;
+    duplicateTitles: number;
+    missingDescriptions: number;
+    duplicateDescriptions: number;
+    canonicalIssues: number;
+    noindex: number;
+    orphans: { available: true; count: number } | { available: false; reason: string };
+  };
+  limit: number;
+  findingCount: number;
+  issues: { severity: "critical" | "high" | "medium" | "low"; rule: string; title: string; url: string }[];
+}
+
 export interface TextData {
   text: string;
 }

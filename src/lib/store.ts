@@ -99,3 +99,28 @@ export function migrateRankHistory(database: DatabaseSync): boolean {
 }
 
 migrateRankHistory(db);
+
+/**
+ * Phase 12 C1: saved local crawls (local_crawl, crawlmark-cli crawl, run_audit with localCrawl).
+ * Additive and idempotent like rank_history: CREATE ... IF NOT EXISTS on every start; older
+ * builds never read the table, so no rollback step is needed. `pages` is the JSON page list.
+ * crawls.ts keeps the newest 10 per client.
+ */
+export function migrateLocalCrawls(database: DatabaseSync): boolean {
+  const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'local_crawls'").get() !== undefined;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS local_crawls (
+      id         TEXT PRIMARY KEY,
+      client     TEXT NOT NULL,
+      ran_at     INTEGER NOT NULL,
+      settings   TEXT,
+      summary    TEXT,
+      exhaustive INTEGER NOT NULL,
+      pages      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS local_crawls_client ON local_crawls (client, ran_at DESC);
+  `);
+  return !existed;
+}
+
+migrateLocalCrawls(db);

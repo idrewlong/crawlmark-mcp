@@ -39,6 +39,7 @@ import { groupHelp, HELP_GROUPS, isHelpGroup, programName, topHelp } from "./cli
 import { printUpdateNotice, updateCacheFile } from "./lib/update-check.js";
 import { reportCommand, templatesCommand, type ReportCliDeps } from "./report-cli.js";
 import { closeEgressProxy } from "./lib/egress-proxy.js";
+import { crawlCommand } from "./crawl-cli.js";
 
 /** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
 async function updateNoticeAfterHelp(json = false): Promise<void> {
@@ -544,6 +545,12 @@ async function main(argv: string[]): Promise<number> {
       include: { type: "string" },
       to: { type: "string" },
       force: { type: "boolean", default: false },
+      "max-pages": { type: "string" },
+      "max-depth": { type: "string" },
+      concurrency: { type: "string" },
+      "user-agent": { type: "string" },
+      "include-subdomains": { type: "boolean", default: false },
+      "start-url": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -555,6 +562,15 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (group === "audit" || group === "check-traffic" || group === "check-ranks") return scheduledCommand(group, command ? [command, ...args] : args, values);
+  if (group === "crawl") {
+    return crawlCommand(command ? [command, ...args] : args, values, { out, warn, usage: scheduledUsage }, {
+      resolveClient,
+      run: async (client, opts) => {
+        const { runLocalCrawl, loadLocalCrawlDeps } = await import("./reports/local-crawl.js");
+        return (await runLocalCrawl(client, opts, await loadLocalCrawlDeps())).result;
+      },
+    });
+  }
   if (group === "report" && command === "templates") {
     const [sub, ...rest] = args;
     return templatesCommand(sub, rest, { out, warn, homeDir: HOME.dir, cwd: process.cwd() });

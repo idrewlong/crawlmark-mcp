@@ -37,13 +37,13 @@ export interface RenderedFetch {
   html: string;
 }
 
-/** Read a body stream up to MAX_BODY_BYTES. */
-async function readCapped(body: Readable): Promise<{ text: string; truncated: boolean }> {
+/** Read a body stream up to `max` bytes (default MAX_BODY_BYTES). */
+async function readCapped(body: Readable, max = MAX_BODY_BYTES): Promise<{ text: string; truncated: boolean }> {
   const chunks: Buffer[] = [];
   let size = 0;
   let truncated = false;
   for await (const chunk of body as AsyncIterable<Buffer>) {
-    const room = MAX_BODY_BYTES - size;
+    const room = max - size;
     if (chunk.byteLength > room) {
       chunks.push(chunk.subarray(0, room));
       size += room;
@@ -88,7 +88,7 @@ const header = (res: IncomingMessage, name: string): string | null => {
 };
 
 /** One GET, connected only to the vetted `addresses` (no second DNS lookup, so no rebinding). */
-function getPinned(url: URL, addresses: LookupAddress[], signal: AbortSignal): Promise<IncomingMessage> {
+function getPinned(url: URL, addresses: LookupAddress[], signal: AbortSignal, userAgent = GOOGLEBOT_UA): Promise<IncomingMessage> {
   const send = url.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
     const req = send(url, {
@@ -97,7 +97,7 @@ function getPinned(url: URL, addresses: LookupAddress[], signal: AbortSignal): P
       lookup: pinnedLookup(addresses),
       signal,
       headers: {
-        "user-agent": GOOGLEBOT_UA,
+        "user-agent": userAgent,
         accept: "text/html,application/xhtml+xml,*/*;q=0.8",
         "accept-encoding": "gzip, deflate, br",
       },
@@ -106,6 +106,68 @@ function getPinned(url: URL, addresses: LookupAddress[], signal: AbortSignal): P
     req.once("error", reject);
     req.end();
   });
+}
+
+/** One response from fetchHop. `location` is set on 3xx responses that carry one; the caller follows it (or not). */
+export interface Hop {
+  url: string;
+  status: number;
+  location: string | null;
+  contentType: string | null;
+  xRobotsTag: string | null;
+  /** The decoded body (size-capped), or null when it wasn't read (redirect, or not wanted for this content type). */
+  body: string | null;
+  truncated: boolean;
+}
+
+export interface HopOptions {
+  userAgent: string;
+  signal?: AbortSignal;
+  /** Per-request limit (default 15 s). */
+  timeoutMs?: number;
+  /** Body cap in bytes (default 2 MB). */
+  maxBytes?: number;
+  /** Which bodies to read: "html" (default: HTML or no content-type) or "any" (e.g. robots.txt). */
+  body?: "html" | "any";
+}
+
+const HOP_TIMEOUT_MS = 15_000;
+const HOP_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * One guarded GET with no redirect following (Phase 12 C1, the local crawler): the URL is checked
+ * and resolved (assertSafeUrlResolved: http(s) only, every address public unless ALLOW_PRIVATE_URLS),
+ * the connection pinned to the vetted addresses, and the body read only when wanted, up to the cap.
+ * The caller checks each redirect target the same way by calling fetchHop again.
+ */
+export async function fetchHop(url: string, opts: HopOptions): Promise<Hop> {
+  const { url: target, addresses } = await assertSafeUrlResolved(url);
+  const timeoutMs = opts.timeoutMs ?? HOP_TIMEOUT_MS;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const off = onAbort(opts.signal, () => ctrl.abort());
+  try {
+    const res = await getPinned(target, addresses, ctrl.signal, opts.userAgent);
+    const status = res.statusCode ?? 0;
+    const location = status >= 300 && status < 400 ? header(res, "location") : null;
+    const contentType = header(res, "content-type");
+    const base = { url: target.toString(), status, location, contentType, xRobotsTag: header(res, "x-robots-tag") };
+    const wanted = !location && (opts.body === "any" || contentType == null || /html/i.test(contentType));
+    if (!wanted) {
+      res.destroy();
+      return { ...base, body: null, truncated: false };
+    }
+    // A .gz file served as-is (sitemap.xml.gz) is decompressed like fetchRaw does; the cap applies after decompression.
+    const { text, truncated } = await readCapped(decoded(res, opts.body === "any" && isGzipFile(base.url, status, contentType)), opts.maxBytes ?? HOP_MAX_BYTES);
+    return { ...base, body: text, truncated };
+  } catch (err) {
+    if (opts.signal?.aborted) throw opts.signal.reason instanceof Error ? opts.signal.reason : err;
+    if (ctrl.signal.aborted) throw new Error(`Fetch of ${url} timed out after ${timeoutMs / 1000}s`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    off();
+  }
 }
 
 /**
@@ -191,10 +253,23 @@ const isHtml = (contentType: string | null) => contentType == null || /html/i.te
 /** Fetch both versions, extract, and compare. Throws (so the audit section fails) unless both are usable HTML pages. */
 export async function checkRender(url: string, opts: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<RenderCheck> {
   await assertSafeUrlResolved(url);
-  const [raw, rendered] = await Promise.all([fetchRaw(url, opts), fetchRendered(url, opts)]);
-  if (raw.status >= 400) throw new Error(`Raw fetch of ${url} returned HTTP ${raw.status}; nothing to compare`);
+  // Both fetches start together, but the rendered one has its own abort: when the raw fetch already rules the
+  // page out (4xx/5xx, not HTML, or a failure), Chrome is stopped instead of being waited for.
+  const renderCtrl = new AbortController();
+  const renderSignal = opts.signal ? AbortSignal.any([opts.signal, renderCtrl.signal]) : renderCtrl.signal;
+  const renderedP = fetchRendered(url, { ...opts, signal: renderSignal });
+  renderedP.catch(() => undefined); // observed here; awaited below on the success path
+  let raw: RawFetch;
+  try {
+    raw = await fetchRaw(url, opts);
+    if (raw.status >= 400) throw new Error(`Raw fetch of ${url} returned HTTP ${raw.status}; nothing to compare`);
+    if (!isHtml(raw.contentType)) throw new Error(`Raw response for ${url} is ${raw.contentType}, not HTML; nothing to compare`);
+  } catch (err) {
+    renderCtrl.abort(err);
+    throw err;
+  }
+  const rendered = await renderedP;
   if (rendered.status != null && rendered.status >= 400) throw new Error(`Rendered fetch of ${url} returned HTTP ${rendered.status}; nothing to compare`);
-  if (!isHtml(raw.contentType)) throw new Error(`Raw response for ${url} is ${raw.contentType}, not HTML; nothing to compare`);
 
   const { html: rawHtml, ...rawMeta } = raw;
   const { html: renHtml, ...renMeta } = rendered;

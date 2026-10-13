@@ -436,6 +436,8 @@ Planned in [specs/2026-10-13-1900-phase-12-reports-and-gaps.md](specs/2026-10-13
 
 Things to confirm: Ahrefs `related-terms` / `matching-terms` answer with a `keywords` array and charge 1 unit for `keyword` and `cpc`; DataForSEO `keyword_suggestions` takes `keyword` + `limit` and returns the `keyword_ideas` item shape; Semrush's header texts for `Kd` and for `domain_domains`' `P0` / `P1` columns (the fixtures in `test/fixtures/semrush/phase12b/` assume "Keyword Difficulty" and the domain names); and that the reported cost or units match the estimate.
 
+**Stage C1 status:** built on branch `phase-12c1`: the free bounded local crawler (`src/providers/crawler.ts`: robots.txt for the `crawlmark` or `Googlebot` group, Crawl-delay up to 10 s, 250 ms per host otherwise, every URL and redirect hop through the guarded single-hop `fetchHop` and `RESTRICT_TO_CLIENT_DOMAINS`, page/depth/concurrency/time caps, 2 MB pages), its analysis and `crawl` findings (`src/analysis/crawl.ts`), the `local_crawls` table (newest 10 per client), `local_crawl` and `local_crawl_pages`, `crawlmark-cli crawl`, `run_audit` with `localCrawl`, orphans in `site_hygiene` from the newest complete local or DataForSEO crawl, and the `site_crawl` report section. Pending: review, merge, and the manual check on a site the user owns (spec C1 Done-when).
+
 ## Final checklist
 
 - [ ] All phases typecheck and tests pass.

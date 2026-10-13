@@ -32,6 +32,21 @@ vi.mock("../src/providers/crux.js", async () => {
   };
 });
 
+// Phase 12 C1: the local crawl inside run_audit, stubbed (no network). Only imported when localCrawl is set.
+const crawlRuns: unknown[] = [];
+vi.mock("../src/reports/local-crawl.js", () => ({
+  loadLocalCrawlDeps: vi.fn(async () => ({})),
+  runLocalCrawl: vi.fn(async (_c: unknown, o: unknown) => {
+    crawlRuns.push(o);
+    const f = { id: "f1", source: "crawl", rule: "missing-title", url: "https://example.com/x", severity: "high", title: "Page has no title" };
+    return { result: { crawlId: "crawl_1", exhaustive: true, topIssues: [f], summary: {} }, findings: [f], checked: ["site:crawl", "site:crawl-complete", "https://example.com/x"] };
+  }),
+  toAuditData: (r: { result: Record<string, unknown>; findings: unknown[]; checked: string[] }) => {
+    const { topIssues: _t, ...rest } = r.result;
+    return { ...rest, findings: r.findings, checked: r.checked };
+  },
+}));
+
 const { runAudit } = await import("../src/reports/audit.js");
 const FIXTURE = join(import.meta.dirname, "fixtures", "reports", "run-audit-keys.json");
 
@@ -68,5 +83,17 @@ describe("run_audit output keys", () => {
     expect(r.site.cruxHistory).toMatchObject({ ok: true, data: { available: true, key: { origin: "https://example.com" } } });
     expect(Object.keys(r).sort()).toEqual(Object.keys(plain).sort());
     expect(r.findingCount).toBe(plain.findingCount + 2);
+  });
+
+  it("localCrawl: true adds site.localCrawl and crawl findings, nothing else (Phase 12 C1)", async () => {
+    const plain = JSON.parse(JSON.stringify(await runAudit(client, {})));
+    expect(crawlRuns).toHaveLength(0);
+    const r = JSON.parse(JSON.stringify(await runAudit(client, { localCrawl: true, maxLocalCrawlPages: 50 })));
+    expect(crawlRuns).toEqual([expect.objectContaining({ maxPages: 50, timeLimitMs: 240_000 })]);
+    expect(Object.keys(r.site).sort()).toEqual(["backlinks", "crawl", "hygiene", "localCrawl", "sitemaps"]);
+    expect(r.site.localCrawl).toMatchObject({ ok: true, data: { crawlId: "crawl_1", checked: expect.arrayContaining(["site:crawl"]) } });
+    expect(r.site.localCrawl.data.topIssues).toBeUndefined();
+    expect(Object.keys(r).sort()).toEqual(Object.keys(plain).sort());
+    expect(r.findingCount).toBe(plain.findingCount + 1);
   });
 });

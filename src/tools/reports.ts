@@ -269,6 +269,11 @@ export function registerReportTools(server: McpServer) {
           .boolean()
           .optional()
           .describe("Also audit the client's Tag Manager container (as gtm_audit does) as site.tagManager, with its findings (source gtm, medium or low; never alerts). Only when the user asks; default false."),
+        localCrawl: z
+          .boolean()
+          .optional()
+          .describe("Also run the free local crawl (as local_crawl does, up to 4 minutes inside the audit) as site.localCrawl, with its findings (source crawl); it is saved, so the orphan check can use it. Default false."),
+        maxLocalCrawlPages: z.number().int().min(1).max(2000).optional().describe("Page cap for localCrawl. Default 300."),
       },
       annotations: READ_ONLY,
     },
@@ -292,7 +297,7 @@ export function registerReportTools(server: McpServer) {
         "Site-level checks that need no browser: robots.txt (missing, blocks everything, blocks key pages, no Sitemap line), " +
         "sitemaps (found via robots.txt and Search Console, indexes followed to depth 2 and 50 children; up to 50 URLs sampled for non-200, redirects and noindex; key pages missing from every sitemap), " +
         "basic JSON-LD validation on key pages (required properties for Organization, LocalBusiness, Article, Product, BreadcrumbList, FAQPage; not the Rich Results Test), " +
-        "hreflang (self-reference, reciprocity, x-default) and orphan pages (only when a full crawl is already stored; never starts a paid crawl). " +
+        "hreflang (self-reference, reciprocity, x-default) and orphan pages (only when a complete crawl is already stored: the newest of a local_crawl (free) or a DataForSEO crawl, within 30 days; never starts a crawl). " +
         "Every fetch is SSRF-guarded and size-capped. Uses raw HTML; run_audit uses the rendered DOM where it has a rendering result. Findings use source `site`; run_audit includes the same checks.",
       inputSchema: {
         client: clientArg,

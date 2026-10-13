@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import type { CrawlPageExtract } from "./crawl-parse.js";
 import type { PageHygieneExtract, ParsedSitemap } from "./hygiene-parse.js";
 import type { SeoExtract } from "./render-extract.js";
 
@@ -37,7 +38,10 @@ export const parseSitemapIsolated = (xml: string, opts: { timeoutMs?: number } =
 export const extractHygieneIsolated = (html: string, url: string, opts: { timeoutMs?: number } = {}) =>
   runIsolated<PageHygieneExtract>("hygiene", html, url, opts);
 
-async function runIsolated<T>(kind: "seo" | "sitemap" | "hygiene", html: string, url: string, opts: { timeoutMs?: number }): Promise<T> {
+/** Title, description, canonical, robots meta, H1 count and links of a page for the local crawler, in a worker with the same limits. */
+export const extractCrawlIsolated = (html: string, url: string, opts: { timeoutMs?: number } = {}) => runIsolated<CrawlPageExtract>("crawl", html, url, opts);
+
+async function runIsolated<T>(kind: "seo" | "sitemap" | "hygiene" | "crawl", html: string, url: string, opts: { timeoutMs?: number }): Promise<T> {
   if (running >= MAX_EXTRACT_WORKERS) await new Promise<void>((r) => waiting.push(r));
   running++;
   try {

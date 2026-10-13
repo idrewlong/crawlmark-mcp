@@ -114,6 +114,7 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
   const ok = (type: string) => report.sections.some((s) => s.type === type && s.status === "ok");
   const extraSources: Text[] = [];
   if (ok("rank_trend")) extraSources.push([txt("Rank trends: crawlmark's stored rank checks (Search Console 7-day averages; live ranks from DataForSEO when they were checked).")]);
+  if (ok("site_crawl")) extraSources.push([txt("Site crawl: crawlmark's own crawl of the site from this machine (free), the newest one saved.")]);
   if (ok("keyword_gap")) extraSources.push([txt("Keyword gap: the client's SEO data provider (paid), named in that section.")]);
   if (extraSources.length) sourcesAndNotes.push({ kind: "list", items: extraSources });
   const statuses = report.sections.filter((s) => s.status !== "ok");

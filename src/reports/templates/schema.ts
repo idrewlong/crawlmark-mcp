@@ -89,6 +89,8 @@ const sectionSchemas = [
     limit: limit(500),
     competitors: z.array(z.string().min(1).max(253)).min(1).max(5).optional(),
   }),
+  // Phase 12 C1: the newest saved local crawl (free, local; never starts a crawl).
+  z.strictObject({ ...common, type: z.literal("site_crawl"), limit: limit(50) }),
   z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
 ] as const;
 
@@ -116,6 +118,7 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   data_spend: "Paid data spend this month",
   rank_trend: "Tracked keyword rank trends",
   keyword_gap: "Competitor keyword gap",
+  site_crawl: "Site crawl",
   text: "Note",
 };
 

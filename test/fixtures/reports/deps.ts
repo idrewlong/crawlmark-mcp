@@ -63,6 +63,7 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
       throw new Error("keywordGap isn't part of this test");
     },
     gapCompetitors: (_c, passed) => (passed?.length ? [...passed] : ["competitor-a.example"]),
+    latestLocalCrawl: () => undefined,
     ...over,
   };
 }
