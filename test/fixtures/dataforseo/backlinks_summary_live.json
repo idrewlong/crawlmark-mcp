@@ -1,0 +1,123 @@
+{
+  "version": "0.1.20260917",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0 sec.",
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0 sec.",
+      "result_count": 1,
+      "path": [
+        "v3",
+        "backlinks",
+        "summary",
+        "live"
+      ],
+      "data": {
+        "api": "backlinks",
+        "function": "summary",
+        "target": "example.com",
+        "internal_list_limit": 10,
+        "include_subdomains": true
+      },
+      "result": [
+        {
+          "target": "example.com",
+          "first_seen": "2019-01-15 23:54:14 +00:00",
+          "lost_date": null,
+          "rank": 52,
+          "backlinks": 285501,
+          "backlinks_spam_score": 16,
+          "crawled_pages": 178250,
+          "info": {
+            "server": "example-server",
+            "cms": null,
+            "platform_type": [
+              "organization"
+            ],
+            "ip_address": "192.0.2.1",
+            "country": "US",
+            "is_ip": false,
+            "target_spam_score": 0
+          },
+          "internal_links_count": 2470601,
+          "external_links_count": 7311530,
+          "broken_backlinks": 1185,
+          "broken_pages": 135,
+          "referring_domains": 3044,
+          "referring_domains_nofollow": 0,
+          "referring_main_domains": 2898,
+          "referring_main_domains_nofollow": 0,
+          "referring_ips": 2374,
+          "referring_subnets": 1412,
+          "referring_pages": 279543,
+          "referring_pages_nofollow": 0,
+          "referring_links_tld": {
+            "jetzt": 181650,
+            "de": 82909,
+            "com": 5861,
+            "net": 1489,
+            "pl": 1126,
+            "io": 969,
+            "ai": 948,
+            "example.blog": 916,
+            "org": 709,
+            "cc": 400
+          },
+          "referring_links_types": {
+            "image": 186985,
+            "anchor": 64983,
+            "redirect": 27572,
+            "canonical": 3
+          },
+          "referring_links_attributes": {
+            "noopener": 4655,
+            "noreferrer": 2512,
+            "sponsored": 48,
+            "external": 44,
+            "ugc": 5,
+            "bookmark": 3,
+            "author": 1
+          },
+          "referring_links_platform_types": {
+            "unknown": 191349,
+            "organization": 58344,
+            "blogs": 4093,
+            "cms": 3197,
+            "news": 1141,
+            "ecommerce": 437,
+            "message-boards": 60
+          },
+          "referring_links_semantic_locations": {
+            "": 270299,
+            "article": 4474,
+            "section": 2537,
+            "main": 1263,
+            "header": 557,
+            "footer": 162,
+            "details": 121,
+            "aside": 87,
+            "figure": 22,
+            "figcaption": 16
+          },
+          "referring_links_countries": {
+            "": 188481,
+            "DE": 83384,
+            "US": 1590,
+            "IO": 1362,
+            "PL": 1268,
+            "AI": 949,
+            "WW": 632,
+            "CC": 400,
+            "CA": 235,
+            "UA": 215
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -44,6 +44,12 @@ cp config/clients.example.yaml config/clients.yaml
 npm run build
 ```
 
+Scripts: `npm run dev` (tsx), `npm run build`, `npm start` (runs `dist/` with the SQLite ExperimentalWarning silenced), `npm run typecheck` (source and tests), `npm test` (vitest), `npm run inspect`.
+
+### Config and paths
+
+Settings come from environment variables, with `.env` in the project root loaded automatically (a missing `.env` is fine). `.env.example` lists every variable. Relative `CLIENTS_FILE`, `DATA_DIR` and `GOOGLE_APPLICATION_CREDENTIALS` values resolve against the project root (the directory above `src/` or `dist/`), not the working directory, so the server works no matter where a client launches it. Absolute paths are used as-is.
+
 ### Google service account (GSC + GA4)
 
 1. In Google Cloud, create a project and enable the **Google Search Console API** and **Google Analytics Data API**.
@@ -74,24 +80,21 @@ Edit `config/clients.yaml`. Each client has a slug, domain, GSC property, GA4 pr
 **Claude Code**
 
 ```bash
-claude mcp add seo-ops -- node /absolute/path/to/seo-ops-mcp/dist/index.js
+claude mcp add seo-ops -- node --disable-warning=ExperimentalWarning /absolute/path/to/seo-ops-mcp/dist/index.js
 ```
 
-Run it from the project folder, or set `CLIENTS_FILE`, `DATA_DIR` and the credential paths as absolute paths, because the server resolves them from its working directory.
+The `--disable-warning=ExperimentalWarning` flag hides Node's `node:sqlite` warning. The `seo-ops-mcp` bin entry has the same flag in its shebang. Config paths resolve from the project root, so the working directory doesn't matter.
 
 **Claude Desktop / other clients** (`mcpServers` config)
+
+Secrets and paths come from the project's `.env`, so no `env` block is needed (you can still set one to override).
 
 ```json
 {
   "mcpServers": {
     "seo-ops": {
       "command": "node",
-      "args": ["/absolute/path/to/seo-ops-mcp/dist/index.js"],
-      "env": {
-        "CLIENTS_FILE": "/absolute/path/to/seo-ops-mcp/config/clients.yaml",
-        "DATA_DIR": "/absolute/path/to/seo-ops-mcp/data",
-        "GOOGLE_APPLICATION_CREDENTIALS": "/absolute/path/to/seo-ops-mcp/secrets/google-service-account.json"
-      }
+      "args": ["--disable-warning=ExperimentalWarning", "/absolute/path/to/seo-ops-mcp/dist/index.js"]
     }
   }
 }
@@ -116,14 +119,17 @@ npm run inspect
 ```
 src/
   index.ts              server entry (stdio)
-  config.ts             env + clients.yaml loading
+  config.ts             env + clients.yaml loading (paths resolved from project root)
   lib/
     store.ts            SQLite (cache + spend ledger)
     cache.ts            TTL cache wrapper
     budget.ts           per-client / global spend caps
     dates.ts            month ranges and comparisons
+    paths.ts            project-root path resolution (pure)
+    env.ts              empty env values count as unset (pure)
   providers/            one file per data source
     gsc.ts  ga4.ts  dataforseo.ts  lighthouse.ts  axe.ts  google.ts  browser.ts
+    dataforseo-shape.ts pure mappers: raw DataForSEO results -> typed compact objects
   reports/
     monthly.ts          monthly_report composer
     audit.ts            run_audit composer
@@ -131,6 +137,11 @@ src/
   tools/
     reports.ts          report tool registrations
     raw.ts              lower-level tool registrations
+scripts/
+  record-fixtures.ts    records raw DataForSEO sandbox responses (refuses non-sandbox); scrub before committing
+test/
+  *.test.ts             vitest unit tests (pure functions)
+  fixtures/dataforseo/  API payloads used by the mapping tests (see its README)
 ```
 
 ## Adding a source
@@ -143,4 +154,4 @@ Candidates: Bing Webmaster Tools, Google Business Profile, a rank tracker, or th
 
 ## Status
 
-Scaffold. It typechecks and the server starts and serves all tools. It has not yet been run against live Google, DataForSEO or Chrome. Expect to adjust response field mappings once you see real payloads, especially DataForSEO's ranked keywords, competitors and backlinks results, which are returned unshaped for now.
+Scaffold. It typechecks and the server starts and serves all tools. It has not yet been run against live Google, DataForSEO or Chrome. DataForSEO ranked keywords, competitors, backlinks and instant page results are shaped into compact typed objects, but the mapping fixtures are scrubbed sandbox recordings (see `test/fixtures/dataforseo/README.md`).

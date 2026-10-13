@@ -45,7 +45,7 @@ export async function runAudit(client: Client, opts: AuditOptions = {}) {
     const accessibility = await section(() => runAxe(url, wcagLevel));
     const [indexing, onPage] = await Promise.all([
       section(() => gscInspectUrl(client, url)),
-      section(async () => (await instantPage(client, url)).result[0]),
+      section(async () => (await instantPage(client, url)).page),
     ]);
     pages.push({ url, lighthouse, accessibility, indexing, onPage });
   }

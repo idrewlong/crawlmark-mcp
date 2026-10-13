@@ -8,3 +8,4 @@ data/
 google-token.json
 config/clients.yaml
 .DS_Store
+recordings/

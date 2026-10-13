@@ -1,0 +1,2200 @@
+{
+  "version": "0.1.20260917",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0 sec.",
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0 sec.",
+      "result_count": 1,
+      "path": [
+        "v3",
+        "Example path text",
+        "Example path text",
+        "ranked_keywords",
+        "live"
+      ],
+      "data": {
+        "api": "dataforseo_labs",
+        "function": "ranked_keywords",
+        "se_type": "google",
+        "target": "example.com",
+        "limit": 10,
+        "item_types": [
+          "organic"
+        ],
+        "location_code": 2840,
+        "language_code": "en",
+        "order_by": [
+          "keyword_data.keyword_info.search_volume,desc"
+        ]
+      },
+      "result": [
+        {
+          "se_type": "google",
+          "target": "example.com",
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 9528,
+          "items_count": 6,
+          "metrics": {
+            "organic": {
+              "pos_1": 48,
+              "pos_2_3": 146,
+              "pos_4_10": 1223,
+              "pos_11_20": 2259,
+              "pos_21_30": 1941,
+              "pos_31_40": 1384,
+              "pos_41_50": 1042,
+              "pos_51_60": 731,
+              "pos_61_70": 432,
+              "pos_71_80": 203,
+              "pos_81_90": 94,
+              "pos_91_100": 25,
+              "etv": 31868.476467285305,
+              "count": 9528,
+              "estimated_paid_traffic_cost": 193646.92324275448,
+              "is_new": 7839,
+              "is_up": 917,
+              "is_down": 585,
+              "is_lost": 0,
+              "clickstream_etv": 27475.138403999998,
+              "clickstream_gender_distribution": {
+                "female": 46,
+                "male": 53
+              },
+              "clickstream_age_distribution": {
+                "18-24": 30,
+                "25-34": 18,
+                "35-44": 18,
+                "45-54": 28,
+                "55-64": 4
+              }
+            },
+            "paid": {
+              "pos_1": 0,
+              "pos_2_3": 0,
+              "pos_4_10": 0,
+              "pos_11_20": 0,
+              "pos_21_30": 0,
+              "pos_31_40": 0,
+              "pos_41_50": 0,
+              "pos_51_60": 0,
+              "pos_61_70": 0,
+              "pos_71_80": 0,
+              "pos_81_90": 0,
+              "pos_91_100": 0,
+              "etv": 0,
+              "count": 0,
+              "estimated_paid_traffic_cost": 0,
+              "is_new": 0,
+              "is_up": 0,
+              "is_down": 0,
+              "is_lost": 0,
+              "clickstream_etv": 0,
+              "clickstream_gender_distribution": {
+                "female": 0,
+                "male": 0
+              },
+              "clickstream_age_distribution": {
+                "18-24": 0,
+                "25-34": 0,
+                "35-44": 0,
+                "45-54": 0,
+                "55-64": 0
+              }
+            },
+            "featured_snippet": null,
+            "local_pack": null,
+            "ai_overview_reference": null
+          },
+          "metrics_absolute": {
+            "organic": {
+              "pos_1": 26,
+              "pos_2_3": 72,
+              "pos_4_10": 987,
+              "pos_11_20": 1981,
+              "pos_21_30": 1916,
+              "pos_31_40": 1432,
+              "pos_41_50": 1064,
+              "pos_51_60": 835,
+              "pos_61_70": 575,
+              "pos_71_80": 339,
+              "pos_81_90": 194,
+              "pos_91_100": 76,
+              "is_new": 7839,
+              "is_up": 917,
+              "is_down": 585,
+              "is_lost": 0,
+              "clickstream_etv": 27475.138403999998,
+              "clickstream_gender_distribution": {
+                "female": 46,
+                "male": 53
+              },
+              "clickstream_age_distribution": {
+                "18-24": 30,
+                "25-34": 18,
+                "35-44": 18,
+                "45-54": 28,
+                "55-64": 4
+              }
+            },
+            "paid": {
+              "pos_1": 0,
+              "pos_2_3": 0,
+              "pos_4_10": 0,
+              "pos_11_20": 0,
+              "pos_21_30": 0,
+              "pos_31_40": 0,
+              "pos_41_50": 0,
+              "pos_51_60": 0,
+              "pos_61_70": 0,
+              "pos_71_80": 0,
+              "pos_81_90": 0,
+              "pos_91_100": 0,
+              "is_new": 0,
+              "is_up": 0,
+              "is_down": 0,
+              "is_lost": 0,
+              "clickstream_etv": 0,
+              "clickstream_gender_distribution": {
+                "female": 0,
+                "male": 0
+              },
+              "clickstream_age_distribution": {
+                "18-24": 0,
+                "25-34": 0,
+                "35-44": 0,
+                "45-54": 0,
+                "55-64": 0
+              }
+            },
+            "featured_snippet": null,
+            "local_pack": null,
+            "ai_overview_reference": null
+          },
+          "items": [
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "1000 keywords",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "competition": 0.10000000149011612,
+                  "competition_level": "LOW",
+                  "cpc": null,
+                  "search_volume": 40,
+                  "low_top_of_page_bid": null,
+                  "high_top_of_page_bid": null,
+                  "categories": [
+                    10015,
+                    10125,
+                    10672,
+                    11944
+                  ],
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ],
+                  "search_volume_trend": {
+                    "monthly": -91,
+                    "quarterly": -80,
+                    "yearly": -80
+                  }
+                },
+                "keyword_info_normalized_with_bing": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "keyword_info_normalized_with_clickstream": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "clickstream_keyword_info": null,
+                "keyword_properties": {
+                  "se_type": "google",
+                  "core_keyword": null,
+                  "synonym_clustering_algorithm": null,
+                  "keyword_difficulty": 15,
+                  "detected_language": "en",
+                  "is_another_language": false
+                },
+                "serp_info": {
+                  "se_type": "google",
+                  "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                  "serp_item_types": [
+                    "ai_overview",
+                    "organic",
+                    "people_also_ask",
+                    "video",
+                    "discussions_and_forums",
+                    "related_searches"
+                  ],
+                  "se_results_count": 132,
+                  "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                  "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+                },
+                "avg_backlinks_info": {
+                  "se_type": "google",
+                  "backlinks": 4747.2998046875,
+                  "dofollow": 3054.10009765625,
+                  "referring_pages": 4337.2998046875,
+                  "referring_domains": 1214.800048828125,
+                  "referring_main_domains": 1154.5,
+                  "rank": 128.8000030517578,
+                  "main_domain_rank": 448.8999938964844,
+                  "last_updated_time": "2026-08-13 18:13:12 +00:00"
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "informational",
+                  "foreign_intent": null,
+                  "last_updated_time": "2026-04-25 03:15:02 +00:00"
+                }
+              },
+              "ranked_serp_element": {
+                "se_type": "google",
+                "serp_item": {
+                  "se_type": "google",
+                  "type": "organic",
+                  "rank_group": 1,
+                  "rank_absolute": 2,
+                  "position": "left",
+                  "xpath": "/html[1]/body[1]/div[3]/div[1]/div[13]/div[2]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div[1]",
+                  "domain": "example.com",
+                  "title": "Example title text",
+                  "url": "https://example.com/free-seo-stats/top-1000-keywords",
+                  "breadcrumb": "https://example.com › Free SEO Stats",
+                  "website_name": "Example website_name text",
+                  "is_image": false,
+                  "is_video": false,
+                  "is_featured_snippet": false,
+                  "is_malicious": false,
+                  "checks": null,
+                  "description": "The table below surfaces the 1000 most searched keywords across 75 countries. contains over 5 billion search terms",
+                  "pre_snippet": null,
+                  "extended_snippet": null,
+                  "amp_version": false,
+                  "rating": null,
+                  "highlighted": [
+                    "1000 most searched keywords"
+                  ],
+                  "links": null,
+                  "about_this_result": null,
+                  "main_domain": "example.com",
+                  "relative_url": "/free-seo-stats/top-1000-keywords",
+                  "etv": 12.15999984741211,
+                  "estimated_paid_traffic_cost": null,
+                  "clickstream_etv": 0,
+                  "rank_changes": {
+                    "previous_rank_absolute": 1,
+                    "is_new": false,
+                    "is_up": false,
+                    "is_down": true
+                  },
+                  "backlinks_info": {
+                    "referring_domains": 4,
+                    "referring_main_domains": 3,
+                    "referring_pages": 4,
+                    "dofollow": 4,
+                    "backlinks": 6,
+                    "time_update": "2026-10-01 04:25:30 +00:00"
+                  },
+                  "rank_info": {
+                    "page_rank": 64,
+                    "main_domain_rank": 336
+                  }
+                },
+                "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                "serp_item_types": [
+                  "ai_overview",
+                  "organic",
+                  "people_also_ask",
+                  "video",
+                  "discussions_and_forums",
+                  "related_searches"
+                ],
+                "se_results_count": 132,
+                "keyword_difficulty": 15,
+                "is_lost": false,
+                "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "example keyword 1",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "last_updated_time": "2026-09-17 05:05:27 +00:00",
+                  "competition": 0.28999999165534973,
+                  "competition_level": "LOW",
+                  "cpc": 20.049999237060547,
+                  "search_volume": 30,
+                  "low_top_of_page_bid": 4.360000133514404,
+                  "high_top_of_page_bid": 16.350000381469727,
+                  "categories": [
+                    10004,
+                    10276,
+                    11088,
+                    12376
+                  ],
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 40
+                    }
+                  ],
+                  "search_volume_trend": {
+                    "monthly": 0,
+                    "quarterly": 100,
+                    "yearly": -60
+                  }
+                },
+                "keyword_info_normalized_with_bing": {
+                  "last_updated_time": "2026-09-27 02:27:37 +00:00",
+                  "search_volume": 3,
+                  "is_normalized": true,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 2
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 2
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 1
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 3
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 3
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 4
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 2
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 4
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 2
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 2
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 3
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 4
+                    }
+                  ]
+                },
+                "keyword_info_normalized_with_clickstream": {
+                  "last_updated_time": "2026-09-27 02:27:37 +00:00",
+                  "search_volume": 30,
+                  "is_normalized": true,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 39
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 13
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 15
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 20
+                    }
+                  ]
+                },
+                "clickstream_keyword_info": {
+                  "search_volume": 101,
+                  "last_updated_time": "2026-09-03 21:45:53 +00:00",
+                  "gender_distribution": {
+                    "female": 50,
+                    "male": 50
+                  },
+                  "age_distribution": {
+                    "18-24": null,
+                    "25-34": 100,
+                    "35-44": null,
+                    "45-54": null,
+                    "55-64": null
+                  },
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 100
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 100
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 100
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 100
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 100
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 100
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 50
+                    }
+                  ]
+                },
+                "keyword_properties": {
+                  "se_type": "google",
+                  "core_keyword": "Example core_keyword text",
+                  "synonym_clustering_algorithm": "text_processing",
+                  "keyword_difficulty": 6,
+                  "detected_language": "en",
+                  "is_another_language": false
+                },
+                "serp_info": {
+                  "se_type": "google",
+                  "check_url": "Example check_url text",
+                  "serp_item_types": [
+                    "ai_overview",
+                    "organic",
+                    "discussions_and_forums",
+                    "people_also_ask",
+                    "related_searches"
+                  ],
+                  "se_results_count": 123,
+                  "last_updated_time": "2026-09-01 03:22:08 +00:00",
+                  "previous_updated_time": "2026-06-16 07:53:47 +00:00"
+                },
+                "avg_backlinks_info": {
+                  "se_type": "google",
+                  "backlinks": 1918.199951171875,
+                  "dofollow": 1915.9000244140625,
+                  "referring_pages": 1917.199951171875,
+                  "referring_domains": 14.699999809265137,
+                  "referring_main_domains": 14.100000381469727,
+                  "rank": 79,
+                  "main_domain_rank": 535.0999755859375,
+                  "last_updated_time": "2026-09-01 03:23:22 +00:00"
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "informational",
+                  "foreign_intent": [
+                    "commercial"
+                  ],
+                  "last_updated_time": "2026-04-29 00:25:10 +00:00"
+                }
+              },
+              "ranked_serp_element": {
+                "se_type": "google",
+                "serp_item": {
+                  "se_type": "google",
+                  "type": "organic",
+                  "rank_group": 1,
+                  "rank_absolute": 2,
+                  "position": "left",
+                  "xpath": "/html[1]/body[1]/div[3]/div[1]/div[13]/div[2]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div[1]",
+                  "domain": "trends.example.com",
+                  "title": "Example title text",
+                  "url": "https://trends.example.com/",
+                  "breadcrumb": "https://trends.example.com",
+                  "website_name": "Example website_name text",
+                  "is_image": false,
+                  "is_video": false,
+                  "is_featured_snippet": false,
+                  "is_malicious": false,
+                  "checks": null,
+                  "description": "Example description text",
+                  "pre_snippet": null,
+                  "extended_snippet": null,
+                  "amp_version": false,
+                  "rating": null,
+                  "highlighted": [
+                    "Example highlighted text"
+                  ],
+                  "links": null,
+                  "about_this_result": null,
+                  "main_domain": "example.com",
+                  "relative_url": "/",
+                  "etv": 9.119999885559082,
+                  "estimated_paid_traffic_cost": 182.8560028076172,
+                  "clickstream_etv": 30.704,
+                  "rank_changes": {
+                    "previous_rank_absolute": 3,
+                    "is_new": false,
+                    "is_up": true,
+                    "is_down": false
+                  },
+                  "backlinks_info": {
+                    "referring_domains": 80,
+                    "referring_main_domains": 78,
+                    "referring_pages": 153053,
+                    "dofollow": 153053,
+                    "backlinks": 153053,
+                    "time_update": "2026-10-01 04:03:50 +00:00"
+                  },
+                  "rank_info": {
+                    "page_rank": 431,
+                    "main_domain_rank": 340
+                  }
+                },
+                "check_url": "Example check_url text",
+                "serp_item_types": [
+                  "ai_overview",
+                  "organic",
+                  "discussions_and_forums",
+                  "people_also_ask",
+                  "related_searches"
+                ],
+                "se_results_count": 123,
+                "keyword_difficulty": 6,
+                "is_lost": false,
+                "last_updated_time": "2026-09-01 03:22:08 +00:00",
+                "previous_updated_time": "2026-06-16 07:53:47 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "example keyword 2",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "last_updated_time": "2026-09-15 10:31:03 +00:00",
+                  "competition": 0.10999999940395355,
+                  "competition_level": "LOW",
+                  "cpc": null,
+                  "search_volume": 30,
+                  "low_top_of_page_bid": null,
+                  "high_top_of_page_bid": null,
+                  "categories": [
+                    13575,
+                    13860
+                  ],
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 70
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ],
+                  "search_volume_trend": {
+                    "monthly": 0,
+                    "quarterly": -50,
+                    "yearly": -80
+                  }
+                },
+                "keyword_info_normalized_with_bing": {
+                  "last_updated_time": "2026-09-15 10:31:03 +00:00",
+                  "search_volume": 30,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 70
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "keyword_info_normalized_with_clickstream": {
+                  "last_updated_time": "2026-09-15 10:31:03 +00:00",
+                  "search_volume": 30,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 70
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 30
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "clickstream_keyword_info": {
+                  "search_volume": 0,
+                  "last_updated_time": "2026-09-03 21:33:53 +00:00",
+                  "gender_distribution": {
+                    "female": null,
+                    "male": null
+                  },
+                  "age_distribution": {
+                    "18-24": null,
+                    "25-34": null,
+                    "35-44": null,
+                    "45-54": null,
+                    "55-64": null
+                  },
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 50
+                    }
+                  ]
+                },
+                "keyword_properties": {
+                  "se_type": "google",
+                  "core_keyword": null,
+                  "synonym_clustering_algorithm": null,
+                  "keyword_difficulty": 0,
+                  "detected_language": "en",
+                  "is_another_language": false
+                },
+                "serp_info": {
+                  "se_type": "google",
+                  "check_url": "Example check_url text",
+                  "serp_item_types": [
+                    "ai_overview",
+                    "organic",
+                    "related_searches"
+                  ],
+                  "se_results_count": 137,
+                  "last_updated_time": "2026-08-17 21:01:47 +00:00",
+                  "previous_updated_time": "2026-05-10 09:28:33 +00:00"
+                },
+                "avg_backlinks_info": {
+                  "se_type": "google",
+                  "backlinks": 96.5999984741211,
+                  "dofollow": 55.099998474121094,
+                  "referring_pages": 92.69999694824219,
+                  "referring_domains": 45,
+                  "referring_main_domains": 43.900001525878906,
+                  "rank": 35.20000076293945,
+                  "main_domain_rank": 476,
+                  "last_updated_time": "2026-08-17 21:01:50 +00:00"
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "informational",
+                  "foreign_intent": null,
+                  "last_updated_time": "2026-04-24 22:57:30 +00:00"
+                }
+              },
+              "ranked_serp_element": {
+                "se_type": "google",
+                "serp_item": {
+                  "se_type": "google",
+                  "type": "organic",
+                  "rank_group": 1,
+                  "rank_absolute": 2,
+                  "position": "left",
+                  "xpath": "/html[1]/body[1]/div[3]/div[1]/div[13]/div[2]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div[1]",
+                  "domain": "example.com",
+                  "title": "Example title text",
+                  "url": "Example url text",
+                  "breadcrumb": "https://example.com › Help Сenter",
+                  "website_name": "Example website_name text",
+                  "is_image": false,
+                  "is_video": false,
+                  "is_featured_snippet": false,
+                  "is_malicious": false,
+                  "checks": null,
+                  "description": "Example description text",
+                  "pre_snippet": null,
+                  "extended_snippet": null,
+                  "amp_version": false,
+                  "rating": null,
+                  "highlighted": [
+                    "Example highlighted text"
+                  ],
+                  "links": null,
+                  "about_this_result": null,
+                  "main_domain": "example.com",
+                  "relative_url": "Example relative_url text",
+                  "etv": 9.119999885559082,
+                  "estimated_paid_traffic_cost": null,
+                  "clickstream_etv": 0,
+                  "rank_changes": {
+                    "previous_rank_absolute": null,
+                    "is_new": true,
+                    "is_up": false,
+                    "is_down": false
+                  },
+                  "backlinks_info": null,
+                  "rank_info": {
+                    "page_rank": 0,
+                    "main_domain_rank": 336
+                  }
+                },
+                "check_url": "Example check_url text",
+                "serp_item_types": [
+                  "ai_overview",
+                  "organic",
+                  "related_searches"
+                ],
+                "se_results_count": 137,
+                "keyword_difficulty": 0,
+                "is_lost": false,
+                "last_updated_time": "2026-08-17 21:01:47 +00:00",
+                "previous_updated_time": "2026-05-10 09:28:33 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "edge case null volume and traffic",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "competition": 0.10000000149011612,
+                  "competition_level": "LOW",
+                  "cpc": null,
+                  "search_volume": null,
+                  "low_top_of_page_bid": null,
+                  "high_top_of_page_bid": null,
+                  "categories": [
+                    10015,
+                    10125,
+                    10672,
+                    11944
+                  ],
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ],
+                  "search_volume_trend": {
+                    "monthly": -91,
+                    "quarterly": -80,
+                    "yearly": -80
+                  }
+                },
+                "keyword_info_normalized_with_bing": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "keyword_info_normalized_with_clickstream": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "clickstream_keyword_info": null,
+                "keyword_properties": {
+                  "se_type": "google",
+                  "core_keyword": null,
+                  "synonym_clustering_algorithm": null,
+                  "keyword_difficulty": 15,
+                  "detected_language": "en",
+                  "is_another_language": false
+                },
+                "serp_info": {
+                  "se_type": "google",
+                  "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                  "serp_item_types": [
+                    "ai_overview",
+                    "organic",
+                    "people_also_ask",
+                    "video",
+                    "discussions_and_forums",
+                    "related_searches"
+                  ],
+                  "se_results_count": 132,
+                  "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                  "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+                },
+                "avg_backlinks_info": {
+                  "se_type": "google",
+                  "backlinks": 4747.2998046875,
+                  "dofollow": 3054.10009765625,
+                  "referring_pages": 4337.2998046875,
+                  "referring_domains": 1214.800048828125,
+                  "referring_main_domains": 1154.5,
+                  "rank": 128.8000030517578,
+                  "main_domain_rank": 448.8999938964844,
+                  "last_updated_time": "2026-08-13 18:13:12 +00:00"
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "informational",
+                  "foreign_intent": null,
+                  "last_updated_time": "2026-04-25 03:15:02 +00:00"
+                }
+              },
+              "ranked_serp_element": {
+                "se_type": "google",
+                "serp_item": {
+                  "se_type": "google",
+                  "type": "organic",
+                  "rank_group": 4,
+                  "rank_absolute": 2,
+                  "position": "left",
+                  "xpath": "/html[1]/body[1]/div[3]/div[1]/div[13]/div[2]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div[1]",
+                  "domain": "example.com",
+                  "title": "Example title text",
+                  "url": "https://example.com/services",
+                  "breadcrumb": "https://example.com › Free SEO Stats",
+                  "website_name": "Example website_name text",
+                  "is_image": false,
+                  "is_video": false,
+                  "is_featured_snippet": false,
+                  "is_malicious": false,
+                  "checks": null,
+                  "description": "The table below surfaces the 1000 most searched keywords across 75 countries. contains over 5 billion search terms",
+                  "pre_snippet": null,
+                  "extended_snippet": null,
+                  "amp_version": false,
+                  "rating": null,
+                  "highlighted": [
+                    "1000 most searched keywords"
+                  ],
+                  "links": null,
+                  "about_this_result": null,
+                  "main_domain": "example.com",
+                  "relative_url": "/free-seo-stats/top-1000-keywords",
+                  "etv": null,
+                  "estimated_paid_traffic_cost": null,
+                  "clickstream_etv": 0,
+                  "rank_changes": {
+                    "previous_rank_absolute": 1,
+                    "is_new": false,
+                    "is_up": false,
+                    "is_down": true
+                  },
+                  "backlinks_info": {
+                    "referring_domains": 4,
+                    "referring_main_domains": 3,
+                    "referring_pages": 4,
+                    "dofollow": 4,
+                    "backlinks": 6,
+                    "time_update": "2026-10-01 04:25:30 +00:00"
+                  },
+                  "rank_info": {
+                    "page_rank": 64,
+                    "main_domain_rank": 336
+                  }
+                },
+                "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                "serp_item_types": [
+                  "ai_overview",
+                  "organic",
+                  "people_also_ask",
+                  "video",
+                  "discussions_and_forums",
+                  "related_searches"
+                ],
+                "se_results_count": 132,
+                "keyword_difficulty": 15,
+                "is_lost": false,
+                "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "edge case missing serp item",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info_normalized_with_bing": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "keyword_info_normalized_with_clickstream": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "clickstream_keyword_info": null,
+                "keyword_properties": {
+                  "se_type": "google",
+                  "core_keyword": null,
+                  "synonym_clustering_algorithm": null,
+                  "keyword_difficulty": 15,
+                  "detected_language": "en",
+                  "is_another_language": false
+                },
+                "serp_info": {
+                  "se_type": "google",
+                  "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                  "serp_item_types": [
+                    "ai_overview",
+                    "organic",
+                    "people_also_ask",
+                    "video",
+                    "discussions_and_forums",
+                    "related_searches"
+                  ],
+                  "se_results_count": 132,
+                  "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                  "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+                },
+                "avg_backlinks_info": {
+                  "se_type": "google",
+                  "backlinks": 4747.2998046875,
+                  "dofollow": 3054.10009765625,
+                  "referring_pages": 4337.2998046875,
+                  "referring_domains": 1214.800048828125,
+                  "referring_main_domains": 1154.5,
+                  "rank": 128.8000030517578,
+                  "main_domain_rank": 448.8999938964844,
+                  "last_updated_time": "2026-08-13 18:13:12 +00:00"
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "informational",
+                  "foreign_intent": null,
+                  "last_updated_time": "2026-04-25 03:15:02 +00:00"
+                }
+              },
+              "ranked_serp_element": {
+                "se_type": "google",
+                "serp_item": null,
+                "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                "serp_item_types": [
+                  "ai_overview",
+                  "organic",
+                  "people_also_ask",
+                  "video",
+                  "discussions_and_forums",
+                  "related_searches"
+                ],
+                "se_results_count": 132,
+                "keyword_difficulty": 15,
+                "is_lost": false,
+                "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "edge case paid item",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "competition": 0.10000000149011612,
+                  "competition_level": "LOW",
+                  "cpc": null,
+                  "search_volume": 40,
+                  "low_top_of_page_bid": null,
+                  "high_top_of_page_bid": null,
+                  "categories": [
+                    10015,
+                    10125,
+                    10672,
+                    11944
+                  ],
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ],
+                  "search_volume_trend": {
+                    "monthly": -91,
+                    "quarterly": -80,
+                    "yearly": -80
+                  }
+                },
+                "keyword_info_normalized_with_bing": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "keyword_info_normalized_with_clickstream": {
+                  "last_updated_time": "2026-09-14 05:02:50 +00:00",
+                  "search_volume": 40,
+                  "is_normalized": false,
+                  "monthly_searches": [
+                    {
+                      "year": 2026,
+                      "month": 8,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2026,
+                      "month": 7,
+                      "search_volume": 110
+                    },
+                    {
+                      "year": 2026,
+                      "month": 6,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 5,
+                      "search_volume": 140
+                    },
+                    {
+                      "year": 2026,
+                      "month": 4,
+                      "search_volume": 50
+                    },
+                    {
+                      "year": 2026,
+                      "month": 3,
+                      "search_volume": 40
+                    },
+                    {
+                      "year": 2026,
+                      "month": 2,
+                      "search_volume": 0
+                    },
+                    {
+                      "year": 2026,
+                      "month": 1,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 12,
+                      "search_volume": 10
+                    },
+                    {
+                      "year": 2025,
+                      "month": 11,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 10,
+                      "search_volume": 20
+                    },
+                    {
+                      "year": 2025,
+                      "month": 9,
+                      "search_volume": 70
+                    }
+                  ]
+                },
+                "clickstream_keyword_info": null,
+                "keyword_properties": {
+                  "se_type": "google",
+                  "core_keyword": null,
+                  "synonym_clustering_algorithm": null,
+                  "keyword_difficulty": 15,
+                  "detected_language": "en",
+                  "is_another_language": false
+                },
+                "serp_info": {
+                  "se_type": "google",
+                  "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                  "serp_item_types": [
+                    "ai_overview",
+                    "organic",
+                    "people_also_ask",
+                    "video",
+                    "discussions_and_forums",
+                    "related_searches"
+                  ],
+                  "se_results_count": 132,
+                  "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                  "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+                },
+                "avg_backlinks_info": {
+                  "se_type": "google",
+                  "backlinks": 4747.2998046875,
+                  "dofollow": 3054.10009765625,
+                  "referring_pages": 4337.2998046875,
+                  "referring_domains": 1214.800048828125,
+                  "referring_main_domains": 1154.5,
+                  "rank": 128.8000030517578,
+                  "main_domain_rank": 448.8999938964844,
+                  "last_updated_time": "2026-08-13 18:13:12 +00:00"
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "informational",
+                  "foreign_intent": null,
+                  "last_updated_time": "2026-04-25 03:15:02 +00:00"
+                }
+              },
+              "ranked_serp_element": {
+                "se_type": "google",
+                "serp_item": {
+                  "se_type": "google",
+                  "type": "paid",
+                  "rank_group": 1,
+                  "rank_absolute": 2,
+                  "position": "left",
+                  "xpath": "/html[1]/body[1]/div[3]/div[1]/div[13]/div[2]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div[1]",
+                  "domain": "example.com",
+                  "title": "Example title text",
+                  "url": "https://example.com/free-seo-stats/top-1000-keywords",
+                  "breadcrumb": "https://example.com › Free SEO Stats",
+                  "website_name": "Example website_name text",
+                  "is_image": false,
+                  "is_video": false,
+                  "is_featured_snippet": false,
+                  "is_malicious": false,
+                  "checks": null,
+                  "description": "The table below surfaces the 1000 most searched keywords across 75 countries. contains over 5 billion search terms",
+                  "pre_snippet": null,
+                  "extended_snippet": null,
+                  "amp_version": false,
+                  "rating": null,
+                  "highlighted": [
+                    "1000 most searched keywords"
+                  ],
+                  "links": null,
+                  "about_this_result": null,
+                  "main_domain": "example.com",
+                  "relative_url": "/free-seo-stats/top-1000-keywords",
+                  "etv": 12.15999984741211,
+                  "estimated_paid_traffic_cost": null,
+                  "clickstream_etv": 0,
+                  "rank_changes": {
+                    "previous_rank_absolute": 1,
+                    "is_new": false,
+                    "is_up": false,
+                    "is_down": true
+                  },
+                  "backlinks_info": {
+                    "referring_domains": 4,
+                    "referring_main_domains": 3,
+                    "referring_pages": 4,
+                    "dofollow": 4,
+                    "backlinks": 6,
+                    "time_update": "2026-10-01 04:25:30 +00:00"
+                  },
+                  "rank_info": {
+                    "page_rank": 64,
+                    "main_domain_rank": 336
+                  }
+                },
+                "check_url": "https://www.example.com/search?q=1000%20keywords&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                "serp_item_types": [
+                  "ai_overview",
+                  "organic",
+                  "people_also_ask",
+                  "video",
+                  "discussions_and_forums",
+                  "related_searches"
+                ],
+                "se_results_count": 132,
+                "keyword_difficulty": 15,
+                "is_lost": false,
+                "last_updated_time": "2026-08-13 18:11:06 +00:00",
+                "previous_updated_time": "2026-05-04 07:08:20 +00:00"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

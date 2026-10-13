@@ -1,6 +1,25 @@
 import { env, type Client } from "../config.js";
 import { assertBudget, recordSpend } from "../lib/budget.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
+import {
+  mapBacklinksSummary,
+  mapCompetitors,
+  mapInstantPage,
+  mapRankedKeywords,
+  type RawBacklinksSummary,
+  type RawCompetitors,
+  type RawInstantPages,
+  type RawRankedKeywords,
+} from "./dataforseo-shape.js";
+
+export type {
+  BacklinksSummary,
+  Competitor,
+  CompetitorsResult,
+  InstantPage,
+  RankedKeyword,
+  RankedKeywordsResult,
+} from "./dataforseo-shape.js";
 
 /**
  * Thin DataForSEO v3 client. Every call goes through the cache and the budget
@@ -136,34 +155,37 @@ export async function serp(client: Client, keyword: string, depth = 100) {
 
 // ------------------------------------------------------- domain analytics
 
-export function rankedKeywords(client: Client, target = client.domain, limit = 100) {
-  return paid<unknown>(
+export async function rankedKeywords(client: Client, target = client.domain, limit = 100) {
+  const { result, costUsd, fromCache } = await paid<RawRankedKeywords>(
     client,
     "rankedKeywords",
     "/dataforseo_labs/google/ranked_keywords/live",
-    [{ target, limit, ...geo(client), order_by: ["keyword_data.keyword_info.search_volume,desc"] }],
+    [{ target, limit, item_types: ["organic"], ...geo(client), order_by: ["keyword_data.keyword_info.search_volume,desc"] }],
     TTL.week,
   );
+  return { ...mapRankedKeywords(result[0]), costUsd, fromCache };
 }
 
-export function competitorDomains(client: Client, limit = 20) {
-  return paid<unknown>(
+export async function competitorDomains(client: Client, limit = 20) {
+  const { result, costUsd, fromCache } = await paid<RawCompetitors>(
     client,
     "competitors",
     "/dataforseo_labs/google/competitors_domain/live",
-    [{ target: client.domain, limit, ...geo(client) }],
+    [{ target: client.domain, limit, item_types: ["organic"], ...geo(client) }],
     TTL.month,
   );
+  return { ...mapCompetitors(result[0]), costUsd, fromCache };
 }
 
-export function backlinksSummary(client: Client, target = client.domain) {
-  return paid<unknown>(
+export async function backlinksSummary(client: Client, target = client.domain) {
+  const { result, costUsd, fromCache } = await paid<RawBacklinksSummary>(
     client,
     "backlinksSummary",
     "/backlinks/summary/live",
     [{ target, internal_list_limit: 10, include_subdomains: true }],
     TTL.week,
   );
+  return { summary: mapBacklinksSummary(result[0]), costUsd, fromCache };
 }
 
 // ------------------------------------------------------------------ on-page
@@ -220,6 +242,13 @@ export async function onPagePagesWithIssue(taskId: string, check: string, limit 
 }
 
 /** Instant on-page check for a single URL, no crawl needed. */
-export function instantPage(client: Client, url: string) {
-  return paid<unknown>(client, "instantPage", "/on_page/instant_pages", [{ url, enable_javascript: true }], TTL.day);
+export async function instantPage(client: Client, url: string) {
+  const { result, costUsd, fromCache } = await paid<RawInstantPages>(
+    client,
+    "instantPage",
+    "/on_page/instant_pages",
+    [{ url, enable_javascript: true }],
+    TTL.day,
+  );
+  return { page: mapInstantPage(result[0]), costUsd, fromCache };
 }

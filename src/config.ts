@@ -2,8 +2,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import { stripEmptyValues } from "./lib/env.js";
+import { projectRoot, resolveFromRoot } from "./lib/paths.js";
 
-if (existsSync(".env")) process.loadEnvFile(".env");
+/** Directory above src/ or dist/. Relative paths in config resolve from here, not the cwd. */
+export const PROJECT_ROOT = projectRoot(import.meta.url);
+
+// Must run before EnvSchema.parse. A missing .env is fine (env may come from the client config).
+const envFile = resolve(PROJECT_ROOT, ".env");
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const EnvSchema = z.object({
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
@@ -16,7 +23,16 @@ const EnvSchema = z.object({
   GLOBAL_MONTHLY_BUDGET_USD: z.coerce.number().positive().default(50),
 });
 
-export const env = EnvSchema.parse(process.env);
+const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
+
+export const env = {
+  ...parsedEnv,
+  CLIENTS_FILE: resolveFromRoot(PROJECT_ROOT, parsedEnv.CLIENTS_FILE),
+  DATA_DIR: resolveFromRoot(PROJECT_ROOT, parsedEnv.DATA_DIR),
+  GOOGLE_APPLICATION_CREDENTIALS: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS
+    ? resolveFromRoot(PROJECT_ROOT, parsedEnv.GOOGLE_APPLICATION_CREDENTIALS)
+    : undefined,
+};
 
 const ClientSchema = z.object({
   name: z.string(),
