@@ -20,7 +20,12 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | Tool | Does |
 |---|---|
 | `list_clients` | Every client: domain, name, sources, GSC property, GA4 property, alternates, what's missing, what was just added to `clients.yaml`, and discovery status. `refresh: true` re-lists from Google |
-| `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions, a [branded vs non-branded split](#branded-queries) (`search.branded`, `search.nonBranded`; query rows and tracked keywords carry `branded: boolean`), and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
+| `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions, an [`opportunities`](#opportunities) section (top 5 each of striking distance, low CTR and cannibalization), a [branded vs non-branded split](#branded-queries) (`search.branded`, `search.nonBranded`; query rows and tracked keywords carry `branded: boolean`), and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
+| `striking_distance` | Queries at positions 5-20 with top page and estimated extra clicks if they reached position 3. Free, Search Console only; see [Opportunities](#opportunities) |
+| `quick_wins` | Pages at positions 11-20 with their top 3 queries |
+| `low_ctr` | Queries at positions 1-5 with CTR under 60% of expected (title and meta rewrite candidates) |
+| `cannibalization` | Queries where 2+ pages each hold at least 10% of the impressions |
+| `declining_pages` | Pages whose clicks fell versus the previous equal-length period, with the queries that lost the most |
 | `run_audit` | Lighthouse + axe + GSC index status + on-page check per key page, sitemap health; optional full crawl and backlinks. Every run is saved and returns an `auditId`. Runs are fresh by default (the response cache is skipped, so the on-page check is a paid call per page); `fresh: false` reuses results up to a day old, and `compare_audits` warns when the later audit was not fresh |
 | `list_audits` | A client's saved audits, newest first: ID, run time, page count, average scores, finding count |
 | `get_audit` | One saved audit's full result and normalised findings, by ID |
@@ -309,6 +314,20 @@ A query counts as branded when, ignoring case, spacing, punctuation and accents,
 
 The split sums query-level rows (up to 5,000 per month), which leave out anonymized queries, so branded + non-branded will be lower than the site totals in the same report; the report says so in `search.note`. Matching is heuristic: a client whose name is a common word can have a few non-brand queries marked branded, so spot-check `topQueries` and add terms where it misses.
 
+#### Opportunities
+
+Free Search Console tools that find where more clicks are likely. Each takes `client`, optional `startDate`/`endDate` (both or neither; default is the last 28 days ending 3 days ago, since Search Console lags 2-3 days), `includeBranded` (default false: branded queries are excluded), `limit` (default 25) and the thresholds below. Each returns the window used, `total` found, and a `method` string describing the thresholds. Rows are sorted by estimated extra clicks (or impressions or clicks lost where there is no estimate), then by name.
+
+| Tool | Finds | Defaults |
+|---|---|---|
+| `striking_distance` | Queries at positions 5-20: query, top page, position, impressions, clicks, CTR, estimated extra clicks if they reached position 3 | `minPosition` 5, `maxPosition` 20, `minImpressions` 100 |
+| `quick_wins` | Pages at positions 11-20 with their top 3 queries | `minPosition` 11, `maxPosition` 20, `minImpressions` 100 |
+| `low_ctr` | Queries at positions 1-5 with CTR under 60% of expected: title and meta rewrite candidates | `ctrRatio` 0.6, `minImpressions` 100 |
+| `cannibalization` | Queries where 2+ pages each hold at least 10% of the impressions | `minShare` 0.1, `minImpressions` 100 |
+| `declining_pages` | Pages whose clicks fell versus the previous equal-length period, with the queries that lost the most | `minDropPct` 30, `minClickLoss` 10 |
+
+Estimates use the expected-CTR-by-position curve in `src/analysis/ctr-curve.ts`, an editable industry-average approximation: treat the numbers as a ranking signal, not a forecast. Positions are impression-weighted averages, and page URLs are normalised (fragment and trailing slash ignored). The first four tools make one Search Console call with `query` + `page` dimensions (up to 25,000 rows); `declining_pages` makes two (current and previous window), or four with `includeBranded`. Query-level rows leave out anonymized queries. Small sites often return nothing at the default thresholds; lower `minImpressions` to see more.
+
 ## Layout
 
 ```
@@ -346,6 +365,8 @@ src/
   analysis/
     competitor-suggestions.ts  seed picking, merge, filter and score for suggest_competitors (pure)
     branded.ts          branded vs non-branded totals from query rows (pure)
+    ctr-curve.ts        expected CTR by position (editable constant)
+    opportunities.ts    striking distance, quick wins, low CTR, cannibalization, declining pages (pure)
     findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
     diff.ts             diffAudits: new / resolved / persistent / unverified, score changes (pure)
   prompts/
@@ -353,11 +374,13 @@ src/
     templates/          prompt text (markdown), copied to dist/ at build
   reports/
     monthly.ts          monthly_report composer
+    opportunities.ts    fetch + wrap for the opportunity tools; monthly `opportunities` section
     audit.ts            run_audit composer
     section.ts          per-section error isolation
   tools/
     reports.ts          report tool registrations
     raw.ts              lower-level tool registrations
+    opportunities.ts    striking_distance, quick_wins, low_ctr, cannibalization, declining_pages
     competitors.ts      competitor, keyword, profile and suggestion tool registrations
 scripts/
   record-fixtures.ts    records raw DataForSEO sandbox responses (refuses non-sandbox); scrub before committing

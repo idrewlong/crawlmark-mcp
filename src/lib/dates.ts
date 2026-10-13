@@ -50,3 +50,18 @@ export function lastDays(days: number, lagDays = 3, today = new Date()): DateRan
   const start = new Date(end.getTime() - (days - 1) * 86_400_000);
   return { startDate: iso(start), endDate: iso(end) };
 }
+
+const MS_DAY = 86_400_000;
+const parseDay = (s: string) => Date.parse(`${s}T00:00:00Z`);
+
+/** Number of days in an inclusive range. */
+export function rangeDays(r: DateRange): number {
+  return Math.round((parseDay(r.endDate) - parseDay(r.startDate)) / MS_DAY) + 1;
+}
+
+/** The range of equal length ending the day before `r` starts. */
+export function previousRange(r: DateRange): DateRange {
+  const days = rangeDays(r);
+  const end = parseDay(r.startDate) - MS_DAY;
+  return { startDate: iso(new Date(end - (days - 1) * MS_DAY)), endDate: iso(new Date(end)) };
+}

@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerPrompts } from "./prompts/index.js";
 import { registerCompetitorTools } from "./tools/competitors.js";
+import { registerOpportunityTools } from "./tools/opportunities.js";
 import { registerRawTools } from "./tools/raw.js";
 import { registerReportTools } from "./tools/reports.js";
 
@@ -20,6 +21,7 @@ const server = new McpServer(
 
 registerReportTools(server);
 registerCompetitorTools(server);
+registerOpportunityTools(server);
 registerRawTools(server);
 registerPrompts(server);
 

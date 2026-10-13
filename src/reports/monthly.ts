@@ -9,6 +9,7 @@ import { serp } from "../providers/dataforseo.js";
 import { ga4OrganicSummary, ga4TopLandingPages } from "../providers/ga4.js";
 import { gscQuery, gscTotals, type GscRow } from "../providers/gsc.js";
 import { isBranded } from "../lib/brand.js";
+import { opportunitiesForMonth } from "./opportunities.js";
 import { dataOf, section } from "./section.js";
 
 /** Query rows fetched per month. The branded split sums these, so the limit is well above the old 500 (Search Console allows up to 25,000). */
@@ -64,7 +65,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
   const prev = monthRange(previousMonth(month));
   const yoy = monthRange(sameMonthLastYear(month));
 
-  const [gscCur, gscPrev, gscYoy, queriesCur, queriesPrev, pagesCur, pagesPrev, gaCur, gaPrev, landing] =
+  const [gscCur, gscPrev, gscYoy, queriesCur, queriesPrev, pagesCur, pagesPrev, gaCur, gaPrev, landing, opportunities] =
     await Promise.all([
       section(() => gscTotals(client, cur)),
       section(() => gscTotals(client, prev)),
@@ -76,6 +77,8 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
       section(() => ga4OrganicSummary(client, cur)),
       section(() => ga4OrganicSummary(client, prev)),
       section(() => ga4TopLandingPages(client, cur, 15)),
+      // Free opportunity lists for the month (one more Search Console call, cached).
+      section(() => opportunitiesForMonth(client, cur, 5)),
     ]);
 
   // Tracked keywords: free GSC average position, optionally a paid live SERP check.
@@ -158,6 +161,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
     pageMovers: pagesCur.ok && pagesPrev.ok ? movers(pagesCur.data, pagesPrev.data) : null,
     topLandingPages: landing,
     trackedKeywords: tracked,
+    opportunities: opportunities.ok ? opportunities.data : { error: opportunities.error },
     audit: audit.ok ? audit.data : { error: audit.error },
     dataSpendThisMonthUsd: Number(spentThisMonth(spendKeys(client)).toFixed(4)),
   };
