@@ -13,6 +13,7 @@ export const CLI_SUBCOMMANDS: readonly string[] = [
   "brand",
   "audit",
   "check-traffic",
+  "check-ranks",
   "help",
 ];
 

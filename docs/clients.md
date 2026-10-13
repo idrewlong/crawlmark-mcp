@@ -99,6 +99,14 @@ Add them whenever you like, with the tools, the CLI (`crawlmark-cli competitors 
 
 Competitors are stored as bare domains (`https://www.rival.example/page` becomes `rival.example`), keywords lowercase with single spaces, and duplicates are skipped. The client's own domain can't be a competitor.
 
+## Rank history
+
+Tracked keywords get a stored rank history (local, in crawlmark's database). `crawlmark-cli check-ranks` (or the `check_ranks` tool) saves each one's Search Console average position over the last 7 complete days, free; with `--live` (or `live: true`) it also saves the live Google rank from DataForSEO, paid and checked against the caps first. Live ranks from `serp_check`, `monthly_report` with `liveRanks` and report templates with `liveRanks` are saved too. Only tracked keywords are stored, and a second check on the same day replaces the first. `rank_history` returns the series with the latest, best and worst rank and the change over 30 and 90 days; the `rank_trend` report section shows it in report files. Keep everything; a year of daily checks for 50 keywords is about 18,000 small rows.
+
+## Keyword ideas and competitor gap
+
+`keyword_ideas` (from 1-20 seed keywords) and `keyword_gap` (keywords the client's competitors rank for and it doesn't) use the client's data provider: DataForSEO, Ahrefs or Semrush, never another account. Both are paid and take `estimateOnly: true`, which returns the estimate, the provider and what's left of the cap without a request; the `keyword-research` prompt always asks you before the real call. A call that wouldn't fit the cap is refused before any request, and the message names a smaller `limit` that fits (for example a Semrush gap at 80 units a line: 2 competitors × 50 lines is 8,000 units, more than the default 5,000 a client, so it suggests limit 25). `keyword_gap` compares the client's saved competitors (the first 3) unless you name up to 5. With Ahrefs, "the client already ranks" comes from the client's own Search Console queries (free) when it has a property, otherwise from one extra Ahrefs call for the client's top 1,000 keywords (13,000 units, included in the estimate). Difficulty is each provider's own 0-100 score (`dataforseo_kd`, `ahrefs_kd`, `semrush_kd`) and isn't comparable across providers.
+
 ## Competitor suggestions
 
 `suggest_competitors` (or the `find-competitors` prompt) proposes competitors from two sources:

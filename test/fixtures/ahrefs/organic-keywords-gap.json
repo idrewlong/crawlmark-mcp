@@ -1,0 +1,28 @@
+{
+  "keywords": [
+    {
+      "keyword": "drain cleaning service",
+      "best_position": 3,
+      "best_position_url": "https://example.org/drains",
+      "volume": 18100
+    },
+    {
+      "keyword": "sewer line repair",
+      "best_position": 7,
+      "best_position_url": "https://example.org/sewer",
+      "volume": 8100
+    },
+    {
+      "keyword": "Example Widgets",
+      "best_position": 2,
+      "best_position_url": "https://example.org/w",
+      "volume": 2400
+    },
+    {
+      "keyword": "plumbing inspection",
+      "best_position": 4,
+      "best_position_url": null,
+      "volume": 880
+    }
+  ]
+}

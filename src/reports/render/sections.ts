@@ -9,7 +9,10 @@ import type {
   ComparedTotals,
   CruxHistoryResult,
   DataSpendData,
+  KeywordGapData,
   LandingPagesData,
+  RankTrendData,
+  RankTrendSummary,
   MoversData,
   OpportunityLists,
   OrganicTrafficData,
@@ -101,6 +104,14 @@ const vsLabel = (report: TemplateReport, which: "previous_period" | "previous_ye
   const r = which ? report.period.comparisons[which] : undefined;
   return r ? periodName(r) : "";
 };
+
+/** "8.4 → 5.1" (first → latest), or the single value, or "no data". */
+const trendText = (sum: RankTrendSummary | undefined) => {
+  if (!sum || sum.latest === null) return sum && sum.checks > 0 ? "not found" : "no data";
+  return sum.first !== null && sum.firstDay !== sum.latestDay ? `${fmt1(sum.first)} → ${fmt1(sum.latest)}` : fmt1(sum.latest);
+};
+const PROVIDER_NAME = { dataforseo: "DataForSEO", ahrefs: "Ahrefs", semrush: "Semrush" } as const;
+const KD_LABEL = { dataforseo_kd: "DataForSEO difficulty", ahrefs_kd: "Ahrefs KD", semrush_kd: "Semrush KD" } as const;
 
 export const SECTION_MAPPERS: Record<string, Mapper> = {
   search_overview: (data: SearchOverviewData, report) => {
@@ -273,6 +284,50 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     { kind: "paragraph", text: [t(`Paid data used this calendar month (${data.month}, all of crawlmark for this client): DataForSEO $${data.usd.toFixed(2)}, Ahrefs ${fmtInt(data.units.ahrefs)} units, Semrush ${fmtInt(data.units.semrush)} units.`)] },
   ],
   text: (data: TextData) => [{ kind: "paragraph", text: [t(data.text)] }],
+  // Phase 12 B: stored rank history, text trend first → latest (no sparklines).
+  rank_trend: (data: RankTrendData) => {
+    const gsc = data.source !== "serp";
+    const serp = data.source !== "gsc";
+    const header = ["Keyword", ...(gsc ? ["Search Console average position", "Change"] : []), ...(serp ? ["Live rank", "Change"] : [])];
+    const rows = data.keywords.map((k) => [
+      d(k.keyword),
+      ...(gsc ? [cell(trendText(k.gsc)), cell(fmtChangeNumber(k.gsc?.change))] : []),
+      ...(serp ? [cell(trendText(k.serp)), cell(fmtChangeNumber(k.serp?.change))] : []),
+    ]);
+    return [
+      { kind: "paragraph", text: [t(`Stored checks from ${data.since} to ${data.until}, first → latest. Lower is better, so a negative change is an improvement.`)] },
+      { kind: "table", header, rows, numeric: header.map((_, i) => i > 0) },
+      {
+        kind: "note",
+        text: [
+          t(
+            (gsc ? "Search Console average position is a 7-day average and moves with the mix of searches. " : "") +
+              (serp ? "Live rank is Google's organic position on the day it was checked (DataForSEO); \"not found\" means outside the depth checked." : ""),
+          ),
+        ],
+      },
+    ];
+  },
+  keyword_gap: (data: KeywordGapData) => {
+    const metric = data.gaps.find((g) => g.difficulty.value !== null)?.difficulty.metric ?? data.gaps[0]?.difficulty.metric;
+    const header = ["Keyword", "Monthly volume", metric ? KD_LABEL[metric] : "Difficulty", "Competitors ranking (position)"];
+    return [
+      {
+        kind: "paragraph",
+        text: [t(`Keywords ${data.competitors.join(", ")} rank for and this site doesn't (${PROVIDER_NAME[data.provider]} data, up to ${fmtInt(data.limit)} per competitor), sorted by volume.`)],
+      },
+      data.gaps.length
+        ? {
+            kind: "table",
+            header,
+            rows: data.gaps.map((g) => [d(g.keyword), cell(fmtInt(g.volume)), cell(g.difficulty.value === null ? "n/a" : String(g.difficulty.value)), d(g.competitors.map((x) => `${x.domain}${x.position === null ? "" : ` (${x.position})`}`).join(", "))]),
+            numeric: [false, true, true, false],
+          }
+        : { kind: "paragraph", text: [t("No gap keywords found.")] },
+      ...(data.gaps.some((g) => g.clientCheck === "gsc") ? [{ kind: "note" as const, text: [t("Keywords this site already gets Search Console impressions for were left out.")] }] : []),
+      { kind: "note", text: [t("Difficulty is the provider's own 0-100 scale; don't compare it with another provider's.")] },
+    ];
+  },
 };
 
 /** The blocks for one section, or a note saying why it has no data. */

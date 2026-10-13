@@ -17,7 +17,18 @@ import { ahrefsCountry, noCountryMessage } from "../lib/country.js";
 import { ProviderUnavailableError } from "../lib/provider-ids.js";
 import { createLimiter } from "../lib/rate.js";
 import { TIMEOUTS } from "../lib/timeout.js";
+import { mergeGaps } from "../analysis/keyword-gap.js";
+import { normalizeKeyword } from "../lib/clients.js";
 import {
+  AHREFS_GAP_CLIENT_ROWS,
+  gapFields,
+  gapKeywordsRequest,
+  ideasFields,
+  keywordIdeasRequest,
+  mapAhrefsGapRows,
+  mapAhrefsIdeas,
+  type RawAhrefsGapKeywords,
+  type RawAhrefsTerms,
   AHREFS_KEYWORD_BATCH,
   AHREFS_PATHS,
   ahrefsErrorText,
@@ -49,7 +60,19 @@ import {
   type RawAhrefsLimitsAndUsage,
   type RawAhrefsOrganicKeywords,
 } from "./ahrefs-shape.js";
-import type { BacklinksRouted, CompetitorsRouted, KeywordVolumeResult, RankedKeywordsRouted, SeoDataProvider } from "./seo-data.js";
+import type {
+  BacklinksRouted,
+  CompetitorsRouted,
+  GapContext,
+  KeywordGapRequest,
+  KeywordGapRouted,
+  KeywordIdeasRequest,
+  KeywordIdeasRouted,
+  KeywordVolumeResult,
+  PaidPlan,
+  RankedKeywordsRouted,
+  SeoDataProvider,
+} from "./seo-data.js";
 import { normalizeKeywordList } from "./semrush-shape.js";
 import { isTimeoutOrAbort, redact, retryAfterMs, todayUtc, unitsCall } from "./units-billing.js";
 
@@ -156,7 +179,7 @@ async function billed<T>(client: Client, req: AhrefsParams, estimate: number, fa
 }
 
 /** The client's Ahrefs country, or unavailable (a city-level location code and no `country`). */
-function country(client: Client, capability: "keywordVolume" | "rankedKeywords" | "competitorDomains"): string {
+function country(client: Client, capability: "keywordVolume" | "rankedKeywords" | "competitorDomains" | "keywordIdeas" | "keywordGap"): string {
   if (!client.country) throw new ProviderUnavailableError(capability, "ahrefs", noCountryMessage(client));
   return ahrefsCountry(client.country);
 }
@@ -262,10 +285,125 @@ export async function ahrefsBacklinksSummary(client: Client, target: string, opt
   return { ...r.value, ...meta(r) };
 }
 
+// ------------------------------------------------------------------ keyword ideas and gap (Phase 12 B)
+
+/** Seeds for Ahrefs' comma-separated `keywords`: a comma inside a seed makes more seeds, so split first. */
+const ahrefsSeeds = (seeds: readonly string[]) => normalizeKeywordList(seeds.flatMap((k) => k.split(",")));
+
+export function planAhrefsKeywordIdeas(client: Client, req: KeywordIdeasRequest): PaidPlan {
+  const cc = country(client, "keywordIdeas");
+  return {
+    keyParts: { country: cc, mode: req.mode, seeds: ahrefsSeeds(req.seeds), limit: req.limit },
+    unit: "units",
+    requests: 1,
+    cost: (limit) => ahrefsEstimates.keywordIdeas(limit),
+    breakdown: (limit) => `1 ${req.mode === "related" ? "related-terms" : "matching-terms"} request, max(50, 22 × ${limit} rows)`,
+  };
+}
+
+/** Keyword ideas: one related-terms or matching-terms request with every seed. */
+export async function ahrefsKeywordIdeas(client: Client, req: KeywordIdeasRequest, opts: { refresh?: boolean } = {}): Promise<KeywordIdeasRouted> {
+  const plan = planAhrefsKeywordIdeas(client, req);
+  const seeds = ahrefsSeeds(req.seeds);
+  const estimate = plan.cost(req.limit);
+  const r = await unitsCall({
+    client,
+    provider: "ahrefs",
+    capability: "keywordIdeas",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate,
+    refresh: opts.refresh,
+    run: async () => {
+      const req2 = keywordIdeasRequest({ mode: req.mode, keywords: seeds, country: plan.keyParts.country as string, limit: req.limit });
+      const { json, units } = await billed<RawAhrefsTerms>(client, req2, estimate, (j) => estimateAhrefsUnits(ideasFields(), j.keywords?.length ?? 0));
+      return { value: { ideas: mapAhrefsIdeas(json, seeds.length === 1 ? seeds[0]! : null).slice(0, req.limit) }, units };
+    },
+  });
+  return { ...r.value, ...meta(r) };
+}
+
+export function planAhrefsKeywordGap(client: Client, req: KeywordGapRequest, ctx: Pick<GapContext, "gscAvailable">): PaidPlan {
+  const cc = country(client, "keywordGap");
+  const n = req.competitors.length;
+  const clientCall = ctx.gscAvailable ? 0 : 1;
+  return {
+    keyParts: { country: cc, target: client.domain, competitors: req.competitors, limit: req.limit, clientCheck: ctx.gscAvailable ? "gsc" : "provider" },
+    unit: "units",
+    requests: n + clientCall,
+    cost: (limit) => n * ahrefsEstimates.gapCompetitor(limit) + clientCall * ahrefsEstimates.gapClient(),
+    breakdown: (limit) =>
+      `${n} competitor(s) × organic-keywords max(50, 13 × ${limit} rows)` +
+      (clientCall ? ` + the client's own keywords (no Search Console): max(50, 13 × ${AHREFS_GAP_CLIENT_ROWS} rows)` : "; the client's rankings come from its Search Console (free)"),
+  };
+}
+
+/**
+ * Keyword gap (B-D3): Ahrefs has no gap endpoint, so each competitor's organic keywords are read and the ones the
+ * client already ranks for are removed. "Already ranks" comes from the client's own Search Console (queries with
+ * impressions in the last 90 days, free; clientCheck "gsc"), or, without a property, from one organic-keywords
+ * call for the client (1,000 rows, in the estimate; clientCheck "provider"). Search Console is read before any paid request.
+ */
+export async function ahrefsKeywordGap(client: Client, req: KeywordGapRequest, ctx: GapContext, opts: { refresh?: boolean } = {}): Promise<KeywordGapRouted> {
+  const plan = planAhrefsKeywordGap(client, req, ctx);
+  const cc = plan.keyParts.country as string;
+  const r = await unitsCall({
+    client,
+    provider: "ahrefs",
+    capability: "keywordGap",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate: plan.cost(req.limit),
+    refresh: opts.refresh,
+    run: async () => {
+      let units = 0;
+      const date = todayUtc();
+      let exclude: Set<string>;
+      if (ctx.gscAvailable) {
+        exclude = await ctx.clientQueries();
+      } else {
+        const own = await billed<RawAhrefsGapKeywords>(client, gapKeywordsRequest({ target: client.domain, country: cc, date, limit: AHREFS_GAP_CLIENT_ROWS }), ahrefsEstimates.gapClient(), (j) =>
+          estimateAhrefsUnits(gapFields(), j.keywords?.length ?? 0),
+        );
+        units += own.units;
+        exclude = new Set(mapAhrefsGapRows(own.json).filter((k) => k.position !== null).map((k) => normalizeKeyword(k.keyword)).filter((k): k is string => Boolean(k)));
+      }
+      const per = [];
+      for (const competitor of req.competitors) {
+        const res = await billed<RawAhrefsGapKeywords>(client, gapKeywordsRequest({ target: competitor, country: cc, date, limit: req.limit }), ahrefsEstimates.gapCompetitor(req.limit), (j) =>
+          estimateAhrefsUnits(gapFields(), j.keywords?.length ?? 0),
+        );
+        units += res.units;
+        per.push({ domain: competitor, rows: mapAhrefsGapRows(res.json) });
+      }
+      // Cached before the minimum volume is applied, so a different minVolume reuses it.
+      const merged = mergeGaps(per, { metric: "ahrefs_kd", clientCheck: ctx.gscAvailable ? "gsc" : "provider", minVolume: 0, exclude });
+      return { value: { ...merged, exclusionSource: ctx.gscAvailable ? "gsc" : "provider" }, units };
+    },
+  });
+  const v = r.value;
+  const notes = [
+    v.exclusionSource === "gsc"
+      ? `${v.excluded} competitor keyword(s) were dropped because ${client.domain} already gets Search Console impressions for them (last 90 days).`
+      : `${v.excluded} competitor keyword(s) were dropped because ${client.domain} already ranks for them (its top ${AHREFS_GAP_CLIENT_ROWS} Ahrefs keywords).`,
+    "Ahrefs keyword difficulty isn't requested for the gap (it would add 10 units per row), so difficulty is null.",
+  ];
+  return {
+    gaps: req.minVolume > 0 ? v.gaps.filter((g) => (g.volume ?? 0) >= req.minVolume) : v.gaps,
+    perCompetitor: v.perCompetitor,
+    notes,
+    ...meta(r),
+  };
+}
+
 export const ahrefsProvider: SeoDataProvider = {
   id: "ahrefs",
-  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary"]),
+  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap"]),
   configured: () => Boolean(env.AHREFS_API_KEY),
+  planKeywordIdeas: (c, r) => planAhrefsKeywordIdeas(c, r),
+  keywordIdeas: (c, r, o) => ahrefsKeywordIdeas(c, r, o),
+  planKeywordGap: (c, r, ctx) => planAhrefsKeywordGap(c, r, ctx),
+  keywordGap: (c, r, ctx, o) => ahrefsKeywordGap(c, r, ctx, o),
   keywordVolume: (c, k, o) => ahrefsKeywordVolume(c, k, o),
   rankedKeywords: (c, t, l, o) => ahrefsRankedKeywords(c, t, l, o),
   competitorDomains: (c, l, o) => ahrefsCompetitorDomains(c, l, o),

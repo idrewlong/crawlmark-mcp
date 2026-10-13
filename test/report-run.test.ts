@@ -47,9 +47,10 @@ describe("runTemplate", () => {
     const skipped = await runTemplate(client, opts(h, { template: "live" }), fakeDeps({ serp }));
     expect(skipped.sections[0]).toMatchObject({ status: "skipped", reason: expect.stringContaining("allowPaid") });
     expect(serp).not.toHaveBeenCalled();
-    const assertBudget = vi.fn();
-    const ran = await runTemplate(client, opts(h, { template: "live", allowPaid: true }), fakeDeps({ serp, assertBudget }));
-    expect(assertBudget).toHaveBeenCalledWith(client, 3 * 0.002);
+    // SEC-1: the whole paid estimate is checked and reserved while the sections run.
+    const withUsdReservation = vi.fn(async (_c: unknown, _usd: number, fn: () => Promise<unknown>) => fn()) as never;
+    const ran = await runTemplate(client, opts(h, { template: "live", allowPaid: true }), fakeDeps({ serp, withUsdReservation }));
+    expect(withUsdReservation).toHaveBeenCalledWith(client, 3 * 0.002, expect.any(Function));
     expect(serp).toHaveBeenCalledTimes(3);
     expect(ran.sections[0]).toMatchObject({ status: "ok", data: { keywords: [{ liveRank: 2 }, { liveRank: 2 }, { liveRank: 2 }] } });
   });

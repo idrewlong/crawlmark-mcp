@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { env, type Client } from "../config.js";
 import { mergeSpendRows, spendKeys, type SpendRow } from "./spend.js";
 import { db } from "./store.js";
@@ -44,24 +45,71 @@ export function spentThisMonth(client?: string | string[]): number {
   return row.total;
 }
 
+interface UsdReservation {
+  keys: string[];
+  usd: number;
+}
+
+/**
+ * USD estimates of DataForSEO operations in progress in this process (SEC-1, like unitsCall's units).
+ * assertBudget and remainingUsd count them, so calls started together can't each pass a check their sum
+ * would fail. A call never counts its own reservation (AsyncLocalStorage), so the per-request checks inside
+ * a reserved operation aren't double-counted. Per process: a cron run and the MCP server can each pass.
+ */
+const usdInFlight = new Set<UsdReservation>();
+/** The reservations of the operation running here and of every operation it runs inside (nested reservations). */
+const currentReservation = new AsyncLocalStorage<ReadonlySet<UsdReservation>>();
+
+/** Reserved USD of calls in progress (other than the caller's own): this client's and everyone's. */
+export function pendingUsd(keys: readonly string[]): { client: number; global: number } {
+  const own = currentReservation.getStore();
+  let client = 0;
+  let global = 0;
+  for (const r of usdInFlight) {
+    if (own?.has(r)) continue;
+    global += r.usd;
+    if (r.keys.some((k) => keys.includes(k))) client += r.usd;
+  }
+  return { client, global };
+}
+
+const reservedNote = (n: number) => (n > 0 ? ` (plus $${n.toFixed(4)} reserved by calls in progress)` : "");
+
 /**
  * Throws before a paid call if it would push the client or the global total
  * past its monthly cap. `estimateUsd` is a conservative guess for the call.
+ * Estimates reserved by other calls in progress count too.
  */
 export function assertBudget(client: Client, estimateUsd: number): void {
+  const pending = pendingUsd(spendKeys(client));
   const clientSpent = spentThisMonth(spendKeys(client));
-  if (clientSpent + estimateUsd > client.monthlyBudgetUsd) {
+  if (clientSpent + pending.client + estimateUsd > client.monthlyBudgetUsd) {
     throw new BudgetExceededError(
       `Budget cap hit for ${client.slug}: $${clientSpent.toFixed(4)} spent of ` +
-        `$${client.monthlyBudgetUsd} this month. Raise monthlyBudgetUsd for this client in clients.yaml ` +
+        `$${client.monthlyBudgetUsd} this month${reservedNote(pending.client)}. Raise monthlyBudgetUsd for this client in clients.yaml ` +
         "(or DEFAULT_CLIENT_MONTHLY_BUDGET_USD for every client) to continue.",
     );
   }
   const globalSpent = spentThisMonth();
-  if (globalSpent + estimateUsd > env.GLOBAL_MONTHLY_BUDGET_USD) {
+  if (globalSpent + pending.global + estimateUsd > env.GLOBAL_MONTHLY_BUDGET_USD) {
     throw new BudgetExceededError(
-      `Global budget cap hit: $${globalSpent.toFixed(4)} of $${env.GLOBAL_MONTHLY_BUDGET_USD} this month.`,
+      `Global budget cap hit: $${globalSpent.toFixed(4)} of $${env.GLOBAL_MONTHLY_BUDGET_USD} this month${reservedNote(pending.global)}.`,
     );
+  }
+}
+
+/**
+ * Check `usd` against the caps and reserve it (synchronously, before any await) for as long as `fn` runs,
+ * so a multi-request operation's whole estimate counts against concurrent calls. Released in finally.
+ */
+export async function withUsdReservation<T>(client: Client, usd: number, fn: () => Promise<T>): Promise<T> {
+  assertBudget(client, usd);
+  const r: UsdReservation = { keys: spendKeys(client), usd };
+  usdInFlight.add(r);
+  try {
+    return await currentReservation.run(new Set([...(currentReservation.getStore() ?? []), r]), fn);
+  } finally {
+    usdInFlight.delete(r);
   }
 }
 
@@ -142,5 +190,15 @@ export function spendSummary(canonical: Map<string, string> = new Map()) {
       ahrefs: { used: unitsThisMonth(undefined, "ahrefs"), globalCap: globalUnitCap("ahrefs") },
       semrush: { used: unitsThisMonth(undefined, "semrush"), globalCap: globalUnitCap("semrush") },
     },
+  };
+}
+
+/** USD left this month for a client (its monthlyBudgetUsd) and for everyone (GLOBAL_MONTHLY_BUDGET_USD); never below 0. Phase 12 B estimates. */
+export function remainingUsd(client: Pick<Client, "slug" | "aliases" | "monthlyBudgetUsd">): { clientUsd: number; globalUsd: number } {
+  const r4 = (n: number) => Number(Math.max(0, n).toFixed(4));
+  const pending = pendingUsd(spendKeys(client));
+  return {
+    clientUsd: r4(client.monthlyBudgetUsd - spentThisMonth(spendKeys(client)) - pending.client),
+    globalUsd: r4(env.GLOBAL_MONTHLY_BUDGET_USD - spentThisMonth() - pending.global),
   };
 }

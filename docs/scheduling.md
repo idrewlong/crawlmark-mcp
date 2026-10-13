@@ -1,11 +1,13 @@
 # Scheduled audits and alerts
 
-`crawlmark-cli audit`, `crawlmark-cli check-traffic` and `crawlmark-cli report` are meant for cron or another scheduler. The MCP server stays stateless; these commands are separate runs that print JSON to stdout. The [README](../README.md#scheduled-audits-and-alerts) has the summary.
+`crawlmark-cli audit`, `crawlmark-cli check-traffic`, `crawlmark-cli check-ranks` and `crawlmark-cli report` are meant for cron or another scheduler. The MCP server stays stateless; these commands are separate runs that print JSON to stdout. The [README](../README.md#scheduled-audits-and-alerts) has the summary.
 
 ## What each command does
 
 - **`audit`** runs a fresh `run_audit` for each client, one after another (each audit launches Chrome), saves the snapshot and diffs it against that client's previous audit. A client's first audit is saved as the baseline and raises no alerts. `--all` runs discovery first, so new domains are included. `--urls a,b` overrides the page list for one client. The on-page check inside the audit is the only paid call (DataForSEO, per `DATAFORSEO_BASE_URL`; the sandbox by default).
 - **`check-traffic`** compares the last 7 complete Search Console days (ending 3 days ago, because Search Console lags) with the 7 days before, split into branded and non-branded with the same matching as the monthly report. It uses Search Console only, so it is free. Clients without a Search Console property are skipped.
+- **`check-ranks`** saves each tracked keyword's Search Console average position over the last 7 complete days (free) to rank history, which `rank_history` and the `rank_trend` report section read. Running it twice on the same day keeps one row per keyword. Clients with no tracked keywords are skipped, and so are clients with no Search Console property unless `--live` is given.
+- **`check-ranks --live`** also checks each tracked keyword's live Google rank through DataForSEO (paid, about $0.002 a keyword). It runs only when `--live` is on the command line. Every live check is fetched fresh (not from the one-day SERP cache), so each run is billed. Each client's total is checked against its monthly cap (and the global one) before its first request; a client over its cap, or without DataForSEO, is listed under `skipped` with the reason and the others still run. `--dry-run` prints each client's keywords, the estimate and what's left of the cap, and calls nothing. Weekly is plenty.
 - **Skipping.** A client that is ignored, has no Search Console property (for `check-traffic`) or fails with an error is listed under `skipped` and never fails the run. Only when every client that was tried fails, or an explicit `--client` can't be found, does the run count as an error.
 - **`--dry-run`** lists what would run and calls nothing but discovery.
 - **`audit --include-tag-manager`** also audits each client's Tag Manager container and adds its findings. They are medium or low, so they never raise an alert. Without the flag, Tag Manager is left out (and earlier Tag Manager findings show as `unverified` in the diff, never `resolved`).
@@ -17,6 +19,7 @@
 |---|---|
 | New finding | Any `critical` or `high` finding in this audit that the previous audit did not have |
 | Traffic drop | Non-branded clicks down by at least `ALERT_TRAFFIC_DROP_PCT` (default 25) **and** at least `ALERT_MIN_CLICKS_LOST` (default 50) clicks |
+| Rank drop | `check-ranks --live` only: a tracked keyword that was in the top 10 at its last live check and is now outside it, one that fell at least `ALERT_RANK_DROP` places (default 5), or one that was found and no longer is. Search Console averages never alert |
 
 Output is `{ command, ranAt, dryRun, results, alerts, skipped, errors, webhook, exitCode, discovery }`. If `ALERT_WEBHOOK_URL` is set and there are alerts, a short text summary is POSTed to it as `{ "text": "..." }` (Slack-style incoming webhook). It must be `https`. Nothing is sent when there are no alerts.
 
@@ -37,6 +40,9 @@ Weekdays at 06:00 for traffic, Mondays at 05:00 for audits. Replace `/usr/local/
 ```cron
 0 6 * * 1-5  cd /path/to/crawlmark-mcp && /usr/local/bin/node --disable-warning=ExperimentalWarning dist/cli.js check-traffic --all >> /var/log/crawlmark-traffic.json 2>> /var/log/crawlmark-traffic.err
 0 5 * * 1    cd /path/to/crawlmark-mcp && /usr/local/bin/node --disable-warning=ExperimentalWarning dist/cli.js audit --all >> /var/log/crawlmark-audit.json 2>> /var/log/crawlmark-audit.err
+30 6 * * *   cd /path/to/crawlmark-mcp && /usr/local/bin/node --disable-warning=ExperimentalWarning dist/cli.js check-ranks --all >> /var/log/crawlmark-ranks.json 2>> /var/log/crawlmark-ranks.err
+# Paid, opt-in: live ranks once a week (only because --live is given).
+0 7 * * 1    cd /path/to/crawlmark-mcp && /usr/local/bin/node --disable-warning=ExperimentalWarning dist/cli.js check-ranks --all --live >> /var/log/crawlmark-ranks.json 2>> /var/log/crawlmark-ranks.err
 ```
 
 Appended runs make a stream of JSON objects, not one array; read it with `jq -s`, or write to a dated file per run.

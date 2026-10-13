@@ -185,6 +185,44 @@ export interface DataSpendData {
   units: { ahrefs: number; semrush: number };
 }
 
+/** Phase 12 B: one source's summary for a keyword (analysis/ranks.ts RankSummary; lower is better). */
+export interface RankTrendSummary {
+  latest: number | null;
+  first: number | null;
+  latestDay: string | null;
+  firstDay: string | null;
+  best: number | null;
+  worst: number | null;
+  change: number | null;
+  change30d: number | null;
+  change90d: number | null;
+  checks: number;
+  noRank: number;
+}
+
+export interface RankTrendData {
+  since: string;
+  until: string;
+  source: "gsc" | "serp" | "both";
+  keywords: { keyword: string; gsc?: RankTrendSummary; serp?: RankTrendSummary }[];
+}
+
+export interface KeywordGapData {
+  provider: "dataforseo" | "ahrefs" | "semrush";
+  competitors: string[];
+  limit: number;
+  gaps: {
+    keyword: string;
+    volume: number | null;
+    difficulty: { metric: "dataforseo_kd" | "ahrefs_kd" | "semrush_kd"; value: number | null };
+    competitors: { domain: string; position: number | null; url: string | null }[];
+    clientPosition: number | null;
+    clientCheck: "provider" | "gsc";
+  }[];
+  perCompetitor: { domain: string; returned: number }[];
+  notes?: string[];
+}
+
 export interface TextData {
   text: string;
 }

@@ -42,6 +42,8 @@ templates:
       # ...
       - { id: cwv, type: core_web_vitals_history, optional: true, formFactor: PHONE, weeks: 25 }
       - { id: gtm, type: tag_manager, optional: true, limit: 20 }
+      - { id: ranks, type: rank_trend, optional: true, since: 180d }
+      # - { id: gap, type: keyword_gap, optional: true, paid: true, limit: 25 }
 ```
 
 A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, with the same layout. Its `branding` fields override the global ones one by one, its `defaults` override too, and a template with the same id replaces the global one entirely. Files are read on every run, so edits apply at once. An invalid file never hides the builtin `monthly`; its errors are reported instead.
@@ -73,8 +75,12 @@ A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, 
 | `audit_changes` | Changes since the last saved audit | `limit` (10, up to 50 new findings listed) |
 | `core_web_vitals_history` | Real-user Core Web Vitals over time (needs a [CrUX key](../README.md#crux-history-optional)) | `formFactor`, `weeks`, `scope`, `url` |
 | `tag_manager` | Tag Manager findings. Must be `optional: true` | `limit` (20, up to 100) |
+| `rank_trend` | Tracked keywords' stored positions, first → latest, with the change (lower is better). Local and free; fill the history with `crawlmark-cli check-ranks` or `check_ranks`. The builtin `monthly` has it as optional section `ranks` | `since` (`90d`, `180d` default, `365d`, counted back from the period's end), `source` (`gsc`, `serp`, `both` default) |
+| `keyword_gap` | Keywords competitors rank for and the client doesn't, from the client's SEO data provider. **Paid**: needs `paid: true` | `limit` (50 per competitor, up to 500), `competitors` (up to 5; default the client's saved ones, at most 3) |
 | `data_spend` | Paid data used this month | |
 | `text` | Your own text | `text` |
+
+A paid `keyword_gap` section is estimated with the other paid sections before the report makes its first paid request; if the estimate doesn't fit the client's or the global cap, the run stops with the cap message (and a limit that would fit) and nothing is spent.
 
 Every section has an `id` and `type`, and optionally a `title`, `optional: true` (included only when asked: `include: ["cwv"]` or `--include cwv`) and `paid: true`. A paid section runs only when the template marks it paid **and** you allow it at run time (`allowPaid: true`, or `--paid`); otherwise it is listed as skipped. Each section reports its own status: `ok`, `error`, `unavailable` (no Search Console or GA4 property, no CrUX key) or `skipped`, and the report's "Data sources and notes" section names each one that has no data and why.
 

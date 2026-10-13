@@ -165,7 +165,7 @@ By hand, set `SEMRUSH_API_KEY` (and `SEMRUSH_V4_API_KEY`, and `SEO_DATA_PROVIDER
 
 ### Data providers
 
-Keyword volume, rankings, competitors and backlinks can come from any of the three providers. Live SERPs, on-page checks and crawls come from DataForSEO only.
+Keyword volume, rankings, competitors, backlinks, keyword ideas and the competitor keyword gap can come from any of the three providers. Live SERPs, on-page checks and crawls come from DataForSEO only.
 
 | Capability | DataForSEO | Ahrefs | Semrush |
 |---|---|---|---|
@@ -173,7 +173,9 @@ Keyword volume, rankings, competitors and backlinks can come from any of the thr
 | `ranked_keywords` | Labs ranked keywords | Site Explorer organic keywords | Domain organic search keywords |
 | `competitor_domains` | Labs competitors | Site Explorer organic competitors | Competitors in organic search |
 | `backlinks_summary` | Backlinks summary (rank, spam score) | Backlinks stats plus Domain Rating | Backlinks overview (v4 with a v4 key, else v3) plus authority score |
-| `serp_check`, on-page checks, crawls | Yes | No (DataForSEO is used) | No (DataForSEO is used) |
+| `keyword_ideas` | Labs keyword ideas (`related`) or keyword suggestions (`matching`) | Keywords Explorer related terms or matching terms | Related keywords or broad match |
+| `keyword_gap` | Labs domain intersection | Each competitor's organic keywords, minus what the client already gets Search Console impressions for | Domain vs Domain |
+| `serp_check`, `check_ranks` with `live`, on-page checks, crawls | Yes | No (DataForSEO is used) | No (DataForSEO is used) |
 | Account check | `dataforseo_status` | `ahrefs_status` | `semrush_status` |
 
 - **The default.** `SEO_DATA_PROVIDER` (`dataforseo`, `ahrefs` or `semrush`; blank means `dataforseo`) picks the default. `crawlmark-cli setup --step provider` sets it, and so does the bundle's "Default SEO data provider" field. An unknown value doesn't stop the server: `setup_status` and every paid call say what's wrong, and free tools keep working.
@@ -344,6 +346,15 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `accessibility_check` | axe-core WCAG checks on one page |
 | `crux_history` | Real-user Core Web Vitals (LCP, INP, CLS, FCP, TTFB) per week for up to 40 weeks, with ratings and a trend, for a client, an origin or a URL. Free with a key ([CrUX History](#crux-history-optional)) |
 
+### Rank history
+
+| Tool | Description |
+|---|---|
+| `check_ranks` | Checks the client's tracked keywords now and saves them: Search Console's average position, clicks, impressions and top page over the last 7 complete days (free). `live: true` adds a **paid** live Google rank per keyword (DataForSEO, about $0.002 each); `estimateOnly: true` returns the estimate and what's left of the caps without any request |
+| `rank_history` | The saved positions per tracked keyword and source, with the latest, first, best and worst rank and the change over the range, 30 and 90 days (lower is better). Free, local |
+
+Live ranks from `serp_check`, `monthly_report` with `liveRanks` and report templates with `liveRanks` are saved too when the keyword is tracked. Only tracked keywords are stored.
+
 ### Competitors, keywords and brand terms
 
 | Tool | Description |
@@ -352,6 +363,8 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `suggest_competitors` | **Paid.** Ranked competitor candidates from keyword overlap (the client's data provider) and local Google results (DataForSEO), with evidence. Never saves; you pick which to add |
 | `list_keywords`, `add_keywords`, `remove_keywords` | Tracked keywords; `monthly_report` reports their positions. Free |
 | `add_brand_terms`, `remove_brand_terms` | Terms that mark a query as branded, per client. Free |
+| `keyword_ideas` | **Paid** (the client's data provider). Keyword ideas from 1-20 seeds, `related` or `matching`, with volume, CPC and the provider's own difficulty score (labelled; scales differ). `estimateOnly: true` first |
+| `keyword_gap` | **Paid** (the client's data provider). Keywords the client's competitors (its saved ones, or up to 5 you name) rank for and it doesn't, sorted by volume. `estimateOnly: true` first; a call that wouldn't fit the cap is refused with a limit that does |
 | `suggest_brand_terms` | Infers how people search for the client by name from its Search Console queries (free), or the client's data provider's ranked keywords when it has no Search Console data (about $0.02 on DataForSEO) |
 
 ### Raw data
@@ -423,21 +436,26 @@ crawlmark-cli report --client example.com --format md,pdf,docx
 crawlmark-cli report --all --template quarterly --quarter 2026-Q3 --format pdf
 ```
 
+Optional sections are added with `--include` (`include` in Claude): `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings) and `ranks` (tracked keyword rank trends from the stored history). A template can also have a paid `keyword_gap` section, which runs only with `--paid` (`allowPaid`) after its estimate fits the caps.
+
 PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, branding, paths and the Docs handoff.
 
 Scheduled audits and alerts
 ---------------------------
 
-Two CLI commands are built for cron, launchd or CI:
+These CLI commands are built for cron, launchd or CI:
 
 ```bash
 crawlmark-cli check-traffic --all   # last 7 days vs the 7 before, branded vs non-branded (free)
 crawlmark-cli audit --all           # a fresh audit per client, diffed against the previous one
+crawlmark-cli check-ranks --all     # saves every tracked keyword's Search Console position (free)
 ```
+
+`check-ranks --live` adds a paid live Google rank per keyword (DataForSEO). It only runs when you pass `--live`, each client's total is checked against its cap first (a client over its cap is skipped, the others run), and `--dry-run` shows the keywords and the estimate without calling anything. Only live ranks alert: a keyword that leaves the top 10 or drops at least `ALERT_RANK_DROP` places (default 5). Search Console averages never alert.
 
 `audit --include-tag-manager` adds each client's Tag Manager findings (medium or low, so they never alert); without it they're left out. `crawlmark-cli report --all` writes report files on a schedule ([Report files](#report-files)).
 
-Both print JSON. They alert on any new critical or high finding, or a non-branded click drop of at least `ALERT_TRAFFIC_DROP_PCT` (default 25%) and `ALERT_MIN_CLICKS_LOST` (default 50) clicks. Set `ALERT_WEBHOOK_URL` to an `https` Slack-style incoming webhook to get a text summary. Exit codes: `0` no alerts, `1` error, `2` alerts.
+They print JSON. They alert on any new critical or high finding, a live rank drop (`check-ranks --live`), or a non-branded click drop of at least `ALERT_TRAFFIC_DROP_PCT` (default 25%) and `ALERT_MIN_CLICKS_LOST` (default 50) clicks. Set `ALERT_WEBHOOK_URL` to an `https` Slack-style incoming webhook to get a text summary. Exit codes: `0` no alerts, `1` error, `2` alerts.
 
 [docs/scheduling.md](docs/scheduling.md) has cron, launchd and GitHub Actions examples.
 
@@ -446,6 +464,7 @@ Cost controls
 
 - Every paid DataForSEO call checks the client's monthly budget (`monthlyBudgetUsd`, default `DEFAULT_CLIENT_MONTHLY_BUDGET_USD`, 5) and the global `GLOBAL_MONTHLY_BUDGET_USD` (default 50) first, and refuses once a cap would be crossed.
 - Ahrefs and Semrush calls check unit caps instead (see [Data providers](#data-providers)). Units are never converted to dollars.
+- Calls that run at the same time reserve their whole estimate until they finish, so together they can't pass a cap that their sum would cross. Reservations are per process: a cron run and the MCP server running at the same moment each see only the other's recorded spend, not its calls in progress.
 - The cost DataForSEO reports, and the units Ahrefs and Semrush calls use, are written to a ledger; `spend_summary` reads it.
 - Responses are cached (keyword volume 30 days; ranked keywords and backlinks 7 days; SERPs, Google data and client discovery 1 day), so re-running a report mostly costs nothing.
 - `monthly_report` and the opportunity tools are free. Live rank checks, full crawls and backlinks are opt-in.
@@ -492,6 +511,7 @@ The config home holds `.env`, `config/clients.yaml`, `config/report-templates.ya
 | `ALLOW_PRIVATE_URLS` | | `true` lets browser checks reach local and private addresses (local development) |
 | `RESTRICT_TO_CLIENT_DOMAINS` | | `true` only accepts URLs on your clients' domains |
 | `ALERT_TRAFFIC_DROP_PCT`, `ALERT_MIN_CLICKS_LOST` | `25`, `50` | Traffic-drop alert thresholds |
+| `ALERT_RANK_DROP` | `5` | Places a live rank must fall to alert (`check-ranks --live`) |
 | `ALERT_WEBHOOK_URL` | | Incoming webhook for alerts |
 | `CRAWLMARK_NO_UPDATE_CHECK` | | `1` turns off the daily "Update available" check in `init`, `setup`, `--help` and `--version` (`NO_UPDATE_NOTIFIER=1` works too) |
 
@@ -515,6 +535,7 @@ CLI
 | `brand suggest <client>\|--all [--apply] [--paid]` | Infer brand terms. `--all` makes no paid calls unless `--paid` |
 | `audit --client <domain>\|--all [--dry-run] [--include-tag-manager]` | Scheduled audits |
 | `check-traffic --client <domain>\|--all [--dry-run]` | Scheduled traffic check |
+| `check-ranks --client <domain>\|--all [--live] [--dry-run]` | Save tracked keyword positions (free); `--live` adds paid live ranks |
 | `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format md,html,pdf,docx] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
 

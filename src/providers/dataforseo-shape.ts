@@ -329,3 +329,85 @@ export function mapUserData(raw: RawUserData | undefined, baseUrl: string): Data
 export function isAuthRejection(message: string): boolean {
   return /HTTP 40[13]\b|\b4010\d\b/.test(message);
 }
+
+// ------------------------------------------------- Labs: keyword ideas and keyword gap (Phase 12 B)
+
+/** Difficulty is DataForSEO's own 0-100 Labs score (B-D4: labelled, never mixed with Ahrefs' or Semrush's). */
+export interface LabsIdea {
+  keyword: string;
+  volume: number | null;
+  cpc: number | null;
+  competition: number | null;
+  difficulty: { metric: "dataforseo_kd"; value: number | null };
+  intent: string | null;
+  seed: string | null;
+}
+
+export interface RawLabsKeywordItem {
+  keyword?: string | null;
+  keyword_info?: { search_volume?: number | null; cpc?: number | null; competition?: number | null } | null;
+  keyword_properties?: { keyword_difficulty?: number | null } | null;
+  search_intent_info?: { main_intent?: string | null } | null;
+}
+
+export interface RawLabsKeywords {
+  total_count?: number | null;
+  items?: RawLabsKeywordItem[] | null;
+}
+
+/** keyword_ideas / keyword_suggestions items -> ideas (same item shape). Keywords are whitespace-collapsed; rows with none are dropped. */
+export function mapLabsKeywordIdeas(raw: RawLabsKeywords | undefined, seed: string | null): LabsIdea[] {
+  const out: LabsIdea[] = [];
+  for (const i of raw?.items ?? []) {
+    const keyword = text(i.keyword);
+    if (!keyword) continue;
+    out.push({
+      keyword,
+      volume: num(i.keyword_info?.search_volume),
+      cpc: round(num(i.keyword_info?.cpc)),
+      competition: round(num(i.keyword_info?.competition)),
+      difficulty: { metric: "dataforseo_kd", value: num(i.keyword_properties?.keyword_difficulty) },
+      intent: text(i.search_intent_info?.main_intent),
+      seed,
+    });
+  }
+  return out;
+}
+
+export interface LabsGapRow {
+  keyword: string;
+  volume: number | null;
+  difficulty: number | null;
+  position: number | null;
+  url: string | null;
+}
+
+export interface RawDomainIntersection {
+  total_count?: number | null;
+  items?: {
+    keyword_data?: { keyword?: string | null; keyword_info?: { search_volume?: number | null } | null; keyword_properties?: { keyword_difficulty?: number | null } | null } | null;
+    first_domain_serp_element?: { type?: string | null; rank_group?: number | null; rank_absolute?: number | null; url?: string | null } | null;
+  }[] | null;
+}
+
+/**
+ * domain_intersection with `intersections: false` -> keywords target1 (the competitor) ranks for and target2
+ * (the client) doesn't. Position is the competitor's organic position (rank_group, else rank_absolute).
+ */
+export function mapDomainIntersection(raw: RawDomainIntersection | undefined): LabsGapRow[] {
+  const out: LabsGapRow[] = [];
+  for (const i of raw?.items ?? []) {
+    const keyword = text(i.keyword_data?.keyword);
+    if (!keyword) continue;
+    const el = i.first_domain_serp_element;
+    if (el?.type && el.type !== "organic") continue;
+    out.push({
+      keyword,
+      volume: num(i.keyword_data?.keyword_info?.search_volume),
+      difficulty: num(i.keyword_data?.keyword_properties?.keyword_difficulty),
+      position: num(el?.rank_group) ?? num(el?.rank_absolute),
+      url: str(el?.url),
+    });
+  }
+  return out;
+}

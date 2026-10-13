@@ -14,6 +14,7 @@ import { clientOrigin, cruxHistory } from "../providers/crux.js";
 import { checkRender } from "../providers/render.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import { keywordInput } from "../lib/clients.js";
+import { recordLiveRank } from "../lib/rank-history.js";
 import { assertUserUrl } from "../user-url.js";
 import { handler, READ_ONLY } from "./util.js";
 
@@ -147,11 +148,19 @@ export function registerRawTools(server: McpServer) {
     "serp_check",
     {
       title: "Live SERP check",
-      description: "Live Google organic results for one keyword in the client's market, with the client's rank and the top 10. Paid (DataForSEO only, whatever the client's data provider), cached 1 day.",
+      description:
+        "Live Google organic results for one keyword in the client's market, with the client's rank and the top 10. Paid (DataForSEO only, whatever the client's data provider), cached 1 day. " +
+        "When the keyword is one of the client's tracked keywords, its rank is also saved to rank history (see rank_history).",
       inputSchema: { client: clientArg, keyword: z.string(), depth: z.number().int().min(10).max(100).optional() },
       annotations: READ_ONLY,
     },
-    handler("serp_check", async ({ client, keyword, depth }) => serp(await resolveClient(client), keyword, depth)),
+    handler("serp_check", async ({ client, keyword, depth }) => {
+      const c = await resolveClient(client);
+      const r = await serp(c, keyword, depth);
+      // Phase 12 B: tracked keywords only (B-D1); an untracked keyword stores nothing. The result is unchanged.
+      recordLiveRank(c, keyword, r, depth === undefined ? {} : { depth });
+      return r;
+    }),
   );
 
   server.registerTool(

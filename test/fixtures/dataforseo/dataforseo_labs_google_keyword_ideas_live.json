@@ -1,0 +1,184 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.5 sec.",
+  "cost": 0.0156,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131500-0000-0000-0000-000000000000",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.4 sec.",
+      "cost": 0.0156,
+      "result_count": 1,
+      "path": [
+        "v3",
+        "dataforseo_labs",
+        "google",
+        "keyword_ideas",
+        "live"
+      ],
+      "data": {},
+      "result": [
+        {
+          "se_type": "google",
+          "seed_keywords": [
+            "emergency plumber",
+            "water heater repair"
+          ],
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 5120,
+          "items_count": 3,
+          "offset": 0,
+          "offset_token": "x",
+          "items": [
+            {
+              "se_type": "google",
+              "keyword": "emergency plumber near me",
+              "location_code": 2840,
+              "language_code": "en",
+              "keyword_info": {
+                "se_type": "google",
+                "last_updated_time": "2026-10-01 00:00:00 +00:00",
+                "competition": 0.42,
+                "competition_level": "MEDIUM",
+                "cpc": 12.31,
+                "search_volume": 74000,
+                "low_top_of_page_bid": 1.1,
+                "high_top_of_page_bid": 4.2,
+                "categories": [
+                  10021
+                ],
+                "monthly_searches": []
+              },
+              "keyword_properties": {
+                "se_type": "google",
+                "core_keyword": null,
+                "synonym_clustering_algorithm": "text_processing",
+                "keyword_difficulty": 38,
+                "detected_language": "en",
+                "is_another_language": false
+              },
+              "search_intent_info": {
+                "se_type": "google",
+                "main_intent": "transactional",
+                "foreign_intent": null,
+                "last_updated_time": "2026-09-20 00:00:00 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword": "24 hour plumber",
+              "location_code": 2840,
+              "language_code": "en",
+              "keyword_info": {
+                "se_type": "google",
+                "last_updated_time": "2026-10-01 00:00:00 +00:00",
+                "competition": 0.37,
+                "competition_level": "MEDIUM",
+                "cpc": 10.8,
+                "search_volume": 33100,
+                "low_top_of_page_bid": 1.1,
+                "high_top_of_page_bid": 4.2,
+                "categories": [
+                  10021
+                ],
+                "monthly_searches": []
+              },
+              "keyword_properties": {
+                "se_type": "google",
+                "core_keyword": null,
+                "synonym_clustering_algorithm": "text_processing",
+                "keyword_difficulty": 31,
+                "detected_language": "en",
+                "is_another_language": false
+              },
+              "search_intent_info": {
+                "se_type": "google",
+                "main_intent": "commercial",
+                "foreign_intent": null,
+                "last_updated_time": "2026-09-20 00:00:00 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword": "water heater repair cost",
+              "location_code": 2840,
+              "language_code": "en",
+              "keyword_info": {
+                "se_type": "google",
+                "last_updated_time": "2026-10-01 00:00:00 +00:00",
+                "competition": 0.12,
+                "competition_level": "MEDIUM",
+                "cpc": 6.02,
+                "search_volume": 9900,
+                "low_top_of_page_bid": 1.1,
+                "high_top_of_page_bid": 4.2,
+                "categories": [
+                  10021
+                ],
+                "monthly_searches": []
+              },
+              "keyword_properties": {
+                "se_type": "google",
+                "core_keyword": null,
+                "synonym_clustering_algorithm": "text_processing",
+                "keyword_difficulty": 22,
+                "detected_language": "en",
+                "is_another_language": false
+              },
+              "search_intent_info": {
+                "se_type": "google",
+                "main_intent": "informational",
+                "foreign_intent": null,
+                "last_updated_time": "2026-09-20 00:00:00 +00:00"
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword": null
+            },
+            {
+              "se_type": "google",
+              "keyword": "Emergency   Plumber Near Me",
+              "location_code": 2840,
+              "language_code": "en",
+              "keyword_info": {
+                "se_type": "google",
+                "last_updated_time": "2026-10-01 00:00:00 +00:00",
+                "competition": 0.42,
+                "competition_level": "MEDIUM",
+                "cpc": 12.31,
+                "search_volume": 74000,
+                "low_top_of_page_bid": 1.1,
+                "high_top_of_page_bid": 4.2,
+                "categories": [
+                  10021
+                ],
+                "monthly_searches": []
+              },
+              "keyword_properties": {
+                "se_type": "google",
+                "core_keyword": null,
+                "synonym_clustering_algorithm": "text_processing",
+                "keyword_difficulty": 38,
+                "detected_language": "en",
+                "is_another_language": false
+              },
+              "search_intent_info": {
+                "se_type": "google",
+                "main_intent": "transactional",
+                "foreign_intent": null,
+                "last_updated_time": "2026-09-20 00:00:00 +00:00"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

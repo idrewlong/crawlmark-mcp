@@ -148,6 +148,14 @@
       "description": "Suggest likely competitors for a client from two sources: DataForSEO organic keyword overlap, and live Google results for up to 5 seed keywords (seeds you pass, the niche, tracked keywords, then to..."
     },
     {
+      "name": "keyword_ideas",
+      "description": "Keyword ideas (related or matching) from seed keywords with volume, CPC and provider-labelled difficulty. Paid through the client's data provider, estimate first."
+    },
+    {
+      "name": "keyword_gap",
+      "description": "Keywords the client's competitors rank for and it doesn't, sorted by volume. Paid through the client's data provider, estimate first."
+    },
+    {
       "name": "add_brand_terms",
       "description": "Add brand terms to one client in clients.yaml: names people search for that client (e.g."
     },
@@ -182,6 +190,14 @@
     {
       "name": "gtm_audit",
       "description": "Audit a client's live (published) Tag Manager container: paused tags, tags with no firing trigger, legacy Universal Analytics tags, duplicate GA4 configuration / Google tags for one measurement ID,..."
+    },
+    {
+      "name": "check_ranks",
+      "description": "Check tracked keywords now and save them to rank history: free Search Console 7-day positions, plus paid live SERP ranks (DataForSEO) with live: true after an estimate."
+    },
+    {
+      "name": "rank_history",
+      "description": "Stored rank history for tracked keywords: Search Console 7-day average positions and live Google ranks, with best, worst and 30/90-day changes. Free, local."
     },
     {
       "name": "gsc_query",
@@ -313,6 +329,15 @@
         "client"
       ],
       "text": "Run the crawlmark \"client-health-check\" prompt for ${arguments.client}."
+    },
+    {
+      "name": "keyword-research",
+      "description": "Keyword ideas from seed keywords, or the keywords competitors rank for and the client doesn't. Shows the estimate and the remaining cap first, runs the paid call only after you agree, then groups the results by intent.",
+      "arguments": [
+        "client",
+        "seeds"
+      ],
+      "text": "Run the crawlmark \"keyword-research\" prompt for ${arguments.client} with seeds ${arguments.seeds}."
     }
   ],
   "keywords": [

@@ -18,15 +18,29 @@ import * as dfs from "./dataforseo.js";
 import { semrushProvider } from "./semrush.js";
 import { normalizeKeywordList } from "./semrush-shape.js";
 import type { BacklinksSummary, CompetitorsResult, KeywordVolume, RankedKeywordsResult } from "./dataforseo.js";
+import { BudgetExceededError, remainingUsd, type UnitProvider } from "../lib/budget.js";
+import { cacheKey, peekCache } from "../lib/cache.js";
+import { isPlainDomain, normalizeHost, normalizeKeyword } from "../lib/clients.js";
+import { lastDays } from "../lib/dates.js";
+import { remainingUnits } from "./units-billing.js";
 
 export { PROVIDER_IDS, PROVIDER_LABELS, ProviderUnavailableError, resolveDefaultProvider, isProviderId } from "../lib/provider-ids.js";
 export type { DefaultProvider, DefaultProviderSource, ProviderId } from "../lib/provider-ids.js";
 export type { KeywordVolume } from "./dataforseo.js";
 
-export type Capability = "keywordVolume" | "rankedKeywords" | "competitorDomains" | "backlinksSummary" | "serpLive" | "onPageInstant" | "siteCrawl";
+export type Capability =
+  | "keywordVolume"
+  | "rankedKeywords"
+  | "competitorDomains"
+  | "backlinksSummary"
+  | "keywordIdeas"
+  | "keywordGap"
+  | "serpLive"
+  | "onPageInstant"
+  | "siteCrawl";
 
-/** The four capabilities that route to the client's provider. */
-export const ROUTED_CAPABILITIES = ["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary"] as const satisfies readonly Capability[];
+/** The capabilities that route to the client's provider (Phase 12 B adds keyword ideas and keyword gap). */
+export const ROUTED_CAPABILITIES = ["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap"] as const satisfies readonly Capability[];
 const DFS_ONLY = ["serpLive", "onPageInstant", "siteCrawl"] as const satisfies readonly Capability[];
 
 export const CAPABILITIES: Readonly<Record<ProviderId, ReadonlySet<Capability>>> = {
@@ -61,6 +75,74 @@ export type RankedKeywordsRouted = RankedKeywordsResult & { notes?: string[] } &
 export type CompetitorsRouted = CompetitorsResult & { notes?: string[] } & ProviderMeta;
 export type BacklinksRouted = { summary: RoutedBacklinksSummary | null } & ProviderMeta;
 
+// ------------------------------------------------------------------ keyword ideas and gap (Phase 12 B)
+
+/** Each provider's keyword difficulty is its own 0-100 scale, so it is labelled and never mixed (B-D4). */
+export type DifficultyMetric = "dataforseo_kd" | "ahrefs_kd" | "semrush_kd";
+
+export interface KeywordIdeasRequest {
+  /** Normalised, 1..20. */
+  seeds: string[];
+  mode: "related" | "matching";
+  /** Ideas wanted in total, 1..200. */
+  limit: number;
+}
+
+export interface KeywordIdea {
+  keyword: string;
+  volume: number | null;
+  /** USD per click. */
+  cpc: number | null;
+  /** Advertiser competition, 0-1 (DataForSEO, Semrush); null for Ahrefs. */
+  competition: number | null;
+  difficulty: { metric: DifficultyMetric; value: number | null };
+  intent: string | null;
+  /** The seed the idea came from; null when one request covered several seeds. */
+  seed: string | null;
+}
+
+export type KeywordIdeasRouted = { ideas: KeywordIdea[]; notes?: string[] } & ProviderMeta;
+
+export interface KeywordGapRequest {
+  /** Normalised competitor domains (bare hosts), 1..5. */
+  competitors: string[];
+  /** Rows per competitor, 1..500. */
+  limit: number;
+  minVolume: number;
+}
+
+export interface KeywordGapRow {
+  keyword: string;
+  volume: number | null;
+  difficulty: { metric: DifficultyMetric; value: number | null };
+  competitors: { domain: string; position: number | null; url: string | null }[];
+  clientPosition: number | null;
+  /** How "the client doesn't rank" was decided: by the provider, or by the client's own Search Console (Ahrefs, B-D3). */
+  clientCheck: "provider" | "gsc";
+}
+
+export type KeywordGapRouted = { gaps: KeywordGapRow[]; perCompetitor: { domain: string; returned: number }[]; notes?: string[] } & ProviderMeta;
+
+/** What the Ahrefs gap needs to know about Search Console (B-D3); the other providers ignore it. */
+export interface GapContext {
+  /** True when the client has a Search Console property and Google is set up. */
+  gscAvailable: boolean;
+  /** The client's queries with impressions in the last 90 days, normalised (free). */
+  clientQueries(): Promise<Set<string>>;
+}
+
+/**
+ * A paid operation's pre-flight plan (no request): the cache key parts (the provider's own call uses the
+ * same ones) and the cost of the whole operation as a function of `limit`, in USD (DataForSEO) or units.
+ */
+export interface PaidPlan {
+  keyParts: Record<string, unknown>;
+  unit: "usd" | "units";
+  requests: number;
+  cost(limit: number): number;
+  breakdown(limit: number): string;
+}
+
 export interface SeoDataProvider {
   id: ProviderId;
   capabilities: ReadonlySet<Capability>;
@@ -70,6 +152,11 @@ export interface SeoDataProvider {
   rankedKeywords?(client: Client, target: string, limit: number, opts?: CallOpts): Promise<RankedKeywordsRouted>;
   competitorDomains?(client: Client, limit: number, opts?: CallOpts): Promise<CompetitorsRouted>;
   backlinksSummary?(client: Client, target: string, opts?: CallOpts): Promise<BacklinksRouted>;
+  /** Pure: throws ProviderUnavailableError when the client's market can't be served (e.g. no country). */
+  planKeywordIdeas?(client: Client, req: KeywordIdeasRequest): PaidPlan;
+  keywordIdeas?(client: Client, req: KeywordIdeasRequest, opts?: CallOpts): Promise<KeywordIdeasRouted>;
+  planKeywordGap?(client: Client, req: KeywordGapRequest, ctx: Pick<GapContext, "gscAvailable">): PaidPlan;
+  keywordGap?(client: Client, req: KeywordGapRequest, ctx: GapContext, opts?: CallOpts): Promise<KeywordGapRouted>;
 }
 
 // ------------------------------------------------------------------ resolution (pure)
@@ -178,6 +265,10 @@ const dataforseoProvider: SeoDataProvider = {
   id: "dataforseo",
   capabilities: CAPABILITIES.dataforseo,
   configured: dataForSeoConfigured,
+  planKeywordIdeas: (client, req) => dfs.planLabsKeywordIdeas(client, req),
+  keywordIdeas: (client, req, opts) => dfs.labsKeywordIdeas(client, req, opts),
+  planKeywordGap: (client, req) => dfs.planLabsKeywordGap(client, req),
+  keywordGap: (client, req, _ctx, opts) => dfs.labsKeywordGap(client, req, opts),
   async keywordVolume(client, keywords) {
     return { ...(await dfs.searchVolume(client, keywords)), provider: "dataforseo", units: null };
   },
@@ -246,9 +337,9 @@ export function requireDataForSeo(capability: Capability, client: Pick<Client, "
 }
 
 /** dataforseo.ts serp, gated by requireDataForSeo, plus `provider` (and `fallbackFrom`). */
-export async function serp(client: Client, keyword: string, depth?: number) {
+export async function serp(client: Client, keyword: string, depth?: number, opts: { refresh?: boolean } = {}) {
   const { fallbackFrom } = requireDataForSeo("serpLive", client);
-  return withFallback({ ...(await dfs.serp(client, keyword, depth)), provider: "dataforseo" as const }, fallbackFrom);
+  return withFallback({ ...(await dfs.serp(client, keyword, depth, opts)), provider: "dataforseo" as const }, fallbackFrom);
 }
 
 /** dataforseo.ts serpOrganic, gated by requireDataForSeo. */
@@ -267,4 +358,163 @@ export async function instantPage(client: Client, url: string, opts: { refresh?:
 export async function onPageStartCrawl(client: Client, maxPages?: number) {
   requireDataForSeo("siteCrawl", client);
   return dfs.onPageStartCrawl(client, maxPages);
+}
+
+
+// ------------------------------------------------------------------ keyword ideas and gap (Phase 12 B)
+
+/** Limits tried, largest first, when an estimate doesn't fit: round numbers people recognise. */
+const FIT_STEPS = [500, 250, 200, 100, 50, 25, 10, 5, 1];
+
+export interface PaidEstimate {
+  provider: ProviderId;
+  requests: number;
+  /** USD for DataForSEO, else 0. */
+  usd: number;
+  /** API units for Ahrefs/Semrush, else null. */
+  units: number | null;
+  breakdown: string;
+  /** The same request ran within the cache window, so running it again costs nothing. */
+  cached: boolean;
+}
+
+export interface EstimateResult {
+  estimateOnly: true;
+  provider: ProviderId;
+  fallbackFrom?: ProviderId;
+  estimate: PaidEstimate;
+  /** What is left this month: USD (DataForSEO) or units (Ahrefs/Semrush), for the client and for everyone. */
+  remaining: { unit: "usd" | "units"; client: number; global: number };
+  wouldExceed: boolean;
+  /** When it would exceed: the largest round limit that fits, and its cost. */
+  fits?: { limit: number; cost: number } | null;
+  message: string;
+}
+
+const fmtCost = (unit: "usd" | "units", n: number) => (unit === "usd" ? `$${n.toFixed(4)}` : `${Math.round(n).toLocaleString("en-US")} units`);
+const capName = (provider: ProviderId) =>
+  provider === "dataforseo" ? "monthlyBudgetUsd (or DEFAULT_CLIENT_MONTHLY_BUDGET_USD)" : `monthlyUnits.${provider} (or DEFAULT_CLIENT_MONTHLY_${provider.toUpperCase()}_UNITS)`;
+
+function remainingFor(client: Client, provider: ProviderId): { unit: "usd" | "units"; client: number; global: number } {
+  if (provider === "dataforseo") {
+    const r = remainingUsd(client);
+    return { unit: "usd", client: r.clientUsd, global: r.globalUsd };
+  }
+  const r = remainingUnits(client, provider as UnitProvider);
+  return { unit: "units", client: r.client, global: r.global };
+}
+
+/** The whole operation's estimate against what's left, and the largest round limit that fits when it doesn't. Pure apart from reading the ledger. */
+function estimateFor(client: Client, provider: ProviderId, capability: Capability, plan: PaidPlan, limit: number, fallbackFrom: ProviderId | undefined, refresh: boolean): EstimateResult {
+  const cachedAlready = !refresh && peekCache(cacheKey("seo", provider, capability, plan.keyParts)) !== undefined;
+  const cost = cachedAlready ? 0 : plan.cost(limit);
+  const remaining = remainingFor(client, provider);
+  const left = Math.min(remaining.client, remaining.global);
+  const wouldExceed = cost > left;
+  let fits: EstimateResult["fits"];
+  if (wouldExceed) {
+    const l = FIT_STEPS.find((n) => n < limit && plan.cost(n) <= left);
+    fits = l === undefined ? null : { limit: l, cost: plan.cost(l) };
+  }
+  const label = PROVIDER_LABELS[provider];
+  const who = remaining.client <= remaining.global ? `${client.domain} has` : "the global cap has";
+  const message = cachedAlready
+    ? `${label}: already fetched within the last 7 days, so this comes from the cache and costs nothing.`
+    : wouldExceed
+      ? `That needs ${fmtCost(plan.unit, cost)} of ${label} (${plan.breakdown(limit)}) but ${who} ${fmtCost(plan.unit, left)} left this month. ` +
+        (fits ? `Use limit ${fits.limit} (${fmtCost(plan.unit, fits.cost)}), or raise ${capName(provider)}.` : `Raise ${capName(provider)} to continue.`)
+      : `${label}: ${plan.breakdown(limit)} = ${fmtCost(plan.unit, cost)} (an estimate; the actual cost is recorded). ${client.domain} has ${fmtCost(plan.unit, remaining.client)} left this month (global: ${fmtCost(plan.unit, remaining.global)}).`;
+  return {
+    estimateOnly: true,
+    provider,
+    ...(fallbackFrom ? { fallbackFrom } : {}),
+    estimate: { provider, requests: cachedAlready ? 0 : plan.requests, usd: plan.unit === "usd" ? cost : 0, units: plan.unit === "units" ? cost : null, breakdown: plan.breakdown(limit), cached: cachedAlready },
+    remaining,
+    wouldExceed,
+    ...(wouldExceed ? { fits: fits ?? null } : {}),
+    message,
+  };
+}
+
+export interface PaidCallOpts {
+  estimateOnly?: boolean | undefined;
+  refresh?: boolean | undefined;
+}
+
+/** Seeds for keyword_ideas: split on `;` and line breaks, trimmed, de-duplicated, 1..20. */
+export function normalizeSeeds(seeds: readonly string[]): string[] {
+  const list = normalizeKeywordList(seeds);
+  if (list.length === 0) throw new Error("keyword_ideas needs at least one seed keyword.");
+  if (list.length > 20) throw new Error(`keyword_ideas takes at most 20 seeds (got ${list.length}).`);
+  return list;
+}
+
+/**
+ * Keyword ideas from seed keywords through the client's provider (routed, D2: no silent fallback). The whole
+ * call's estimate is checked against the caps before the first request; `estimateOnly` makes no request.
+ */
+export async function keywordIdeas(client: Client, req: KeywordIdeasRequest, opts: PaidCallOpts = {}): Promise<KeywordIdeasRouted | EstimateResult> {
+  const { provider, fallbackFrom } = await choose(client, "keywordIdeas");
+  const p = impl(provider);
+  if (!p.planKeywordIdeas || !p.keywordIdeas) throw new Error(`Keyword ideas from ${PROVIDER_LABELS[provider]} are not available in this build.`);
+  const r: KeywordIdeasRequest = { ...req, seeds: normalizeSeeds(req.seeds) };
+  const plan = p.planKeywordIdeas(client, r);
+  const est = estimateFor(client, provider, "keywordIdeas", plan, r.limit, fallbackFrom, opts.refresh === true);
+  if (opts.estimateOnly) return est;
+  // Refused before any request, naming a limit that fits (B-D5); the provider re-checks its own cap too.
+  if (est.wouldExceed) throw new BudgetExceededError(est.message);
+  return withFallback(await p.keywordIdeas(client, r, { refresh: opts.refresh ?? false }), fallbackFrom);
+}
+
+/** Competitor domains for keyword_gap: the ones passed (normalised, not the client's own), else the client's first 3 saved. */
+export function gapCompetitors(client: Pick<Client, "domain" | "competitors">, passed: readonly string[] | undefined): string[] {
+  const own = client.domain.replace(/^www\./, "");
+  const norm = (d: string) => normalizeHost(d)?.replace(/^www\./, "");
+  if (passed?.length) {
+    const out: string[] = [];
+    for (const d of passed) {
+      const h = norm(d);
+      if (!h || !isPlainDomain(h)) throw new Error(`"${d}" isn't a domain.`);
+      if (h === own || h.endsWith(`.${own}`)) throw new Error(`${h} is ${client.domain} itself; pass competitors' domains.`);
+      if (!out.includes(h)) out.push(h);
+    }
+    if (out.length > 5) throw new Error("keyword_gap compares at most 5 competitors at a time.");
+    return out;
+  }
+  const saved = client.competitors.map((d) => norm(d)).filter((d): d is string => Boolean(d) && isPlainDomain(d!));
+  if (saved.length === 0) {
+    throw new Error(`${client.domain} has no saved competitors and none were passed. Find some with suggest_competitors (and save them with add_competitors), or pass competitors.`);
+  }
+  return [...new Set(saved)].slice(0, 3);
+}
+
+/** The Search Console side of the Ahrefs gap (B-D3): free, loaded only when needed. */
+async function gapContext(client: Client): Promise<GapContext> {
+  const google = await import("./google.js");
+  const gscAvailable = google.googleConfigured() && Boolean(client.gscProperty);
+  return {
+    gscAvailable,
+    clientQueries: async () => {
+      const { gscQuery } = await import("./gsc.js");
+      const rows = await gscQuery(client, { ...lastDays(90, 3), dimensions: ["query"], rowLimit: 25_000 });
+      return new Set(rows.filter((r) => r.impressions > 0).map((r) => normalizeKeyword(r.keys[0] ?? "")).filter((k): k is string => Boolean(k)));
+    },
+  };
+}
+
+/**
+ * Keywords competitors rank for and the client doesn't, through the client's provider (routed, no silent
+ * fallback). One pre-flight check for every request in the call (all competitors, and Ahrefs' client call
+ * when Search Console isn't available) before the first; `estimateOnly` makes no request.
+ */
+export async function keywordGap(client: Client, req: KeywordGapRequest, opts: PaidCallOpts & { ctx?: GapContext } = {}): Promise<KeywordGapRouted | EstimateResult> {
+  const { provider, fallbackFrom } = await choose(client, "keywordGap");
+  const p = impl(provider);
+  if (!p.planKeywordGap || !p.keywordGap) throw new Error(`Keyword gap from ${PROVIDER_LABELS[provider]} is not available in this build.`);
+  const ctx = opts.ctx ?? (await gapContext(client));
+  const plan = p.planKeywordGap(client, req, ctx);
+  const est = estimateFor(client, provider, "keywordGap", plan, req.limit, fallbackFrom, opts.refresh === true);
+  if (opts.estimateOnly) return est;
+  if (est.wouldExceed) throw new BudgetExceededError(est.message);
+  return withFallback(await p.keywordGap(client, req, ctx, { refresh: opts.refresh ?? false }), fallbackFrom);
 }

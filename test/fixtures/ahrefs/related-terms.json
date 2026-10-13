@@ -1,0 +1,28 @@
+{
+  "keywords": [
+    {
+      "keyword": "example widgets near me",
+      "volume": 2400,
+      "difficulty": 37,
+      "cpc": 185
+    },
+    {
+      "keyword": "best example widgets",
+      "volume": 1300,
+      "difficulty": 52,
+      "cpc": 210
+    },
+    {
+      "keyword": "example widget sizes",
+      "volume": null,
+      "difficulty": null,
+      "cpc": null
+    },
+    {
+      "keyword": null,
+      "volume": 10,
+      "difficulty": 1,
+      "cpc": 1
+    }
+  ]
+}

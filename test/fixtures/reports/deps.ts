@@ -54,9 +54,15 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
     spentThisMonth: () => 0.42,
     unitsThisMonth: () => 0,
     assertBudget: () => undefined,
+    withUsdReservation: async (_c, _usd, fn) => fn(),
     serp: async () => ({ clientRank: 4, clientUrl: "https://example.com/" }),
     runGtmAudit: async () => GTM_OK as never,
     cruxHistory: async () => CRUX_OK,
+    rankHistory: (c, o) => ({ client: c.slug, since: o.since ?? "2026-04-03", until: o.until ?? "2026-09-30", source: o.source ?? "both", keywords: [], note: "" }),
+    keywordGap: async () => {
+      throw new Error("keywordGap isn't part of this test");
+    },
+    gapCompetitors: (_c, passed) => (passed?.length ? [...passed] : ["competitor-a.example"]),
     ...over,
   };
 }

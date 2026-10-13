@@ -25,6 +25,7 @@ export const BUILTIN_MONTHLY: TemplateSpec = {
     { id: "spend", type: "data_spend" },
     { id: "cwv", type: "core_web_vitals_history", optional: true, formFactor: "PHONE", weeks: 25 },
     { id: "gtm", type: "tag_manager", optional: true, limit: 20 },
+    { id: "ranks", type: "rank_trend", optional: true, since: "180d" },
   ],
 };
 
@@ -66,6 +67,10 @@ templates:
       # Optional: rendered only when asked for (include: [cwv] or --include cwv).
       - { id: cwv, type: core_web_vitals_history, optional: true, formFactor: PHONE, weeks: 25 }
       - { id: gtm, type: tag_manager, optional: true, limit: 20 }
+      # Stored rank history (free; fill it with crawlmark-cli check-ranks): --include ranks.
+      - { id: ranks, type: rank_trend, optional: true, since: 180d }
+      # Paid example: competitor keyword gap (needs paid: true here and --paid / allowPaid at run time).
+      # - { id: gap, type: keyword_gap, optional: true, paid: true, limit: 25 }
   quarterly:
     title: Quarterly SEO review
     period: { range: last_quarter }

@@ -36,6 +36,8 @@ export interface GscQueryOptions extends DateRange {
   pageContains?: string;
   /** Filter to rows whose query contains this string. */
   queryContains?: string;
+  /** Filter to rows whose query matches this RE2 regular expression (Search Console `includingRegex`). */
+  queryRegex?: string;
 }
 
 function requireProperty(client: Client): string {
@@ -55,6 +57,7 @@ export async function gscQuery(client: Client, opts: GscQueryOptions): Promise<G
   const filters = [
     opts.pageContains && { dimension: "page", operator: "contains", expression: opts.pageContains },
     opts.queryContains && { dimension: "query", operator: "contains", expression: opts.queryContains },
+    opts.queryRegex && { dimension: "query", operator: "includingRegex", expression: opts.queryRegex },
   ].filter(Boolean) as { dimension: string; operator: string; expression: string }[];
 
   const key = cacheKey("gsc", googleAuthIdentity(), siteUrl, opts);

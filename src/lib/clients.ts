@@ -297,9 +297,18 @@ export type CompetitorItem = z.infer<typeof CompetitorItemSchema>;
 export type KeywordItem = z.infer<typeof KeywordItemSchema>;
 
 /** A competitor's bare domain (any URL or `www.` form works), or undefined if it isn't a domain. */
+/**
+ * A plain host name after normalizeHost (punycode, lowercase): letters, digits, dots and hyphens only, no
+ * leading or trailing dot or hyphen, no empty label, and at least one dot. Characters such as `, ; & = *`
+ * (which the URL parser lets through) are refused, so a "domain" can't smuggle syntax into provider requests.
+ */
+export function isPlainDomain(host: string): boolean {
+  return /^[a-z0-9.-]+$/.test(host) && host.includes(".") && !/^[.-]|[.-]$/.test(host) && !host.includes("..") && !/(^|\.)-|-(\.|$)/.test(host);
+}
+
 export function normalizeCompetitorDomain(input: string): string | undefined {
   const host = normalizeHost(input);
-  return host && host.includes(".") ? host : undefined;
+  return host && isPlainDomain(host) ? host : undefined;
 }
 
 /** Longest keyword accepted; DataForSEO's keyword endpoints cap well below this. */

@@ -107,6 +107,17 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - Real-user LCP, INP and CLS week by week for up to 40 weeks, with ratings and a trend, from the Chrome UX Report (free with a Google key). *"Has example.com's LCP improved since spring?"*
 - New tool `crux_history`, setup step `setup --step crux`, an optional `cwv` report section, and `run_audit` with `cruxHistory`.
 
+**Rank history** (Shipped)
+- Tracked keywords' positions saved over time: Search Console's 7-day average for free, and live Google ranks when you ask (DataForSEO, paid, estimate first). *"How have our tracked keywords moved since July for example.com?"*
+- An alert when a live rank leaves the top 10 or drops 5 places (Search Console averages never alert).
+- New tools: `check_ranks`, `rank_history`. New command: `crawlmark-cli check-ranks --client example.com|--all [--live] [--dry-run]` (live ranks only with an explicit `--live`).
+- New report section `rank_trend` (optional `ranks` in the builtin monthly).
+
+**Keyword ideas and competitor gap** (Shipped)
+- Keyword ideas from seed keywords and the keywords competitors rank for that you don't, from your own DataForSEO, Ahrefs or Semrush account, with each provider's difficulty labelled. *"What keywords do our competitors rank for that we don't?"*
+- Always an estimate first, checked against your monthly caps; a call that wouldn't fit is refused before any spend, with a limit that would.
+- New tools: `keyword_ideas`, `keyword_gap`. New prompt: `keyword-research`. New report section `keyword_gap` (paid, opt-in).
+
 **Tag Manager findings in audits** (Shipped, opt-in)
 - `run_audit` with `includeTagManager` and `crawlmark-cli audit --include-tag-manager` add Tag Manager findings to saved audits and diffs; an optional `gtm` report section. Never on by default, never an alert.
 

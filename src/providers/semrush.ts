@@ -23,7 +23,12 @@ import { noCountryMessage, semrushDatabase } from "../lib/country.js";
 import { ProviderUnavailableError } from "../lib/provider-ids.js";
 import { createLimiter } from "../lib/rate.js";
 import { TIMEOUTS } from "../lib/timeout.js";
+import { mergeGaps } from "../analysis/keyword-gap.js";
 import {
+  domainVsDomain,
+  mapSemrushGapRows,
+  mapSemrushIdeas,
+  positionHeaderFor,
   classifySemrushError,
   classifySemrushV4Error,
   estimateSemrushUnits,
@@ -42,10 +47,22 @@ import {
   SEMRUSH_KEYWORD_BATCH,
   SEMRUSH_UNITS,
   SEMRUSH_V4_BACKLINK_FIELDS,
+  SemrushFormatError,
   type SemrushErrorKind,
   type SemrushReport,
 } from "./semrush-shape.js";
-import type { BacklinksRouted, CompetitorsRouted, KeywordVolumeResult, RankedKeywordsRouted, SeoDataProvider } from "./seo-data.js";
+import type {
+  BacklinksRouted,
+  CompetitorsRouted,
+  KeywordGapRequest,
+  KeywordGapRouted,
+  KeywordIdeasRequest,
+  KeywordIdeasRouted,
+  KeywordVolumeResult,
+  PaidPlan,
+  RankedKeywordsRouted,
+  SeoDataProvider,
+} from "./seo-data.js";
 import { isTimeoutOrAbort, redact, retryAfterMs, unitsCall } from "./units-billing.js";
 
 export class SemrushApiError extends Error {
@@ -125,7 +142,15 @@ function database(client: Client, capability: string): string {
  * ERROR bodies are classified by text whatever the HTTP status (N10). Units are the
  * documented price x lines returned. A timeout records `estimate` and rethrows.
  */
-async function v3Report(client: Client, req: Req, columns: readonly string[], type: SemrushReport, estimate: number, db: string | null): Promise<{ rows: Record<string, string>[]; units: number; nothingFound: boolean }> {
+async function v3Report(
+  client: Client,
+  req: Req,
+  columns: readonly string[],
+  type: SemrushReport,
+  estimate: number,
+  db: string | null,
+  accept: Readonly<Record<string, (header: string) => boolean>> = {},
+): Promise<{ rows: Record<string, string>[]; units: number; nothingFound: boolean }> {
   let res: { status: number; text: string };
   try {
     res = await send(req);
@@ -148,7 +173,16 @@ async function v3Report(client: Client, req: Req, columns: readonly string[], ty
     throw new SemrushApiError(429, info.kind, info.message);
   }
   if (res.status >= 400) throw new SemrushApiError(res.status, "server", `Semrush ${req.label} returned HTTP ${res.status}: ${redact(res.text, secrets())}`);
-  const rows = parseSemrushCsv(res.text, columns);
+  let rows: Record<string, string>[];
+  try {
+    rows = parseSemrushCsv(res.text, columns, accept);
+  } catch (err) {
+    if (!(err instanceof SemrushFormatError)) throw err;
+    // R-3: a 2xx answer we can't read was probably billed: the lines it has (minus the header) x the price, else the estimate.
+    const lines = res.text.split(/\r?\n/).filter((l) => l.trim() !== "").length - 1;
+    recordUnits(client.slug, "semrush", `${req.label} (unreadable body, estimated)`, lines > 0 ? estimateSemrushUnits(type, lines) : estimate);
+    throw err;
+  }
   const units = estimateSemrushUnits(type, rows.length);
   recordUnits(client.slug, "semrush", req.label, units);
   return { rows, units, nothingFound: false };
@@ -308,10 +342,130 @@ export async function semrushBacklinksSummary(client: Client, target: string, op
   return { ...r.value, ...meta(r) };
 }
 
+// ------------------------------------------------------------------ keyword ideas and gap (Phase 12 B)
+
+const IDEAS_TYPE = { related: "phrase_related", matching: "phrase_fullsearch" } as const;
+const perSeed = (limit: number, seeds: number) => Math.max(1, Math.ceil(limit / Math.max(1, seeds)));
+/** Semrush wants bare domains in `domains`. */
+const bare = (d: string) => d.replace(/^www\./, "");
+
+export function planSemrushKeywordIdeas(client: Client, req: KeywordIdeasRequest): PaidPlan {
+  const db = database(client, "keywordIdeas");
+  const type = IDEAS_TYPE[req.mode];
+  const n = req.seeds.length;
+  return {
+    keyParts: { database: db, mode: req.mode, seeds: req.seeds, limit: req.limit },
+    unit: "units",
+    requests: n,
+    cost: (limit) => n * estimateSemrushUnits(type, perSeed(limit, n)),
+    breakdown: (limit) => `${n} ${type} request(s) × ${perSeed(limit, n)} lines × ${SEMRUSH_UNITS[type]} units`,
+  };
+}
+
+/** Keyword ideas: one phrase_related (`related`) or phrase_fullsearch (`matching`) request per seed, display_limit = ceil(limit / seeds), always sent. */
+export async function semrushKeywordIdeas(client: Client, req: KeywordIdeasRequest, opts: { refresh?: boolean } = {}): Promise<KeywordIdeasRouted> {
+  const plan = planSemrushKeywordIdeas(client, req);
+  const db = plan.keyParts.database as string;
+  const key = v3Key("keywordIdeas");
+  const type = IDEAS_TYPE[req.mode];
+  const per = perSeed(req.limit, req.seeds.length);
+  const r = await unitsCall({
+    client,
+    provider: "semrush",
+    capability: "keywordIdeas",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate: plan.cost(req.limit),
+    refresh: opts.refresh,
+    run: async () => {
+      const lists = [];
+      const notes: string[] = [];
+      let units = 0;
+      for (const seed of req.seeds) {
+        const columns = SEMRUSH_COLUMNS[type];
+        const q: Req = { path: "/", label: type, auth: { v3: key }, params: { type, phrase: seed, database: db, export_columns: columns.join(","), display_limit: String(per) } };
+        const out = await v3Report(client, q, columns, type, estimateSemrushUnits(type, per), db);
+        units += out.units;
+        lists.push(mapSemrushIdeas(out.rows, seed));
+        const note = out.nothingFound ? undefined : partialLinesNote(out.rows.length, per);
+        if (note) notes.push(`${seed}: ${note}`);
+      }
+      const seen = new Set<string>();
+      const ideas = lists.flat().filter((i) => {
+        const k = i.keyword.toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      return { value: { ideas: ideas.slice(0, req.limit), ...withNotes(notes) }, units };
+    },
+  });
+  return { ...r.value, ...meta(r) };
+}
+
+export function planSemrushKeywordGap(client: Client, req: KeywordGapRequest): PaidPlan {
+  const db = database(client, "keywordGap");
+  const n = req.competitors.length;
+  return {
+    keyParts: { database: db, target: bare(client.domain), competitors: req.competitors, limit: req.limit },
+    unit: "units",
+    requests: n,
+    cost: (limit) => n * estimateSemrushUnits("domain_domains", limit),
+    breakdown: (limit) => `${n} competitor(s) × domain_domains ${limit} lines × ${SEMRUSH_UNITS.domain_domains} units`,
+  };
+}
+
+/** Keyword gap: one domain_domains (Domain vs Domain) per competitor, `domains = *|or|<competitor>|-|or|<client>`, display_limit = limit. */
+export async function semrushKeywordGap(client: Client, req: KeywordGapRequest, opts: { refresh?: boolean } = {}): Promise<KeywordGapRouted> {
+  const plan = planSemrushKeywordGap(client, req);
+  const db = plan.keyParts.database as string;
+  const key = v3Key("keywordGap");
+  const target = bare(client.domain);
+  const r = await unitsCall({
+    client,
+    provider: "semrush",
+    capability: "keywordGap",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate: plan.cost(req.limit),
+    refresh: opts.refresh,
+    run: async () => {
+      const per = [];
+      const notes: string[] = [];
+      let units = 0;
+      for (const competitor of req.competitors) {
+        const columns = SEMRUSH_COLUMNS.domain_domains;
+        const q: Req = {
+          path: "/",
+          label: "domain_domains",
+          auth: { v3: key },
+          params: { type: "domain_domains", domains: domainVsDomain(bare(competitor), target), database: db, export_columns: columns.join(","), display_sort: "nq_desc", display_limit: String(req.limit) },
+        };
+        const out = await v3Report(client, q, columns, "domain_domains", estimateSemrushUnits("domain_domains", req.limit), db, {
+          P0: positionHeaderFor(bare(competitor), "P0"),
+          P1: positionHeaderFor(target, "P1"),
+        });
+        units += out.units;
+        per.push({ domain: competitor, rows: mapSemrushGapRows(out.rows) });
+        // B1: fewer lines than display_limit may be a cut-short answer (low balance), or simply all there is.
+        const note = out.nothingFound ? undefined : partialLinesNote(out.rows.length, req.limit);
+        if (note) notes.push(`${competitor}: ${note}`);
+      }
+      return { value: { per, notes }, units };
+    },
+  });
+  const merged = mergeGaps(r.value.per, { metric: "semrush_kd", clientCheck: "provider", minVolume: req.minVolume });
+  return { gaps: merged.gaps, perCompetitor: merged.perCompetitor, ...withNotes(r.value.notes), ...meta(r) };
+}
+
 export const semrushProvider: SeoDataProvider = {
   id: "semrush",
-  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary"]),
+  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap"]),
   configured: () => Boolean(env.SEMRUSH_API_KEY),
+  planKeywordIdeas: (c, r) => planSemrushKeywordIdeas(c, r),
+  keywordIdeas: (c, r, o) => semrushKeywordIdeas(c, r, o),
+  planKeywordGap: (c, r) => planSemrushKeywordGap(c, r),
+  keywordGap: (c, r, _ctx, o) => semrushKeywordGap(c, r, o),
   keywordVolume: (c, k, o) => semrushKeywordVolume(c, k, o),
   rankedKeywords: (c, t, l, o) => semrushRankedKeywords(c, t, l, o),
   competitorDomains: (c, l, o) => semrushCompetitorDomains(c, l, o),

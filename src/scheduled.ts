@@ -1,5 +1,5 @@
 /**
- * Scheduled runs for `crawlmark-cli audit` and `check-traffic`. Clients run one
+ * Scheduled runs for `crawlmark-cli audit`, `check-traffic` and `check-ranks`. Clients run one
  * at a time (each audit launches Chrome). A client that cannot be processed is
  * skipped and reported; it never fails the run. Rules live in analysis/alerts.ts.
  */
@@ -18,6 +18,9 @@ import { getAudit, latestAuditBefore } from "./lib/audits.js";
 import { lastDays, previousRange, type DateRange } from "./lib/dates.js";
 import { sendWebhook, type WebhookOutcome } from "./lib/webhook.js";
 import type { GscQueryOptions, GscRow } from "./providers/gsc.js";
+import { BudgetExceededError } from "./lib/budget.js";
+import { ProviderUnavailableError } from "./lib/provider-ids.js";
+import { checkRanks, planCheckRanks, type CheckRanksDeps, type CheckRanksEstimate, type CheckRanksResult } from "./ranks.js";
 
 export interface Skipped {
   client: string;
@@ -25,7 +28,7 @@ export interface Skipped {
 }
 
 export interface RunReport<R> {
-  command: "audit" | "check-traffic" | "report";
+  command: "audit" | "check-traffic" | "report" | "check-ranks";
   ranAt: string;
   dryRun: boolean;
   results: R[];
@@ -198,6 +201,91 @@ export async function runTrafficChecks(
     }
   }
   return finish("check-traffic", results, alerts, skipped, { dryRun: !!opts.dryRun, attempted, failedClients, webhookUrl: opts.webhookUrl, send: opts.send, clientCount: clients.length, discoveryError: opts.discoveryError });
+}
+
+// ---------------------------------------------------------------- ranks
+
+export interface RankCheckClientResult {
+  client: string;
+  day: string;
+  live: boolean;
+  checked: number;
+  saved: number;
+  costUsd: number;
+  results: CheckRanksResult["results"];
+  notes: string[];
+}
+
+export interface RankCheckDryRun {
+  client: string;
+  wouldCheck: string[];
+  gscWindow: DateRange;
+  live: boolean;
+  estimate: CheckRanksEstimate["estimate"];
+  remaining: CheckRanksEstimate["remaining"];
+  wouldExceed: boolean;
+}
+
+/**
+ * `crawlmark-cli check-ranks`: free Search Console positions for every tracked keyword, plus paid live
+ * SERPs only with an explicit --live (the user's decision, 2026-10-13). Clients run one at a time; with
+ * --live each client's whole estimate is checked against its own cap (and the global one) before its
+ * first request, and a client over cap is skipped with the cap message while the others run. Only live
+ * ranks alert (rank-drop). Search Console averages never do.
+ */
+export async function runRankChecks(
+  clients: Client[],
+  opts: { live: boolean; rankDropThreshold: number; dryRun?: boolean; skipped?: Skipped[]; webhookUrl?: string | undefined; discoveryError?: string | undefined; deps?: CheckRanksDeps; loadDeps?: () => Promise<CheckRanksDeps>; send?: typeof sendWebhook; today?: Date },
+): Promise<RunReport<RankCheckClientResult | RankCheckDryRun>> {
+  const skipped = [...(opts.skipped ?? [])];
+  const results: (RankCheckClientResult | RankCheckDryRun)[] = [];
+  const alerts: Alert[] = [];
+  let attempted = 0;
+  let failedClients = 0;
+  let deps = opts.deps;
+  const getDeps = async () => (deps ??= await (opts.loadDeps ?? (async () => (await import("./ranks.js")).loadCheckRanksDeps()))());
+
+  for (const client of clients) {
+    if (client.trackedKeywords.length === 0) {
+      skipped.push({ client: client.slug, reason: "no tracked keywords" });
+      continue;
+    }
+    if (!opts.live && !client.gscProperty) {
+      skipped.push({ client: client.slug, reason: "no Search Console property (--live checks live ranks instead, paid)" });
+      continue;
+    }
+    if (opts.dryRun) {
+      try {
+        // Local only: the keyword list, the window and the estimate against the ledger. No request.
+        const d = await getDeps();
+        const p = planCheckRanks(client, { live: opts.live, ...(opts.today ? { today: opts.today } : {}) }, d);
+        results.push({ client: client.slug, wouldCheck: p.keywords, gscWindow: p.gscWindow, live: p.live, estimate: p.estimate, remaining: p.remaining, wouldExceed: p.wouldExceed });
+      } catch (err) {
+        skipped.push({ client: client.slug, reason: message(err) });
+      }
+      continue;
+    }
+    attempted++;
+    try {
+      const r = (await checkRanks(client, { live: opts.live, rankDropThreshold: opts.rankDropThreshold, ...(opts.today ? { today: opts.today } : {}) }, await getDeps())) as CheckRanksResult;
+      // R-2: --live was asked for and every live check failed: the run didn't do its job for this client.
+      if (r.live && r.results.length > 0 && r.results.every((x) => x.liveError !== undefined)) {
+        throw new Error(`every live check failed (first error: ${r.results[0]!.liveError}); Search Console positions were saved (${r.saved} row(s)).`);
+      }
+      results.push({ client: client.slug, day: r.day, live: r.live, checked: r.results.length, saved: r.saved, costUsd: r.costUsd, results: r.results, notes: r.notes });
+      for (const d of r.rankDrops) alerts.push({ kind: "rank-drop", client: client.slug, keyword: d.keyword, previousRank: d.previousRank, currentRank: d.currentRank, source: "serp" });
+    } catch (err) {
+      // Over its cap or without DataForSEO: a planned skip, not a failure (the others still run).
+      if (err instanceof BudgetExceededError || err instanceof ProviderUnavailableError) {
+        attempted--;
+        skipped.push({ client: client.slug, reason: message(err) });
+        continue;
+      }
+      failedClients++;
+      skipped.push({ client: client.slug, reason: `error: ${message(err)}` });
+    }
+  }
+  return finish("check-ranks", results, alerts, skipped, { dryRun: !!opts.dryRun, attempted, failedClients, webhookUrl: opts.webhookUrl, send: opts.send, clientCount: clients.length, discoveryError: opts.discoveryError });
 }
 
 // ---------------------------------------------------------------- shared

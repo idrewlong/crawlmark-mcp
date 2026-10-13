@@ -81,6 +81,14 @@ const sectionSchemas = [
   }),
   z.strictObject({ ...common, type: z.literal("tag_manager"), limit: limit(100) }),
   z.strictObject({ ...common, type: z.literal("data_spend") }),
+  // Phase 12 B: stored rank history (free, local) and the competitor keyword gap (paid).
+  z.strictObject({ ...common, type: z.literal("rank_trend"), since: z.enum(["90d", "180d", "365d"]).optional(), source: z.enum(["gsc", "serp", "both"]).optional() }),
+  z.strictObject({
+    ...common,
+    type: z.literal("keyword_gap"),
+    limit: limit(500),
+    competitors: z.array(z.string().min(1).max(253)).min(1).max(5).optional(),
+  }),
   z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
 ] as const;
 
@@ -106,14 +114,16 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   core_web_vitals_history: "Core Web Vitals history (real users)",
   tag_manager: "Tag Manager findings",
   data_spend: "Paid data spend this month",
+  rank_trend: "Tracked keyword rank trends",
+  keyword_gap: "Competitor keyword gap",
   text: "Note",
 };
 
 /**
- * Section types that always cost money. Stage B and C add keyword_gap, local_profile and ai_visibility.
+ * Section types that always cost money (Stage B: keyword_gap; Stage C adds local_profile and ai_visibility).
  * `tracked_keywords` is paid only with `liveRanks: true`.
  */
-export const PAID_SECTION_TYPES: ReadonlySet<string> = new Set<string>([]);
+export const PAID_SECTION_TYPES: ReadonlySet<string> = new Set<string>(["keyword_gap"]);
 
 /** True when a section spends money (and so needs `paid: true` in the template and allowPaid at run time). */
 export function isPaidSection(s: SectionSpec): boolean {

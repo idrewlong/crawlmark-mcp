@@ -31,7 +31,7 @@ import { describeHome } from "./lib/home.js";
 import { deleteTokenFile, readTokenFile } from "./lib/token-store.js";
 import { checkGoogleAuthLive, googleAuthMode, googleAuthModeNote, googleAuthStatus } from "./providers/google.js";
 import { loopbackLogin } from "./providers/google-login.js";
-import { runAudits, runTrafficChecks, type Skipped } from "./scheduled.js";
+import { runAudits, runRankChecks, runTrafficChecks, type Skipped } from "./scheduled.js";
 import { assertSafeUrl } from "./lib/url-guard.js";
 import { packageVersion } from "./lib/entry.js";
 import { setupCommand } from "./setup/cli-setup.js";
@@ -410,7 +410,7 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
   return 0;
 }
 
-type ScheduledFlags = { client?: string | undefined; all: boolean; urls?: string | undefined; "dry-run": boolean; "include-tag-manager": boolean };
+type ScheduledFlags = { client?: string | undefined; all: boolean; urls?: string | undefined; "dry-run": boolean; "include-tag-manager": boolean; live: boolean };
 
 /** Usage problems in the scheduled commands exit 1, because 2 means "alerts" to a cron wrapper. */
 function scheduledUsage(problem: string): number {
@@ -419,11 +419,13 @@ function scheduledUsage(problem: string): number {
   return 1;
 }
 
-async function scheduledCommand(kind: "audit" | "check-traffic", args: string[], values: ScheduledFlags): Promise<number> {
+async function scheduledCommand(kind: "audit" | "check-traffic" | "check-ranks", args: string[], values: ScheduledFlags): Promise<number> {
   if (args.length) return scheduledUsage(`${kind} takes only flags, got: ${args.join(" ")}`);
   if (values.all === (values.client !== undefined)) return scheduledUsage(`${kind} takes --client <domain|slug> or --all.`);
   if (values.urls !== undefined && (kind !== "audit" || values.all)) return scheduledUsage("--urls works only with `audit --client`.");
   if (values["include-tag-manager"] && kind !== "audit") return scheduledUsage("--include-tag-manager works only with `audit`.");
+  // Paid live SERPs run only when --live is given explicitly (never by default, also not from cron).
+  if (values.live && kind !== "check-ranks") return scheduledUsage("--live works only with `check-ranks`.");
 
   let urls: string[] | undefined;
   if (values.urls !== undefined) {
@@ -459,7 +461,9 @@ async function scheduledCommand(kind: "audit" | "check-traffic", args: string[],
   const report =
     kind === "audit"
       ? await runAudits(clients, { ...common, ...(urls ? { urls } : {}), ...(values["include-tag-manager"] ? { includeTagManager: true } : {}) })
-      : await runTrafficChecks(clients, { ...common, thresholds });
+      : kind === "check-ranks"
+        ? await runRankChecks(clients, { ...common, live: values.live, rankDropThreshold: env.ALERT_RANK_DROP })
+        : await runTrafficChecks(clients, { ...common, thresholds });
   out(JSON.stringify({ ...report, discovery }, null, 2));
   for (const e of report.errors) warn(`Error: ${e}`);
   return report.exitCode;
@@ -525,6 +529,7 @@ async function main(argv: string[]): Promise<number> {
       client: { type: "string" },
       urls: { type: "string" },
       "include-tag-manager": { type: "boolean", default: false },
+      live: { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       step: { type: "string" },
       yes: { type: "boolean", short: "y", default: false },
@@ -549,7 +554,7 @@ async function main(argv: string[]): Promise<number> {
     await updateNoticeAfterHelp(values.json);
     return 0;
   }
-  if (group === "audit" || group === "check-traffic") return scheduledCommand(group, command ? [command, ...args] : args, values);
+  if (group === "audit" || group === "check-traffic" || group === "check-ranks") return scheduledCommand(group, command ? [command, ...args] : args, values);
   if (group === "report" && command === "templates") {
     const [sub, ...rest] = args;
     return templatesCommand(sub, rest, { out, warn, homeDir: HOME.dir, cwd: process.cwd() });

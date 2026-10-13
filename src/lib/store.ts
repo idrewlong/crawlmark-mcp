@@ -65,3 +65,37 @@ export function migrateSpendUnits(database: DatabaseSync): boolean {
 }
 
 migrateSpendUnits(db);
+
+/**
+ * Phase 12 B: stored rank history for tracked keywords (spec 12.B.2). Additive and idempotent:
+ * CREATE ... IF NOT EXISTS on every start, so an existing database gains the table and index once
+ * and a migrated one is left alone. Older builds never read the table, so no rollback step is needed.
+ * One row per (client, keyword, source, day, market, language, device); a later check of the same day
+ * replaces the earlier one (upsert in rank-history.ts).
+ */
+export function migrateRankHistory(database: DatabaseSync): boolean {
+  const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'rank_history'").get() !== undefined;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS rank_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      client      TEXT NOT NULL,
+      keyword     TEXT NOT NULL,
+      source      TEXT NOT NULL,
+      day         TEXT NOT NULL,
+      checked_at  INTEGER NOT NULL,
+      rank        REAL,
+      url         TEXT,
+      depth       INTEGER,
+      market      TEXT NOT NULL,
+      language    TEXT NOT NULL,
+      device      TEXT NOT NULL DEFAULT 'desktop',
+      clicks      INTEGER,
+      impressions INTEGER,
+      UNIQUE (client, keyword, source, day, market, language, device)
+    );
+    CREATE INDEX IF NOT EXISTS rank_history_lookup ON rank_history (client, keyword, source, day);
+  `);
+  return !existed;
+}
+
+migrateRankHistory(db);

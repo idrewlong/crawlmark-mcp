@@ -423,6 +423,19 @@ Planned in [specs/2026-10-13-1900-phase-12-reports-and-gaps.md](specs/2026-10-13
 
 **Status:** Stage A built on branch `phase-12a` (tasks A-1 to A-11): report templates (`config/report-templates.yaml`, per-client files, a builtin `monthly`), `run_report_template` and `export_report` writing Markdown, HTML, PDF (managed Chrome, offline) and Word (`docx` 9.8.1) files under `REPORTS_DIR`, the `template-report` prompt and the Google Docs handoff through the user's own Drive connector, `crawlmark-cli report`, `crux_history` with `setup --step crux`, and opt-in Tag Manager and CrUX findings in `run_audit`. Pending: the manual checks in the spec's Done-when (the Word, LibreOffice and Google Docs import of a DOCX, and a Claude session with a Drive connector), review, and merge.
 
+**Stage B status:** built on branch `phase-12b` (tasks B-1 to B-6): the `rank_history` table (guarded `CREATE ... IF NOT EXISTS` on start), `check_ranks` (free Search Console 7-day positions; live DataForSEO ranks only with `live: true`, one pre-flight cap check for the whole run, `estimateOnly`), `rank_history`, rank rows from `serp_check` and `monthly_report` with `liveRanks` (tracked keywords only; output unchanged), the `rank-drop` alert (live ranks only, `ALERT_RANK_DROP`), `crawlmark-cli check-ranks [--live] [--dry-run]` (paid only with an explicit `--live`), the routed `keywordIdeas` / `keywordGap` capabilities for DataForSEO Labs, Ahrefs (gap checked against the client's own Search Console) and Semrush with whole-call estimates and a "use limit N" refusal, the `keyword_ideas` and `keyword_gap` tools, the `rank_trend` (free, optional `ranks` in the builtin monthly) and `keyword_gap` (paid) report sections, and the `keyword-research` prompt. Pending: review, merge, and the live check below.
+
+**Stage B live check (pending; needs the user's approval and keys, answers 12.Q-B1 and research "Not confirmed" 4, 7, 8).** One call of each per configured provider, on a client of the user's own (shown as `example.com`), smallest limit, each preceded by its `estimateOnly: true` call to compare against the cost the real call reports (`costUsd` / `units`, and the spend ledger):
+
+| Provider | Calls | Estimated cost |
+|---|---|---|
+| DataForSEO (live mode, `DATAFORSEO_LIVE=true`; the sandbox is free) | `keyword_ideas { client: "example.com", seeds: ["<one service keyword>"], mode: "related", limit: 1 }`, `keyword_ideas { ..., mode: "matching", limit: 1 }`, `keyword_gap { client: "example.com", competitors: ["<one competitor>"], limit: 1 }` | $0.01212 each ($0.012 per task + $0.00012 per item), about $0.037 in total |
+| Ahrefs | `keyword_ideas { ..., mode: "related", limit: 1 }`, `keyword_ideas { ..., mode: "matching", limit: 1 }`, `keyword_gap { ..., competitors: ["<one competitor>"], limit: 1 }` on a client with a Search Console property | 50 units each (the minimum), 150 units in total; a gap for a client without Search Console adds 13,000 units, so don't use one |
+| Semrush | `keyword_ideas { ..., mode: "related", limit: 1 }` (40 units a line), `keyword_ideas { ..., mode: "matching", limit: 1 }` (20), `keyword_gap { ..., competitors: ["<one competitor>"], limit: 1 }` (80) | at most 140 units in total |
+| Optional: `check_ranks { client: "example.com", live: true, keywords: ["<one tracked keyword>"] }` | DataForSEO live SERP | about $0.002 |
+
+Things to confirm: Ahrefs `related-terms` / `matching-terms` answer with a `keywords` array and charge 1 unit for `keyword` and `cpc`; DataForSEO `keyword_suggestions` takes `keyword` + `limit` and returns the `keyword_ideas` item shape; Semrush's header texts for `Kd` and for `domain_domains`' `P0` / `P1` columns (the fixtures in `test/fixtures/semrush/phase12b/` assume "Keyword Difficulty" and the domain names); and that the reported cost or units match the estimate.
+
 ## Final checklist
 
 - [ ] All phases typecheck and tests pass.

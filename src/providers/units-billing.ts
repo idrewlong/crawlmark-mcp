@@ -4,7 +4,7 @@
  * wrapper, timeout detection and Retry-After parsing. No provider-specific logic.
  */
 import type { Client } from "../config.js";
-import { assertUnits, type UnitProvider } from "../lib/budget.js";
+import { assertUnits, globalUnitCap, unitsThisMonth, type UnitProvider } from "../lib/budget.js";
 import { cached, cacheKey } from "../lib/cache.js";
 import { spendKeys } from "../lib/spend.js";
 import { stripControl } from "../lib/terminal-text.js";
@@ -109,4 +109,17 @@ export async function unitsCall<T>(o: {
     { refresh: o.refresh ?? false },
   );
   return { value: value.value, units: fromCache ? 0 : value.units, fromCache };
+}
+
+/**
+ * Units left this month for a client (client.monthlyUnits) and for everyone (<PROVIDER>_MONTHLY_UNIT_CAP),
+ * after what is recorded and what calls in progress have reserved; never below 0. Phase 12 B estimates.
+ */
+export function remainingUnits(client: Pick<Client, "slug" | "aliases" | "monthlyUnits">, provider: UnitProvider): { client: number; global: number } {
+  const keys = spendKeys(client);
+  const pending = pendingFor(provider, keys);
+  return {
+    client: Math.max(0, client.monthlyUnits[provider] - unitsThisMonth(keys, provider) - pending.client),
+    global: Math.max(0, globalUnitCap(provider) - unitsThisMonth(undefined, provider) - pending.global),
+  };
 }

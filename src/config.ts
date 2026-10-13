@@ -69,6 +69,8 @@ const EnvSchema = z.object({
   ALERT_TRAFFIC_DROP_PCT: z.coerce.number().min(0).max(100).default(25),
   ALERT_MIN_CLICKS_LOST: z.coerce.number().int().min(0).default(50),
   ALERT_WEBHOOK_URL: z.string().url().optional(),
+  // Phase 12 B: a live SERP rank that worsens by at least this many places alerts (check-ranks --live).
+  ALERT_RANK_DROP: z.coerce.number().int().min(1).max(100).default(5),
   // Phase 9: Ahrefs (API v3) and Semrush keys, and monthly unit caps. SEO_DATA_PROVIDER is read
   // leniently below (not here), so an unknown value never stops the server.
   AHREFS_API_KEY: z.string().optional(),

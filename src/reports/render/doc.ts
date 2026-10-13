@@ -110,6 +110,12 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
       ],
     },
   ];
+  // Phase 12 B sources, listed only when those sections are in the report.
+  const ok = (type: string) => report.sections.some((s) => s.type === type && s.status === "ok");
+  const extraSources: Text[] = [];
+  if (ok("rank_trend")) extraSources.push([txt("Rank trends: crawlmark's stored rank checks (Search Console 7-day averages; live ranks from DataForSEO when they were checked).")]);
+  if (ok("keyword_gap")) extraSources.push([txt("Keyword gap: the client's SEO data provider (paid), named in that section.")]);
+  if (extraSources.length) sourcesAndNotes.push({ kind: "list", items: extraSources });
   const statuses = report.sections.filter((s) => s.status !== "ok");
   if (statuses.length) sourcesAndNotes.push({ kind: "list", items: statuses.map((s) => [txt(statusLine(s))]) });
   if (report.notes.length) sourcesAndNotes.push({ kind: "list", items: report.notes.map((n) => [txt(n)]) });

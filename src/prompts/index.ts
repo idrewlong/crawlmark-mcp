@@ -52,6 +52,23 @@ function template(name: string, vars: Record<string, string>): string {
   return renderTemplate(readFileSync(new URL(`${name}.md`, TEMPLATES), "utf8"), vars);
 }
 
+/** The keyword-research prompt's step 2: confirm the seeds passed in, or propose some (Phase 12 B). */
+export function keywordResearchVars(client: string, seeds: string | undefined): Record<string, string> {
+  const list = (seeds ?? "")
+    .split(/[,;\n]/)
+    .map((s) => s.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  const shown = list.map((s) => `"${s.replace(/["`]/g, "")}"`).join(", ");
+  return {
+    client,
+    scope: list.length ? `keyword ideas from the seeds ${shown}, or a competitor keyword gap` : "keyword ideas from seed keywords, or a competitor keyword gap",
+    seedStep: list.length
+      ? `Use these seeds for \`keyword_ideas\`: ${shown}. Ask whether I want \`related\` ideas (searches related to the seeds, the default) or \`matching\` ones (keywords containing a seed), and the limit (default 50). If I'd rather see a competitor gap, use \`keyword_gap\` with the saved competitors (or the ones I name) instead.`
+      : "Ask whether I want keyword ideas or a competitor gap. For ideas, propose 3-5 non-branded seed keywords from the niche, the tracked keywords and the top pages (never the brand name), and confirm them with me; ask for `related` (the default) or `matching`, and the limit (default 50). For a gap, use the saved competitors (at most 3 by default) or the ones I name; if none are saved, suggest running the find-competitors prompt first.",
+  };
+}
+
 export function registerPrompts(server: McpServer) {
   server.registerPrompt(
     "find-competitors",
@@ -187,5 +204,19 @@ export function registerPrompts(server: McpServer) {
       argsSchema: { client: clientArg },
     },
     ({ client }) => text(template("client-health-check", { client: client.trim() })),
+  );
+
+  server.registerPrompt(
+    "keyword-research",
+    {
+      title: "Keyword research",
+      description:
+        "Find keyword ideas from seed keywords, or the keywords competitors rank for and the client doesn't, through the client's SEO data provider. Always shows the estimate and the remaining cap first and runs the paid call only after you agree; then groups the results by intent and suggests which page should target each.",
+      argsSchema: {
+        client: clientArg,
+        seeds: z.string().max(1000).optional().describe('Optional seed keywords, comma-separated, e.g. "emergency plumber, water heater repair".'),
+      },
+    },
+    ({ client, seeds }) => text(template("keyword-research", keywordResearchVars(client.trim(), seeds))),
   );
 }

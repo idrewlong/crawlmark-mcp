@@ -24,3 +24,13 @@ To refresh, re-run the recorder (sandbox only; it refuses any other base URL), s
 | `on_page_instant_pages.json` | `/on_page/instant_pages` |
 | `serp_google_organic_live_regular.json` | `/serp/google/organic/live/regular` (with `location_name`, depth 20) |
 | `appendix_user_data.json` | `/appendix/user_data` (GET) |
+
+## Phase 12 B: Labs keyword ideas and gap (hand-built, not recordings)
+
+These three were written by hand from the documented response structure (docs.dataforseo.com, see `docs/research/2026-10-13-phase-12-apis.md` D1-D3); no request was made. Domains and keywords are placeholders (`example.com`, `competitor-a.example`). Hand-added edge cases: an item with a null keyword, a duplicate keyword differing only in case and spacing (keyword ideas), a null `keyword_difficulty` (suggestions) and a `paid` first-domain element that must be dropped (intersection). Replace them with scrubbed sandbox recordings when the live check runs.
+
+| File | Endpoint |
+|---|---|
+| `dataforseo_labs_google_keyword_ideas_live.json` | `/dataforseo_labs/google/keyword_ideas/live` |
+| `dataforseo_labs_google_keyword_suggestions_live.json` | `/dataforseo_labs/google/keyword_suggestions/live` |
+| `dataforseo_labs_google_domain_intersection_live.json` | `/dataforseo_labs/google/domain_intersection/live` |

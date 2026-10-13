@@ -23,6 +23,8 @@ export const AHREFS_PATHS = {
   backlinksStats: "/site-explorer/backlinks-stats",
   domainRating: "/site-explorer/domain-rating",
   keywordsOverview: "/keywords-explorer/overview",
+  relatedTerms: "/keywords-explorer/related-terms",
+  matchingTerms: "/keywords-explorer/matching-terms",
 } as const;
 
 /** Per-row field costs documented by Ahrefs ("(10 units)" in each field's description); every other field costs 1. */
@@ -63,7 +65,18 @@ export const BACKLINKS_FIELDS = ["live", "all_time", "live_refdomains", "all_tim
 /** Keywords per keywords-explorer overview request (N4: no documented cap; the spec uses 100). */
 export const AHREFS_KEYWORD_BATCH = 100;
 
+/** Phase 12 B: keyword ideas (related-terms / matching-terms): 1 + 10 + 10 + 1 = 22 units per row (research A1). */
+export const IDEAS_SELECT = ["keyword", "volume", "difficulty", "cpc"] as const;
+export const IDEAS_ORDER = "volume:desc";
+/** Phase 12 B: keyword gap rows from organic-keywords: 1 + 1 + 1 + 10 = 13 units per row (spec 12.B.2). */
+export const GAP_SELECT = ["keyword", "best_position", "best_position_url", "volume"] as const;
+export const GAP_ORDER = "volume:desc";
+/** Without Search Console, the gap reads the client's own organic keywords: one call of this many rows. */
+export const AHREFS_GAP_CLIENT_ROWS = 1000;
+
 export const rankedFields = () => [...RANKED_SELECT, ...orderFields(RANKED_ORDER)];
+export const ideasFields = () => [...IDEAS_SELECT, ...orderFields(IDEAS_ORDER)];
+export const gapFields = () => [...GAP_SELECT, ...orderFields(GAP_ORDER)];
 export const competitorFields = () => [...COMPETITORS_SELECT, ...orderFields(COMPETITORS_ORDER)];
 
 /** Pre-flight estimates (spec 9.4): conservative ceilings using `limit` as the row count. */
@@ -74,6 +87,12 @@ export const ahrefsEstimates = {
   backlinksStats: () => estimateAhrefsUnits(BACKLINKS_FIELDS, 1),
   /** The documented 50-unit-minimum example (2 fields, 1 row). */
   domainRating: () => AHREFS_MIN_UNITS,
+  /** max(50, 22 x limit): one request with every seed. */
+  keywordIdeas: (limit: number) => estimateAhrefsUnits(ideasFields(), limit),
+  /** max(50, 13 x limit) per competitor. */
+  gapCompetitor: (limit: number) => estimateAhrefsUnits(gapFields(), limit),
+  /** max(50, 13 x 1000): the client's own keywords when Search Console isn't available. */
+  gapClient: () => estimateAhrefsUnits(gapFields(), AHREFS_GAP_CLIENT_ROWS),
 };
 
 // ------------------------------------------------------------------ request parameters
@@ -113,6 +132,22 @@ export function organicCompetitorsRequest(o: { target: string; country: string; 
       order_by: COMPETITORS_ORDER,
       limit: String(o.limit),
     },
+  };
+}
+
+/** Keyword ideas: related-terms (`terms=also_rank_for`) or matching-terms (`match_mode=terms`), every seed in one request. */
+export function keywordIdeasRequest(o: { mode: "related" | "matching"; keywords: readonly string[]; country: string; limit: number }): AhrefsParams {
+  const base = { select: IDEAS_SELECT.join(","), country: o.country, keywords: o.keywords.join(","), order_by: IDEAS_ORDER, limit: String(o.limit) };
+  return o.mode === "related"
+    ? { path: AHREFS_PATHS.relatedTerms, params: { ...base, terms: "also_rank_for" } }
+    : { path: AHREFS_PATHS.matchingTerms, params: { ...base, match_mode: "terms" } };
+}
+
+/** One domain's organic keywords for the gap (select exactly keyword,best_position,best_position_url,volume). */
+export function gapKeywordsRequest(o: { target: string; country: string; date: string; limit: number }): AhrefsParams {
+  return {
+    path: AHREFS_PATHS.organicKeywords,
+    params: { select: GAP_SELECT.join(","), target: o.target, country: o.country, date: o.date, mode: "subdomains", volume_mode: "average", order_by: GAP_ORDER, limit: String(o.limit) },
   };
 }
 
@@ -302,4 +337,32 @@ export function describeAhrefsAccount(a: AhrefsAccount): string {
       ? `key ${fmt(a.unitsUsageApiKey)} of ${fmt(a.unitsLimitApiKey)} units used`
       : `workspace ${fmt(a.unitsUsageWorkspace)} of ${fmt(a.unitsLimitWorkspace)} units used`;
   return `plan ${a.plan ?? "unknown"}, ${usage}${a.resetDate ? ` (resets ${a.resetDate})` : ""}`;
+}
+
+// ------------------------------------------------------------------ keyword ideas and gap (Phase 12 B)
+
+export interface RawAhrefsTerms {
+  keywords?: { keyword?: string | null; volume?: number | null; difficulty?: number | null; cpc?: number | null }[] | null;
+}
+
+/** related-terms / matching-terms rows -> ideas. cpc is USD cents (-> dollars); competition and intent aren't requested (null). */
+export function mapAhrefsIdeas(raw: RawAhrefsTerms | undefined, seed: string | null) {
+  return (raw?.keywords ?? []).flatMap((r) => {
+    const keyword = str(r.keyword)?.replace(/\s+/g, " ").trim();
+    if (!keyword) return [];
+    const cents = num(r.cpc);
+    return [{ keyword, volume: num(r.volume), cpc: cents === null ? null : Math.round(cents) / 100, competition: null, difficulty: { metric: "ahrefs_kd" as const, value: num(r.difficulty) }, intent: null, seed }];
+  });
+}
+
+export interface RawAhrefsGapKeywords {
+  keywords?: { keyword?: string | null; best_position?: number | null; best_position_url?: string | null; volume?: number | null }[] | null;
+}
+
+/** organic-keywords gap rows (difficulty isn't selected for the gap: null). */
+export function mapAhrefsGapRows(raw: RawAhrefsGapKeywords | undefined) {
+  return (raw?.keywords ?? []).flatMap((r) => {
+    const keyword = str(r.keyword)?.replace(/\s+/g, " ").trim();
+    return keyword ? [{ keyword, volume: num(r.volume), difficulty: null, position: num(r.best_position), url: str(r.best_position_url) }] : [];
+  });
 }

@@ -10,12 +10,14 @@ import {
 } from "../clients.js";
 import { suggestCompetitors } from "../competitors.js";
 import { ENTRY_SOURCES, keywordInput } from "../lib/clients.js";
+import { gapCompetitors, keywordGap, keywordIdeas } from "../providers/seo-data.js";
 import { handler, READ_ONLY } from "./util.js";
 
 /**
  * Competitor and tracked-keyword management plus competitor suggestions.
  * The list and profile tools are free and local: they edit clients.yaml
- * (comments and other entries are kept). suggest_competitors is paid and read-only.
+ * (comments and other entries are kept). suggest_competitors, keyword_ideas and
+ * keyword_gap are paid and read-only.
  */
 
 const clientArg = z
@@ -176,5 +178,57 @@ export function registerCompetitorTools(server: McpServer) {
       annotations: READ_ONLY,
     },
     handler("suggest_competitors", ({ client, area, niche, seeds, limit }) => suggestCompetitors(client, { area, niche, seeds, limit })),
+  );
+
+  // ------------------------------------------------ keyword ideas and gap (paid, read-only; Phase 12 B)
+
+  const ESTIMATE_FIRST =
+    "Paid through the client's data provider (DataForSEO in USD, Ahrefs or Semrush in API units), checked against the client's and the global monthly caps for the whole call before the first request. " +
+    "Call with estimateOnly: true first, tell the user the provider, the cost and what's left, and run it only after they agree; when the estimate doesn't fit, the message names a limit that does. Cached 7 days.";
+
+  server.registerTool(
+    "keyword_ideas",
+    {
+      title: "Keyword ideas",
+      description:
+        "Keyword ideas from seed keywords in the client's market: `related` (searches related to the seeds) or `matching` (keywords containing a seed). " +
+        "Each idea has volume, CPC, competition (0-1; null for Ahrefs), difficulty labelled by provider (dataforseo_kd, ahrefs_kd or semrush_kd: different 0-100 scales, never compare them), intent (DataForSEO only) and the seed. " +
+        ESTIMATE_FIRST,
+      inputSchema: {
+        client: clientArg,
+        seeds: z.array(keywordInput).min(1).max(20).describe("1-20 seed keywords, e.g. the services the client sells (never just the brand name)."),
+        mode: z.enum(["related", "matching"]).optional().describe('Default "related".'),
+        limit: z.number().int().min(1).max(200).optional().describe("Ideas in total (default 50)."),
+        estimateOnly: z.boolean().optional().describe("Return the estimate and the remaining cap only; no request."),
+      },
+      annotations: READ_ONLY,
+    },
+    handler("keyword_ideas", async ({ client, seeds, mode, limit, estimateOnly }) =>
+      keywordIdeas(await resolveClient(client), { seeds, mode: mode ?? "related", limit: limit ?? 50 }, { estimateOnly }),
+    ),
+  );
+
+  server.registerTool(
+    "keyword_gap",
+    {
+      title: "Competitor keyword gap",
+      description:
+        "Keywords the client's competitors rank for and the client doesn't, sorted by volume and de-duplicated across competitors (each with the competitors' positions and URLs). " +
+        "Competitors default to the client's saved ones (the first 3); with none saved, use suggest_competitors first. With Ahrefs, \"the client already ranks\" is decided from the client's own Search Console data (free; clientCheck: gsc) when it has a property. " +
+        "Difficulty is labelled by provider (never compare scales). " +
+        ESTIMATE_FIRST,
+      inputSchema: {
+        client: clientArg,
+        competitors: z.array(z.string().min(1).max(253)).min(1).max(5).optional().describe("Competitor domains. Default: the client's saved competitors (at most 3)."),
+        limit: z.number().int().min(1).max(500).optional().describe("Keywords per competitor (default 50)."),
+        minVolume: z.number().int().min(0).optional().describe("Drop keywords below this monthly volume (default 0)."),
+        estimateOnly: z.boolean().optional().describe("Return the estimate and the remaining cap only; no request."),
+      },
+      annotations: READ_ONLY,
+    },
+    handler("keyword_gap", async ({ client, competitors, limit, minVolume, estimateOnly }) => {
+      const c = await resolveClient(client);
+      return keywordGap(c, { competitors: gapCompetitors(c, competitors), limit: limit ?? 50, minVolume: minVolume ?? 0 }, { estimateOnly });
+    }),
   );
 }

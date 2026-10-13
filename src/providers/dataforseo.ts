@@ -1,8 +1,14 @@
 import { env, type Client } from "../config.js";
 import { TIMEOUTS } from "../lib/timeout.js";
-import { assertBudget, recordSpend } from "../lib/budget.js";
+import { assertBudget, recordSpend, withUsdReservation } from "../lib/budget.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
+import { mergeGaps, mergeIdeas } from "../analysis/keyword-gap.js";
+import type { KeywordGapRequest, KeywordGapRouted, KeywordIdeasRequest, KeywordIdeasRouted, PaidPlan } from "./seo-data.js";
 import {
+  mapDomainIntersection,
+  mapLabsKeywordIdeas,
+  type RawDomainIntersection,
+  type RawLabsKeywords,
   mapBacklinksSummary,
   mapCompetitors,
   mapInstantPage,
@@ -38,7 +44,7 @@ export type {
  * Estimates are deliberately conservative ceilings used only for the pre-flight
  * budget check; check dataforseo.com/pricing and tune them for your usage.
  */
-const ESTIMATE_USD = {
+export const ESTIMATE_USD = {
   searchVolume: 0.075,
   serp: 0.002,
   rankedKeywords: 0.02,
@@ -177,13 +183,14 @@ const serpGeo = (c: Client, locationName?: string) =>
   locationName ? { location_name: locationName, language_code: c.languageCode } : geo(c);
 
 /** Live organic SERP for one keyword. Returns the client's rank if found. */
-export async function serp(client: Client, keyword: string, depth = 100) {
+export async function serp(client: Client, keyword: string, depth = 100, opts: { refresh?: boolean } = {}) {
   const res = await paid<SerpResult>(
     client,
     "serp",
     "/serp/google/organic/live/regular",
     [{ keyword, depth, ...serpGeo(client) }],
     TTL.day,
+    opts,
   );
   const items = (res.result[0]?.items ?? []).filter((i) => i.type === "organic");
   const mine = items.find((i) => i.domain?.replace(/^www\./, "").endsWith(client.domain));
@@ -245,6 +252,127 @@ export async function backlinksSummary(client: Client, target = client.domain) {
     TTL.week,
   );
   return { summary: mapBacklinksSummary(result[0]), costUsd, fromCache };
+}
+
+// ------------------------------------------------ Labs: keyword ideas and gap (Phase 12 B)
+
+/** Labs Live price for every endpoint used here (research D3): per task plus per item returned. */
+export const LABS_USD = { task: 0.012, item: 0.00012 } as const;
+export const LABS_PATHS = {
+  keywordIdeas: "/dataforseo_labs/google/keyword_ideas/live",
+  keywordSuggestions: "/dataforseo_labs/google/keyword_suggestions/live",
+  domainIntersection: "/dataforseo_labs/google/domain_intersection/live",
+} as const;
+
+const usd6 = (n: number) => Number(n.toFixed(6));
+/** One Labs task asking for up to `limit` items: $0.012 + limit x $0.00012 (a ceiling; fewer items cost less). */
+export const labsTaskUsd = (limit: number) => usd6(LABS_USD.task + limit * LABS_USD.item);
+const perSeed = (limit: number, seeds: number) => Math.max(1, Math.ceil(limit / Math.max(1, seeds)));
+
+interface LabsTask {
+  path: string;
+  body: Record<string, unknown>;
+  limit: number;
+  seed: string | null;
+}
+
+/** related: one keyword_ideas task with every seed; matching: one keyword_suggestions task per seed, ceil(limit / seeds) each. */
+function ideaTasks(client: Client, req: KeywordIdeasRequest): LabsTask[] {
+  if (req.mode === "related") return [{ path: LABS_PATHS.keywordIdeas, body: { keywords: req.seeds, ...geo(client), limit: req.limit }, limit: req.limit, seed: req.seeds.length === 1 ? req.seeds[0]! : null }];
+  const per = perSeed(req.limit, req.seeds.length);
+  return req.seeds.map((seed) => ({ path: LABS_PATHS.keywordSuggestions, body: { keyword: seed, ...geo(client), limit: per }, limit: per, seed }));
+}
+
+export function planLabsKeywordIdeas(client: Client, req: KeywordIdeasRequest): PaidPlan {
+  const n = req.mode === "related" ? 1 : req.seeds.length;
+  return {
+    keyParts: { base: env.DATAFORSEO_BASE_URL, mode: req.mode, seeds: req.seeds, limit: req.limit, ...geo(client) },
+    unit: "usd",
+    requests: n,
+    cost: (limit) => usd6(n * labsTaskUsd(req.mode === "related" ? limit : perSeed(limit, req.seeds.length))),
+    breakdown: (limit) =>
+      req.mode === "related"
+        ? `1 keyword_ideas task × ($0.012 + ${limit} × $0.00012)`
+        : `${n} keyword_suggestions task(s) × ($0.012 + ${perSeed(limit, req.seeds.length)} × $0.00012)`,
+  };
+}
+
+/**
+ * A whole multi-request Labs operation, cached as one entry (TTL.week) under the plan's key parts. On a miss,
+ * the whole operation's estimate is checked against the USD caps before the first request; each request's
+ * actual cost is recorded (a timeout records its estimate).
+ */
+async function labsOperation<V>(
+  client: Client,
+  capability: "keywordIdeas" | "keywordGap",
+  plan: PaidPlan,
+  limit: number,
+  opts: { refresh?: boolean | undefined },
+  run: (send: <T>(path: string, body: unknown, estimateUsd: number) => Promise<DfsTask<T>>) => Promise<V>,
+): Promise<{ value: V; costUsd: number; fromCache: boolean }> {
+  const { value, fromCache } = await cached(
+    cacheKey("seo", "dataforseo", capability, plan.keyParts),
+    TTL.week,
+    // The whole operation's estimate is checked and reserved (SEC-1) until its last request ends.
+    () => withUsdReservation(client, plan.cost(limit), async () => {
+      let cost = 0;
+      const send = async <T>(path: string, body: unknown, estimateUsd: number): Promise<DfsTask<T>> => {
+        const task = await billedRequest<T>(client.slug, path, [body], estimateUsd, "DataForSEO may still have billed it.");
+        recordSpend(client.slug, "dataforseo", path, task.cost ?? 0);
+        cost += task.cost ?? 0;
+        return task;
+      };
+      const v = await run(send);
+      return { value: v, costUsd: usd6(cost) };
+    }),
+    { refresh: opts.refresh ?? false },
+  );
+  return { value: value.value, costUsd: fromCache ? 0 : value.costUsd, fromCache };
+}
+
+/** Keyword ideas from DataForSEO Labs (`related`: keyword_ideas; `matching`: keyword_suggestions). */
+export async function labsKeywordIdeas(client: Client, req: KeywordIdeasRequest, opts: { refresh?: boolean } = {}): Promise<KeywordIdeasRouted> {
+  const plan = planLabsKeywordIdeas(client, req);
+  const r = await labsOperation(client, "keywordIdeas", plan, req.limit, opts, async (send) => {
+    const lists = [];
+    for (const t of ideaTasks(client, req)) {
+      const task = await send<RawLabsKeywords>(t.path, t.body, labsTaskUsd(t.limit));
+      lists.push(mapLabsKeywordIdeas(task.result?.[0], t.seed));
+    }
+    return { ideas: mergeIdeas(lists, req.limit) };
+  });
+  return { ...r.value, provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
+}
+
+/** DataForSEO wants bare domains (no scheme, no www.). */
+const bareDomain = (d: string) => d.replace(/^www\./, "");
+
+export function planLabsKeywordGap(client: Client, req: KeywordGapRequest): PaidPlan {
+  const n = req.competitors.length;
+  return {
+    // minVolume is applied to the cached rows afterwards, so it isn't part of the key.
+    keyParts: { base: env.DATAFORSEO_BASE_URL, target: bareDomain(client.domain), competitors: req.competitors, limit: req.limit, ...geo(client) },
+    unit: "usd",
+    requests: n,
+    cost: (limit) => usd6(n * labsTaskUsd(limit)),
+    breakdown: (limit) => `${n} competitor(s) × domain_intersection ($0.012 + ${limit} × $0.00012)`,
+  };
+}
+
+/** Keyword gap from Labs domain_intersection: per competitor, target1 = competitor, target2 = client, intersections: false. */
+export async function labsKeywordGap(client: Client, req: KeywordGapRequest, opts: { refresh?: boolean } = {}): Promise<KeywordGapRouted> {
+  const plan = planLabsKeywordGap(client, req);
+  const r = await labsOperation(client, "keywordGap", plan, req.limit, opts, async (send) => {
+    const per = [];
+    for (const competitor of req.competitors) {
+      const body = { target1: bareDomain(competitor), target2: bareDomain(client.domain), intersections: false, item_types: ["organic"], ...geo(client), limit: req.limit };
+      const task = await send<RawDomainIntersection>(LABS_PATHS.domainIntersection, body, labsTaskUsd(req.limit));
+      per.push({ domain: competitor, rows: mapDomainIntersection(task.result?.[0]) });
+    }
+    return per;
+  });
+  const merged = mergeGaps(r.value, { metric: "dataforseo_kd", clientCheck: "provider", minVolume: req.minVolume });
+  return { gaps: merged.gaps, perCompetitor: merged.perCompetitor, provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
 }
 
 // ------------------------------------------------------------------ on-page

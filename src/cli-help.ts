@@ -6,7 +6,7 @@
 import { basename } from "node:path";
 import { styleText } from "node:util";
 
-export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "report"] as const;
+export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "report"] as const;
 export type HelpGroup = (typeof HELP_GROUPS)[number];
 
 export function isHelpGroup(name: string | undefined): name is HelpGroup {
@@ -47,6 +47,7 @@ export function topHelp(o: HelpOptions): string {
     "  clients, competitors, keywords, brand   Manage clients and their lists",
     heading("Scheduled", o),
     "  audit, check-traffic  Run from cron; exit 2 means alerts",
+    "  check-ranks           Save tracked keyword positions (free; --live is paid)",
     "  report                Report files (Markdown, HTML, PDF, Word) from templates",
     "",
     heading("Examples", o),
@@ -210,6 +211,25 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  --dry-run               Show the date ranges it would compare; fetch nothing",
     "",
     ...SCHEDULED_FOOTER,
+  ],
+  "check-ranks": (p) => [
+    `Usage: ${p} check-ranks --client <domain|slug> | --all`,
+    "                [--live] [--dry-run]",
+    "",
+    "  Saves each tracked keyword's Search Console average position over the last",
+    "  7 complete days to rank history (free; see the rank_history tool).",
+    "  --client <domain|slug>  One client",
+    "  --all                   Every client (no tracked keywords: skipped)",
+    "  --live                  Also a paid live SERP check per keyword (DataForSEO,",
+    "                          about $0.002 each). Runs only when given; each",
+    "                          client's total is checked against its cap first, and",
+    "                          a client over its cap is skipped",
+    "  --dry-run               List the keywords and the estimate; call nothing",
+    "",
+    "  Prints JSON to stdout and POSTs a text summary to ALERT_WEBHOOK_URL when a",
+    "  live rank left the top 10 or fell by ALERT_RANK_DROP places (default 5).",
+    "  Search Console positions never alert. Exit code: 0 no alerts, 1 error,",
+    "  2 alerts.",
   ],
   report: (p) => [
     `Usage: ${p} report --client <domain|slug> | --all [--template <id>]`,

@@ -1,0 +1,155 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.5 sec.",
+  "cost": 0.0124,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131500-0000-0000-0000-000000000000",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.4 sec.",
+      "cost": 0.0124,
+      "result_count": 1,
+      "path": [
+        "v3",
+        "dataforseo_labs",
+        "google",
+        "domain_intersection",
+        "live"
+      ],
+      "data": {},
+      "result": [
+        {
+          "se_type": "google",
+          "target1": "competitor-a.example",
+          "target2": "example.com",
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 312,
+          "items_count": 3,
+          "items": [
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "drain cleaning service",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "competition": 0.3,
+                  "cpc": 4.5,
+                  "search_volume": 18100
+                },
+                "keyword_properties": {
+                  "se_type": "google",
+                  "keyword_difficulty": 27
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "commercial"
+                }
+              },
+              "first_domain_serp_element": {
+                "se_type": "google",
+                "type": "organic",
+                "rank_group": 3,
+                "rank_absolute": 4,
+                "position": "left",
+                "domain": "competitor-a.example",
+                "title": "Example title",
+                "url": "https://competitor-a.example/drains",
+                "etv": 120.5
+              },
+              "second_domain_serp_element": null
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "sewer line repair",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "competition": 0.3,
+                  "cpc": 4.5,
+                  "search_volume": 8100
+                },
+                "keyword_properties": {
+                  "se_type": "google",
+                  "keyword_difficulty": 35
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "commercial"
+                }
+              },
+              "first_domain_serp_element": {
+                "se_type": "google",
+                "type": "organic",
+                "rank_group": 7,
+                "rank_absolute": 8,
+                "position": "left",
+                "domain": "competitor-a.example",
+                "title": "Example title",
+                "url": "https://competitor-a.example/sewer",
+                "etv": 120.5
+              },
+              "second_domain_serp_element": null
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "se_type": "google",
+                "keyword": "plumbing inspection",
+                "location_code": 2840,
+                "language_code": "en",
+                "keyword_info": {
+                  "se_type": "google",
+                  "competition": 0.3,
+                  "cpc": 4.5,
+                  "search_volume": 880
+                },
+                "keyword_properties": {
+                  "se_type": "google",
+                  "keyword_difficulty": 12
+                },
+                "search_intent_info": {
+                  "se_type": "google",
+                  "main_intent": "commercial"
+                }
+              },
+              "first_domain_serp_element": {
+                "se_type": "google",
+                "type": "organic",
+                "rank_group": 4,
+                "rank_absolute": 5,
+                "position": "left",
+                "domain": "competitor-a.example",
+                "title": "Example title",
+                "url": "https://competitor-a.example/inspection",
+                "etv": 120.5
+              },
+              "second_domain_serp_element": null
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "keyword": "paid only"
+              },
+              "first_domain_serp_element": {
+                "type": "paid",
+                "rank_group": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

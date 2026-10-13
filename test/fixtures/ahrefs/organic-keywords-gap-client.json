@@ -1,0 +1,16 @@
+{
+  "keywords": [
+    {
+      "keyword": "example widgets",
+      "best_position": 1,
+      "best_position_url": "https://example.com/",
+      "volume": 2400
+    },
+    {
+      "keyword": "sewer line repair",
+      "best_position": null,
+      "best_position_url": null,
+      "volume": 8100
+    }
+  ]
+}

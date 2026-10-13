@@ -35,10 +35,20 @@ export const SEMRUSH_HEADER_TEXT: Readonly<Record<string, string>> = {
   Ot: "Organic Traffic",
   Oc: "Organic Cost",
   Ad: "Adwords Keywords",
+  // Phase 12 B (keyword reports and domain_domains). Not confirmed: the Kd header text (see SEMRUSH_HEADER_ALTERNATES).
+  Kd: "Keyword Difficulty",
   // v3 backlinks_overview returns its export_columns names as the header.
   ascore: "ascore",
   total: "total",
   domains_num: "domains_num",
+};
+
+/**
+ * Other header texts accepted for a column whose exact header isn't documented (Phase 12 B, to confirm in the
+ * live check): Kd has appeared as "Keyword Difficulty Index" in older Semrush output.
+ */
+export const SEMRUSH_HEADER_ALTERNATES: Readonly<Record<string, readonly string[]>> = {
+  Kd: ["Keyword Difficulty Index"],
 };
 
 export const SEMRUSH_COLUMNS = {
@@ -47,6 +57,11 @@ export const SEMRUSH_COLUMNS = {
   domain_organic: ["Ph", "Po", "Nq", "Ur", "Tg"],
   domain_organic_organic: ["Dn", "Np", "Ot"],
   backlinks_overview: ["ascore", "total", "domains_num"],
+  /** Phase 12 B keyword ideas: phrase_related (40/line) and phrase_fullsearch (20/line). */
+  phrase_related: ["Ph", "Nq", "Cp", "Co", "Kd"],
+  phrase_fullsearch: ["Ph", "Nq", "Cp", "Co", "Kd"],
+  /** Phase 12 B keyword gap (Domain vs Domain): P0 is the first domain's position (the competitor), P1 the client's. */
+  domain_domains: ["Ph", "P0", "P1", "Nq", "Kd"],
 } as const;
 
 export const SEMRUSH_V4_BACKLINK_FIELDS = ["backlinks_count", "domains_count", "new_count", "lost_count", "score"] as const;
@@ -58,6 +73,9 @@ export const SEMRUSH_UNITS = {
   domain_organic_organic: 40,
   backlinks_overview_v4: 45,
   backlinks_overview_v3: 40,
+  phrase_related: 40,
+  phrase_fullsearch: 20,
+  domain_domains: 80,
 } as const;
 export type SemrushReport = keyof typeof SEMRUSH_UNITS;
 
@@ -128,14 +146,24 @@ function splitLine(line: string): string[] {
  * SemrushFormatError, never a silent mis-map. Commas inside a field (the Trends
  * value), CRLF, a trailing newline and quoted fields are fine. Extra trailing columns are ignored.
  */
-export function parseSemrushCsv(text: string, exportColumns: readonly string[]): Record<string, string>[] {
+export function parseSemrushCsv(
+  text: string,
+  exportColumns: readonly string[],
+  /** Extra header checks for columns whose header isn't a fixed text (domain_domains' P0/P1 name the domains). */
+  accept: Readonly<Record<string, (header: string) => boolean>> = {},
+): Record<string, string>[] {
   const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length === 0) return [];
   const header = splitLine(lines[0]!).map((h) => h.trim());
   exportColumns.forEach((code, i) => {
+    const custom = accept[code];
+    if (custom) {
+      if (!custom(header[i] ?? "")) throw new SemrushFormatError(`Semrush returned an unexpected header: column ${i + 1} is ${JSON.stringify(header[i] ?? "(missing)")} for ${code}.`);
+      return;
+    }
     const want = SEMRUSH_HEADER_TEXT[code];
     if (want === undefined) throw new SemrushFormatError(`Unknown Semrush column code ${code}.`);
-    if (header[i] !== want) {
+    if (header[i] !== want && !(SEMRUSH_HEADER_ALTERNATES[code] ?? []).includes(header[i] ?? "")) {
       throw new SemrushFormatError(`Semrush returned an unexpected header: column ${i + 1} is ${JSON.stringify(header[i] ?? "(missing)")}, expected ${JSON.stringify(want)} for ${code}.`);
     }
   });
@@ -301,4 +329,41 @@ export function partialLinesNote(returned: number, requested: number): string | 
   return returned < requested
     ? `Semrush returned ${returned} of ${requested} requested lines; if your unit balance is low, results may be cut short (semrush_status shows the balance).`
     : undefined;
+}
+
+// ------------------------------------------------------------------ keyword ideas and gap (Phase 12 B)
+
+/** phrase_related / phrase_fullsearch rows -> ideas (Cp is USD; Co is 0-1; Kd is Semrush's 0-100 difficulty). */
+export function mapSemrushIdeas(rows: Record<string, string>[], seed: string | null) {
+  return rows.flatMap((r) => {
+    const keyword = str(r.Ph)?.replace(/\s+/g, " ");
+    return keyword ? [{ keyword, volume: num(r.Nq), cpc: num(r.Cp), competition: num(r.Co), difficulty: { metric: "semrush_kd" as const, value: num(r.Kd) }, intent: null, seed }] : [];
+  });
+}
+
+/** `*|or|<competitor>|-|or|<client>`: keywords the competitor has and the client lacks (research S2). */
+export const domainVsDomain = (competitor: string, client: string) => `*|or|${competitor}|-|or|${client}`;
+
+/**
+ * domain_domains rows -> gap rows. P0 is the competitor's position (0 means not ranked: null); Semrush
+ * gives no URL in this report (null).
+ */
+export function mapSemrushGapRows(rows: Record<string, string>[]) {
+  return rows.flatMap((r) => {
+    const keyword = str(r.Ph)?.replace(/\s+/g, " ");
+    const pos = num(r.P0);
+    return keyword ? [{ keyword, volume: num(r.Nq), difficulty: num(r.Kd), position: pos === 0 ? null : pos, url: null }] : [];
+  });
+}
+
+/**
+ * Not confirmed (live check): the header text of domain_domains' position columns. Accepted: the domain
+ * itself (any case, with or without www.), the column code, or a text naming a position.
+ */
+export function positionHeaderFor(domain: string, code: "P0" | "P1"): (header: string) => boolean {
+  const d = domain.toLowerCase().replace(/^www\./, "");
+  return (h) => {
+    const t = h.trim().toLowerCase().replace(/^www\./, "");
+    return t === d || t === code.toLowerCase() || /position/.test(t);
+  };
 }

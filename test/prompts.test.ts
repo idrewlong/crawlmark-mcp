@@ -7,6 +7,7 @@ import { registerPrompts, renderTemplate } from "../src/prompts/index.js";
 import { registerBrandTools } from "../src/tools/brand.js";
 import { registerCompetitorTools } from "../src/tools/competitors.js";
 import { registerOpportunityTools } from "../src/tools/opportunities.js";
+import { registerRankTools } from "../src/tools/ranks.js";
 import { registerRawTools } from "../src/tools/raw.js";
 import { registerGtmTools } from "../src/tools/gtm.js";
 import { registerReportTools } from "../src/tools/reports.js";
@@ -21,6 +22,7 @@ async function connect() {
   registerCompetitorTools(server);
   registerBrandTools(server);
   registerOpportunityTools(server);
+  registerRankTools(server);
   registerRawTools(server);
   registerGtmTools(server);
   registerSetupTools(server);
@@ -40,6 +42,7 @@ const EXPECTED_PROMPTS: Record<string, { required: string[]; optional: string[] 
   "client-health-check": { required: ["client"], optional: [] },
   "getting-started": { required: [], optional: [] },
   "template-report": { required: ["client"], optional: ["period", "template"] },
+  "keyword-research": { required: ["client"], optional: ["seeds"] },
 };
 
 /** Prompts with no client argument. */
@@ -107,6 +110,7 @@ describe("tool names mentioned in templates", () => {
       "opportunity-review": ["striking_distance", "quick_wins", "low_ctr", "cannibalization", "declining_pages", "list_competitors", "ranked_keywords", "suggest_competitors"],
       "client-health-check": ["list_clients", "gsc_query", "ga4_report", "render_check", "dataforseo_status"],
       "getting-started": ["setup_status", "list_clients", "gsc_query", "striking_distance", "monthly_report"],
+      "keyword-research": ["keyword_ideas", "keyword_gap", "list_keywords", "list_competitors", "add_keywords"],
     };
     for (const [file, names] of Object.entries(need)) {
       const text = readFileSync(new URL(`${file}.md`, TEMPLATE_DIR), "utf8");
@@ -208,3 +212,20 @@ describe("report prompts (Phase 12)", () => {
     expect(t).toContain('`template: "monthly"`, `month: "2026-09"`');
   });
 });
+
+describe("keyword-research (Phase 12 B)", () => {
+  it("always estimates first, asks before the paid call, and passes seeds through", async () => {
+    const client = await connect();
+    const r = await client.getPrompt({ name: "keyword-research", arguments: { client: "example.com", seeds: "emergency plumber, water heater repair" } });
+    const text = (r.messages[0]!.content as { text: string }).text;
+    expect(text).toContain('"emergency plumber", "water heater repair"');
+    expect(text).toContain("`estimateOnly: true`");
+    expect(text.indexOf("estimateOnly: true")).toBeLessThan(text.indexOf("**Ask.**"));
+    expect(text).toMatch(/Don't call the tool without `estimateOnly` until I say yes/);
+    expect(text).toMatch(/never raise a cap yourself/);
+    expect(text).toMatch(/never compare them/);
+    const none = await client.getPrompt({ name: "keyword-research", arguments: { client: "example.com" } });
+    expect((none.messages[0]!.content as { text: string }).text).toMatch(/propose 3-5 non-branded seed keywords/);
+  });
+});
+

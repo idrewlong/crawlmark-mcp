@@ -5,7 +5,7 @@ const plain = { prog: "crawlmark-mcp" as const, bold: false };
 const width = (text: string) => Math.max(...text.replace(/\u001b\[[0-9;]*m/g, "").split("\n").map((l) => Array.from(l).length));
 
 /** Every flag the Phase 6s USAGE text listed, by group (a fixture of the old text). */
-const OLD_FLAGS: Record<Exclude<HelpGroup, "init" | "report">, string[]> = {
+const OLD_FLAGS: Record<Exclude<HelpGroup, "init" | "report" | "check-ranks">, string[]> = {
   setup: ["--step", "--dry-run", "--yes", "--json", "--only", "--refresh", "--to", "--force"],
   auth: ["login", "status", "logout"],
   clients: ["--refresh", "--name", "--ignore", "--area", "--niche", "--brand-terms"],

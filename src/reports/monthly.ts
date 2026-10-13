@@ -10,6 +10,7 @@ import { requireDataForSeo, serp } from "../providers/seo-data.js";
 import { ga4OrganicSummary, ga4TopLandingPages } from "../providers/ga4.js";
 import { gscQuery, gscTotals, type GscRow } from "../providers/gsc.js";
 import { isBranded } from "../lib/brand.js";
+import { recordLiveRank } from "../lib/rank-history.js";
 import { opportunitiesForMonth } from "./opportunities.js";
 import { dataOf, section } from "./section.js";
 
@@ -171,7 +172,13 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
   // and the section says why, instead of the whole section failing.
   const qCur = dataOf(queriesCur) ?? [];
   const liveRanks = opts.liveRanks ? liveRanksAvailability(client) : undefined;
-  const trackedRows = await section(async () => trackedKeywordRows(client, qCur, liveRanks?.available ? serp : undefined));
+  // Phase 12 B: each live rank is also saved to rank history (tracked keywords only); the output is unchanged.
+  const liveSerp = async (c: Client, kw: string) => {
+    const r = await serp(c, kw);
+    recordLiveRank(c, kw, r);
+    return r;
+  };
+  const trackedRows = await section(async () => trackedKeywordRows(client, qCur, liveRanks?.available ? liveSerp : undefined));
   const tracked = liveRanks ? { ...trackedRows, liveRanks } : trackedRows;
 
   // Latest saved audit, diffed against the most recent one from before the report month.

@@ -13,6 +13,10 @@ is `example.com`, `example.org` or `example.net`.
 | `backlinks-stats.json` | `GET /v3/site-explorer/backlinks-stats` | the note's example |
 | `domain-rating.json` | `GET /v3/site-explorer/domain-rating` | |
 | `keywords-overview.json` | `GET /v3/keywords-explorer/overview` | `cpc` is USD cents; one null `cpc` |
+| `related-terms.json` | `GET /v3/keywords-explorer/related-terms` (Phase 12 B) | `select=keyword,volume,difficulty,cpc`; a null-metrics row and a row with no keyword (dropped). Response key `keywords` assumed like the other Keywords Explorer endpoints (to confirm live) |
+| `matching-terms.json` | `GET /v3/keywords-explorer/matching-terms` (Phase 12 B) | same select |
+| `organic-keywords-gap.json` | `GET /v3/site-explorer/organic-keywords` (Phase 12 B gap, a competitor) | `select=keyword,best_position,best_position_url,volume` |
+| `organic-keywords-gap-client.json` | the same, for the client (gap without Search Console) | one row with a null `best_position` (not counted as ranking) |
 | `error-401.json`, `error-400.json` | any endpoint | the documented `{ "error": string }` shape; the strings are invented (exact wording is "Not confirmed" N1) |
 
 Task 10 (live verification against Ahrefs' free test targets) compares these with real responses.
