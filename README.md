@@ -1,4 +1,4 @@
-# seo-ops-mcp
+# crawlmark-mcp
 
 An MCP server for automated SEO audits and monthly reports. It combines:
 
@@ -80,10 +80,10 @@ Edit `config/clients.yaml`. Each client has a slug, domain, GSC property, GA4 pr
 **Claude Code**
 
 ```bash
-claude mcp add seo-ops -- node --disable-warning=ExperimentalWarning /absolute/path/to/seo-ops-mcp/dist/index.js
+claude mcp add crawlmark -- node --disable-warning=ExperimentalWarning /absolute/path/to/crawlmark-mcp/dist/index.js
 ```
 
-The `--disable-warning=ExperimentalWarning` flag hides Node's `node:sqlite` warning. The `seo-ops-mcp` bin entry has the same flag in its shebang. Config paths resolve from the project root, so the working directory doesn't matter.
+The `--disable-warning=ExperimentalWarning` flag hides Node's `node:sqlite` warning. The `crawlmark-mcp` bin entry has the same flag in its shebang. Config paths resolve from the project root, so the working directory doesn't matter.
 
 **Claude Desktop / other clients** (`mcpServers` config)
 
@@ -92,9 +92,9 @@ Secrets and paths come from the project's `.env`, so no `env` block is needed (y
 ```json
 {
   "mcpServers": {
-    "seo-ops": {
+    "crawlmark": {
       "command": "node",
-      "args": ["--disable-warning=ExperimentalWarning", "/absolute/path/to/seo-ops-mcp/dist/index.js"]
+      "args": ["--disable-warning=ExperimentalWarning", "/absolute/path/to/crawlmark-mcp/dist/index.js"]
     }
   }
 }
@@ -110,7 +110,7 @@ npm run inspect
 
 - Every paid call checks the client's `monthlyBudgetUsd` and the global `GLOBAL_MONTHLY_BUDGET_USD` before running, and refuses with a clear error once a cap would be crossed.
 - The actual cost DataForSEO reports is written to a ledger; `spend_summary` reads it.
-- Responses are cached in `data/seo-ops.db` (volume 30 days, ranked keywords and backlinks 7 days, SERPs and Google data 1 day), so re-running a report mostly costs nothing.
+- Responses are cached in `data/crawlmark.db` (volume 30 days, ranked keywords and backlinks 7 days, SERPs and Google data 1 day), so re-running a report mostly costs nothing.
 - `monthly_report` is free by default. Live rank checks (`liveRanks: true`), full crawls and backlinks are opt-in.
 - The pre-flight estimates in `src/providers/dataforseo.ts` are conservative placeholders. Tune them against DataForSEO's pricing page.
 

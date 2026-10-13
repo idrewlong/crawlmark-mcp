@@ -1,6 +1,6 @@
-# seo-ops-mcp: Implementation Plan
+# crawlmark-mcp: Implementation Plan
 
-This document is a build spec for extending the `seo-ops-mcp` scaffold. Work through the phases in order. Each phase lists what to build, where it goes, and how to know it's done.
+This document is a build spec for extending the `crawlmark-mcp` scaffold. Work through the phases in order. Each phase lists what to build, where it goes, and how to know it's done.
 
 ## How to work
 
@@ -42,13 +42,15 @@ Support two ways to authenticate to Google, chosen by `GOOGLE_AUTH_MODE`:
 ### Setup to document in the README
 
 1. In Google Cloud, enable the Search Console, Analytics Data, PageSpeed Insights and (later) Tag Manager APIs.
-2. Configure the OAuth consent screen with user type **Internal**. Internal apps are limited to accounts in the team's Google Workspace organization and skip Google's app verification. Note in the README that Internal requires the Cloud project to belong to a Workspace organization; personal Gmail accounts can't use it.
+2. Configure the OAuth consent screen. The code is the same either way; document both options in the README:
+   - **Internal** (Google Workspace): limited to accounts in the team's Workspace organization, skips Google's app verification, and refresh tokens don't expire on a schedule. Requires the Cloud project to belong to a Workspace organization.
+   - **External, publishing status Testing** (personal Gmail): add each person's Google account as a test user (up to 100). No app verification is needed, but Google expires refresh tokens for Testing apps after 7 days, so these users re-run `auth login` weekly. For unattended jobs on a personal account, use `service_account` mode instead.
 3. Create an OAuth client of type **Desktop app**. Put its client ID and secret in `.env` as `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
 4. Run the login command (below) once per machine.
 
 ### Implementation
 
-1. **Login command.** Add a `seo-ops-cli auth login` command (create `src/cli.ts` now if Phase 6c hasn't yet). It runs the OAuth loopback flow:
+1. **Login command.** Add a `crawlmark-cli auth login` command (create `src/cli.ts` now if Phase 6c hasn't yet). It runs the OAuth loopback flow:
    - Start a temporary HTTP server on `127.0.0.1` with a random port.
    - Open the browser to Google's consent URL with `access_type=offline` and `prompt=consent`, so a refresh token is returned.
    - Request only the read-only scopes: `webmasters.readonly`, `analytics.readonly`, and `tagmanager.readonly` once Phase 6b exists.
@@ -58,10 +60,10 @@ Support two ways to authenticate to Google, chosen by `GOOGLE_AUTH_MODE`:
 2. **Token storage.** Store the refresh token in `DATA_DIR/google-token.json` with file mode `0600`, and add it to `.gitignore`. Never log token values.
 3. **Other commands.** Add `auth status` (shows the signed-in email and granted scopes) and `auth logout` (revokes the token and deletes the file).
 4. **Shared auth.** Update `src/providers/google.ts` so `googleAuth()` returns either the `OAuth2Client` (with stored credentials, auto-refreshing) or the existing `GoogleAuth` for service accounts, based on `GOOGLE_AUTH_MODE`. GSC and GA4 providers shouldn't need changes beyond that.
-5. **Clear errors.** If OAuth mode has no token, tools return an error telling the user to run `seo-ops-cli auth login`. If a refresh fails with `invalid_grant`, the error says the sign-in expired or was revoked and to log in again.
+5. **Clear errors.** If OAuth mode has no token, tools return an error telling the user to run `crawlmark-cli auth login`. If a refresh fails with `invalid_grant`, the error says the sign-in expired or was revoked and to log in again (and notes that Testing-mode apps expire sign-ins after 7 days).
 6. **Health check.** The `client-health-check` prompt (Phase 5) reports which auth mode is active and which email it's using.
 
-**Done when** OAuth login works end to end on a real Workspace account, the GSC and GA4 tools work in both modes, and switching modes needs only an `.env` change.
+**Done when** OAuth login works end to end on a real account (Workspace/Internal, or personal/External-Testing if no Workspace account is available), the GSC and GA4 tools work in both modes, and switching modes needs only an `.env` change.
 
 ## Phase 1: Audit snapshots and diffs
 
@@ -270,7 +272,7 @@ Tool `site_hygiene({ client })`, a new section in `run_audit`, and findings with
 
 Keep the MCP server itself stateless. Scheduling lives in a separate CLI entry point.
 
-- **CLI.** Add `src/cli.ts` with a `bin` entry, `seo-ops-cli`:
+- **CLI.** Add `src/cli.ts` with a `bin` entry, `crawlmark-cli`:
   - `audit --client <slug>` or `audit --all` runs `runAudit`, saves the snapshot and diffs it against the previous one.
   - `check-traffic --all` compares the last 7 days of Search Console clicks with the previous 7.
 - **Alert rules.** Alert on any new `critical` or `high` finding, or a non-branded click drop of ≥ `ALERT_TRAFFIC_DROP_PCT` (default 25%) with at least 50 clicks lost.

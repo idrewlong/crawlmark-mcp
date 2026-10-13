@@ -1,5 +1,5 @@
 {
-  "name": "seo-ops-mcp",
+  "name": "crawlmark-mcp",
   "version": "0.1.0",
   "description": "MCP server for automated SEO audits and reports (GSC, GA4, DataForSEO, Lighthouse, axe)",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "type": "module",
   "bin": {
-    "seo-ops-mcp": "dist/index.js"
+    "crawlmark-mcp": "dist/index.js"
   },
   "engines": {
     "node": ">=22.13"

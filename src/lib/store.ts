@@ -8,7 +8,7 @@ import { env } from "../config.js";
  * node:sqlite ships with Node 22.13+, so there is no native module to build.
  */
 mkdirSync(resolve(env.DATA_DIR), { recursive: true });
-export const db = new DatabaseSync(join(resolve(env.DATA_DIR), "seo-ops.db"));
+export const db = new DatabaseSync(join(resolve(env.DATA_DIR), "crawlmark.db"));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS cache (

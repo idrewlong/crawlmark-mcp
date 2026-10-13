@@ -5,7 +5,7 @@ import { registerRawTools } from "./tools/raw.js";
 import { registerReportTools } from "./tools/reports.js";
 
 const server = new McpServer(
-  { name: "seo-ops", version: "0.1.0" },
+  { name: "crawlmark", version: "0.1.0" },
   {
     instructions:
       "SEO audit and reporting tools across Google Search Console, GA4, DataForSEO, Lighthouse and axe-core. " +
@@ -20,4 +20,4 @@ registerRawTools(server);
 
 await server.connect(new StdioServerTransport());
 // stdout is the MCP channel; log to stderr only.
-console.error("seo-ops MCP server running on stdio");
+console.error("crawlmark MCP server running on stdio");
