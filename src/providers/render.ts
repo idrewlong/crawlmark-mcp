@@ -55,8 +55,17 @@ async function readCapped(body: Readable): Promise<{ text: string; truncated: bo
   return { text: Buffer.concat(chunks).toString("utf8"), truncated };
 }
 
+/** A 200 response for a `.gz` path that is not an HTML error page: the body is a gzip file to decompress ourselves. */
+function isGzipFile(url: string, status: number, contentType: string | null): boolean {
+  try {
+    return status === 200 && /\.gz$/i.test(new URL(url).pathname) && !/html/i.test(contentType ?? "");
+  } catch {
+    return false;
+  }
+}
+
 /** Decode gzip/deflate/br like fetch would; other encodings are passed through. */
-function decoded(res: IncomingMessage): Readable {
+function decoded(res: IncomingMessage, gzFile = false): Readable {
   const enc = String(res.headers["content-encoding"] ?? "").trim().toLowerCase();
   const decoder =
     enc === "gzip" || enc === "x-gzip"
@@ -65,7 +74,9 @@ function decoded(res: IncomingMessage): Readable {
         ? createInflate()
         : enc === "br"
           ? createBrotliDecompress()
-          : undefined;
+          : gzFile
+            ? createGunzip() // a .xml.gz file served as-is (no Content-Encoding): the size cap then applies after decompression
+            : undefined;
   return decoder ? pipeline(res, decoder, () => undefined) : res;
 }
 
@@ -119,7 +130,7 @@ export async function fetchRaw(url: string, opts: { refresh?: boolean; signal?: 
           current = new URL(location, current).toString();
           continue;
         }
-        const { text, truncated } = await readCapped(decoded(res));
+        const { text, truncated } = await readCapped(decoded(res, isGzipFile(current, status, header(res, "content-type"))));
         return {
           status,
           finalUrl: current,

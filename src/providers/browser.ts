@@ -72,10 +72,19 @@ export async function withChrome<R, T>(
   work: (r: R) => Promise<T>,
 ): Promise<T> {
   signal?.throwIfAborted();
-  const resource = await launch();
+  // Registered before launch() settles: a shutdown or abort during the launch still closes
+  // the browser once it arrives (closeOnce waits for the launch).
+  const launching = launch();
+  launching.catch(() => undefined);
   let closing: Promise<void> | undefined;
   const closeOnce = () =>
     (closing ??= (async () => {
+      let resource: R;
+      try {
+        resource = await launching;
+      } catch {
+        return; // the launch failed: nothing to close
+      }
       try {
         await close(resource);
       } catch (err) {
@@ -85,6 +94,8 @@ export async function withChrome<R, T>(
   openBrowsers.add(closeOnce);
   const off = onAbort(signal, () => void closeOnce());
   try {
+    const resource = await launching;
+    if (closing) throw new Error(`${label} was cancelled while the browser was starting`);
     return await withTimeout(work(resource), TIMEOUTS.browserMs, label, closeOnce);
   } catch (err) {
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : err;

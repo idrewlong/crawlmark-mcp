@@ -43,3 +43,14 @@ export function purgeExpired(): number {
   const now = Math.floor(Date.now() / 1000);
   return Number(db.prepare("DELETE FROM cache WHERE expires_at <= ?").run(now).changes);
 }
+
+/** Read a fresh cache entry without computing anything. */
+export function peekCache<T>(key: string): T | undefined {
+  const row = getStmt.get(key) as { value: string; expires_at: number } | undefined;
+  return row && row.expires_at > Math.floor(Date.now() / 1000) ? (JSON.parse(row.value) as T) : undefined;
+}
+
+/** Store a value under a cache key (see cached()). */
+export function putCache(key: string, ttlSeconds: number, value: unknown): void {
+  setStmt.run(key, JSON.stringify(value), Math.floor(Date.now() / 1000) + ttlSeconds);
+}

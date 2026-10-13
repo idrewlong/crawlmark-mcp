@@ -71,12 +71,12 @@ function authHeader(): string {
   return "Basic " + Buffer.from(`${env.DATAFORSEO_LOGIN}:${env.DATAFORSEO_PASSWORD}`).toString("base64");
 }
 
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<DfsTask<T>> {
+async function request<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal): Promise<DfsTask<T>> {
   const res = await fetch(`${env.DATAFORSEO_BASE_URL}${path}`, {
     method,
     headers: { Authorization: authHeader(), "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(TIMEOUTS.networkMs),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUTS.networkMs)]) : AbortSignal.timeout(TIMEOUTS.networkMs),
   });
   if (!res.ok) throw new Error(`DataForSEO ${path} HTTP ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as DfsResponse<T>;
@@ -294,6 +294,41 @@ export async function onPagePagesWithIssue(taskId: string, check: string, limit 
     [{ id: taskId, limit, filters: [`checks.${check}`, "=", true] }],
   );
   return (task.result?.[0]?.items ?? []).map((p) => ({ url: p.url, status: p.status_code, title: p.meta?.title }));
+}
+
+export interface CrawlUrls {
+  /** True when the crawl finished and ran out of pages before its cap, so a URL it never reached is truly unlinked. */
+  exhaustive: boolean;
+  urls: string[];
+}
+
+/**
+ * URLs a finished crawl reached. Reads an existing task only (no task is posted), so it starts
+ * no crawl and records no spend. Throws if the crawl has not finished.
+ */
+export async function onPageCrawlUrls(clientSlug: string, taskId: string, opts: { signal?: AbortSignal } = {}): Promise<CrawlUrls> {
+  let cost = 0;
+  try {
+    const summaryTask = await request<OnPageSummary>("GET", `/on_page/summary/${taskId}`, undefined, opts.signal);
+    cost += summaryTask.cost ?? 0;
+    const sum = summaryTask.result?.[0];
+    if (sum?.crawl_progress !== "finished") throw new Error("The stored crawl has not finished");
+    const urls: string[] = [];
+    const PAGE = 1000;
+    for (let offset = 0; offset < 5000; offset += PAGE) {
+      opts.signal?.throwIfAborted();
+      const task = await request<{ items?: { url: string }[] }>("POST", "/on_page/pages", [{ id: taskId, limit: PAGE, offset }], opts.signal);
+      cost += task.cost ?? 0;
+      const items = task.result?.[0]?.items ?? [];
+      urls.push(...items.map((i) => i.url));
+      if (items.length < PAGE) break;
+    }
+    const c = sum.crawl_status;
+    return { exhaustive: !!c && c.pages_in_queue === 0 && c.pages_crawled < c.max_crawl_pages && urls.length < 5000, urls };
+  } finally {
+    // Reading a task should be free; anything DataForSEO did charge shows up in the ledger.
+    if (cost > 0) recordSpend(clientSlug, "dataforseo", "/on_page/pages (stored crawl read)", cost);
+  }
 }
 
 /** Instant on-page check for a single URL, no crawl needed. */

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import type { PageHygieneExtract, ParsedSitemap } from "./hygiene-parse.js";
 import type { SeoExtract } from "./render-extract.js";
 
 export const EXTRACT_TIMEOUT_MS = 10_000;
@@ -26,22 +27,33 @@ const waiting: (() => void)[] = [];
 
 /** extractSeo in a worker thread with a hard timeout and heap limit. Rejects with a clear error on either. */
 export async function extractIsolated(html: string, url: string, opts: { timeoutMs?: number } = {}): Promise<SeoExtract> {
+  return runIsolated<SeoExtract>("seo", html, url, opts);
+}
+
+/** Sitemap XML parsed (cheerio, xml mode) in a worker with the same limits. */
+export const parseSitemapIsolated = (xml: string, opts: { timeoutMs?: number } = {}) => runIsolated<ParsedSitemap>("sitemap", xml, "", opts);
+
+/** JSON-LD blocks, hreflang, robots meta and canonical of a page, in a worker with the same limits. */
+export const extractHygieneIsolated = (html: string, url: string, opts: { timeoutMs?: number } = {}) =>
+  runIsolated<PageHygieneExtract>("hygiene", html, url, opts);
+
+async function runIsolated<T>(kind: "seo" | "sitemap" | "hygiene", html: string, url: string, opts: { timeoutMs?: number }): Promise<T> {
   if (running >= MAX_EXTRACT_WORKERS) await new Promise<void>((r) => waiting.push(r));
   running++;
   try {
-    return await runWorker(html, url, opts);
+    return await runWorker<T>(kind, html, url, opts);
   } finally {
     running--;
     waiting.shift()?.();
   }
 }
 
-function runWorker(html: string, url: string, opts: { timeoutMs?: number }): Promise<SeoExtract> {
+function runWorker<T>(kind: string, html: string, url: string, opts: { timeoutMs?: number }): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? EXTRACT_TIMEOUT_MS;
   const { file, execArgv } = workerSpec();
-  return new Promise<SeoExtract>((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     const worker = new Worker(file, {
-      workerData: { html, url },
+      workerData: { kind, html, url },
       execArgv,
       resourceLimits: { maxOldGenerationSizeMb: MAX_OLD_GEN_MB },
     });
@@ -57,7 +69,7 @@ function runWorker(html: string, url: string, opts: { timeoutMs?: number }): Pro
       () => done(() => reject(new Error(`HTML analysis timed out after ${timeoutMs / 1000}s (page is too complex to parse safely)`))),
       timeoutMs,
     );
-    worker.once("message", (m: { ok: true; seo: SeoExtract } | { ok: false; error: string }) =>
+    worker.once("message", (m: { ok: true; seo: T } | { ok: false; error: string }) =>
       done(() => (m.ok ? resolve(m.seo) : reject(new Error(m.error)))),
     );
     worker.once("error", (err: NodeJS.ErrnoException) =>

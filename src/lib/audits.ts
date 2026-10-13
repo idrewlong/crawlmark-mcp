@@ -70,3 +70,13 @@ export function latestAuditBefore(client: string, beforeMs: number): StoredAudit
     .get(client, beforeMs) as Row | undefined;
   return row ? fromRow(row) : undefined;
 }
+
+/** The task ID of the client's newest stored full crawl (from a run_audit with fullCrawl), if any. */
+export function latestCrawlTask(client: string): { taskId: string; ranAt: number } | undefined {
+  const row = db
+    .prepare(
+      "SELECT json_extract(result, '$.site.crawl.data.taskId') AS task_id, ran_at FROM audits WHERE client = ? AND json_extract(result, '$.site.crawl.data.taskId') IS NOT NULL ORDER BY ran_at DESC LIMIT 1",
+    )
+    .get(client) as { task_id: string; ran_at: number } | undefined;
+  return row ? { taskId: String(row.task_id), ranAt: row.ran_at } : undefined;
+}

@@ -9,6 +9,7 @@ import { spendSummary } from "../lib/budget.js";
 import { purgeExpired } from "../lib/cache.js";
 import { onPagePagesWithIssue, onPageSummary } from "../providers/dataforseo.js";
 import { runAudit } from "../reports/audit.js";
+import { HYGIENE_BUDGET_MS, siteHygiene } from "../reports/site-hygiene.js";
 import { monthlyReport } from "../reports/monthly.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import { purgeOldToolCalls, summarizeUsage, toolCallsSince } from "../lib/usage.js";
@@ -115,6 +116,34 @@ export function registerReportTools(server: McpServer) {
         return runAudit(c, { ...opts, signal });
       },
       { timeoutMs: TIMEOUTS.auditMs },
+    ),
+  );
+
+  server.registerTool(
+    "site_hygiene",
+    {
+      title: "Site hygiene checks",
+      description:
+        "Site-level checks that need no browser: robots.txt (missing, blocks everything, blocks key pages, no Sitemap line), " +
+        "sitemaps (found via robots.txt and Search Console, indexes followed to depth 2 and 50 children; up to 50 URLs sampled for non-200, redirects and noindex; key pages missing from every sitemap), " +
+        "basic JSON-LD validation on key pages (required properties for Organization, LocalBusiness, Article, Product, BreadcrumbList, FAQPage; not the Rich Results Test), " +
+        "hreflang (self-reference, reciprocity, x-default) and orphan pages (only when a full crawl is already stored; never starts a paid crawl). " +
+        "Every fetch is SSRF-guarded and size-capped. Uses raw HTML; run_audit uses the rendered DOM where it has a rendering result. Findings use source `site`; run_audit includes the same checks.",
+      inputSchema: {
+        client: clientArg,
+        fresh: z.boolean().optional().describe("Skip the one-day response cache. Default true."),
+      },
+      annotations: READ_ONLY,
+    },
+    handler(
+      "site_hygiene",
+      async ({ client, fresh }, { signal }) => {
+        const c = await resolveClient(client);
+        for (const url of c.keyPages) await assertUserUrl(url);
+        const result = await siteHygiene(c, { fresh: fresh ?? true, signal });
+        return { client: c.slug, ...result };
+      },
+      { timeoutMs: HYGIENE_BUDGET_MS + 30_000 },
     ),
   );
 

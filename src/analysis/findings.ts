@@ -52,12 +52,28 @@ export function findingId(source: FindingSource, rule: string, url: string): str
   return createHash("sha256").update([source, rule, normalizeUrl(url)].join("\n")).digest("hex").slice(0, 16);
 }
 
-/** The {url, source} a finding depends on having run, for the diff's resolved/unverified decision. */
-export function checkOf(f: Pick<Finding, "source" | "url">): CheckedPair {
-  return { url: f.source === "site" ? SITE_CHECK_URL : normalizeUrl(f.url), source: f.source };
+/**
+ * Which site sub-check a finding depends on. Sub-check keys start with "site" (the GSC sitemap
+ * check is plain "site"); sampled sitemap URLs and per-page checks use the page URL.
+ */
+export function siteCheckUrl(rule: string, url: string): string {
+  if (rule.startsWith("robots-")) return "site:robots";
+  if (rule === "sitemap-non200" || rule === "sitemap-redirect" || rule === "sitemap-noindex") return normalizeUrl(url);
+  if (rule === "key-page-not-in-sitemap") return "site:sitemap-urls";
+  if (rule.startsWith("schema-")) return `site:schema ${normalizeUrl(url)}`;
+  if (rule.startsWith("hreflang-")) return `site:hreflang ${normalizeUrl(url)}`;
+  if (rule === "orphan-page") return "site:orphans";
+  return SITE_CHECK_URL;
 }
 
-export const checkKey = (c: CheckedPair) => `${c.source}\n${c.source === "site" ? SITE_CHECK_URL : normalizeUrl(c.url)}`;
+const siteKeyUrl = (u: string) => (u.startsWith("site") ? u : normalizeUrl(u));
+
+/** The {url, source} a finding depends on having run, for the diff's resolved/unverified decision. */
+export function checkOf(f: Pick<Finding, "source" | "url"> & { rule?: string }): CheckedPair {
+  return { url: f.source === "site" ? siteCheckUrl(f.rule ?? "", f.url) : normalizeUrl(f.url), source: f.source };
+}
+
+export const checkKey = (c: CheckedPair) => `${c.source}\n${c.source === "site" ? siteKeyUrl(c.url) : normalizeUrl(c.url)}`;
 
 const AXE_SEVERITY: Record<string, Severity> = { critical: "critical", serious: "high", moderate: "medium", minor: "low" };
 
@@ -207,6 +223,12 @@ export function extractFindings(audit: AuditResult): Finding[] {
     }
   }
 
+  if (audit.site.hygiene?.ok) {
+    for (const f of audit.site.hygiene.data.flags) {
+      add({ source: "site", rule: f.rule, url: f.url, severity: f.severity, title: f.title, ...(f.evidence ? { evidence: f.evidence } : {}) });
+    }
+  }
+
   return [...out.values()];
 }
 
@@ -224,5 +246,6 @@ export function checkedPairs(audit: AuditResult): CheckedPair[] {
     if (p.rendering?.ok) out.push({ url, source: "rendering" });
   }
   if (audit.site.sitemaps.ok) out.push({ url: SITE_CHECK_URL, source: "site" });
+  if (audit.site.hygiene?.ok) for (const url of audit.site.hygiene.data.checked) out.push({ url, source: "site" });
   return out;
 }

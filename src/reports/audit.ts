@@ -7,6 +7,7 @@ import { runLighthouse, type FormFactor, type LighthouseResult } from "../provid
 import { checkedPairs, extractFindings } from "../analysis/findings.js";
 import { newAuditId, saveAudit } from "../lib/audits.js";
 import { section, type Section } from "./section.js";
+import { siteHygiene } from "./site-hygiene.js";
 
 export interface AuditOptions {
   /** Override the client's keyPages for this run. */
@@ -85,12 +86,24 @@ async function collectAudit(client: Client, opts: AuditOptions) {
     pages.push({ url, lighthouse, accessibility, rendering, indexing, onPage });
   }
 
+  // Site hygiene runs after the pages so key pages with a rendering result reuse its cached DOM.
+  signal?.throwIfAborted();
+  const hygiene = await section(() =>
+    siteHygiene(client, {
+      urls,
+      fresh,
+      signal,
+      gscSitemapPaths: sitemaps.ok ? sitemaps.data.flatMap((s) => (s.path ? [s.path] : [])) : undefined,
+      renderedUrls: pages.filter((p) => p.rendering.ok).map((p) => p.url),
+    }),
+  );
+
   return {
     client: { slug: client.slug, name: client.name, domain: client.domain },
     ranAt: new Date().toISOString(),
     settings: { formFactor, wcagLevel, pages: urls.length, fresh },
     summary: summarize(pages),
-    site: { sitemaps, crawl, backlinks: links },
+    site: { sitemaps, crawl, backlinks: links, hygiene },
     pages,
     next: opts.fullCrawl
       ? "A full crawl was started. Call crawl_status with the taskId in site.crawl; crawls of 100 pages usually finish in a few minutes."

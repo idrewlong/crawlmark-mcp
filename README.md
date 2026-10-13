@@ -31,6 +31,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `get_audit` | One saved audit's full result and normalised findings, by ID |
 | `compare_audits` | Diffs two saved audits (default: latest vs the one before): `new`, `resolved`, `persistent` and `unverified` findings plus Lighthouse score changes. A finding is `resolved` only if its check ran in the later audit; otherwise it is `unverified` |
 | `render_check` | Fetches a URL as plain HTML (Googlebot-like user agent) and as rendered by headless Chrome, extracts title, description, canonical, robots, H1s, links, JSON-LD types, hreflang, Open Graph and visible word count from each, and flags SEO elements that only exist after JavaScript runs (`title-js-only`, `canonical-mismatch`, `robots-js-only`, `content-js-dependent`, `jsonld-js-only`, `links-js-only`, ...). See [URL safety](#url-safety-and-timeouts) for what URLs it accepts. Free, cached 1 day; `refresh` bypasses |
+| `site_hygiene` | Site-level checks, no browser: robots.txt, sitemaps, basic JSON-LD validation, hreflang and orphan pages, as findings with source `site`. `run_audit` includes the same checks. See [Site hygiene](#site-hygiene). Free, cached 1 day; `fresh` (default true) bypasses |
 | `crawl_status` | Progress and issue counts for a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check (e.g. `no_description`) |
 | `spend_summary` | Paid API spend this month by client |
@@ -493,6 +494,20 @@ Estimates use the expected-CTR-by-position curve in `src/analysis/ctr-curve.ts`,
 
 **Usage log.** Every tool call adds one row to the `tool_calls` table in `DATA_DIR/crawlmark.db`: tool name, client (the host or slug), duration, ok/error and error class (e.g. `TimeoutError`, `UrlRefusedError`). No other arguments are stored, since URLs and queries can be sensitive. `usage_summary` reads it, and `purge_cache` deletes rows older than 365 days.
 
+## Site hygiene
+
+`site_hygiene({ client })` (and the `site.hygiene` section of `run_audit`, which feeds findings with source `site`) runs five checks. Every fetch uses the guarded raw fetch (pinned to vetted addresses, 5 MB cap, 20s timeout) and is cached for a day; the whole run stops after 2 minutes.
+
+| Check | Findings (rule: severity) |
+| --- | --- |
+| robots.txt (groups `*` and `Googlebot`, `Allow`/`Disallow` longest match, `Sitemap:` lines) | `robots-missing`: low; `robots-disallow-all`: high; `robots-blocks-key-page`: high; `robots-no-sitemap`: low |
+| Sitemaps, found via robots.txt and Search Console (or `/sitemap.xml` if neither lists one). Indexes are followed to depth 2 and 50 child sitemaps; `.xml.gz` files are decompressed (5 MB cap after decompression). Up to 50 URLs, spread evenly, are fetched with GET (4 at a time, redirects are followed and reported) | `sitemap-non200`: high for 4xx/5xx, else medium; `sitemap-redirect`: medium; `sitemap-noindex` (meta robots or `X-Robots-Tag`): high; `key-page-not-in-sitemap`: medium |
+| Structured data on key pages: required properties for Organization, LocalBusiness (and subtypes), Product, BreadcrumbList and FAQPage; recommended properties for Article, BlogPosting, NewsArticle and similar (Google lists none as required). This is basic validation, not Google's Rich Results Test. `run_audit` reads the rendered JSON-LD for pages with a rendering result; `site_hygiene` reads raw HTML | `schema-missing-property`: medium; `schema-missing-recommended`: low; `schema-parse-error`: low |
+| hreflang on key pages: self-reference, `x-default` when 2+ languages, reciprocity (alternates fetched, at most 20 per page) | `hreflang-missing-self`: medium; `hreflang-not-reciprocal`: medium; `hreflang-missing-x-default`: low |
+| Orphan pages: sitemap URLs a stored DataForSEO full crawl never reached. It reads the latest crawl task stored by a previous `run_audit` with `fullCrawl` (results are read from that task only; no crawl is started). URLs with a `<lastmod>` after the crawl started are not counted. It reports `orphans.available: false` with one of these reasons: `no full crawl` (none stored), the sitemap URL set is incomplete, the stored crawl is older than 30 days, the crawl hit its page cap or has not finished, or the stored crawl could not be read | `orphan-page`: medium, one per orphan (not capped) |
+
+A sub-check that could not finish (fetch error, a cap reached, a page whose HTML could not be parsed, or the time budget running out) is not recorded as checked, so `compare_audits` shows its old findings as `unverified` instead of `resolved`. Sitemap URLs and child sitemaps are only followed on the client's domain and its subdomains. hreflang alternates may be on other public hosts unless `RESTRICT_TO_CLIENT_DOMAINS=true`, which limits them to the client's domain.
+
 ## Layout
 
 ```
@@ -547,6 +562,11 @@ src/
     opportunities.ts    striking distance, quick wins, low CTR, cannibalization, declining pages (pure)
     render-extract.ts   extractSeo(): SEO elements from an HTML string with cheerio (pure)
     render.ts           compareRender(): raw vs rendered flags (pure)
+    hygiene.ts          site hygiene flags and the SiteHygiene result type (pure)
+    robots.ts           robots.txt parser and Allow/Disallow matching (pure)
+    structured-data.ts  JSON-LD required-property table and validator (pure)
+    hreflang.ts         hreflang self/x-default/reciprocity checks (pure)
+    hygiene-parse.ts    sitemap XML and page JSON-LD/hreflang extraction (cheerio; run in the extraction worker)
     findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
     diff.ts             diffAudits: new / resolved / persistent / unverified, score changes (pure)
   prompts/
@@ -556,6 +576,7 @@ src/
     monthly.ts          monthly_report composer
     opportunities.ts    fetch + wrap for the opportunity tools; monthly `opportunities` section
     audit.ts            run_audit composer
+    site-hygiene.ts     siteHygiene(): fetches robots.txt, sitemaps, key pages and alternates, runs the hygiene checks
     section.ts          per-section error isolation
   tools/
     reports.ts          report tool registrations
