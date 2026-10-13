@@ -16,10 +16,20 @@ export const DATA_SCOPES = [
 ] as const;
 
 /**
- * OAuth scopes: the data scopes plus `openid email`, the minimum needed to
- * learn which account signed in (Google returns it in the ID token).
+ * Tag Manager (read-only). Not part of DATA_SCOPES: OAuth tokens issued before
+ * Phase 6b lack it, so it is requested at login but never required by the
+ * missing-scope check. Only the GTM tools need it (see missingGtmScope).
  */
-export const OAUTH_SCOPES = [...DATA_SCOPES, "openid", "email"] as const;
+export const GTM_SCOPE = "https://www.googleapis.com/auth/tagmanager.readonly";
+
+/** Scopes for service-account mode. */
+export const SERVICE_ACCOUNT_SCOPES = [...DATA_SCOPES, GTM_SCOPE] as const;
+
+/**
+ * OAuth scopes: the data scopes plus Tag Manager and `openid email`, the
+ * minimum needed to learn which account signed in (Google returns it in the ID token).
+ */
+export const OAUTH_SCOPES = [...DATA_SCOPES, GTM_SCOPE, "openid", "email"] as const;
 
 export const LOGIN_COMMAND = "crawlmark-cli auth login";
 export const CALLBACK_PATH = "/oauth2callback";
@@ -197,6 +207,15 @@ export function missingDataScopes(granted: string | readonly string[] | undefine
   const set = new Set(typeof granted === "string" ? granted.split(/\s+/) : (granted ?? []));
   return DATA_SCOPES.filter((s) => !set.has(s));
 }
+
+/** True when a granted-scope list is known and lacks the Tag Manager scope. An unknown list is not "missing". */
+export function missingGtmScope(granted: string | readonly string[] | undefined | null): boolean {
+  if (granted === undefined || granted === null) return false;
+  const list = typeof granted === "string" ? granted.split(/\s+/) : granted;
+  return !list.includes(GTM_SCOPE);
+}
+
+export const GTM_SCOPE_MESSAGE = `Tag Manager access isn't granted to this sign-in. Run \`${LOGIN_COMMAND}\` again to grant it (leave every permission ticked).`;
 
 /** Email claim from an ID token. Display only: the token came straight from Google's token endpoint over TLS. */
 export function emailFromIdToken(idToken: string | null | undefined): string | undefined {

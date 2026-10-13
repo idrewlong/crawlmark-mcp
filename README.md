@@ -26,6 +26,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `low_ctr` | Queries at positions 1-5 with CTR under 60% of expected (title and meta rewrite candidates) |
 | `cannibalization` | Queries where 2+ pages each hold at least 10% of the impressions |
 | `declining_pages` | Pages whose clicks fell versus the previous equal-length period, with the queries that lost the most |
+| `gtm_audit` | Audits the client's live (published) Tag Manager container: paused tags, tags with no firing trigger, legacy Universal Analytics tags, duplicate GA4 configuration / Google tags for one measurement ID, unused variables and triggers, custom HTML tags (listed for review) and tags missing consent settings when Consent Mode is used elsewhere in the container. Findings are `medium` (legacy UA, no trigger, duplicate config, missing consent) or `low` (paused, unused, custom HTML). Also counts unpublished workspace changes. Free; see [Tag Manager](#tag-manager-optional). Not part of `run_audit` yet |
 | `run_audit` | Lighthouse + axe + a rendered-vs-raw HTML check (`rendering`) + GSC index status + on-page check per key page, sitemap health; optional full crawl and backlinks. Every run is saved and returns an `auditId`. Runs are fresh by default (the response cache is skipped, so the on-page check is a paid call per page); `fresh: false` reuses results up to a day old, and `compare_audits` warns when the later audit was not fresh |
 | `list_audits` | A client's saved audits, newest first: ID, run time, page count, average scores, finding count |
 | `get_audit` | One saved audit's full result and normalised findings, by ID |
@@ -111,7 +112,7 @@ The server signs in to Google one of two ways. Leave `GOOGLE_AUTH_MODE` unset to
 
 **Which one?** With Workspace, use A. Without it, use C for daily work and unattended jobs, and B if you'd rather not share each property with a service account. You can set up more than one and switch with `GOOGLE_AUTH_MODE`. Unset, it auto-detects as described above.
 
-All options request read-only scopes only: `webmasters.readonly` and `analytics.readonly`. OAuth also requests `openid email` so it can show which account is signed in.
+All options request read-only scopes only: `webmasters.readonly`, `analytics.readonly` and `tagmanager.readonly`. OAuth also requests `openid email` so it can show which account is signed in.
 
 #### 1. Google Cloud project and APIs
 
@@ -120,6 +121,7 @@ In the [Google Cloud console](https://console.cloud.google.com/), create (or pic
 - **Google Search Console API**
 - **Google Analytics Data API**
 - **Google Analytics Admin API** (lists your GA4 properties so clients can be discovered; without it only Search Console clients are found, and `list_clients` says so)
+- **Tag Manager API** (only for [`gtm_audit` and container discovery](#tag-manager-optional); everything else works without it)
 - **PageSpeed Insights API** (only for `PSI_API_KEY`, see below)
 
 #### 2. OAuth mode setup
@@ -158,6 +160,17 @@ In the [Google Cloud console](https://console.cloud.google.com/), create (or pic
    ```
 
 One service account covers every client; you just add it to each property, and discovery picks the property up (within a day, or at once with `list_clients` `refresh: true`). A `sc-domain:` domain property and a `https://` URL-prefix property are separate in Search Console, so add the account to the one you want used; discovery prefers the domain property when it sees both.
+
+#### Tag Manager (optional)
+
+`gtm_audit` reads a client's Tag Manager container through the Tag Manager API (read-only). Enable the **Tag Manager API** in the Cloud project, then give the account crawlmark signs in as **Read** access to each container:
+
+- **Service-account mode.** In Tag Manager, open **Admin > User Management** for the container (or its account), add the service account's email (`...@<project>.iam.gserviceaccount.com`) and give it **Read** access. One grant at the account level covers all its containers.
+- **OAuth mode.** The signed-in person needs Read access to the container, and the sign-in must include the Tag Manager permission. Sign-ins made before this feature existed don't have it, so re-run `npm run cli -- auth login` once and leave every permission ticked. Until then `gtm_audit` fails with that instruction and the other tools keep working (`auth status` also says when it's missing).
+
+Containers are discovered the same way as Search Console and GA4 properties: crawlmark lists the accounts and web containers the identity can read and matches each container's **domain list** (container settings) to a client's domain. The match fills `gtmAccountId` and `gtmContainerId` on the client in `clients.yaml` (fill only, never overwriting). Discovery is cached for a day like the rest (`list_clients` with `refresh: true` re-runs it) and is best-effort: if Tag Manager fails or the account has no access, clients are still discovered and `list_clients` adds a note. Containers with no domain list are listed in those notes; pin one to a client by setting `gtmAccountId` and `gtmContainerId` in `clients.yaml` (the numeric IDs in the Tag Manager URL, not `GTM-XXXX`). If several containers list one domain, the lowest `GTM-` ID is used and the others are noted.
+
+`gtm_audit` returns an error when the client has no container, or when Tag Manager denies access (the message names the account to add). It audits the live published version, so unpublished edits show up only as a count of changed entities per workspace. The Consent Mode check is a heuristic: it runs only when some tag requires consent or a Consent Initialization trigger exists, and skips tag types with built-in consent checks (Google tags).
 
 #### Check it works
 
@@ -324,7 +337,7 @@ The client list is `config/clients.yaml` (path set by `CLIENTS_FILE`, gitignored
 - **From Google.** When Google is set up, crawlmark lists every Search Console site and GA4 property (with its web streams) the account can access, joins them by domain, and adds any new domain to `clients.yaml` with its name, `gscProperty` and `ga4PropertyId`. This happens on first use and then at most once a day (cached in SQLite); `list_clients` with `refresh: true` or `clients list --refresh` re-lists now. The file is created if it's missing.
 - **By hand.** `npm run cli -- clients add example.com` (or edit the file). Only `domain` is required. A hand-added client works for DataForSEO, Lighthouse and axe with no Google setup at all.
 
-**crawlmark never changes or removes what you write.** Discovery only appends domains that have no entry and fills a missing `gscProperty` or `ga4PropertyId`. It keeps your comments, order and values (indentation is normalised), writes atomically (following a symlinked file and keeping its permissions), and leaves entries for domains it no longer sees (`list_clients` notes them). If you pin a property that differs from what discovery would pick, your value wins and `list_clients` notes the difference. To drop a client for good, set `ignore: true` on its entry (or `clients remove <domain> --ignore`): it's hidden and never re-added. Deleting an entry outright only lasts until the next discovery if Google still lists the domain.
+**crawlmark never changes or removes what you write.** Discovery only appends domains that have no entry and fills a missing `gscProperty`, `ga4PropertyId` or Tag Manager container (`gtmAccountId` plus `gtmContainerId`, only when the entry has neither). It keeps your comments, order and values (indentation is normalised), writes atomically (following a symlinked file and keeping its permissions), and leaves entries for domains it no longer sees (`list_clients` notes them). If you pin a property that differs from what discovery would pick, your value wins and `list_clients` notes the difference. To drop a client for good, set `ignore: true` on its entry (or `clients remove <domain> --ignore`): it's hidden and never re-added. Deleting an entry outright only lasts until the next discovery if Google still lists the domain.
 
 Every field is in `config/clients.example.yaml`. The file is re-read on every call, so edits apply without a restart.
 
@@ -541,6 +554,7 @@ src/
     competitor-denylist.ts  built-in platform denylist and rule matching (pure)
     spend.ts            spend-ledger key and alias merging (pure)
     concurrency.ts      mapLimit: bounded-concurrency map (pure)
+    gtm.ts              Tag Manager container refs, domain join, access-denied and scope messages (pure)
     google-auth.ts      Google auth mode selection, consent URL, callback check, token merge, error messages (pure)
     url-guard.ts        http/https only; resolves hostnames and refuses any loopback/private/link-local address unless
                         ALLOW_PRIVATE_URLS=true; pinned lookup; RESTRICT_TO_CLIENT_DOMAINS matching
@@ -550,6 +564,7 @@ src/
     browser.ts          Chrome path and flags, egress-proxy flags, withChrome/withBrowser (always close, 90s, abortable)
     render.ts           fetchRaw (Googlebot UA, 20s, 5 MB cap, every hop resolved, checked and pinned), fetchRendered (headless Chrome), checkRender; both cached 1 day
     discovery.ts        lists Search Console sites and GA4 properties + web streams (cached 1 day)
+    gtm.ts              Tag Manager API: container discovery (cached 1 day, best-effort) and the live version + workspace status for gtm_audit (cached 1 hour)
     google.ts           googleAuth(): OAuth client or service account, by GOOGLE_AUTH_MODE or auto-detected; googleAuthStatus()
     google-login.ts     OAuth loopback login flow
     google-oauth-client.ts  OAuth2Client that maps invalid_grant; token-file client loader (refresh persistence)
@@ -567,6 +582,7 @@ src/
     structured-data.ts  JSON-LD required-property table and validator (pure)
     hreflang.ts         hreflang self/x-default/reciprocity checks (pure)
     hygiene-parse.ts    sitemap XML and page JSON-LD/hreflang extraction (cheerio; run in the extraction worker)
+    gtm.ts              Tag Manager container audit rules and workspace-change summary (pure)
     findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
     diff.ts             diffAudits: new / resolved / persistent / unverified, score changes (pure)
   prompts/
@@ -577,6 +593,7 @@ src/
     opportunities.ts    fetch + wrap for the opportunity tools; monthly `opportunities` section
     audit.ts            run_audit composer
     site-hygiene.ts     siteHygiene(): fetches robots.txt, sitemaps, key pages and alternates, runs the hygiene checks
+    gtm.ts              gtm_audit composer
     section.ts          per-section error isolation
   tools/
     reports.ts          report tool registrations
@@ -584,6 +601,7 @@ src/
     opportunities.ts    striking_distance, quick_wins, low_ctr, cannibalization, declining_pages
     competitors.ts      competitor, keyword, profile and suggestion tool registrations
     brand.ts            add_brand_terms, remove_brand_terms, suggest_brand_terms
+    gtm.ts              gtm_audit
 scripts/
   record-fixtures.ts    records raw DataForSEO sandbox responses (refuses non-sandbox); scrub before committing
 test/

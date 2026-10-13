@@ -341,6 +341,8 @@ Tool `site_hygiene({ client })`, a new section in `run_audit`, and findings with
   - tags missing consent settings when Consent Mode is in use elsewhere in the container
 - **Workspaces.** Also report unpublished workspace changes, by count of changed entities.
 
+**Status:** done as `gtm_audit` (`src/analysis/gtm.ts`, `src/providers/gtm.ts`, `src/reports/gtm.ts`). Findings use a local type with source `gtm` and are not yet part of `run_audit` or `src/analysis/findings.ts`; wiring them in (add `gtm` to `FindingSource`, a `gtm` audit section) is a follow-up once Phase 6a has landed. In OAuth mode the Tag Manager scope is requested at login but not required by the missing-scope check, so older tokens keep working for everything else.
+
 ### 6c. Scheduled audits and alerts
 
 Keep the MCP server itself stateless. Scheduling lives in a separate CLI entry point.

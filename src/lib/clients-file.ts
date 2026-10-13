@@ -11,7 +11,7 @@ export const NEW_FILE_HEADER = [
   " crawlmark clients. Domains found in Search Console and GA4 are added here",
   " automatically; you can edit them and add your own. Each entry needs only `domain`.",
   " crawlmark never changes or removes what you write here: it only appends new",
-  " domains and fills a missing gscProperty or ga4PropertyId.",
+  " domains and fills a missing gscProperty, ga4PropertyId or Tag Manager container.",
   " Hide a domain for good with `ignore: true`. See config/clients.example.yaml for every field.",
 ].join("\n");
 
@@ -47,6 +47,8 @@ function entryNode(doc: Document, entry: NewEntry & { ignore?: boolean }) {
   if (entry.name !== undefined) value.name = entry.name;
   if (entry.gscProperty !== undefined) value.gscProperty = entry.gscProperty;
   if (entry.ga4PropertyId !== undefined) value.ga4PropertyId = entry.ga4PropertyId;
+  if (entry.gtmAccountId !== undefined) value.gtmAccountId = entry.gtmAccountId;
+  if (entry.gtmContainerId !== undefined) value.gtmContainerId = entry.gtmContainerId;
   if (entry.ignore) value.ignore = true;
   // Number-like strings (GA4 IDs) are quoted by the serializer, so they stay strings.
   return doc.createNode(value);

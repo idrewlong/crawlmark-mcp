@@ -1,0 +1,14 @@
+{
+  "6000000001": {
+    "container": [
+      { "accountId": "6000000001", "containerId": "7000000001", "publicId": "GTM-EXAMPL1", "name": "Example site", "usageContext": ["web"], "domainName": ["https://www.example.com/", "example.net"] },
+      { "accountId": "6000000001", "containerId": "7000000002", "publicId": "GTM-EXAMPL2", "name": "No domains", "usageContext": ["web"] },
+      { "accountId": "6000000001", "containerId": "7000000003", "publicId": "GTM-EXAMPL3", "name": "Server side", "usageContext": ["server"], "domainName": ["example.org"] }
+    ]
+  },
+  "6000000002": {
+    "container": [
+      { "accountId": "6000000002", "containerId": "7000000004", "publicId": "GTM-EXAMPL4", "name": "Other for example.net", "usageContext": ["web"], "domainName": ["example.net"] }
+    ]
+  }
+}

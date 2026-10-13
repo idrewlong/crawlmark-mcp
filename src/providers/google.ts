@@ -4,7 +4,7 @@ import { Auth, google } from "googleapis";
 import { env } from "../config.js";
 import {
   authIdentityKey,
-  DATA_SCOPES,
+  SERVICE_ACCOUNT_SCOPES,
   authModeNote,
   GOOGLE_NOT_CONFIGURED_MESSAGE,
   GoogleNotConfiguredError,
@@ -33,7 +33,7 @@ let saAuth: Auth.GoogleAuth | undefined;
 
 function serviceAccountAuth(keyFile: string): Auth.GoogleAuth {
   if (!existsSync(keyFile)) throw new Error(serviceAccountKeyMissingMessage(keyFile));
-  saAuth ??= new google.auth.GoogleAuth({ keyFile, scopes: [...DATA_SCOPES] });
+  saAuth ??= new google.auth.GoogleAuth({ keyFile, scopes: [...SERVICE_ACCOUNT_SCOPES] });
   return saAuth;
 }
 

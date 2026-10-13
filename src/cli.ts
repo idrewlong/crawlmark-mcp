@@ -24,7 +24,7 @@ import {
 } from "./clients.js";
 import { env, type Client } from "./config.js";
 import { formatTable, missingPieces } from "./lib/clients.js";
-import { describeAuthMode, mapTokenError, missingDataScopes } from "./lib/google-auth.js";
+import { describeAuthMode, mapTokenError, missingDataScopes, missingGtmScope } from "./lib/google-auth.js";
 import { deleteTokenFile, readTokenFile } from "./lib/token-store.js";
 import { googleAuth, googleAuthMode, googleAuthModeNote, googleAuthStatus } from "./providers/google.js";
 import { loopbackLogin } from "./providers/google-login.js";
@@ -155,6 +155,9 @@ async function status(): Promise<number> {
     const info = await client.getTokenInfo(token);
     out(`Scopes: ${info.scopes.join(" ")}`);
     out("Token check: OK");
+    if (missingGtmScope(info.scopes)) {
+      out("Note: Tag Manager access isn't granted, so gtm_audit won't work. Run `crawlmark-cli auth login` again to add it.");
+    }
     const missing = missingDataScopes(info.scopes);
     if (missing.length) {
       out(`Missing scopes: ${missing.join(", ")}. Run \`crawlmark-cli auth login\` again and grant all of them.`);

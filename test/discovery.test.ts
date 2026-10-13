@@ -28,6 +28,13 @@ const state = vi.hoisted(() => ({
   adminError: undefined as Error | undefined,
   sitesDelayMs: 0,
   fixtures: {} as { sites: unknown; summaries: unknown; streams: Record<string, unknown> },
+  gtm: {
+    accounts: { account: [] } as unknown,
+    containers: {} as Record<string, unknown>,
+    accountsError: undefined as Error | undefined,
+    failAccounts: new Set<string>(),
+    calls: { accounts: 0, containers: 0 },
+  },
 }));
 
 vi.mock("googleapis", () => ({
@@ -38,6 +45,23 @@ vi.mock("googleapis", () => ({
           state.calls.sites++;
           if (state.sitesDelayMs) await new Promise((r) => setTimeout(r, state.sitesDelayMs));
           return { data: state.fixtures.sites };
+        },
+      },
+    }),
+    tagmanager: () => ({
+      accounts: {
+        list: async () => {
+          state.gtm.calls.accounts++;
+          if (state.gtm.accountsError) throw state.gtm.accountsError;
+          return { data: state.gtm.accounts };
+        },
+        containers: {
+          list: async ({ parent }: { parent: string }) => {
+            state.gtm.calls.containers++;
+            const id = parent.replace("accounts/", "");
+            if (state.gtm.failAccounts.has(id)) throw new Error(`containers failed for ${id}`);
+            return { data: state.gtm.containers[id] ?? {} };
+          },
         },
       },
     }),
@@ -68,6 +92,8 @@ vi.mock("../src/providers/google.js", () => ({
   googleAuthIdentity: () => state.identity,
   googleConfigured: () => state.configured,
   googleAuthModeNote: () => state.modeNote,
+  assertGoogleConfigured: () => {},
+  googleAuthStatus: () => ({ mode: "service_account", auto: false, configured: true, email: "crawlmark@example-project.iam.gserviceaccount.com" }),
 }));
 
 state.fixtures = {
@@ -89,6 +115,11 @@ beforeEach(() => {
   state.sitesDelayMs = 0;
   state.configured = true;
   state.modeNote = undefined;
+  state.gtm.accounts = { account: [] };
+  state.gtm.containers = {};
+  state.gtm.accountsError = undefined;
+  state.gtm.failAccounts = new Set();
+  state.gtm.calls = { accounts: 0, containers: 0 };
   rmSync(clientsFile, { force: true });
 });
 
@@ -237,6 +268,84 @@ describe("clients.yaml persistence", () => {
     writeFileSync(clientsFile, "clients:\n  bad:\n    name: no domain\n");
     await expect(loadRegistry()).rejects.toThrow(/clients\.bad\.domain/);
     expect(fileText()).toBe("clients:\n  bad:\n    name: no domain\n");
+  });
+});
+
+const useGtmFixtures = () => {
+  state.gtm.accounts = fixture("gtm-accounts.json");
+  state.gtm.containers = fixture("gtm-containers.json");
+};
+
+describe("Tag Manager discovery", () => {
+  it("matches containers to clients by domain and writes the ids to clients.yaml, fill only", async () => {
+    state.identity = "test:gtm-sync";
+    useGtmFixtures();
+    writeFileSync(
+      clientsFile,
+      'clients:\n  example.net:\n    domain: example.net\n    gtmContainerId: "555"\n  example.org:\n    domain: example.org\n    gscProperty: https://example.org/\n',
+    );
+    const r = await loadRegistry();
+    const com = r.clients.find((c) => c.domain === "example.com")!;
+    expect([com.gtmAccountId, com.gtmContainerId]).toEqual(["6000000001", "7000000001"]);
+    expect(r.clientsFile.added).toContain("example.com");
+    expect(fileText()).toMatch(/example\.com:\n {4}domain: example\.com\n(?: {4}.*\n)* {4}gtmAccountId: "6000000001"\n {4}gtmContainerId: "7000000001"\n/);
+    // example.net pins a container, so discovery leaves it alone (and doesn't invent an account).
+    const net = r.clients.find((c) => c.domain === "example.net")!;
+    expect([net.gtmAccountId, net.gtmContainerId]).toEqual([undefined, "555"]);
+    // The unmatched web container is listed as a note.
+    expect(r.discovery.notes.some((n) => n.includes("GTM-EXAMPL2") && n.includes("no domain"))).toBe(true);
+    // example.org has only a server container (skipped), so it gets nothing.
+    expect(r.clients.find((c) => c.domain === "example.org")!.gtmContainerId).toBeUndefined();
+
+    const text = fileText();
+    await loadRegistry();
+    expect(fileText()).toBe(text);
+  });
+
+  it("fills a missing pair on an existing entry", async () => {
+    state.identity = "test:gtm-fill";
+    useGtmFixtures();
+    writeFileSync(clientsFile, "clients:\n  example.com:\n    domain: example.com\n    gscProperty: sc-domain:example.com\n");
+    const r = await loadRegistry();
+    expect(r.clientsFile.filled).toEqual(expect.arrayContaining(["example.com gtmAccountId", "example.com gtmContainerId"]));
+    expect(fileText()).toContain('    gtmAccountId: "6000000001"\n    gtmContainerId: "7000000001"\n');
+  });
+
+  it("a Tag Manager failure never breaks client discovery; it becomes a note", async () => {
+    state.identity = "test:gtm-fail";
+    state.gtm.accountsError = new Error("Tag Manager API has not been used in project 1 before or it is disabled.");
+    const r = await loadRegistry();
+    expect(r.discovery.ok).toBe(true);
+    expect(r.clients.map((c) => c.domain)).toContain("example.com");
+    expect(r.discovery.notes.some((n) => n.startsWith("Tag Manager containers could not be listed") && n.includes("Tag Manager API is disabled"))).toBe(true);
+    expect(r.clients.every((c) => c.gtmContainerId === undefined)).toBe(true);
+    // The failure is remembered, so the next call doesn't hit the API again.
+    const before = state.gtm.calls.accounts;
+    await loadRegistry();
+    expect(state.gtm.calls.accounts).toBe(before);
+    await loadRegistry({ refresh: true });
+    expect(state.gtm.calls.accounts).toBe(before + 1);
+  });
+
+  it("keeps the containers it could list when one account fails, and doesn't cache the failure", async () => {
+    state.identity = "test:gtm-partial";
+    useGtmFixtures();
+    state.gtm.failAccounts.add("6000000002");
+    const r = await loadRegistry();
+    expect(r.discovery.notes.some((n) => n.includes("account 6000000002") && n.includes("could not list containers"))).toBe(true);
+    expect(r.clients.find((c) => c.domain === "example.com")!.gtmContainerId).toBe("7000000001");
+    state.gtm.failAccounts.clear();
+    const callsBefore = state.gtm.calls.containers;
+    await loadRegistry();
+    // Account 6000000001 came from the cache; only the failed account is retried.
+    expect(state.gtm.calls.containers).toBe(callsBefore + 1);
+  });
+
+  it("finding no containers at all is not an error", async () => {
+    state.identity = "test:gtm-none";
+    const r = await loadRegistry();
+    expect(r.discovery.ok).toBe(true);
+    expect(r.discovery.notes.filter((n) => n.startsWith("Tag Manager"))).toEqual([]);
   });
 });
 

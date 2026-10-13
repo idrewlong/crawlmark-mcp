@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import { normalizeBrandTerm, squash } from "./brand.js";
+import { gtmNotes, joinGtmContainers, type GtmListing, type GtmMatch } from "./gtm.js";
 
 // ---------------------------------------------------------------- normalisation
 
@@ -360,6 +361,9 @@ const OverrideSchema = z.object({
   gscProperty: z.string().optional(),
   // YAML users often leave the ID unquoted; accept a number too.
   ga4PropertyId: z.union([z.string(), z.number().int()]).transform(String).optional(),
+  /** Tag Manager account and container (the numeric IDs from the GTM URL). Override for container discovery; see src/lib/gtm.ts. */
+  gtmAccountId: z.union([z.string(), z.number().int()]).transform(String).optional(),
+  gtmContainerId: z.union([z.string(), z.number().int()]).transform(String).optional(),
   locationCode: z.number().int().optional(),
   languageCode: z.string().optional(),
   competitors: z.array(CompetitorItemSchema).optional(),
@@ -438,6 +442,9 @@ export interface Client {
   name: string;
   gscProperty?: string;
   ga4PropertyId?: string;
+  /** Tag Manager container for gtm_audit: from clients.yaml, else discovery. The account may be missing when only gtmContainerId is pinned. */
+  gtmAccountId?: string;
+  gtmContainerId?: string;
   locationCode: number;
   languageCode: string;
   /** Competitor domains (normalised, de-duplicated). Details in competitorEntries. */
@@ -468,6 +475,7 @@ export function mergeClients(
   discovered: DiscoveredClient[],
   overrides: ClientOverride[],
   defaults: ClientDefaults,
+  gtm: ReadonlyMap<string, GtmMatch> = new Map(),
 ): Client[] {
   const byDomain = new Map<string, { d?: DiscoveredClient; y?: ClientOverride }>();
   for (const d of discovered) byDomain.set(d.domain, { d });
@@ -508,6 +516,12 @@ export function mergeClients(
       const ga4PropertyId = y?.ga4PropertyId ?? d?.ga4PropertyId;
       if (gscProperty) client.gscProperty = gscProperty;
       if (ga4PropertyId) client.ga4PropertyId = ga4PropertyId;
+      // A pinned container wins; discovery only supplies a pair when yaml has neither id.
+      const found = y?.gtmContainerId || y?.gtmAccountId ? undefined : gtm.get(domain);
+      const gtmAccountId = y?.gtmAccountId ?? found?.gtmAccountId;
+      const gtmContainerId = y?.gtmContainerId ?? found?.gtmContainerId;
+      if (gtmAccountId) client.gtmAccountId = gtmAccountId;
+      if (gtmContainerId) client.gtmContainerId = gtmContainerId;
       const area = y?.area && normalizeArea(y.area);
       if (area) client.area = area;
       if (y?.niche?.trim()) client.niche = y.niche.trim();
@@ -591,6 +605,16 @@ export type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
 export interface DiscoveryOutcome {
   gsc: Settled<GscSite[]>;
   ga4: Settled<{ properties: Ga4Property[]; errors: string[] }>;
+  /** Tag Manager containers. Best-effort: a failure here only adds a discovery note. */
+  gtm?: Settled<GtmListing>;
+}
+
+/** Containers matched to client domains, plus discovery notes (failures, unmatched containers). */
+export function gtmFromOutcome(gtm: Settled<GtmListing> | undefined, overrides: ClientOverride[] = []): { matches: Map<string, GtmMatch>; notes: string[] } {
+  if (!gtm) return { matches: new Map(), notes: [] };
+  if (!gtm.ok) return { matches: new Map(), notes: [`Tag Manager containers could not be listed (gtm_audit may still work with gtmAccountId and gtmContainerId in clients.yaml): ${errText(gtm.error)}`] };
+  const { matches, unmatched } = joinGtmContainers(gtm.value.containers, normalizeHost);
+  return { matches, notes: gtmNotes(gtm.value, matches, unmatched, new Set(overrides.filter((o) => o.gtmContainerId).map((o) => o.domain))) };
 }
 
 /** Discovery didn't run because no Google auth is configured. Not an error. */
@@ -679,6 +703,7 @@ export function assembleRegistry(
 
   const warnings: string[] = [];
   const { gsc, ga4 } = outcome;
+  const gtm = gtmFromOutcome(outcome.gtm, overrides);
 
   const ga4Disabled = !ga4.ok && isAdminApiDisabled(ga4.error);
   if (!gsc.ok && !ga4.ok) {
@@ -688,9 +713,9 @@ export function assembleRegistry(
     const error =
       gscMsg === ga4Msg || ga4Disabled ? gscMsg : `Search Console: ${gscMsg} GA4: ${ga4Msg}`;
     return {
-      clients: mergeClients([], overrides, defaults),
+      clients: mergeClients([], overrides, defaults, gtm.matches),
       ignored,
-      discovery: { ok: false, error, warnings, notes: [] },
+      discovery: { ok: false, error, warnings, notes: gtm.notes },
     };
   }
 
@@ -705,12 +730,12 @@ export function assembleRegistry(
   // A property whose stream lookup failed is missing from the list, so only trust the GA4 list when it's complete.
   const ga4Ids = ga4.ok && ga4.value.errors.length === 0 ? new Set(ga4.value.properties.map((p) => p.propertyId)) : undefined;
   return {
-    clients: mergeClients(joined.clients, overrides, defaults),
+    clients: mergeClients(joined.clients, overrides, defaults, gtm.matches),
     ignored,
     discovery: {
       ok: true,
       warnings,
-      notes: [...joined.notes, ...yamlPropertyNotes(overrides, joined.clients, gsc.ok ? gsc.value : undefined, ga4Ids)],
+      notes: [...joined.notes, ...yamlPropertyNotes(overrides, joined.clients, gsc.ok ? gsc.value : undefined, ga4Ids), ...gtm.notes],
     },
   };
 }
@@ -723,12 +748,14 @@ export interface NewEntry {
   name?: string;
   gscProperty?: string;
   ga4PropertyId?: string;
+  gtmAccountId?: string;
+  gtmContainerId?: string;
 }
 
 export interface SyncPlan {
   add: NewEntry[];
-  /** Missing gscProperty / ga4PropertyId to fill on existing entries, by yaml key. */
-  fill: { key: string; domain: string; field: "gscProperty" | "ga4PropertyId"; value: string }[];
+  /** Missing gscProperty / ga4PropertyId / gtm ids to fill on existing entries, by yaml key. */
+  fill: { key: string; domain: string; field: "gscProperty" | "ga4PropertyId" | "gtmAccountId" | "gtmContainerId"; value: string }[];
 }
 
 /**
@@ -737,7 +764,11 @@ export interface SyncPlan {
  * ga4PropertyId where an existing entry has none. Ignored entries are left
  * alone, and entries for domains no longer discovered are kept.
  */
-export function planSync(overrides: ClientOverride[], discovered: DiscoveredClient[]): SyncPlan {
+export function planSync(
+  overrides: ClientOverride[],
+  discovered: DiscoveredClient[],
+  gtm: ReadonlyMap<string, GtmMatch> = new Map(),
+): SyncPlan {
   const byDomain = new Map(overrides.map((o) => [o.domain, o]));
   const plan: SyncPlan = { add: [], fill: [] };
   for (const d of discovered) {
@@ -747,6 +778,11 @@ export function planSync(overrides: ClientOverride[], discovered: DiscoveredClie
       if (d.ga4DisplayName) entry.name = d.ga4DisplayName;
       if (d.gscProperty) entry.gscProperty = d.gscProperty;
       if (d.ga4PropertyId) entry.ga4PropertyId = d.ga4PropertyId;
+      const g = gtm.get(d.domain);
+      if (g) {
+        entry.gtmAccountId = g.gtmAccountId;
+        entry.gtmContainerId = g.gtmContainerId;
+      }
       plan.add.push(entry);
       continue;
     }
@@ -755,6 +791,14 @@ export function planSync(overrides: ClientOverride[], discovered: DiscoveredClie
     if (!o.ga4PropertyId && d.ga4PropertyId) {
       plan.fill.push({ key: o.slug, domain: o.domain, field: "ga4PropertyId", value: d.ga4PropertyId });
     }
+  }
+  // Tag Manager containers fill any existing entry (discovered or hand-added), and only as a pair:
+  // an entry that already pins either id is left alone.
+  for (const o of overrides) {
+    const g = gtm.get(o.domain);
+    if (!g || o.ignore || o.gtmAccountId || o.gtmContainerId) continue;
+    plan.fill.push({ key: o.slug, domain: o.domain, field: "gtmAccountId", value: g.gtmAccountId });
+    plan.fill.push({ key: o.slug, domain: o.domain, field: "gtmContainerId", value: g.gtmContainerId });
   }
   return plan;
 }

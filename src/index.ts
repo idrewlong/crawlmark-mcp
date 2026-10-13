@@ -7,6 +7,7 @@ import { closeAllBrowsers } from "./providers/browser.js";
 import { registerPrompts } from "./prompts/index.js";
 import { registerBrandTools } from "./tools/brand.js";
 import { registerCompetitorTools } from "./tools/competitors.js";
+import { registerGtmTools } from "./tools/gtm.js";
 import { registerOpportunityTools } from "./tools/opportunities.js";
 import { registerRawTools } from "./tools/raw.js";
 import { registerReportTools } from "./tools/reports.js";
@@ -31,6 +32,7 @@ registerReportTools(server);
 registerCompetitorTools(server);
 registerBrandTools(server);
 registerOpportunityTools(server);
+registerGtmTools(server);
 registerRawTools(server);
 registerPrompts(server);
 

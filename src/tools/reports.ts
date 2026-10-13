@@ -44,6 +44,7 @@ export function registerReportTools(server: McpServer) {
           sources: c.sources,
           gscProperty: c.gscProperty ?? null,
           ga4PropertyId: c.ga4PropertyId ?? null,
+          ...(c.gtmContainerId ? { gtmAccountId: c.gtmAccountId ?? null, gtmContainerId: c.gtmContainerId } : {}),
           ...(c.aliases.length ? { aliases: c.aliases } : {}),
           ...(c.alternates.gsc.length || c.alternates.ga4.length ? { alternates: c.alternates } : {}),
           missing: missingPieces(c),

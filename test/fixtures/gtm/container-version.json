@@ -1,0 +1,31 @@
+{
+  "containerVersionId": "42",
+  "name": "Example release",
+  "tag": [
+    { "tagId": "1", "name": "Google tag G-EXAMPLE1", "type": "googtag", "firingTriggerId": ["2147479553"], "parameter": [{ "type": "template", "key": "tagId", "value": "G-EXAMPLE1" }] },
+    { "tagId": "2", "name": "GA4 Config (dup)", "type": "gaawc", "firingTriggerId": ["2147479553"], "parameter": [{ "type": "template", "key": "measurementId", "value": "{{GA4 ID}}" }] },
+    { "tagId": "3", "name": "UA pageview", "type": "ua", "firingTriggerId": ["2147479553"], "parameter": [{ "type": "template", "key": "trackingId", "value": "UA-1234567-1" }] },
+    { "tagId": "4", "name": "Old snippet", "type": "html", "firingTriggerId": ["10"], "consentSettings": { "consentStatus": "needed" }, "parameter": [{ "type": "template", "key": "html", "value": "<script>ga('create', 'UA-7654321-2', 'auto');</script>" }] },
+    { "tagId": "5", "name": "Paused remarketing", "type": "awct", "paused": true, "firingTriggerId": ["10"] },
+    { "tagId": "6", "name": "Orphan event", "type": "gaawe", "parameter": [{ "type": "template", "key": "eventName", "value": "orphan" }] },
+    { "tagId": "7", "name": "Chat widget", "type": "html", "firingTriggerId": ["11"], "parameter": [{ "type": "template", "key": "html", "value": "<script src=\"https://widget.example/chat.js\"></script>" }] },
+    { "tagId": "8", "name": "Setup only", "type": "gaawe", "parameter": [] },
+    { "tagId": "9", "name": "Main event", "type": "gaawe", "firingTriggerId": ["10"], "blockingTriggerId": ["16"], "setupTag": [{ "tagName": "Setup only" }], "parameter": [{ "type": "template", "key": "eventName", "value": "{{Event Name}}" }] },
+    { "tagId": "12", "name": "Tracked pixel", "type": "img", "firingTriggerId": ["10"], "consentSettings": { "consentStatus": "notSet" } },
+    { "tagId": "20", "name": "CMP banner", "type": "cvt_EXAMPLE1", "firingTriggerId": ["15"] }
+  ],
+  "trigger": [
+    { "triggerId": "10", "name": "Form submit", "type": "formSubmission" },
+    { "triggerId": "11", "name": "Group", "type": "triggerGroup", "parameter": [{ "type": "list", "key": "triggerIds", "list": [{ "type": "triggerReference", "value": "13" }] }] },
+    { "triggerId": "13", "name": "In a group", "type": "pageview" },
+    { "triggerId": "14", "name": "Nobody uses me", "type": "click" },
+    { "triggerId": "15", "name": "Consent init", "type": "consentInit" },
+    { "triggerId": "16", "name": "Blocker", "type": "pageview" }
+  ],
+  "variable": [
+    { "variableId": "1", "name": "GA4 ID", "type": "c", "parameter": [{ "type": "template", "key": "value", "value": "G-EXAMPLE1" }] },
+    { "variableId": "2", "name": "Event Name", "type": "c", "parameter": [{ "type": "template", "key": "value", "value": "main" }] },
+    { "variableId": "3", "name": "Unused \"quoted\" var", "type": "jsm", "parameter": [] },
+    { "variableId": "4", "name": "Old UA ID", "type": "c", "parameter": [{ "type": "template", "key": "value", "value": "UA-1-1" }] }
+  ]
+}

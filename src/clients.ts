@@ -28,6 +28,7 @@ import {
 import {
   assembleRegistry,
   findClient,
+  gtmFromOutcome,
   joinDiscovered,
   normalizeArea,
   normalizeHost,
@@ -53,6 +54,7 @@ import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, squash, toBrandTerms } from 
 import { mapLimit } from "./lib/concurrency.js";
 import { GOOGLE_NOT_CONFIGURED_MESSAGE } from "./lib/google-auth.js";
 import { listGa4Properties, listGscSites } from "./providers/discovery.js";
+import { listGtmContainers } from "./providers/gtm.js";
 import { googleAuthModeNote, googleConfigured } from "./providers/google.js";
 
 /**
@@ -133,7 +135,7 @@ function editClientsFile<T>(edit: (text: string | undefined, path: string) => { 
 export interface SyncResult {
   /** Domains appended to clients.yaml by this run. */
   added: string[];
-  /** Properties filled on existing entries, e.g. "example.com gscProperty". */
+  /** Properties filled on existing entries, e.g. "example.com gscProperty" or "example.com gtmContainerId". */
   filled: string[];
   /** Set when the sync couldn't write clients.yaml (discovery results are still used). */
   error?: string;
@@ -155,6 +157,8 @@ async function settle<T>(p: Promise<T>): Promise<Settled<T>> {
   }
 }
 
+let lastGtmLogged: string | undefined;
+
 const NO_SYNC: SyncResult = { added: [], filled: [] };
 
 async function runDiscovery(refresh: boolean): Promise<DiscoveryRun> {
@@ -166,10 +170,16 @@ async function runDiscovery(refresh: boolean): Promise<DiscoveryRun> {
       brandNotes: [],
     };
   }
-  const [gsc, ga4] = await Promise.all([settle(listGscSites({ refresh })), settle(listGa4Properties({ refresh }))]);
+  // Tag Manager is best-effort: its failure becomes a discovery note and never touches client discovery.
+  const [gsc, ga4, gtm] = await Promise.all([
+    settle(listGscSites({ refresh })),
+    settle(listGa4Properties({ refresh })),
+    settle(listGtmContainers({ refresh })),
+  ]);
   const outcome: DiscoveryOutcome = {
     gsc: gsc.ok ? { ok: true, value: gsc.value.value } : gsc,
     ga4: ga4.ok ? { ok: true, value: ga4.value.value } : ga4,
+    gtm: gtm.ok ? { ok: true, value: gtm.value.value } : gtm,
   };
   const fetched = [gsc, ga4].flatMap((r) => (r.ok ? [r.value.fromCache] : []));
   const fromCache = fetched.length > 0 && fetched.every(Boolean);
@@ -182,7 +192,7 @@ async function runDiscovery(refresh: boolean): Promise<DiscoveryRun> {
     ).clients;
     try {
       sync = await editClientsFile((text, path) => {
-        const plan = planSync(parseText(text, path), joined);
+        const plan = planSync(parseText(text, path), joined, gtmFromOutcome(outcome.gtm).matches);
         return {
           text: applySync(text, plan),
           result: { added: plan.add.map((e) => e.domain), filled: plan.fill.map((f) => `${f.domain} ${f.field}`) },
@@ -198,6 +208,11 @@ async function runDiscovery(refresh: boolean): Promise<DiscoveryRun> {
     ...(ga4.ok ? ga4.value.value.errors : [`GA4: ${(ga4.error as Error).message}`]),
     ...(sync.error ? [`could not update ${env.CLIENTS_FILE}: ${sync.error}`] : []),
   ];
+  // Logged once per distinct message: a failing Tag Manager would otherwise repeat on every tool call.
+  if (!gtm.ok && (gtm.error as Error).message !== lastGtmLogged) {
+    lastGtmLogged = (gtm.error as Error).message;
+    console.error(`crawlmark: client discovery: Tag Manager: ${lastGtmLogged}`);
+  }
   for (const p of problems) console.error(`crawlmark: client discovery: ${p}`);
   const brandNotes = sync.added.length ? await autoBrandTermsForNewClients(outcome, sync.added) : [];
   return { outcome, fromCache, sync, brandNotes };

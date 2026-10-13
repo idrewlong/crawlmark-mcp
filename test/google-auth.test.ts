@@ -22,6 +22,9 @@ import {
   mapTokenError,
   mergeTokens,
   missingDataScopes,
+  missingGtmScope,
+  GTM_SCOPE,
+  DATA_SCOPES,
   OAUTH_SCOPES,
   parseCallback,
   parseTokenFile,
@@ -103,7 +106,8 @@ describe("auth URL", () => {
     expect(q.get("client_id")).toBe("cid.apps.googleusercontent.com");
     expect(q.get("response_type")).toBe("code");
     expect(q.get("scope")!.split(" ")).toEqual([...OAUTH_SCOPES]);
-    expect(q.get("scope")).not.toMatch(/tagmanager|\.edit|\.write|readwrite/);
+    expect(q.get("scope")).toContain("tagmanager.readonly");
+    expect(q.get("scope")).not.toMatch(/\.edit|\.write|readwrite|tagmanager\.(edit|manage|publish|delete)/);
   });
 });
 
@@ -151,6 +155,14 @@ describe("scopes and identity", () => {
       "https://www.googleapis.com/auth/analytics.readonly",
     ]);
     expect(missingDataScopes(undefined)).toHaveLength(2);
+    // Tag Manager is requested but never required by the data-scope check.
+    expect(missingDataScopes(DATA_SCOPES)).toEqual([]);
+  });
+
+  it("flags a missing Tag Manager scope only when the granted list is known", () => {
+    expect(missingGtmScope(undefined)).toBe(false);
+    expect(missingGtmScope("openid https://www.googleapis.com/auth/webmasters.readonly")).toBe(true);
+    expect(missingGtmScope([GTM_SCOPE])).toBe(false);
   });
 
   it("reads the email claim from an ID token and tolerates junk", () => {
