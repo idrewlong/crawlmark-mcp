@@ -274,6 +274,9 @@ describe("mergeClients", () => {
       brandTermEntries: [],
       keyPages: ["https://www.example.com/"],
       monthlyBudgetUsd: 5,
+      // Phase 9: resolved market (from location code 2840) and the default unit caps.
+      country: "US",
+      monthlyUnits: { ahrefs: 10000, semrush: 5000 },
       aliases: [],
       sources: ["gsc", "ga4"],
       alternates: {

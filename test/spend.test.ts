@@ -30,10 +30,11 @@ describe("spend helpers", () => {
       ],
       canonical,
     );
+    // Phase 9: every merged row carries units (0 for DataForSEO).
     expect(rows).toEqual([
-      { client: "example.com", provider: "dataforseo", calls: 3, cost_usd: 0.4 },
-      { client: "example.org", provider: "dataforseo", calls: 1, cost_usd: 0.35 },
-      { client: "gone.example", provider: "dataforseo", calls: 1, cost_usd: 0.01 },
+      { client: "example.com", provider: "dataforseo", calls: 3, cost_usd: 0.4, units: 0 },
+      { client: "example.org", provider: "dataforseo", calls: 1, cost_usd: 0.35, units: 0 },
+      { client: "gone.example", provider: "dataforseo", calls: 1, cost_usd: 0.01, units: 0 },
     ]);
   });
 });
@@ -58,7 +59,7 @@ describe("budget ledger (SQLite)", () => {
     expect(() => assertBudget(client as never, 0.6)).toThrow(BudgetExceededError);
 
     const summary = spendSummary(canonicalSpendNames([client]));
-    expect(summary.byClient).toEqual([{ client: "example.com", provider: "dataforseo", calls: 2, cost_usd: 4.5 }]);
+    expect(summary.byClient).toEqual([{ client: "example.com", provider: "dataforseo", calls: 2, cost_usd: 4.5, units: 0 }]);
     expect(spendSummary().byClient).toHaveLength(2);
   });
 });

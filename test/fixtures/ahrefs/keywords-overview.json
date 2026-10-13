@@ -1,0 +1,4 @@
+{ "keywords": [
+  { "keyword": "example widgets", "volume": 1900, "cpc": 125 },
+  { "keyword": "example gadgets", "volume": 320, "cpc": null }
+] }

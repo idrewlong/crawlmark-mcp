@@ -4,7 +4,7 @@
  */
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { ENV_FILE, ENV_FILE_KEYS, HOME, PROJECT_ROOT } from "../config.js";
+import { ENV_FILE, ENV_FILE_KEYS, HOME, PROJECT_ROOT, providerUrlNotice } from "../config.js";
 import { claudeDesktopConfigPath, cursorConfigPath, shellQuote } from "../lib/claude-config.js";
 import { codexConfigPath } from "../lib/codex-config.js";
 import { formatTable } from "../lib/clients.js";
@@ -245,6 +245,7 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
   }
   const ctx = realWizardContext(prompt, flags["dry-run"]);
   ctx.ui = ui;
+  ctx.yes = flags.yes;
   ctx.command = invokedAs;
   // packageVersion expects a module directly under src/ or dist/; this one is a level deeper.
   ctx.version = packageVersion(new URL("../index.js", import.meta.url).href);
@@ -266,6 +267,7 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
 
 /** `setup`, `setup status`, `setup migrate`, and `init` (the wizard, worded as init). */
 export async function setupCommand(command: string | undefined, args: string[], flags: SetupFlags, invokedAs: "setup" | "init" = "setup"): Promise<number> {
+  if (providerUrlNotice) warn(providerUrlNotice);
   if (invokedAs === "init") {
     const extra = [command, ...args].filter((a): a is string => a !== undefined);
     return wizardCommand(flags, extra, "init");

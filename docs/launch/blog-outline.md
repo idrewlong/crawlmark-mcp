@@ -78,8 +78,13 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - Google via your own account (OAuth) or a service account.
 - `setup status` and an in-Claude `setup_status` tool that say exactly what to fix.
 
-**Bring your own data provider** (Coming, Phase 9)
-- Use Ahrefs or Semrush instead of DataForSEO for keyword, ranking, competitor and backlink data, with unit-based budgets; pick your provider when you install.
+**Bring your own data provider** (Shipped; live API check pending a key)
+- Use your own Ahrefs (API v3, Lite plan or higher) or Semrush (SEO Business plan plus an API unit package) key instead of, or alongside, DataForSEO. The provider is set once (a default, plus an optional per-client override), not per question: with example.com on Ahrefs, *"Which keywords does example.com rank for?"* answers from Ahrefs.
+- What each provider covers: keyword volume (`keyword_volume`), ranked keywords (`ranked_keywords`), organic competitors (`competitor_domains`, and the overlap half of `suggest_competitors`) and backlinks (`backlinks_summary`, with Ahrefs Domain Rating or the Semrush authority score, labelled, never mixed). Live SERPs, on-page checks and full crawls stay on DataForSEO.
+- One default provider, overridable per client: `npx crawlmark-mcp clients set example.com --provider semrush --country GB` (or `set_client_profile`). A missing key never quietly falls back to another account.
+- Budgets in each provider's own currency: DataForSEO keeps its dollar caps; Ahrefs and Semrush get monthly API-unit caps, globally and per client, checked before each call and shown in `spend_summary`.
+- Provider choice at install, whichever way you install: the `init` wizard asks which providers you have and which is the default (`setup --step provider` to change it later, `--step ahrefs` / `--step semrush` for one key), and the Claude Desktop bundle has a "Default SEO data provider" field plus key and unit-cap fields.
+- New free tools `ahrefs_status` and `semrush_status` check a key without spending units; `setup_status` shows the default provider and where it's set.
 
 **Installer polish** (Coming, Phase 10)
 - A menu when you re-run setup, step timings, clickable links, "try asking Claude" examples using your own clients, and update notices.

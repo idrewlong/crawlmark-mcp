@@ -49,3 +49,59 @@ export function dataForSeoBaseUrl(i: DataForSeoUrlInputs): string {
   }
   return i.baseUrl ?? DFS_SANDBOX_URL;
 }
+
+/**
+ * Phase 9 variables a blank Claude Desktop bundle field must not hide. loadEnvFile never
+ * overrides a key that already exists, so a bundle field passed as "" (or as the literal
+ * `${user_config.x}` placeholder) would stop .env from supplying the value. config.ts drops
+ * these keys from the process env, when unset, before loading .env (D11).
+ */
+export const PHASE9_ENV_KEYS = [
+  "SEO_DATA_PROVIDER",
+  "AHREFS_API_KEY",
+  "SEMRUSH_API_KEY",
+  "SEMRUSH_V4_API_KEY",
+  "AHREFS_MONTHLY_UNIT_CAP",
+  "SEMRUSH_MONTHLY_UNIT_CAP",
+  "DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS",
+  "DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS",
+] as const;
+
+/** Delete `keys` from `target` where their value is unset (see isUnsetValue). Returns the keys removed. */
+export function dropUnsetKeys(target: Record<string, string | undefined>, keys: readonly string[]): string[] {
+  const dropped: string[] = [];
+  for (const k of keys) {
+    if (k in target && isUnsetValue(target[k])) {
+      delete target[k];
+      dropped.push(k);
+    }
+  }
+  return dropped;
+}
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/** One line naming each overridden provider URL by origin only (no path or query), or undefined when none is. */
+export function urlOverrideNotice(overrides: { name: string; value: string; fallback: string }[]): string | undefined {
+  const changed = overrides.filter((o) => o.value !== o.fallback);
+  if (!changed.length) return undefined;
+  return `crawlmark: test-only provider URL override in use: ${changed.map((o) => `${o.name} -> ${new URL(o.value).origin}`).join(", ")}. Unset it unless you are testing against a fake server.`;
+}
+
+/**
+ * A test-only base URL override (AHREFS_BASE_URL and friends): used only when it came
+ * from the shell (never from .env, so a stray line there can't redirect a key) and is an
+ * https URL, or plain http to a loopback host (127.0.0.1, localhost, [::1]) for a local
+ * fake server, since the keys travel with every request. Returns `fallback` otherwise.
+ * Trailing slashes are dropped.
+ */
+export function shellUrlOverride(value: string | undefined, fromEnvFile: boolean, fallback: string): string {
+  if (fromEnvFile || isUnsetValue(value)) return fallback;
+  try {
+    const u = new URL(value!.trim());
+    if (u.protocol === "http:" ? !LOOPBACK_HOSTS.has(u.hostname) : u.protocol !== "https:") return fallback;
+    return value!.trim().replace(/\/+$/, "");
+  } catch {
+    return fallback;
+  }
+}

@@ -59,7 +59,8 @@ src/
   config.ts       config home, env loading and validation, client defaults
   clients.ts      client resolution, discovery sync and clients.yaml edits
   lib/            pure helpers: SQLite store, cache, budgets, URL checks, clients.yaml editing, Claude config
-  providers/      one file per data source (gsc, ga4, dataforseo, lighthouse, axe, gtm, render, discovery, google auth)
+  providers/      one file per data source (gsc, ga4, dataforseo, ahrefs, semrush, lighthouse, axe, gtm, render, discovery,
+                  google auth); seo-data.ts routes paid keyword/ranking/competitor/backlink calls to the client's provider
   analysis/       pure analysis: opportunities, branded split, brand terms, render diff, hygiene, findings, diffs
   reports/        report composers (monthly, audit, site hygiene, gtm), each section isolated
   tools/          MCP tool registrations
@@ -75,6 +76,10 @@ test/               vitest tests and fixtures
 1. Add `src/providers/<name>.ts`. Wrap calls in `cached()`, and for paid APIs call `assertBudget()` before and `recordSpend()` after.
 2. Register any raw tools in `src/tools/raw.ts`.
 3. Pull it into a report composer in `src/reports/` inside a `section()` so a failure doesn't break the report.
+
+Paid SEO data (keyword volume, ranked keywords, competitors, backlinks) goes through `src/providers/seo-data.ts`, never a provider file directly: it picks the client's provider (`resolveProvider`, a pure truth table), gates DataForSEO-only capabilities (`requireDataForSeo`), and adds `provider` and `units` to every result. Unit-billed providers (Ahrefs, Semrush) use `unitsCall()` from `units-billing.ts` (cache, `assertUnits()` before, `recordUnits()` per request) and a `createLimiter()` from `src/lib/rate.ts`. Keys never go into an error, log, cache key or ledger row: run vendor text through `redact()`.
+
+Tests point the provider base URLs at a closed local port (`test/setup.ts`) and use a temp `CRAWLMARK_HOME`, so a developer's `.env` is never read and no unstubbed call can reach a real API. For a manual check against a fake server, set `AHREFS_BASE_URL`, `SEMRUSH_BASE_URL` and `SEMRUSH_BALANCE_URL` in your shell (they're ignored in `.env`).
 
 ## Releasing
 

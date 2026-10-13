@@ -9,12 +9,14 @@ export function registerSetupTools(server: McpServer) {
     {
       title: "Setup status",
       description:
-        "Free. Reports, for each integration (config home, DataForSEO, Google, Search Console, GA4, Tag Manager, PageSpeed Insights key, Chrome, clients), " +
+        "Free. Reports, for each integration (config home, DataForSEO, the default data provider, Ahrefs, Semrush, Google, Search Console, GA4, Tag Manager, PageSpeed Insights key, Chrome, clients), " +
         "whether it is `working`, `configured` (set but not verified), `missing` or in `error`, with a plain-language detail and the exact next step " +
         "(a `crawlmark-cli` command for the user to run in a terminal, or a URL). Live checks are cheap (DataForSEO's free account check, a Google token check, " +
         "cached property lists, one headless Chrome launch) and the whole result is cached for 60 seconds; `refresh: true` re-checks. Never returns secrets. " +
         "Never ask the user to paste credentials into the chat: send them to the `next` command. Commands in `next` already use the result's `cli` field, " +
-        "which is how to run crawlmark-cli on this machine (it may be `node /path/dist/cli.js` or carry a CRAWLMARK_HOME prefix); use `cli` rather than a bare `crawlmark-cli` when writing any other command.",
+        "which is how to run crawlmark-cli on this machine (it may be `node /path/dist/cli.js` or carry a CRAWLMARK_HOME prefix); use `cli` rather than a bare `crawlmark-cli` when writing any other command. " +
+        "Also reports the default SEO data provider (seoprovider row: which of DataForSEO, Ahrefs, Semrush is the default, where the setting comes from, and which are configured), " +
+        "repeated as the top-level `seoDataProvider` object, plus `ahrefs` and `semrush` rows. The provider is changed in a terminal with the command in its next field, never through chat.",
       inputSchema: { refresh: z.boolean().optional().describe("Re-run the checks instead of using the 60-second cache.") },
       annotations: READ_ONLY,
     },

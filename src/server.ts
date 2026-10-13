@@ -1,6 +1,7 @@
 import { packageVersion } from "./lib/entry.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { providerUrlNotice, seoDefaultProvider } from "./config.js";
 import { closeEgressProxy } from "./lib/egress-proxy.js";
 import { restrictToClientDomains } from "./lib/url-guard.js";
 import { closeAllBrowsers } from "./providers/browser.js";
@@ -16,6 +17,11 @@ import { registerSetupTools } from "./tools/setup.js";
 // Fail at boot, not on the first URL, when RESTRICT_TO_CLIENT_DOMAINS has a typo.
 restrictToClientDomains();
 
+// An unknown SEO_DATA_PROVIDER never stops the server (D11): one stderr line here, then setup_status and
+// every routed paid call report it, while free and DataForSEO-only tools keep working.
+if (!seoDefaultProvider.ok) console.error(`crawlmark: ${seoDefaultProvider.message}`);
+if (providerUrlNotice) console.error(providerUrlNotice);
+
 const server = new McpServer(
   { name: "crawlmark", version: packageVersion(import.meta.url) },
   {
@@ -24,7 +30,7 @@ const server = new McpServer(
       "Start with list_clients. If something isn't set up, call setup_status and give the user its next step; never ask them to paste credentials into the chat. Manage a client's competitors and tracked keywords with the add_/remove_/list_ tools; " +
       "suggest_competitors proposes more (show them to the user and add only the ones they confirm). " +
       "suggest_brand_terms infers the names people search a client by; confirm medium and low candidates with the user before add_brand_terms. For routine work use monthly_report and run_audit; use the lower-level tools for follow-up questions. " +
-      "Tools marked paid spend DataForSEO credit and are capped per client per month; prefer the free Google tools when they answer the question. " +
+      "Tools marked paid spend DataForSEO credit or Ahrefs/Semrush API units (whichever is the client's data provider) and are capped per client per month; prefer the free Google tools when they answer the question. " +
       "Results are cached, so re-running a report is cheap.",
   },
 );

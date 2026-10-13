@@ -13,6 +13,10 @@ function providers(over: Partial<StatusProviders> = {}): StatusProviders {
     home: () => ({ info: { dir: "/h", source: "project", reason: "source checkout" }, exists: true, envFile: "/h/.env", envFileExists: true, configuredByEnv: false }),
     cli: () => CLI,
     dataforseo: async () => dfsOk,
+    // Phase 9: Ahrefs not set up and not anyone's provider.
+    ahrefs: async () => ({ check: { configured: false, works: false, reachable: true, error: "AHREFS_API_KEY is not set.", costUsd: 0 }, chosen: { byDefault: false, clients: 0 }, unitsUsedThisMonth: 0, cap: 50_000 }),
+    seoDataProvider: () => ({ default: "dataforseo", source: "default", perClientOverrides: 0 }),
+    semrush: async () => ({ check: { configured: false, works: false, reachable: true, error: "SEMRUSH_API_KEY is not set.", costUsd: 0 }, chosen: { byDefault: false, clients: 0 }, v4KeySet: false, unitsUsedThisMonth: 0, cap: 20_000 }),
     googleStatus: () => sa,
     googleLive: async () => ({ ok: true }),
     gscSites: async () => ({ items: ["sc-domain:example.com", "https://www.example.org/"] }),
@@ -31,7 +35,7 @@ describe("setup_status", () => {
   it("everything working: states, counts, mode, balance and email; no next steps", async () => {
     const r = await collectSetupStatus(providers());
     const s = Object.fromEntries(r.integrations.map((i) => [i.id, i]));
-    expect(r.integrations.map((i) => i.id)).toEqual(["home", "dataforseo", "google", "gsc", "ga4", "tagmanager", "psi", "chrome", "clients"]);
+    expect(r.integrations.map((i) => i.id)).toEqual(["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "chrome", "clients"]);
     expect(s.dataforseo).toMatchObject({ state: "working", next: null, data: { mode: "sandbox", balanceUsd: 12.5 } });
     expect(s.dataforseo!.detail).toContain("$12.50");
     expect(s.google).toMatchObject({ state: "working", data: { mode: "service_account", email: "svc@proj.iam.gserviceaccount.com" } });
@@ -41,7 +45,8 @@ describe("setup_status", () => {
     expect(s.psi).toMatchObject({ state: "missing", next: `${CLI} setup --step psi` });
     expect(s.chrome!.state).toBe("working");
     expect(s.clients).toMatchObject({ state: "working", data: { count: 2, ignored: 1 } });
-    expect(r.summary).toEqual({ working: 8, configured: 0, missing: 1, error: 0 });
+    // Phase 9: the data-provider row works (DataForSEO by default); the optional Ahrefs and Semrush rows are "missing".
+    expect(r.summary).toEqual({ working: 9, configured: 0, missing: 3, error: 0 });
     expect(r.costUsd).toBe(0);
     expect(JSON.stringify(r)).not.toMatch(/password|secret/i);
   });

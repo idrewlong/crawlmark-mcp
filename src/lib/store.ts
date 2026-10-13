@@ -50,3 +50,18 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS tool_calls_ts ON tool_calls (ts);
 `);
+
+/**
+ * Phase 9: the spend ledger records Ahrefs/Semrush units next to cost_usd. Adds the
+ * column once (guarded by PRAGMA table_info); existing rows get 0. Older builds keep
+ * working on a migrated file because their INSERT names its columns. No rollback is
+ * needed: the column is ignored by older code and never dropped.
+ */
+export function migrateSpendUnits(database: DatabaseSync): boolean {
+  const cols = database.prepare("PRAGMA table_info(spend)").all() as { name: string }[];
+  if (cols.some((c) => c.name === "units")) return false;
+  database.exec("ALTER TABLE spend ADD COLUMN units INTEGER NOT NULL DEFAULT 0");
+  return true;
+}
+
+migrateSpendUnits(db);

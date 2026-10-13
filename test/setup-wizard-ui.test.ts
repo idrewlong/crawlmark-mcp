@@ -41,7 +41,7 @@ describe("summarize (the fancy summary box)", () => {
       "Fix DataForSEO: npx crawlmark-mcp setup --step dataforseo",
       "Restart Claude Desktop",
       "In Claude, run the getting-started prompt",
-      "Change one step: npx crawlmark-mcp setup --step <node|dataforseo|google|psi|discovery|register>",
+      "Change one step: npx crawlmark-mcp setup --step <node|provider|dataforseo|ahrefs|semrush|google|psi|discovery|register>",
     ]);
   });
 });

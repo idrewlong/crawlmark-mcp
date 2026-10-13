@@ -407,6 +407,8 @@ Planned in [specs/2026-10-13-1400-phase-8-premium-installer.md](specs/2026-10-13
 
 Planned in [specs/2026-10-13-1500-phase-9-seo-data-providers.md](specs/2026-10-13-1500-phase-9-seo-data-providers.md), with API notes in `docs/research/`.
 
+**Status:** built on branch `phase-9-build` (tasks 1 to 9): a provider layer (`src/providers/seo-data.ts`) routing keyword volume, ranked keywords, competitors and backlinks to DataForSEO, Ahrefs (API v3) or Semrush per client; monthly API-unit budgets beside the USD caps; the `provider`, `ahrefs` and `semrush` setup steps with a provider choice at install; `seoprovider`, `ahrefs` and `semrush` rows in `setup_status`; the `ahrefs_status` and `semrush_status` tools; `dataProvider`, `country` and `monthlyUnits` in clients.yaml. Tested with fixtures built from the documented responses and a local fake server only. **Task 10 (live verification) is pending** a real Ahrefs or Semrush key and the user's approval of any billable call; it answers 9.11 N1 to N16.
+
 ## Phase 10: Installer polish
 
 After Phase 9. A menu when `init` runs on a finished setup; step timings and "Done in Ns"; "Try asking Claude" example prompts (the user's own client names when they have clients, read locally and shown only in an interactive terminal; example.com otherwise and in plain/CI mode); clickable links and "Press Enter to open" browser shortcuts; dim tips under results; a daily update notice (never in CI, opt-out env var, sends no client data).

@@ -45,7 +45,12 @@ clients:
     keyPages: # pages run_audit checks; default: the homepage
       - https://example.com/
       - https://example.com/contact/
-    monthlyBudgetUsd: 5 # paid-data cap; default DEFAULT_CLIENT_MONTHLY_BUDGET_USD
+    monthlyBudgetUsd: 5 # DataForSEO cap in USD; default DEFAULT_CLIENT_MONTHLY_BUDGET_USD
+    dataProvider: ahrefs # dataforseo, ahrefs or semrush: whose paid keyword, ranking, competitor and backlink data; default SEO_DATA_PROVIDER
+    country: US # ISO alpha-2 market for Ahrefs and Semrush; default: from a country-level locationCode
+    monthlyUnits: # Ahrefs/Semrush API unit caps; default DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS / _SEMRUSH_UNITS
+      ahrefs: 20000
+      semrush: 5000
 
   # A manual client with no Google access: DataForSEO, Lighthouse and axe still work.
   example.org:

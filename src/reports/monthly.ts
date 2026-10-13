@@ -5,7 +5,8 @@ import { latestAudit, latestAuditBefore } from "../lib/audits.js";
 import { spentThisMonth } from "../lib/budget.js";
 import { spendKeys } from "../lib/spend.js";
 import { lastCompleteMonth, monthRange, pctChange, previousMonth, sameMonthLastYear } from "../lib/dates.js";
-import { serp } from "../providers/dataforseo.js";
+import { ProviderUnavailableError } from "../lib/provider-ids.js";
+import { requireDataForSeo, serp } from "../providers/seo-data.js";
 import { ga4OrganicSummary, ga4TopLandingPages } from "../providers/ga4.js";
 import { gscQuery, gscTotals, type GscRow } from "../providers/gsc.js";
 import { isBranded } from "../lib/brand.js";
@@ -95,13 +96,25 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
       section(() => opportunitiesForMonth(client, cur, 5)),
     ]);
 
-  // Tracked keywords: free GSC average position, optionally a paid live SERP check.
+  // Tracked keywords: free GSC average position, optionally a paid live SERP check. Live SERPs are
+  // DataForSEO-only: when no SERP provider is available, every row keeps its GSC values (liveRank null)
+  // and the section says why, instead of the whole section failing.
   const qCur = dataOf(queriesCur) ?? [];
-  const tracked = await section(async () =>
+  let liveRanks: { available: true } | { available: false; reason: string } | undefined;
+  if (opts.liveRanks) {
+    try {
+      requireDataForSeo("serpLive", client);
+      liveRanks = { available: true };
+    } catch (err) {
+      if (!(err instanceof ProviderUnavailableError)) throw err;
+      liveRanks = { available: false, reason: err.message };
+    }
+  }
+  const trackedRows = await section(async () =>
     Promise.all(
       client.trackedKeywords.map(async (kw) => {
         const row = qCur.find((r) => r.keys[0]?.toLowerCase() === kw.toLowerCase());
-        const live = opts.liveRanks ? await serp(client, kw) : undefined;
+        const live = liveRanks?.available ? await serp(client, kw) : undefined;
         return {
           keyword: kw,
           branded: isBranded(kw, client),
@@ -114,6 +127,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
       }),
     ),
   );
+  const tracked = liveRanks ? { ...trackedRows, liveRanks } : trackedRows;
 
   // Latest saved audit, diffed against the most recent one from before the report month.
   const audit = await section(async () => {

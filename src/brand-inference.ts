@@ -21,7 +21,7 @@ import {
 import type { BrandClient } from "./lib/brand.js";
 import type { Client } from "./lib/clients.js";
 import { lastDays } from "./lib/dates.js";
-import { rankedKeywords } from "./providers/dataforseo.js";
+import { rankedKeywords, type ProviderId } from "./providers/seo-data.js";
 import { googleConfigured } from "./providers/google.js";
 import { gscQuery } from "./providers/gsc.js";
 
@@ -38,6 +38,8 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : String(e
 export interface SourceStatus {
   /** True when the source was queried. */
   used: boolean;
+  /** The paid source's data provider (Phase 9); the source keeps its "dataforseo" key for compatibility. */
+  provider?: ProviderId;
   rows?: number;
   error?: string;
   /** Why it wasn't queried. */
@@ -54,6 +56,8 @@ export interface BrandInference {
   method: string;
   notes: string[];
   costUsd: number;
+  /** Ahrefs/Semrush API units used (Phase 9); present only when one was used. */
+  units?: Partial<Record<"ahrefs" | "semrush", number>>;
   /** True when every paid call was served from the cache; false when none was made. */
   fromCache: boolean;
 }
@@ -81,6 +85,7 @@ export async function inferClientBrandTerms(client: Client, others: Client[], op
   const results: InferResult[] = [];
   const sources: BrandInference["sources"] = { gsc: { used: false }, dataforseo: { used: false } };
   let costUsd = 0;
+  let units: BrandInference["units"];
   const cacheFlags: boolean[] = [];
 
   let gscRows = 0;
@@ -112,6 +117,8 @@ export async function inferClientBrandTerms(client: Client, others: Client[], op
       const r = await rankedKeywords(client, client.domain, RANKED_LIMIT);
       costUsd += r.costUsd;
       cacheFlags.push(r.fromCache);
+      if (r.provider) sources.dataforseo.provider = r.provider;
+      if ((r.provider === "ahrefs" || r.provider === "semrush") && typeof r.units === "number") units = { [r.provider]: r.units };
       sources.dataforseo.rows = r.items.length;
       const input: BrandQueryRow[] = r.items.map((k) => ({ query: k.keyword, position: k.position, searchVolume: k.searchVolume, estimatedTraffic: k.estimatedTraffic }));
       results.push(inferBrandTerms(input, ctx, { source: "dataforseo", otherClients }));
@@ -141,6 +148,7 @@ export async function inferClientBrandTerms(client: Client, others: Client[], op
     method: METHOD,
     notes,
     costUsd: Number(costUsd.toFixed(4)),
+    ...(units ? { units } : {}),
     fromCache: cacheFlags.length > 0 && cacheFlags.every(Boolean),
   };
 }

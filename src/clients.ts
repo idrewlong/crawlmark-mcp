@@ -52,6 +52,7 @@ import {
 } from "./lib/clients.js";
 import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, squash, toBrandTerms } from "./lib/brand.js";
 import { mapLimit } from "./lib/concurrency.js";
+import { isProviderId, PROVIDER_IDS, type ProviderId } from "./lib/provider-ids.js";
 import { GOOGLE_NOT_CONFIGURED_MESSAGE } from "./lib/google-auth.js";
 import { listGa4Properties, listGscSites } from "./providers/discovery.js";
 import { listGtmContainers } from "./providers/gtm.js";
@@ -527,13 +528,18 @@ export interface ProfileUpdate {
   name?: string | undefined;
   /** Brand terms replacing the stored list; an empty array clears it. */
   brandTerms?: string[] | undefined;
+  /** Phase 9: dataforseo, ahrefs or semrush; empty string clears the override (back to SEO_DATA_PROVIDER). */
+  dataProvider?: string | undefined;
+  /** Phase 9: ISO 3166-1 alpha-2 (stored uppercase); empty string clears it. */
+  country?: string | undefined;
 }
 
 export interface ProfileResult {
   client: string;
   set: Record<string, string>;
   cleared: string[];
-  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[] };
+  /** dataProvider and country are included when the update set or cleared either of them. */
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null };
   clientsFile: string;
 }
 
@@ -554,13 +560,23 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
       fields[key] = trimmed;
     }
   }
+  if (update.dataProvider !== undefined) {
+    const v = update.dataProvider.trim().toLowerCase();
+    if (v !== "" && !isProviderId(v)) throw new Error(`"${update.dataProvider}" is not a data provider. Use ${PROVIDER_IDS.join(", ")}, or an empty value to use the default (SEO_DATA_PROVIDER).`);
+    fields.dataProvider = v;
+  }
+  if (update.country !== undefined) {
+    const v = update.country.trim();
+    if (v !== "" && !/^[A-Za-z]{2}$/.test(v)) throw new Error(`"${update.country}" is not a two-letter ISO country code (e.g. US or GB).`);
+    fields.country = v.toUpperCase();
+  }
   let brandTerms: string[] | undefined;
   if (update.brandTerms !== undefined) {
     brandTerms = toBrandTerms(update.brandTerms);
     const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
     if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
   }
-  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name or brandTerms.");
+  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider or country.");
   const client = await resolveClient(idOrDomain);
   await editClientsFile((text, path) => {
     const { text: base, entry } = entryFor(text, path, client);
@@ -577,7 +593,13 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
       ...(brandTerms?.length ? { brandTerms: brandTerms.join(", ") } : {}),
     },
     cleared: [...Object.entries(fields).filter(([, v]) => v === "").map(([k]) => k), ...(brandTerms?.length === 0 ? ["brandTerms"] : [])],
-    profile: { name: updated.name, area: updated.area ?? null, niche: updated.niche ?? null, brandTerms: updated.brandTerms },
+    profile: {
+      name: updated.name,
+      area: updated.area ?? null,
+      niche: updated.niche ?? null,
+      brandTerms: updated.brandTerms,
+      ...(update.dataProvider !== undefined || update.country !== undefined ? { dataProvider: updated.dataProvider ?? null, country: updated.country } : {}),
+    },
     clientsFile: env.CLIENTS_FILE,
   };
 }

@@ -9,7 +9,7 @@ import {
   setClientProfile,
 } from "../clients.js";
 import { suggestCompetitors } from "../competitors.js";
-import { ENTRY_SOURCES } from "../lib/clients.js";
+import { ENTRY_SOURCES, keywordInput } from "../lib/clients.js";
 import { handler, READ_ONLY } from "./util.js";
 
 /**
@@ -88,7 +88,7 @@ export function registerCompetitorTools(server: McpServer) {
       description:
         "Add tracked keywords to a client in clients.yaml (saved lowercase with single spaces). Skips, with a reason, keywords already tracked, " +
         "repeats and empty ones. monthly_report reports their positions. Free, local.",
-      inputSchema: { client: clientArg, keywords: z.array(z.string()).min(1).max(200), note: noteArg, source: sourceArg },
+      inputSchema: { client: clientArg, keywords: z.array(keywordInput).min(1).max(200), note: noteArg, source: sourceArg },
       annotations: ADD,
     },
     handler("add_keywords", ({ client, keywords, note, source }) => addKeywords(client, keywords, { note, source })),
@@ -99,7 +99,7 @@ export function registerCompetitorTools(server: McpServer) {
     {
       title: "Remove tracked keywords",
       description: "Remove tracked keywords from a client in clients.yaml (matched ignoring case and extra spaces). Free, local.",
-      inputSchema: { client: clientArg, keywords: z.array(z.string()).min(1).max(200) },
+      inputSchema: { client: clientArg, keywords: z.array(keywordInput).min(1).max(200) },
       annotations: REMOVE,
     },
     handler("remove_keywords", ({ client, keywords }) => removeKeywords(client, keywords)),
@@ -128,17 +128,29 @@ export function registerCompetitorTools(server: McpServer) {
       description:
         "Set a client's area, niche, display name or brand terms in clients.yaml. brandTerms are names people search for the brand (e.g. [\"example plumbing\", \"ex plumbing\"]); they add to the built-in domain and name matching used to split branded from non-branded queries, and the list you pass replaces the stored one ([] clears it). area is a DataForSEO location_name (City,Region,Country, " +
         'e.g. "Austin,Texas,United States") used for local SERP searches; niche is a few words on what the client does ' +
-        '(e.g. "emergency plumber"). Pass an empty string to clear a field. Free, local.',
+        '(e.g. "emergency plumber"). dataProvider overrides the default SEO data provider for this client; it chooses whose paid data is used, not credentials. ' +
+        'country is the ISO two-letter market Ahrefs and Semrush use (e.g. "US", "GB"). Pass an empty string to clear a field. Free, local.',
       inputSchema: {
         client: clientArg,
         area: z.string().max(200).optional(),
         niche: z.string().max(200).optional(),
         name: z.string().max(200).optional(),
         brandTerms: z.array(z.string().max(100)).max(50).optional().describe("Replaces the client's brand terms; an empty array clears them."),
+        dataProvider: z
+          .enum(["dataforseo", "ahrefs", "semrush", ""])
+          .optional()
+          .describe('Whose paid keyword, ranking, competitor and backlink data this client uses; "" clears the override (back to the default provider).'),
+        country: z
+          .string()
+          .regex(/^([A-Za-z]{2})?$/)
+          .optional()
+          .describe('ISO 3166-1 alpha-2 market for Ahrefs/Semrush, stored uppercase (e.g. "US", "GB"); "" clears it.'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    handler("set_client_profile", ({ client, area, niche, name, brandTerms }) => setClientProfile(client, { area, niche, name, brandTerms })),
+    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country }) =>
+      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country }),
+    ),
   );
 
   // ------------------------------------------------------------ suggestions (paid, read-only)
@@ -148,11 +160,11 @@ export function registerCompetitorTools(server: McpServer) {
     {
       title: "Suggest competitors",
       description:
-        "Suggest likely competitors for a client from two sources: DataForSEO organic keyword overlap, and live Google results " +
+        "Suggest likely competitors for a client from two sources: organic keyword overlap from the client's data provider (DataForSEO, Ahrefs or Semrush), and live Google results from DataForSEO " +
         "for up to 5 seed keywords (seeds you pass, the niche, tracked keywords, then top non-branded Search Console queries that relate to them) in the client's area " +
         "(or its market when no area is set). Pass `seeds`: 3-5 non-branded service keywords (from the niche and homepage, confirmed with the user), since the client's own ranked keywords are mostly branded. Excludes the client's own site, current competitors, ignored domains and big platforms " +
         "(social, directories, business-data sites, marketplaces, encyclopedias, .gov/.edu) and brand lookalikes (domains starting with the client's brand initialism or name). Returns ranked candidates with evidence, costUsd and fromCache. " +
-        "Paid (DataForSEO; cached). Read-only: this never saves anything. Show the candidates and their evidence to the user, ask which " +
+        "Paid (cached; costUsd for DataForSEO, `units` for Ahrefs/Semrush; without DataForSEO the SERP source is skipped with a note). Read-only: this never saves anything. Show the candidates and their evidence to the user, ask which " +
         'to add, and only after they confirm call add_competitors with those domains and source: "suggested".',
       inputSchema: {
         client: clientArg,

@@ -21,18 +21,21 @@ export interface SpendRow {
   provider: string;
   calls: number;
   cost_usd: number;
+  /** Ahrefs/Semrush API units (Phase 9); 0 for DataForSEO, which bills in USD. */
+  units: number;
 }
 
-/** Merge ledger rows whose client names are aliases of the same client, sorted by cost. */
-export function mergeSpendRows(rows: SpendRow[], canonical: Map<string, string>): SpendRow[] {
+/** Merge ledger rows whose client names are aliases of the same client, sorted by cost, then units. */
+export function mergeSpendRows(rows: (Omit<SpendRow, "units"> & { units?: number })[], canonical: Map<string, string>): SpendRow[] {
   const merged = new Map<string, SpendRow>();
   for (const r of rows) {
     const client = canonical.get(r.client) ?? r.client;
     const key = JSON.stringify([client, r.provider]);
-    const cur = merged.get(key) ?? { client, provider: r.provider, calls: 0, cost_usd: 0 };
+    const cur = merged.get(key) ?? { client, provider: r.provider, calls: 0, cost_usd: 0, units: 0 };
     cur.calls += Number(r.calls);
     cur.cost_usd = Number((cur.cost_usd + Number(r.cost_usd)).toFixed(4));
+    cur.units += Number(r.units ?? 0);
     merged.set(key, cur);
   }
-  return [...merged.values()].sort((a, b) => b.cost_usd - a.cost_usd);
+  return [...merged.values()].sort((a, b) => b.cost_usd - a.cost_usd || b.units - a.units);
 }

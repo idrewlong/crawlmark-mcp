@@ -4,14 +4,18 @@
  * to states and next steps is unit tested without network, Chrome or Google.
  * The real providers are in ./status-providers.ts.
  */
+import type { AhrefsKeyCheck } from "../providers/ahrefs.js";
+import type { SemrushKeyCheck } from "../providers/semrush.js";
+import { describeAhrefsAccount } from "../providers/ahrefs-shape.js";
 import type { DataForSeoStatusResult } from "../providers/dataforseo.js";
 import type { GoogleAuthStatus } from "../lib/google-auth.js";
 import type { GoogleLiveCheck } from "../providers/google.js";
 import type { HomeInfo } from "../lib/home.js";
+import { displayProviderValue, invalidProviderMessage, PROVIDER_LABELS, type DefaultProviderSource, type ProviderId } from "../lib/provider-ids.js";
 
 export type IntegrationState = "configured" | "working" | "missing" | "error";
 
-export const INTEGRATIONS = ["home", "dataforseo", "google", "gsc", "ga4", "tagmanager", "psi", "chrome", "clients"] as const;
+export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "chrome", "clients"] as const;
 export type IntegrationId = (typeof INTEGRATIONS)[number];
 
 export interface IntegrationStatus {
@@ -35,6 +39,29 @@ export interface SetupStatusReport {
   checkedAt: string;
   fromCache: boolean;
   costUsd: 0;
+  /** Phase 9: the `seoprovider` row's data (default provider, where it comes from, which providers have keys), when that row was checked. */
+  seoDataProvider?: SeoDataProviderData;
+}
+
+/** The default SEO data provider as setup_status reports it (also `report.seoDataProvider`). */
+export interface SeoDataProviderData {
+  /** null when SEO_DATA_PROVIDER holds an unknown value. */
+  default: ProviderId | null;
+  source: DefaultProviderSource;
+  invalidValue?: string;
+  /** Which providers have a key/login set (not whether it works). */
+  configured: Record<ProviderId, boolean>;
+  /** Clients whose clients.yaml dataProvider overrides the default. */
+  perClientOverrides: number;
+  /** The terminal command that changes it (never an MCP tool: D12). */
+  change: string;
+}
+
+export interface SeoDataProviderInput {
+  default: ProviderId | null;
+  source: DefaultProviderSource;
+  invalidValue?: string;
+  perClientOverrides: number;
 }
 
 export interface Listing<T> {
@@ -43,12 +70,41 @@ export interface Listing<T> {
   warnings?: string[];
 }
 
+/** Whether a unit-billed provider is anyone's choice: the default, and/or this many clients' dataProvider. */
+export interface ProviderChoice {
+  byDefault: boolean;
+  clients: number;
+}
+
+export interface AhrefsStatusInput {
+  check: AhrefsKeyCheck;
+  chosen: ProviderChoice;
+  /** Units crawlmark recorded this calendar month, and its global cap. */
+  unitsUsedThisMonth: number;
+  cap: number;
+}
+
+export interface SemrushStatusInput {
+  check: SemrushKeyCheck;
+  chosen: ProviderChoice;
+  /** SEMRUSH_V4_API_KEY is set (it has no free check, so it's untested until backlinks_summary runs). */
+  v4KeySet: boolean;
+  unitsUsedThisMonth: number;
+  cap: number;
+}
+
 export interface StatusProviders {
   /** `configuredByEnv`: integration credentials come from the process environment (an MCP client's env block, e.g. a Claude Desktop bundle) rather than `.env`. */
   home(): { info: HomeInfo; exists: boolean; envFile: string; envFileExists: boolean; configuredByEnv: boolean };
   /** How to invoke the CLI here, e.g. `crawlmark-cli` or `node "/abs/dist/cli.js"`. */
   cli(): string;
   dataforseo(): Promise<DataForSeoStatusResult>;
+  /** The free Ahrefs limits-and-usage check plus who uses Ahrefs and this month's units. */
+  ahrefs(): Promise<AhrefsStatusInput>;
+  /** The free Semrush balance check plus who uses Semrush, whether a v4 key is set, and this month's units. */
+  semrush(): Promise<SemrushStatusInput>;
+  /** The default SEO data provider (SEO_DATA_PROVIDER, resolved leniently) and how many clients override it. */
+  seoDataProvider(): SeoDataProviderInput;
   googleStatus(): GoogleAuthStatus;
   googleLive(): Promise<GoogleLiveCheck>;
   gscSites(refresh: boolean): Promise<Listing<string>>;
@@ -62,6 +118,7 @@ export interface StatusProviders {
 export const LINKS = {
   dataforseoApiAccess: "https://app.dataforseo.com/api-access",
   dataforseoStatus: "https://status.dataforseo.com/",
+  ahrefsApiKeys: "https://app.ahrefs.com/account/api-keys",
   enableSearchConsole: "https://console.cloud.google.com/apis/library/searchconsole.googleapis.com",
   enableAnalyticsData: "https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com",
   enableAnalyticsAdmin: "https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com",
@@ -107,6 +164,150 @@ function listingStatus<T>(
   return { id, label, state: "working", detail: `${items.length} ${opts.noun} visible.`, next: null, data };
 }
 
+/** A provider's key state from its free check: working, configured (unreachable), error (rejected) or missing (no key). */
+function dfsState(d: DataForSeoStatusResult): IntegrationState {
+  if (d.credentialsWork === true) return "working";
+  if (!d.credentialsConfigured) return "missing";
+  return d.credentialsWork === false ? "error" : "configured";
+}
+export function keyState(c: { configured: boolean; works: boolean | null }): IntegrationState {
+  if (c.works === true) return "working";
+  if (!c.configured) return "missing";
+  return c.works === false ? "error" : "configured";
+}
+
+const SOURCE_TEXT: Record<DefaultProviderSource, string> = { envFile: "from .env", env: "from the environment", default: "built-in default" };
+
+/** The bundle's settings field, when the value comes from Claude Desktop's extension settings. */
+export const BUNDLE_PROVIDER_FIELD = 'Change "Default SEO data provider" in Claude Desktop > Settings > Extensions > Crawlmark';
+
+/**
+ * The `seoprovider` row (spec 9.6): working when the default is valid and its provider works,
+ * configured when that provider is set but unreachable, missing when nothing is chosen
+ * (SEO_DATA_PROVIDER unset) and DataForSEO has no login, error when the default is invalid or an
+ * explicitly chosen provider has no working key. `next` is the CLI command, or the bundle field when the value comes
+ * from the process env of a bundle install.
+ */
+export function seoProviderRow(
+  seo: SeoDataProviderInput,
+  states: Record<ProviderId, IntegrationState>,
+  o: { cli: string; configuredByEnv: boolean },
+): IntegrationStatus {
+  const change = `${o.cli} setup --step provider`;
+  const data: SeoDataProviderData = {
+    default: seo.default,
+    source: seo.source,
+    ...(seo.invalidValue !== undefined ? { invalidValue: seo.invalidValue } : {}),
+    configured: { dataforseo: states.dataforseo !== "missing", ahrefs: states.ahrefs !== "missing", semrush: states.semrush !== "missing" },
+    perClientOverrides: seo.perClientOverrides,
+    change,
+  };
+  const next = seo.source === "env" && o.configuredByEnv ? BUNDLE_PROVIDER_FIELD : change;
+  const base = { id: "seoprovider" as const, label: "Data provider", data: data as unknown as Record<string, unknown> };
+  const overrides = seo.perClientOverrides ? ` ${seo.perClientOverrides} client(s) override it in clients.yaml.` : "";
+  if (seo.default === null) {
+    return { ...base, state: "error", detail: invalidProviderMessage(displayProviderValue(seo.invalidValue ?? "")), next };
+  }
+  const label = PROVIDER_LABELS[seo.default];
+  const head = `${label} (default, ${SOURCE_TEXT[seo.source]}).`;
+  const tail = seo.default === "dataforseo" ? "" : " DataForSEO for live SERPs, on-page and crawls.";
+  const st = states[seo.default];
+  if (st === "working") return { ...base, state: "working", detail: `${head}${tail}${overrides}`, next: null };
+  if (st === "configured") return { ...base, state: "configured", detail: `${head} Its key is set but couldn't be checked just now.${tail}${overrides}`, next };
+  // Nothing chosen and no DataForSEO login: a fresh or free-only install, not an error.
+  if (seo.source === "default" && st === "missing") {
+    return { ...base, state: "missing", detail: `No paid data provider is set up (the default is DataForSEO). Free tools work; keyword, ranking, competitor and backlink tools need DataForSEO, Ahrefs or Semrush.${overrides}`, next };
+  }
+  return {
+    ...base,
+    state: "error",
+    detail: `${head} ${st === "missing" ? `${label} isn't set up, so the paid keyword, ranking, competitor and backlink tools fail.` : `${label} rejected its key.`}${overrides}`,
+    next,
+  };
+}
+
+const fmtUnits = (n: number | null) => (n === null ? "?" : n.toLocaleString("en-US"));
+const choiceText = (c: ProviderChoice) =>
+  [c.byDefault ? "the default provider" : "", c.clients ? `the provider for ${c.clients} client(s)` : ""].filter(Boolean).join(" and ");
+
+/**
+ * The `ahrefs` row (spec 9.6): missing (no key, nobody uses it), error (used but no key,
+ * or the key was rejected), configured (Ahrefs unreachable, so untested), working.
+ * `data` never contains the key.
+ */
+export function ahrefsRow(a: AhrefsStatusInput, next: string): IntegrationStatus {
+  const { check, chosen } = a;
+  const used = chosen.byDefault || chosen.clients > 0;
+  const base = { id: "ahrefs" as const, label: "Ahrefs" };
+  const data: Record<string, unknown> = {
+    default: chosen.byDefault,
+    clients: chosen.clients,
+    keySet: check.configured,
+    unitsUsedThisMonth: a.unitsUsedThisMonth,
+    cap: a.cap,
+  };
+  if (check.works === true) {
+    const acct = check as Extract<AhrefsKeyCheck, { works: true }>;
+    data.plan = acct.plan;
+    data.unitsUsedApiKey = acct.unitsUsageApiKey;
+    data.unitsLimitApiKey = acct.unitsLimitApiKey;
+    data.resetDate = acct.resetDate;
+  }
+  const usage = `crawlmark used ${fmtUnits(a.unitsUsedThisMonth)} of its ${fmtUnits(a.cap)}-unit monthly cap`;
+  if (!check.configured) {
+    return used
+      ? { ...base, state: "error", detail: `Ahrefs is ${choiceText(chosen)}, but AHREFS_API_KEY is not set, so its paid calls fail.`, next, data }
+      : { ...base, state: "missing", detail: "Optional. An Ahrefs API v3 key (Lite plan or higher) can supply keyword, ranking, competitor and backlink data.", next, data };
+  }
+  if (check.works === false) return { ...base, state: "error", detail: check.error, next, data };
+  if (check.works === null) {
+    return { ...base, state: "configured", detail: `AHREFS_API_KEY is set but Ahrefs couldn't be reached, so it's untested: ${check.error}`, next, data };
+  }
+  const acct = check as Extract<AhrefsKeyCheck, { works: true }>;
+  return {
+    ...base,
+    state: "working",
+    detail: `Key works (${describeAhrefsAccount(acct)}); ${usage} this month.${used ? ` Used as ${choiceText(chosen)}.` : ""}`,
+    next: null,
+    data,
+  };
+}
+
+/**
+ * The `semrush` row (spec 9.6): missing (no key, nobody uses it), error (used but no key,
+ * or rejected), configured (the balance check couldn't be reached, the balance is 0, or a
+ * v4 key is set but untested: it has no free check), working. Never a key.
+ */
+export function semrushRow(s: SemrushStatusInput, next: string): IntegrationStatus {
+  const { check, chosen } = s;
+  const used = chosen.byDefault || chosen.clients > 0;
+  const base = { id: "semrush" as const, label: "Semrush" };
+  const data: Record<string, unknown> = {
+    default: chosen.byDefault,
+    clients: chosen.clients,
+    keySet: check.configured,
+    v4KeySet: s.v4KeySet,
+    unitsUsedThisMonth: s.unitsUsedThisMonth,
+    cap: s.cap,
+    ...(check.works === true ? { unitsLeft: (check as Extract<SemrushKeyCheck, { works: true }>).unitsLeft } : {}),
+  };
+  const usage = `crawlmark used ${fmtUnits(s.unitsUsedThisMonth)} of its ${fmtUnits(s.cap)}-unit monthly cap this month`;
+  if (!check.configured) {
+    return used
+      ? { ...base, state: "error", detail: `Semrush is ${choiceText(chosen)}, but SEMRUSH_API_KEY is not set, so its paid calls fail.`, next, data }
+      : { ...base, state: "missing", detail: "Optional. A Semrush API key (SEO Business plan plus an API unit package) can supply keyword, ranking, competitor and backlink data.", next, data };
+  }
+  if (check.works === false) return { ...base, state: "error", detail: check.error, next, data };
+  if (check.works === null) {
+    return { ...base, state: "configured", detail: `SEMRUSH_API_KEY is set but Semrush's balance check couldn't be reached, so it's untested: ${check.error}`, next, data };
+  }
+  const left = (check as Extract<SemrushKeyCheck, { works: true }>).unitsLeft;
+  const v4 = s.v4KeySet ? " The v4 key (backlinks) has no free check; it's checked the first time backlinks_summary runs." : " Backlinks use the v3 report (no v4 key set).";
+  const head = `Key accepted, ${fmtUnits(left)} API units left; ${usage}.${used ? ` Used as ${choiceText(chosen)}.` : ""}`;
+  if (left === 0) return { ...base, state: "configured", detail: `Key accepted but the balance is 0 units; Semrush API needs an SEO Business plan and a unit package.${v4}`, next, data };
+  return { ...base, state: s.v4KeySet ? "configured" : "working", detail: `${head}${v4}`, next: null, data };
+}
+
 async function attempt<T>(fn: () => Promise<T>): Promise<{ ok: true; listing: T } | { ok: false; error: string }> {
   try {
     return { ok: true, listing: await fn() };
@@ -143,13 +344,19 @@ export async function collectSetupStatus(
   // Independent network checks run in parallel.
   const google = p.googleStatus();
   const googleUsable = google.mode !== "none" && !google.problem;
-  const [dfs, live, chrome] = await Promise.all([
-    want("dataforseo") ? p.dataforseo() : undefined,
+  // The seoprovider row needs every provider's check, even when only it was asked for.
+  const wantSeo = want("seoprovider");
+  const [dfs, ahrefs, semrush, live, chrome] = await Promise.all([
+    want("dataforseo") || wantSeo ? p.dataforseo() : undefined,
+    want("ahrefs") || wantSeo ? p.ahrefs() : undefined,
+    want("semrush") || wantSeo ? p.semrush() : undefined,
     googleUsable && (want("google") || want("gsc") || want("ga4") || want("tagmanager")) ? p.googleLive() : undefined,
     want("chrome") ? p.chrome() : undefined,
   ]);
 
-  if (dfs) {
+  const seo = wantSeo || want("dataforseo") ? p.seoDataProvider() : undefined;
+  const otherDefault = seo?.default && seo.default !== "dataforseo" ? " Fallback for live SERPs, on-page and crawls." : "";
+  if (dfs && want("dataforseo")) {
     const data = { mode: dfs.mode, apiHost: dfs.apiHost, ...("balanceUsd" in dfs ? { balanceUsd: dfs.balanceUsd } : {}) };
     if (dfs.credentialsWork === true) {
       const balance = "balanceUsd" in dfs && dfs.balanceUsd !== null ? `, balance $${dfs.balanceUsd.toFixed(2)}` : "";
@@ -157,7 +364,7 @@ export async function collectSetupStatus(
         id: "dataforseo",
         label: "DataForSEO",
         state: "working",
-        detail: `Credentials work (${dfs.mode} mode${balance}).${dfs.mode === "sandbox" ? " Sandbox returns sample data at no cost." : " Live mode is billed per call."}`,
+        detail: `Credentials work (${dfs.mode} mode${balance}).${dfs.mode === "sandbox" ? " Sandbox returns sample data at no cost." : " Live mode is billed per call."}${otherDefault}`,
         next: null,
         data,
       });
@@ -169,6 +376,20 @@ export async function collectSetupStatus(
       out.push({ id: "dataforseo", label: "DataForSEO", state: "configured", detail: `Credentials are set but DataForSEO couldn't be reached, so they're untested: ${dfs.error}`, next: LINKS.dataforseoStatus, data });
     }
   }
+
+  let seoData: SeoDataProviderData | undefined;
+  if (wantSeo && seo) {
+    const states: Record<ProviderId, IntegrationState> = {
+      dataforseo: dfs ? dfsState(dfs) : "missing",
+      ahrefs: ahrefs ? keyState(ahrefs.check) : "missing",
+      semrush: semrush ? keyState(semrush.check) : "missing",
+    };
+    const row = seoProviderRow(seo, states, { cli, configuredByEnv: home.configuredByEnv });
+    seoData = row.data as unknown as SeoDataProviderData;
+    out.push(row);
+  }
+  if (ahrefs && want("ahrefs")) out.push(ahrefsRow(ahrefs, step("ahrefs")));
+  if (semrush && want("semrush")) out.push(semrushRow(semrush, step("semrush")));
 
   const googleNext = google.mode === "oauth" && google.configured && !google.signedIn ? `${cli} auth login` : step("google");
   if (want("google")) {
@@ -286,6 +507,7 @@ export async function collectSetupStatus(
     summary,
     checkedAt: new Date().toISOString(),
     costUsd: 0,
+    ...(seoData ? { seoDataProvider: seoData } : {}),
   };
 }
 

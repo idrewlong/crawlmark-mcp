@@ -3,7 +3,8 @@ import { z } from "zod";
 import { loadRegistry, resolveClient } from "../clients.js";
 import { diffAudits, pickComparison } from "../analysis/diff.js";
 import { getAudit, latestAudit, latestAuditBefore, listAudits } from "../lib/audits.js";
-import { missingPieces } from "../lib/clients.js";
+import { missingPieces, type Client } from "../lib/clients.js";
+import { seoDefaultProvider } from "../config.js";
 import { canonicalSpendNames } from "../lib/spend.js";
 import { spendSummary } from "../lib/budget.js";
 import { purgeExpired } from "../lib/cache.js";
@@ -20,6 +21,12 @@ const clientArg = z
   .string()
   .describe("Client domain, e.g. 'example.com' (URL and www. forms also work), or a clients.yaml slug. Use list_clients to see options.");
 
+/** The client's SEO data provider for list_clients: its own override, else the default marked "(default)". */
+function listedProvider(c: Client): string {
+  if (c.dataProvider) return c.dataProvider;
+  return seoDefaultProvider.ok ? `${seoDefaultProvider.provider} (default)` : `(default is invalid: ${seoDefaultProvider.invalidValue})`;
+}
+
 export function registerReportTools(server: McpServer) {
   server.registerTool(
     "list_clients",
@@ -28,7 +35,7 @@ export function registerReportTools(server: McpServer) {
       description:
         "List clients from clients.yaml. When Google is set up, Search Console sites and GA4 properties the account can " +
         "access are discovered first and any new domains are added to clients.yaml (existing entries are never changed). " +
-        "Shows each client's domain, name, sources, properties, alternates and missing pieces, plus discovery status. " +
+        "Shows each client's domain, name, sources, properties, alternates and missing pieces, its SEO data provider (dataProvider, marked \"(default)\" when inherited) and Ahrefs/Semrush market (country), plus discovery status. " +
         "Discovery is cached for a day; pass refresh to re-list. Clients without Google still work for DataForSEO, Lighthouse and axe.",
       inputSchema: {
         refresh: z.boolean().optional().describe("Bypass the one-day discovery cache and list properties from Google again."),
@@ -55,6 +62,8 @@ export function registerReportTools(server: McpServer) {
           trackedKeywords: c.trackedKeywords.length,
           keyPages: c.keyPages.length,
           monthlyBudgetUsd: c.monthlyBudgetUsd,
+          dataProvider: listedProvider(c),
+          country: c.country,
         })),
         ignored: registry.ignored,
         clientsFile: registry.clientsFile,
@@ -100,7 +109,7 @@ export function registerReportTools(server: McpServer) {
         wcagLevel: z.enum(["A", "AA", "AAA"]).optional().describe("WCAG conformance level for axe. Default AA."),
         fullCrawl: z.boolean().optional().describe("Start a full-site DataForSEO crawl (paid)."),
         maxCrawlPages: z.number().int().min(1).max(5000).optional().describe("Crawl page cap. Default 100."),
-        backlinks: z.boolean().optional().describe("Include a DataForSEO backlinks summary (paid)."),
+        backlinks: z.boolean().optional().describe("Include a backlinks summary from the client's data provider (DataForSEO, Ahrefs or Semrush; paid)."),
         fresh: z
           .boolean()
           .optional()
@@ -253,6 +262,8 @@ export function registerReportTools(server: McpServer) {
       title: "Data spend this month",
       description:
         "Paid API spend this calendar month, by client and provider, against the global cap. " +
+        "DataForSEO is billed in USD (cost_usd, totalUsd); Ahrefs and Semrush in their own API units (units per row, and `units.ahrefs` / `units.semrush` " +
+        "with this month's use and the global unit cap). Units are never converted to dollars. " +
         "Spend recorded under a clients.yaml slug is counted under that client's domain.",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: true },

@@ -1,0 +1,5 @@
+Keyword;Position;Search Volume;Url;Traffic
+example widgets;3;1900;https://example.com/widgets;240
+example widget repair;7;880;https://example.com/repair;35
+"example; quoted";12;50;https://example.com/q;1
+example unranked;0;10;;0

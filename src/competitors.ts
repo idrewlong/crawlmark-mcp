@@ -1,6 +1,6 @@
 /**
- * suggest_competitors: gathers candidate competitors from DataForSEO's
- * organic overlap and from live SERPs for a few seed keywords in the client's
+ * suggest_competitors: gathers candidate competitors from the client's data
+ * provider's organic overlap (DataForSEO, Ahrefs or Semrush) and from live DataForSEO SERPs for a few seed keywords in the client's
  * area, then filters and ranks them with the pure functions in
  * src/analysis/competitor-suggestions.ts. Read-only: it never writes
  * clients.yaml; the caller confirms with the user and calls add_competitors.
@@ -26,7 +26,8 @@ import { normalizeArea, type Client } from "./lib/clients.js";
 import { BUILTIN_DENYLIST, buildDenylist, parseRules, type Denylist } from "./lib/competitor-denylist.js";
 import { mapLimit } from "./lib/concurrency.js";
 import { lastDays } from "./lib/dates.js";
-import { competitorDomains, rankedKeywords, serpOrganic } from "./providers/dataforseo.js";
+import { ProviderUnavailableError } from "./lib/provider-ids.js";
+import { competitorDomains, rankedKeywords, requireDataForSeo, serpOrganic, type ProviderId } from "./providers/seo-data.js";
 import { googleConfigured } from "./providers/google.js";
 import { gscQuery } from "./providers/gsc.js";
 
@@ -61,11 +62,17 @@ export interface Spend {
   costUsd: number;
   /** fromCache flag of every paid call made. */
   flags: boolean[];
+  /** Ahrefs/Semrush API units used, by provider (Phase 9). */
+  units?: Partial<Record<"ahrefs" | "semrush", number>>;
 }
 
-const track = <T extends { costUsd: number; fromCache: boolean }>(spend: Spend, r: T): T => {
+const track = <T extends { costUsd: number; fromCache: boolean; provider?: ProviderId; units?: number | null }>(spend: Spend, r: T): T => {
   spend.costUsd += r.costUsd;
   spend.flags.push(r.fromCache);
+  if ((r.provider === "ahrefs" || r.provider === "semrush") && typeof r.units === "number") {
+    spend.units ??= {};
+    spend.units[r.provider] = (spend.units[r.provider] ?? 0) + r.units;
+  }
   return r;
 };
 
@@ -108,20 +115,28 @@ export async function suggestCompetitors(idOrDomain: string, opts: SuggestOption
 
   // (a) Organic overlap.
   let overlap: OverlapRow[] = [];
-  let overlapStatus: { ok: true; rows: number } | { ok: false; error: string };
+  let overlapStatus: { ok: true; rows: number; provider?: ProviderId } | { ok: false; error: string };
   try {
     const r = track(spend, await competitorDomains(client, OVERLAP_LIMIT));
     overlap = r.items;
-    overlapStatus = { ok: true, rows: r.items.length };
+    overlapStatus = { ok: true, rows: r.items.length, ...(r.provider ? { provider: r.provider } : {}) };
   } catch (err) {
     overlapStatus = { ok: false, error: errText(err) };
   }
 
-  // (b) Local SERP presence.
+  // (b) Local SERP presence. Live SERPs are DataForSEO-only: without it, the source is skipped with a note.
+  let serpUnavailable: string | undefined;
+  try {
+    requireDataForSeo("serpLive", client);
+  } catch (err) {
+    if (!(err instanceof ProviderUnavailableError)) throw err;
+    serpUnavailable = err.message;
+  }
   const seeds = await gatherSeeds(client, niche, spend, notes, opts.seeds);
+  if (serpUnavailable && seeds.length) notes.push(`Local SERP source skipped: ${serpUnavailable}`);
   const failedSeeds: { keyword: string; error: string }[] = [];
   const serps = (
-    await mapLimit(seeds, 2, async (seed): Promise<SeedSerp | undefined> => {
+    await mapLimit(serpUnavailable ? [] : seeds, 2, async (seed): Promise<SeedSerp | undefined> => {
       try {
         const r = track(spend, await serpOrganic(client, seed.keyword, { depth: SERP_DEPTH, locationName: area }));
         return { seed: seed.keyword, hits: r.items };
@@ -135,7 +150,7 @@ export async function suggestCompetitors(idOrDomain: string, opts: SuggestOption
   if (!overlapStatus.ok && serps.length === 0) {
     const why = [
       `organic overlap: ${overlapStatus.error}`,
-      seeds.length ? `SERPs: ${failedSeeds.map((f) => f.error).join("; ")}` : "no seed keywords (set a niche or tracked keywords)",
+      serpUnavailable ? `SERPs: ${serpUnavailable}` : seeds.length ? `SERPs: ${failedSeeds.map((f) => f.error).join("; ")}` : "no seed keywords (set a niche or tracked keywords)",
       ...notes,
     ];
     throw new Error(`No competitor data for ${client.domain}. ${why.join(". ")}`);
@@ -169,11 +184,12 @@ export async function suggestCompetitors(idOrDomain: string, opts: SuggestOption
     excluded: { counts: excludedCounts, domains: excluded.slice(0, 30) },
     sources: {
       organicOverlap: overlapStatus,
-      localSerp: { searched: serps.length, failed: failedSeeds },
+      localSerp: { searched: serps.length, failed: failedSeeds, ...(serpUnavailable ? { skipped: serpUnavailable } : {}) },
     },
     method: SCORE_METHOD,
     notes,
     costUsd: Number(spend.costUsd.toFixed(4)),
+    ...(spend.units ? { units: spend.units } : {}),
     fromCache: spend.flags.length > 0 && spend.flags.every(Boolean),
     next:
       "Nothing was saved. Show these candidates and their evidence to the user, ask which to add, and only then call " +

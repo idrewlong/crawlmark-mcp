@@ -3,12 +3,16 @@
  * an empty DataForSEO balance) shouldn't sink the whole report, so each
  * section is settled on its own and errors are reported inline.
  */
-export type Section<T> = { ok: true; data: T } | { ok: false; error: string };
+import { ProviderUnavailableError } from "../lib/provider-ids.js";
+
+/** `unavailable: true` marks a section no configured provider can serve (Phase 9): unverified, never "passed". */
+export type Section<T> = { ok: true; data: T } | { ok: false; error: string; unavailable?: true };
 
 export async function section<T>(fn: () => Promise<T>): Promise<Section<T>> {
   try {
     return { ok: true, data: await fn() };
   } catch (err) {
+    if (err instanceof ProviderUnavailableError) return { ok: false, error: err.message, unavailable: true };
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

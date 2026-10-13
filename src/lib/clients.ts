@@ -8,6 +8,8 @@
 import { z } from "zod";
 import { normalizeBrandTerm, squash } from "./brand.js";
 import { gtmNotes, joinGtmContainers, type GtmListing, type GtmMatch } from "./gtm.js";
+import { resolveCountry } from "./country.js";
+import { PROVIDER_IDS, type ProviderId } from "./provider-ids.js";
 
 // ---------------------------------------------------------------- normalisation
 
@@ -303,6 +305,16 @@ export function normalizeCompetitorDomain(input: string): string | undefined {
 /** Longest keyword accepted; DataForSEO's keyword endpoints cap well below this. */
 export const MAX_KEYWORD_LENGTH = 200;
 
+/**
+ * A keyword as a tool input: 1-200 characters with no `;`, CR or LF. Semrush separates the
+ * keywords of one request with `;`, so a separator inside a keyword would be billed as extra keywords.
+ */
+export const keywordInput = z
+  .string()
+  .min(1, { error: "A keyword can't be empty." })
+  .max(MAX_KEYWORD_LENGTH, { error: `A keyword can be at most ${MAX_KEYWORD_LENGTH} characters.` })
+  .refine((k) => !/[;\r\n]/.test(k), { error: "A keyword can't contain ';' or a line break; pass each keyword as its own array item." });
+
 /** Lowercase, Unicode NFC, whitespace collapsed. Undefined when empty or too long. */
 export function normalizeKeyword(input: string): string | undefined {
   const k = input.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
@@ -376,6 +388,19 @@ const OverrideSchema = z.object({
   brandTerms: z.array(BrandTermItemSchema).optional(),
   keyPages: z.array(z.string().url()).optional(),
   monthlyBudgetUsd: z.number().positive().optional(),
+  /** Phase 9: overrides SEO_DATA_PROVIDER for this client (whose paid keyword, ranking, competitor and backlink data is used). */
+  dataProvider: z.enum(PROVIDER_IDS, { error: `must be one of ${PROVIDER_IDS.join(", ")}` }).optional(),
+  /** Phase 9: ISO 3166-1 alpha-2 market for Ahrefs/Semrush (stored uppercase); else derived from a country-level locationCode. */
+  country: z
+    .string()
+    .regex(/^\s*[A-Za-z]{2}\s*$/, { error: "must be a two-letter ISO country code, e.g. US or GB" })
+    .transform((c) => c.trim().toUpperCase())
+    .optional(),
+  /** Phase 9: per-client monthly unit caps; else DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS / _SEMRUSH_UNITS. */
+  monthlyUnits: z
+    .object({ ahrefs: z.number().int().positive().optional(), semrush: z.number().int().positive().optional() })
+    .strict()
+    .optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
   ignore: z.boolean().optional(),
 });
@@ -433,7 +458,12 @@ export interface ClientDefaults {
   locationCode: number;
   languageCode: string;
   monthlyBudgetUsd: number;
+  /** Per-client unit caps for clients that don't set monthlyUnits (default: DEFAULT_MONTHLY_UNITS). */
+  monthlyUnits?: { ahrefs: number; semrush: number };
 }
+
+/** DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS / _SEMRUSH_UNITS defaults (D1). */
+export const DEFAULT_MONTHLY_UNITS = { ahrefs: 10_000, semrush: 5_000 } as const;
 
 export interface Client {
   /** Canonical ID: the normalised domain. Also the key for spend tracking. */
@@ -464,6 +494,12 @@ export interface Client {
   ga4Name?: string;
   keyPages: string[];
   monthlyBudgetUsd: number;
+  /** Phase 9: the client's own SEO data provider (clients.yaml dataProvider); unset means SEO_DATA_PROVIDER. */
+  dataProvider?: ProviderId;
+  /** Phase 9: ISO alpha-2 market for Ahrefs/Semrush (clients.yaml country, else from a country-level locationCode); null when neither gives one. */
+  country: string | null;
+  /** Phase 9: monthly unit caps for this client. */
+  monthlyUnits: { ahrefs: number; semrush: number };
   /** clients.yaml slugs that also resolve to this client. */
   aliases: string[];
   sources: ClientSource[];
@@ -508,6 +544,11 @@ export function mergeClients(
         brandTermEntries,
         keyPages: y?.keyPages?.length ? y.keyPages : [homepage],
         monthlyBudgetUsd: y?.monthlyBudgetUsd ?? defaults.monthlyBudgetUsd,
+        country: resolveCountry(y?.country, y?.locationCode ?? defaults.locationCode),
+        monthlyUnits: {
+          ahrefs: y?.monthlyUnits?.ahrefs ?? defaults.monthlyUnits?.ahrefs ?? DEFAULT_MONTHLY_UNITS.ahrefs,
+          semrush: y?.monthlyUnits?.semrush ?? defaults.monthlyUnits?.semrush ?? DEFAULT_MONTHLY_UNITS.semrush,
+        },
         aliases: y && normalizeHost(y.slug) !== domain ? [y.slug] : [],
         sources,
         alternates: { gsc: d?.gscAlternates ?? [], ga4: d?.ga4Alternates ?? [] },
@@ -525,6 +566,7 @@ export function mergeClients(
       const area = y?.area && normalizeArea(y.area);
       if (area) client.area = area;
       if (y?.niche?.trim()) client.niche = y.niche.trim();
+      if (y?.dataProvider) client.dataProvider = y.dataProvider;
       if (d?.ga4DisplayName && d.ga4DisplayName !== client.name) client.ga4Name = d.ga4DisplayName;
       return client;
     });

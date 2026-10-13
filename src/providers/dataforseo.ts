@@ -64,6 +64,11 @@ interface DfsResponse<T> {
   tasks: DfsTask<T>[];
 }
 
+/** True when the DataForSEO login and password are set (no network). */
+export function isDataForSeoConfigured(): boolean {
+  return Boolean(env.DATAFORSEO_LOGIN && env.DATAFORSEO_PASSWORD);
+}
+
 function authHeader(): string {
   if (!env.DATAFORSEO_LOGIN || !env.DATAFORSEO_PASSWORD) {
     throw new Error("DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD are not set. See .env.example.");

@@ -24,6 +24,7 @@ import {
 } from "./clients.js";
 import { env, HOME, type Client } from "./config.js";
 import { formatTable, missingPieces } from "./lib/clients.js";
+import { PROVIDER_IDS } from "./lib/provider-ids.js";
 import { describeAuthMode } from "./lib/google-auth.js";
 import { describeHome } from "./lib/home.js";
 import { deleteTokenFile, readTokenFile } from "./lib/token-store.js";
@@ -363,16 +364,40 @@ async function brandSuggest(args: string[], values: BrandFlags): Promise<number>
   return failed && failed === results.size ? 1 : 0;
 }
 
-async function clientsSet(args: string[], values: { area?: string | undefined; niche?: string | undefined; name?: string | undefined; "brand-terms"?: string | undefined }): Promise<number> {
+type ClientsSetFlags = {
+  area?: string | undefined;
+  niche?: string | undefined;
+  name?: string | undefined;
+  "brand-terms"?: string | undefined;
+  provider?: string | undefined;
+  country?: string | undefined;
+};
+
+/** `none` (any case) clears a value: the empty string setClientProfile expects. */
+const noneToEmpty = (v: string | undefined) => (v !== undefined && v.trim().toLowerCase() === "none" ? "" : v);
+
+async function clientsSet(args: string[], values: ClientsSetFlags): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
-  if (values.area === undefined && values.niche === undefined && values.name === undefined && values["brand-terms"] === undefined) {
-    return usageError("clients set needs --area, --niche, --name or --brand-terms.");
+  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country }).every((v) => v === undefined)) {
+    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider or --country.");
+  }
+  const provider = noneToEmpty(values.provider)?.trim().toLowerCase();
+  if (provider !== undefined && provider !== "" && !(PROVIDER_IDS as readonly string[]).includes(provider)) {
+    return usageError(`--provider must be one of ${PROVIDER_IDS.join(", ")} or none (got "${values.provider}").`);
+  }
+  const country = noneToEmpty(values.country)?.trim();
+  if (country !== undefined && country !== "" && !/^[A-Za-z]{2}$/.test(country)) {
+    return usageError(`--country must be a two-letter ISO code such as US or GB, or none (got "${values.country}").`);
   }
   const brandTerms = values["brand-terms"] === undefined ? undefined : values["brand-terms"].split(",");
-  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms });
+  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country });
   for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
   for (const k of r.cleared) out(`Cleared ${k}.`);
-  out(`${r.client}: name ${r.profile.name}; area ${r.profile.area ?? "(not set)"}; niche ${r.profile.niche ?? "(not set)"}; brand terms ${r.profile.brandTerms.join(", ") || "(none)"}. File: ${r.clientsFile}`);
+  out(
+    `${r.client}: name ${r.profile.name}; area ${r.profile.area ?? "(not set)"}; niche ${r.profile.niche ?? "(not set)"}; brand terms ${r.profile.brandTerms.join(", ") || "(none)"}. ` +
+      (r.profile.country !== undefined ? `data provider ${r.profile.dataProvider ?? "(default)"}; country ${r.profile.country ?? "(none)"}. ` : "") +
+      `File: ${r.clientsFile}`,
+  );
   return 0;
 }
 
@@ -452,6 +477,8 @@ async function main(argv: string[]): Promise<number> {
       area: { type: "string" },
       niche: { type: "string" },
       "brand-terms": { type: "string" },
+      provider: { type: "string" },
+      country: { type: "string" },
       all: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
       "min-confidence": { type: "string" },

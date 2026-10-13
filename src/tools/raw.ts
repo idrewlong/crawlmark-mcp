@@ -3,12 +3,16 @@ import { z } from "zod";
 import { resolveClient } from "../clients.js";
 import { lastCompleteMonth, monthRange } from "../lib/dates.js";
 import { runAxe } from "../providers/axe.js";
-import { backlinksSummary, competitorDomains, dataForSeoStatus, rankedKeywords, searchVolume, serp } from "../providers/dataforseo.js";
+import { ahrefsStatus } from "../providers/ahrefs.js";
+import { dataForSeoStatus } from "../providers/dataforseo.js";
+import { semrushStatus } from "../providers/semrush.js";
+import { backlinksSummary, competitorDomains, rankedKeywords, searchVolume, serp } from "../providers/seo-data.js";
 import { ga4Report } from "../providers/ga4.js";
 import { gscInspectUrl, gscQuery } from "../providers/gsc.js";
 import { runLighthouse } from "../providers/lighthouse.js";
 import { checkRender } from "../providers/render.js";
 import { TIMEOUTS } from "../lib/timeout.js";
+import { keywordInput } from "../lib/clients.js";
 import { assertUserUrl } from "../user-url.js";
 import { handler, READ_ONLY } from "./util.js";
 
@@ -22,6 +26,8 @@ const clientArg = z
   .describe("Client domain (e.g. 'example.com'; URL and www. forms also work) or a clients.yaml slug. See list_clients.");
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const BROWSER = { timeoutMs: TIMEOUTS.browserMs };
+/** Routed paid tools: each result carries `provider` (whose data it is), `units` (Ahrefs/Semrush API units; null for DataForSEO), costUsd and fromCache. */
+const PAID = "Paid (DataForSEO, Ahrefs or Semrush, per client; the result's `provider` and `units` say which and how many API units)";
 const URL_SAFETY =
   "http/https only; hosts that resolve to a private, loopback or link-local address are refused unless ALLOW_PRIVATE_URLS=true, " +
   "and with RESTRICT_TO_CLIENT_DOMAINS=true only client domains and their subdomains are allowed. Times out after 90s.";
@@ -91,14 +97,14 @@ export function registerRawTools(server: McpServer) {
     ),
   );
 
-  // ------------------------------------------------------- DataForSEO (paid)
+  // ------------------------------------- paid SEO data (DataForSEO, Ahrefs or Semrush, per client)
 
   server.registerTool(
     "keyword_volume",
     {
       title: "Keyword search volume",
-      description: "Monthly Google search volume, CPC and competition for up to 1,000 keywords in the client's market. Paid, cached 30 days.",
-      inputSchema: { client: clientArg, keywords: z.array(z.string()).min(1).max(1000) },
+      description: "Monthly Google search volume, CPC and competition for up to 1,000 keywords in the client's market. " + PAID + ", cached 30 days.",
+      inputSchema: { client: clientArg, keywords: z.array(keywordInput).min(1).max(1000) },
       annotations: READ_ONLY,
     },
     handler("keyword_volume", async ({ client, keywords }) => searchVolume(await resolveClient(client), keywords)),
@@ -108,7 +114,7 @@ export function registerRawTools(server: McpServer) {
     "serp_check",
     {
       title: "Live SERP check",
-      description: "Live Google organic results for one keyword in the client's market, with the client's rank and the top 10. Paid, cached 1 day.",
+      description: "Live Google organic results for one keyword in the client's market, with the client's rank and the top 10. Paid (DataForSEO only, whatever the client's data provider), cached 1 day.",
       inputSchema: { client: clientArg, keyword: z.string(), depth: z.number().int().min(10).max(100).optional() },
       annotations: READ_ONLY,
     },
@@ -119,7 +125,7 @@ export function registerRawTools(server: McpServer) {
     "ranked_keywords",
     {
       title: "Ranked keywords",
-      description: "Keywords a domain ranks for (defaults to the client's domain; pass a competitor domain to compare). Paid, cached 7 days.",
+      description: "Keywords a domain ranks for (defaults to the client's domain; pass a competitor domain to compare). " + PAID + ", cached 7 days.",
       inputSchema: {
         client: clientArg,
         target: z.string().optional().describe("Domain to analyze. Defaults to the client's domain."),
@@ -134,7 +140,7 @@ export function registerRawTools(server: McpServer) {
     "competitor_domains",
     {
       title: "Organic competitors",
-      description: "Domains that compete with the client for the same organic keywords. Paid, cached 30 days.",
+      description: "Domains that compete with the client for the same organic keywords. " + PAID + ", cached 30 days.",
       inputSchema: { client: clientArg, limit: z.number().int().min(1).max(100).optional() },
       annotations: READ_ONLY,
     },
@@ -145,7 +151,7 @@ export function registerRawTools(server: McpServer) {
     "backlinks_summary",
     {
       title: "Backlinks summary",
-      description: "Backlink and referring-domain counts, rank and spam score for a domain. Paid, cached 7 days.",
+      description: "Backlink and referring-domain counts, rank and spam score for a domain (rank and spam score are DataForSEO-only; `authority` labels each provider's own domain-strength metric). " + PAID + ", cached 7 days.",
       inputSchema: { client: clientArg, target: z.string().optional() },
       annotations: READ_ONLY,
     },
@@ -163,6 +169,36 @@ export function registerRawTools(server: McpServer) {
       annotations: READ_ONLY,
     },
     handler("dataforseo_status", () => dataForSeoStatus()),
+  );
+
+  server.registerTool(
+    "ahrefs_status",
+    {
+      title: "Ahrefs status",
+      description:
+        "Check the Ahrefs API v3 key with Ahrefs' free limits-and-usage call: whether the key works, the plan, the key's and workspace's units used this billing month " +
+        "and when they reset, plus the units crawlmark recorded this calendar month against its own cap (monthlyUnitCap). " +
+        "Free (no API units), never cached, records no spend, and never shows the key. A missing or rejected key is reported in the result, not as a tool error. " +
+        "Change the key in a terminal (setup --step ahrefs), never through chat.",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    handler("ahrefs_status", () => ahrefsStatus()),
+  );
+
+  server.registerTool(
+    "semrush_status",
+    {
+      title: "Semrush status",
+      description:
+        "Check the Semrush v3 API key with Semrush's free balance call: whether the key is accepted and how many API units are left, whether a v4 key " +
+        "(used for backlinks) is set, plus the units crawlmark recorded this calendar month against its own cap. Accepted proves the key exists, not that the " +
+        "plan includes the API (that shows on the first paid call). The v4 key has no free check. Free, never cached, records no spend, never shows a key. " +
+        "A missing or rejected key is reported in the result, not as a tool error. Change keys in a terminal (setup --step semrush), never through chat.",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    handler("semrush_status", () => semrushStatus()),
   );
 
   // ---------------------------------------------------- browser checks (free)

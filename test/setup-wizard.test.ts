@@ -439,13 +439,18 @@ describe("runWizard", () => {
     const lines: string[] = [];
     const f = fake([], { prompt: autoPrompter((l) => lines.push(l)) });
     const results = await runWizard(f.ctx, { step: "dataforseo" });
-    expect(results).toEqual([{ step: "dataforseo", outcome: "needs-input", message: expect.stringContaining("run without --yes") }]);
+    // Phase 9: --step dataforseo is followed by the provider default phase (nothing works yet, so it writes nothing).
+    expect(results).toEqual([
+      { step: "dataforseo", outcome: "needs-input", message: expect.stringContaining("run without --yes") },
+      { step: "provider", outcome: "skipped", message: "No working provider yet; paid tools stay unavailable." },
+    ]);
   });
 
   it("runs every step in order with --yes and a dry run, and stops after a failed Node check", async () => {
     const f = fake([], { dryRun: true, prompt: autoPrompter(() => {}) });
     const results = await runWizard(f.ctx);
-    expect(results.map((r) => r.step)).toEqual(["node", "dataforseo", "google", "psi", "discovery", "register"]);
+    // Phase 9: the provider credential steps, then the provider default, before Google.
+    expect(results.map((r) => r.step)).toEqual(["node", "dataforseo", "ahrefs", "semrush", "provider", "google", "psi", "discovery", "register"]);
     expect(existsSync(join(f.home, ".env"))).toBe(false);
     expect(f.exec.mock.calls.filter((c) => c[1][1] === "add" || c[1][1] === "remove")).toEqual([]);
 

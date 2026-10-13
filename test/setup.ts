@@ -21,3 +21,20 @@ process.env.CRAWLMARK_CURSOR_CONFIG = join(fakeHome, ".cursor", "mcp.json");
 process.env.CRAWLMARK_CODEX_CONFIG = join(fakeHome, ".codex", "config.toml");
 process.env.CRAWLMARK_CLAUDE_BIN = join(dir, "no-such-bin", "claude");
 process.env.CRAWLMARK_CODEX_BIN = join(dir, "no-such-bin", "codex");
+
+// Phase 9: tests never read the developer's real .env. A temp CRAWLMARK_HOME (with no .env) means
+// process.loadEnvFile has nothing to load, so a real SEO_DATA_PROVIDER or Ahrefs/Semrush key can't
+// change a test's routing or reach the network. Every provider key is cleared, and every provider base URL
+// points at a closed local port (discard, 9), so an unstubbed call fails at once instead of reaching a real host.
+process.env.CRAWLMARK_HOME = join(dir, "crawlmark-home");
+for (const k of ["AHREFS_API_KEY", "SEMRUSH_API_KEY", "SEMRUSH_V4_API_KEY", "SEO_DATA_PROVIDER"]) delete process.env[k];
+process.env.AHREFS_BASE_URL = "http://127.0.0.1:9/v3";
+process.env.SEMRUSH_BASE_URL = "http://127.0.0.1:9";
+process.env.SEMRUSH_BALANCE_URL = "http://127.0.0.1:9/users/countapiunits.html";
+// Before this home isolation, test runs loaded the developer's .env and so usually had DataForSEO credentials.
+// Fake ones keep that "DataForSEO configured" baseline for the routed provider layer (a test that needs it
+// unconfigured deletes them before importing config), and the base URL points at the closed port too.
+process.env.DATAFORSEO_LOGIN = "test@example.com";
+process.env.DATAFORSEO_PASSWORD = "test-password";
+process.env.DATAFORSEO_BASE_URL = "http://127.0.0.1:9/v3";
+delete process.env.DATAFORSEO_LIVE;

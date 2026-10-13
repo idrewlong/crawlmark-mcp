@@ -1,6 +1,6 @@
 import type { Client } from "../config.js";
 import { runAxe, type AxeResult, type WcagLevel } from "../providers/axe.js";
-import { backlinksSummary, instantPage, onPageStartCrawl } from "../providers/dataforseo.js";
+import { backlinksSummary, instantPage, onPageStartCrawl } from "../providers/seo-data.js";
 import { gscInspectUrl, gscSitemaps } from "../providers/gsc.js";
 import { checkRender, type RenderCheck } from "../providers/render.js";
 import { runLighthouse, type FormFactor, type LighthouseResult } from "../providers/lighthouse.js";
@@ -14,12 +14,12 @@ export interface AuditOptions {
   urls?: string[];
   formFactor?: FormFactor;
   wcagLevel?: WcagLevel;
-  /** Kick off a full-site DataForSEO crawl (paid, async). Returns a taskId to poll with crawl_status. */
+  /** Kick off a full-site DataForSEO crawl (paid, async). Returns a taskId to poll with crawl_status. Unavailable (not failed) without DataForSEO. */
   fullCrawl?: boolean;
   maxCrawlPages?: number;
   /** Skip the response cache so the audit is a real snapshot. Default true; false reuses results up to a day old. */
   fresh?: boolean;
-  /** Include a DataForSEO backlinks summary (paid). */
+  /** Include a backlinks summary (paid) from the client's data provider. */
   backlinks?: boolean;
   /** Aborts the audit (run_audit's 10-minute limit): the running browser is closed, no further pages start, nothing is saved. */
   signal?: AbortSignal;

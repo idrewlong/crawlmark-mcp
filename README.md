@@ -10,11 +10,12 @@ It combines:
 | GA4 Data API | Organic sessions, engagement, key events, landing pages | Free |
 | Google Tag Manager | Live container contents for tag audits | Free |
 | DataForSEO | Keyword volume, live SERPs, ranked keywords, competitors, backlinks, site crawls | Pay per call |
+| Ahrefs or Semrush | Keyword volume, ranked keywords, competitors and backlinks, with your own API key | Your plan's API units |
 | Lighthouse | Performance, SEO and best-practice scores, lab Core Web Vitals | Free (runs locally) |
 | PageSpeed Insights | Real-user field data (CrUX) | Free with an API key (optional) |
 | axe-core | Automated WCAG A/AA/AAA checks | Free (runs locally) |
 
-Every source is optional. Your client list fills itself from the Search Console sites and GA4 properties your Google account can see, and you can add clients by hand, so DataForSEO, Lighthouse and axe work without Google. Responses are cached in SQLite, and paid calls stop at a per-client and a global monthly spend cap.
+Every source is optional. Your client list fills itself from the Search Console sites and GA4 properties your Google account can see, and you can add clients by hand, so the paid data tools, Lighthouse and axe work without Google. Responses are cached in SQLite, and paid calls stop at a per-client and a global monthly cap (dollars for DataForSEO, API units for Ahrefs and Semrush). See [Data providers](#data-providers) for choosing between them.
 
 Install crawlmark
 -----------------
@@ -39,7 +40,7 @@ That one command sets up crawlmark and adds it to your AI apps: **Claude Code, C
 npx crawlmark-mcp@latest init
 ```
 
-The wizard checks Node, asks for each credential and checks it live, and discovers your clients. Then it asks which AI apps to add crawlmark to, with the ones it found on your machine already ticked:
+The wizard checks Node, asks which SEO data providers you have (DataForSEO, Ahrefs, Semrush, or none) and which one is the default, asks for each credential and checks it live, and discovers your clients. Then it asks which AI apps to add crawlmark to, with the ones it found on your machine already ticked:
 
 | App | How crawlmark is added |
 |---|---|
@@ -64,11 +65,17 @@ Download `crawlmark.mcpb` from the release page and double-click it, or drag it 
 |---|---|
 | DataForSEO API login / password | From [DataForSEO API access](https://app.dataforseo.com/api-access). The password is stored in your OS keychain. Leave empty to skip the paid tools |
 | Use the live DataForSEO API | Off (default) uses the free sandbox with sample data. On uses real data, billed to your balance |
+| Default SEO data provider | `dataforseo`, `ahrefs` or `semrush`. Blank uses the value in your crawlmark `.env` (from `setup --step provider`), else `dataforseo`. Any other value is reported by `setup_status` |
+| Ahrefs API key | API v3 key ([Ahrefs](#ahrefs)) |
+| Semrush API key (v3), Semrush API key (v4, optional) | [Semrush](#semrush) keys; the v4 key is only for the newer backlinks report |
+| Ahrefs / Semrush monthly unit cap | API units crawlmark may use per month across all clients. Defaults 50,000 and 20,000 |
 | Google service-account key file | The JSON key from [option C](#option-c-service-account) |
 | Google OAuth client ID / secret | Only for signing in with your own Google account ([options A and B](#options-a-and-b-oauth)). After installing, sign in once from a terminal: `CRAWLMARK_HOME=<data folder> npx crawlmark-mcp setup --step google` |
 | PageSpeed Insights API key | Adds real-user field data |
 | Chrome executable | Optional path to Chrome or Chromium |
 | crawlmark data folder | Where the client list, cache and spend log live. Default `~/.crawlmark` |
+
+A blank field never hides a value in your crawlmark `.env` for the provider fields, so you can choose the provider in a terminal (`CRAWLMARK_HOME=<data folder> npx crawlmark-mcp setup --step provider`) and leave the form empty. Keys typed into the form stay in Claude Desktop; the wizard's keys stay in `.env`.
 
 The bundle doesn't include Chrome. Audits use the Chrome path from the form, or the Chrome installed on your machine. Then ask Claude to run `setup_status`, or use the `getting-started` prompt, to see what's working.
 
@@ -82,7 +89,7 @@ npm run build
 npm run cli -- setup
 ```
 
-A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration).
+A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration). The wizard asks which SEO data providers you have; to change that later, run `npm run cli -- setup --step provider`.
 
 Set up credentials
 ------------------
@@ -92,9 +99,9 @@ The setup wizard covers everything here. Each step shows its current status firs
 | Command | Does |
 |---|---|
 | `crawlmark-cli init` (or `setup`) | The whole wizard |
-| `crawlmark-cli setup --step <node\|dataforseo\|google\|psi\|discovery\|register>` | One step |
+| `crawlmark-cli setup --step <node\|provider\|dataforseo\|ahrefs\|semrush\|google\|psi\|discovery\|register>` | One step. `provider` picks your SEO data providers and the default one |
 | `crawlmark-cli setup --dry-run` | Runs the free checks and shows what each step would do, without writing, signing in or registering anything |
-| `crawlmark-cli setup --yes` | Accepts every default. Steps that need input (a password, a key file) are skipped |
+| `crawlmark-cli setup --yes` | Accepts every default. Steps that need input (a password, an API key, a key file) are skipped; the default provider is only written to fix a missing or invalid one when a provider works |
 | `crawlmark-cli setup status` | Each integration's state and the next step (`--json` for machine output) |
 
 From a source checkout, run these as `npm run cli -- setup …` from the project folder. With npx, use `npx crawlmark-mcp setup …`. The commands that `setup status` and the wizard print already use the right form for your install.
@@ -127,6 +134,47 @@ DataForSEO is optional and paid per call. It powers keyword volume, live SERPs, 
 3. Start with the **sandbox** (the default). It's free and returns sample data in the real response shape. Switch to live when you're ready and the account is funded.
 
 By hand, set `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD`, and set `DATAFORSEO_BASE_URL=https://api.dataforseo.com/v3` (or `DATAFORSEO_LIVE=true`) for live data.
+
+Whatever your default provider, live SERPs (`serp_check`, live ranks in `monthly_report`, the SERP half of `suggest_competitors`), the per-page on-page check in `run_audit` and full crawls use DataForSEO.
+
+### Ahrefs
+
+Ahrefs is optional. With an API v3 key it can supply keyword volume, ranked keywords, organic competitors and backlinks (with Ahrefs' Domain Rating).
+
+1. You need the **Lite plan or higher**; other plans can't use the API. Each plan has a monthly unit allowance and a cap on rows per request (Lite 100).
+2. Create a key under **Account settings > API keys** at [app.ahrefs.com/account/api-keys](https://app.ahrefs.com/account/api-keys). Only workspace owners and admins can open that page.
+3. Run `crawlmark-cli setup --step ahrefs`. It checks the key with Ahrefs' free limits-and-usage call (no units used) and shows your plan and units, then asks which provider should be the default.
+
+By hand, set `AHREFS_API_KEY` (and `SEO_DATA_PROVIDER=ahrefs` to make it the default). The `ahrefs_status` tool shows the plan, units used and the reset date.
+
+### Semrush
+
+Semrush is optional. Its API needs an **SEO Toolkit Business** plan **plus** a separately bought **API unit package**; the unit balance is zero until you buy one.
+
+1. Find your **v3 API key** under **Subscription info > API units**. crawlmark uses it for keyword volume, ranked keywords and competitors.
+2. Optionally create a **v4 key** in your profile under **API keys**. With it, backlinks use Semrush's newer v4 overview (45 units); without it, the older v3 report (40 units).
+3. Run `crawlmark-cli setup --step semrush`. It checks the v3 key with Semrush's free balance call and shows the units left ("key accepted": the check proves the key exists, not that your plan includes the API). A v4 key has no free check, so it's saved untested and checked the first time `backlinks_summary` runs.
+
+By hand, set `SEMRUSH_API_KEY` (and `SEMRUSH_V4_API_KEY`, and `SEO_DATA_PROVIDER=semrush` to make it the default). The `semrush_status` tool shows the balance.
+
+### Data providers
+
+Keyword volume, rankings, competitors and backlinks can come from any of the three providers. Live SERPs, on-page checks and crawls come from DataForSEO only.
+
+| Capability | DataForSEO | Ahrefs | Semrush |
+|---|---|---|---|
+| `keyword_volume` | Google Ads volume | Keywords Explorer (12-month average) | Batch keyword overview (12-month average) |
+| `ranked_keywords` | Labs ranked keywords | Site Explorer organic keywords | Domain organic search keywords |
+| `competitor_domains` | Labs competitors | Site Explorer organic competitors | Competitors in organic search |
+| `backlinks_summary` | Backlinks summary (rank, spam score) | Backlinks stats plus Domain Rating | Backlinks overview (v4 with a v4 key, else v3) plus authority score |
+| `serp_check`, on-page checks, crawls | Yes | No (DataForSEO is used) | No (DataForSEO is used) |
+| Account check | `dataforseo_status` | `ahrefs_status` | `semrush_status` |
+
+- **The default.** `SEO_DATA_PROVIDER` (`dataforseo`, `ahrefs` or `semrush`; blank means `dataforseo`) picks the default. `crawlmark-cli setup --step provider` sets it, and so does the bundle's "Default SEO data provider" field. An unknown value doesn't stop the server: `setup_status` and every paid call say what's wrong, and free tools keep working.
+- **Per client.** A client's `dataProvider` in clients.yaml overrides the default: `crawlmark-cli clients set example.com --provider ahrefs` (or `none` to go back to the default), or `set_client_profile`. Ahrefs and Semrush need the client's market as a country: set `country` (`--country GB`), or it comes from a country-level `locationCode`.
+- **No silent fallback.** If a client's provider has no key, its paid calls fail with the command to fix it; crawlmark never spends on another account instead. If the provider lacks a capability (live SERPs, on-page checks, crawls), DataForSEO serves it when it's set up, and the result says `fallbackFrom`.
+- **Units, not dollars.** DataForSEO is capped in USD. Ahrefs and Semrush are capped in their own API units, per month (UTC): `AHREFS_MONTHLY_UNIT_CAP` (default 50,000) and `SEMRUSH_MONTHLY_UNIT_CAP` (20,000) across all clients, and `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS` (10,000) and `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` (5,000) per client, or a client's `monthlyUnits`. Each call checks its estimate first; units are never converted to dollars.
+- **Metrics differ.** Every result carries `provider`, and `backlinks_summary` labels the domain-strength number in `authority.metric` (`dataforseo_rank`, `domain_rating` or `semrush_score`). They aren't comparable across providers.
 
 ### Google (Search Console, GA4, Tag Manager)
 
@@ -242,9 +290,9 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 
 | Tool | Description |
 |---|---|
-| `setup_status` | Each integration's state (`working`, `configured`, `missing` or `error`) and the exact next step. Free |
+| `setup_status` | Each integration's state (`working`, `configured`, `missing` or `error`) and the exact next step, plus the default SEO data provider (`seoDataProvider`). Free |
 | `list_clients` | Every client with its Search Console and GA4 properties, Tag Manager container and what's missing. `refresh: true` re-lists from Google |
-| `set_client_profile` | Sets a client's area (for local searches), niche, display name and brand terms |
+| `set_client_profile` | Sets a client's area (for local searches), niche, display name, brand terms, data provider override and country |
 
 ### Reports
 
@@ -285,10 +333,10 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | Tool | Description |
 |---|---|
 | `list_competitors`, `add_competitors`, `remove_competitors` | A client's competitors. Free |
-| `suggest_competitors` | **Paid.** Ranked competitor candidates from keyword overlap and local Google results, with evidence. Never saves; you pick which to add |
+| `suggest_competitors` | **Paid.** Ranked competitor candidates from keyword overlap (the client's data provider) and local Google results (DataForSEO), with evidence. Never saves; you pick which to add |
 | `list_keywords`, `add_keywords`, `remove_keywords` | Tracked keywords; `monthly_report` reports their positions. Free |
 | `add_brand_terms`, `remove_brand_terms` | Terms that mark a query as branded, per client. Free |
-| `suggest_brand_terms` | Infers how people search for the client by name from its Search Console queries (free), or DataForSEO when it has no Search Console data (about $0.02) |
+| `suggest_brand_terms` | Infers how people search for the client by name from its Search Console queries (free), or the client's data provider's ranked keywords when it has no Search Console data (about $0.02 on DataForSEO) |
 
 ### Raw data
 
@@ -297,18 +345,22 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `gsc_query` | Search Console search analytics |
 | `gsc_inspect_url` | Search Console URL inspection |
 | `ga4_report` | GA4 Data API report |
-| `keyword_volume` | **Paid.** Search volume for keywords |
-| `serp_check` | **Paid.** Live Google results for a keyword |
-| `ranked_keywords` | **Paid.** Keywords a domain ranks for |
-| `competitor_domains` | **Paid.** Domains ranking for the same keywords |
-| `backlinks_summary` | **Paid.** Backlink totals for a domain |
+| `keyword_volume` | **Paid** (the client's data provider). Search volume for keywords |
+| `serp_check` | **Paid** (DataForSEO). Live Google results for a keyword |
+| `ranked_keywords` | **Paid** (the client's data provider). Keywords a domain ranks for |
+| `competitor_domains` | **Paid** (the client's data provider). Domains ranking for the same keywords |
+| `backlinks_summary` | **Paid** (the client's data provider). Backlink totals for a domain |
 | `dataforseo_status` | Credentials check, sandbox or live mode, and balance. Free |
+| `ahrefs_status` | Ahrefs key check, plan, units used and reset date. Free |
+| `semrush_status` | Semrush key check, units left, and whether a v4 key is set. Free |
+
+Paid results carry `provider` (whose data it is) and `units` (Ahrefs or Semrush API units used; `null` for DataForSEO, which reports `costUsd`).
 
 ### Spend and housekeeping
 
 | Tool | Description |
 |---|---|
-| `spend_summary` | Paid API spend this month, by client |
+| `spend_summary` | Paid API spend this month, by client and provider: dollars for DataForSEO, units for Ahrefs and Semrush |
 | `usage_summary` | Calls, errors and durations per tool |
 | `purge_cache` | Drops expired cache entries and old usage rows |
 
@@ -360,11 +412,12 @@ Both print JSON. They alert on any new critical or high finding, or a non-brande
 Cost controls
 -------------
 
-- Every paid call checks the client's monthly budget (`monthlyBudgetUsd`, default `DEFAULT_CLIENT_MONTHLY_BUDGET_USD`, 5) and the global `GLOBAL_MONTHLY_BUDGET_USD` (default 50) first, and refuses once a cap would be crossed.
-- The cost DataForSEO reports is written to a ledger; `spend_summary` reads it.
+- Every paid DataForSEO call checks the client's monthly budget (`monthlyBudgetUsd`, default `DEFAULT_CLIENT_MONTHLY_BUDGET_USD`, 5) and the global `GLOBAL_MONTHLY_BUDGET_USD` (default 50) first, and refuses once a cap would be crossed.
+- Ahrefs and Semrush calls check unit caps instead (see [Data providers](#data-providers)). Units are never converted to dollars.
+- The cost DataForSEO reports, and the units Ahrefs and Semrush calls use, are written to a ledger; `spend_summary` reads it.
 - Responses are cached (keyword volume 30 days; ranked keywords and backlinks 7 days; SERPs, Google data and client discovery 1 day), so re-running a report mostly costs nothing.
 - `monthly_report` and the opportunity tools are free. Live rank checks, full crawls and backlinks are opt-in.
-- Use the DataForSEO sandbox while trying things out.
+- Use the DataForSEO sandbox while trying things out. Ahrefs offers free test queries against its own domains; Semrush has none.
 
 Configuration
 -------------
@@ -388,6 +441,11 @@ The config home holds `.env`, `config/clients.yaml`, `data/` (cache, saved audit
 | `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | | DataForSEO API credentials |
 | `DATAFORSEO_BASE_URL` | sandbox | `https://api.dataforseo.com/v3` for live data |
 | `DATAFORSEO_LIVE` | `false` | `true` selects the live API when no base URL is set |
+| `SEO_DATA_PROVIDER` | `dataforseo` | Default provider for keyword, ranking, competitor and backlink data: `dataforseo`, `ahrefs` or `semrush` |
+| `AHREFS_API_KEY` | | Ahrefs API v3 key |
+| `SEMRUSH_API_KEY`, `SEMRUSH_V4_API_KEY` | | Semrush v3 key, and the optional v4 key for backlinks |
+| `AHREFS_MONTHLY_UNIT_CAP`, `SEMRUSH_MONTHLY_UNIT_CAP` | `50000`, `20000` | Monthly API units across all clients |
+| `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS`, `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` | `10000`, `5000` | Monthly API units per client (clients.yaml `monthlyUnits` overrides) |
 | `PSI_API_KEY` | | PageSpeed Insights key |
 | `CLIENTS_FILE` | `./config/clients.yaml` | The client list |
 | `DATA_DIR` | `./data` | SQLite cache, saved audits, spend ledger and OAuth token |
@@ -415,7 +473,7 @@ CLI
 | `auth login`, `auth status`, `auth logout` | Google OAuth sign-in, check and sign-out |
 | `clients list [--refresh]` | Discover and list clients |
 | `clients add <domain>...`, `clients remove <domain>... [--ignore]` | Add or remove clients by hand |
-| `clients set <client> [--area …] [--niche …] [--name …] [--brand-terms "a,b"]` | Set a client's profile |
+| `clients set <client> [--area …] [--niche …] [--name …] [--brand-terms "a,b"] [--provider <id\|none>] [--country <XX\|none>]` | Set a client's profile, data provider override and country |
 | `competitors list\|add\|remove <client> [domain...]` | Manage competitors |
 | `keywords list\|add\|remove <client> [keyword...]` | Manage tracked keywords (quote ones with spaces) |
 | `brand list\|add\|remove <client> [term...]` | Manage brand terms |
@@ -427,7 +485,7 @@ Results and errors
 ------------------
 
 - **Partial reports.** Each report section runs on its own. If one source fails or isn't set up, that section says why and the rest of the report still comes back.
-- **Timeouts.** Browser checks stop after 90 seconds, `run_audit` after 10 minutes, and each API request after 30 seconds. A DataForSEO call that times out may still be billed, so its estimate is recorded in the spend ledger.
+- **Timeouts.** Browser checks stop after 90 seconds, `run_audit` after 10 minutes, and each API request after 30 seconds. A DataForSEO, Ahrefs or Semrush call that times out may still be billed, so its estimate is recorded in the spend ledger.
 - **URL limits.** Browser checks only load public `http` and `https` URLs. Set `ALLOW_PRIVATE_URLS=true` to audit a local or staging site on a private network, or `RESTRICT_TO_CLIENT_DOMAINS=true` to only accept your clients' domains.
 - **Usage log.** Each tool call records the tool name, client, duration and whether it failed (no other arguments). `usage_summary` reads it.
 - **Common errors.** "Google isn't set up" or a missing property: run `crawlmark-cli setup status`. A 403 from Google: add your account or service account to that client's property. A budget error: raise the cap or wait for next month.
@@ -457,6 +515,8 @@ Links
 
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [DataForSEO API access](https://app.dataforseo.com/api-access) and [pricing](https://dataforseo.com/pricing)
+- [Ahrefs API v3 docs](https://docs.ahrefs.com/) and [API keys](https://app.ahrefs.com/account/api-keys)
+- [Semrush API docs](https://developer.semrush.com/api/)
 - [Google Cloud console](https://console.cloud.google.com/)
 - [Search Console API](https://developers.google.com/webmaster-tools), [GA4 Data API](https://developers.google.com/analytics/devguides/reporting/data/v1), [Tag Manager API](https://developers.google.com/tag-platform/tag-manager/api/v2)
 - [MCPB bundle spec](https://github.com/modelcontextprotocol/mcpb)

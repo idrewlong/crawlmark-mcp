@@ -1,0 +1,6 @@
+{ "keywords": [
+  { "keyword": "example widgets", "best_position": 3, "best_position_url": "https://example.com/widgets", "volume": 1900, "sum_traffic": 240 },
+  { "keyword": "example widget repair", "best_position": 7, "best_position_url": "https://example.com/repair", "volume": 880, "sum_traffic": 35 },
+  { "keyword": "edge case null metrics", "best_position": null, "best_position_url": null, "volume": null, "sum_traffic": null },
+  { "keyword": null, "best_position": 12, "best_position_url": "https://example.com/", "volume": 10, "sum_traffic": 0 }
+] }

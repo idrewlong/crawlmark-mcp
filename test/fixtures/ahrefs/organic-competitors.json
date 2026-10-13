@@ -1,0 +1,5 @@
+{ "competitors": [
+  { "competitor_domain": "example.org", "keywords_common": 412, "traffic": 5300 },
+  { "competitor_domain": "example.net", "keywords_common": 120, "traffic": null },
+  { "competitor_domain": null, "keywords_common": 50, "traffic": 900 }
+] }

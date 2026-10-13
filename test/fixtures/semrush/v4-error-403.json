@@ -1,0 +1,2 @@
+{ "meta": { "success": false, "status_code": 403, "request_id": "…" },
+  "error": { "code": 403, "message": "Forbidden", "retryable": false, "details": {} } }

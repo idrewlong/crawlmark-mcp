@@ -12,14 +12,18 @@ import { APP_LABELS, registerApps, type AppOutcome } from "./apps.js";
 import { copyFileAtomic } from "../lib/atomic-file.js";
 import { readEnvFile, writeEnvFile } from "../lib/env-file.js";
 import { expandPath, sourceCheckoutMarker, type HomeSource } from "../lib/home.js";
+import { checkAhrefsKey } from "../providers/ahrefs.js";
+import { describeAhrefsAccount } from "../providers/ahrefs-shape.js";
 import { checkDataForSeoCredentials } from "../providers/dataforseo.js";
+import { checkSemrushKey } from "../providers/semrush.js";
+import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type ProviderId } from "../lib/provider-ids.js";
 import { checkPsiKey } from "./checks.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
 import { uiFor, type SummaryRow, type Ui } from "./ui.js";
 import { DFS_LIVE_URL, DFS_SANDBOX_URL } from "../lib/env.js";
 import { LINKS, type IntegrationId, type IntegrationStatus, type SetupStatusReport } from "./status.js";
 
-export const STEP_NAMES = ["node", "dataforseo", "google", "psi", "discovery", "register"] as const;
+export const STEP_NAMES = ["node", "provider", "dataforseo", "ahrefs", "semrush", "google", "psi", "discovery", "register"] as const;
 export type StepName = (typeof STEP_NAMES)[number];
 
 export { DFS_LIVE_URL, DFS_SANDBOX_URL };
@@ -77,6 +81,24 @@ export interface WizardContext {
   /** Variables set by the shell (not .env): they override .env, so the wizard warns when it writes one. */
   shellEnvKeys: ReadonlySet<string>;
   dryRun: boolean;
+  /** --yes: no input is read (autoPrompter). Credential steps that need a key end as skipped. */
+  yes?: boolean | undefined;
+  /**
+   * SEO data providers for this run (Phase 9): `selected` from the provider pick (unset when the
+   * run has no pick), `working` grows as credential checks pass.
+   */
+  providers?: { selected?: ReadonlySet<ProviderId> | undefined; working: Set<ProviderId> } | undefined;
+}
+
+/** Options for a provider credential step. `ticked`: the user just picked it in the provider list, so don't ask again whether to set it up. */
+export interface CredentialStepOptions {
+  ticked?: boolean;
+}
+
+/** Record that a provider's check passed in this run (the default select offers it even in a dry run). */
+function markWorking(ctx: WizardContext, id: ProviderId): void {
+  ctx.providers ??= { working: new Set() };
+  ctx.providers.working.add(id);
 }
 
 export type StepOutcome = "done" | "skipped" | "failed" | "needs-input";
@@ -87,6 +109,8 @@ export interface StepResult {
   message: string;
   /** The register step: what happened with each app. */
   apps?: AppOutcome[];
+  /** The provider step: the default it settled on (marked "(default)" in the summary). */
+  defaultProvider?: ProviderId;
 }
 
 const MAX_ATTEMPTS = 3;
@@ -179,12 +203,12 @@ export async function stepNode(ctx: WizardContext): Promise<StepResult> {
   return r.code === 0 ? { step, outcome: "done", message: "Built dist/." } : { step, outcome: "failed", message: `\`npm run build\` failed (exit ${r.code}).` };
 }
 
-export async function stepDataForSeo(ctx: WizardContext): Promise<StepResult> {
+export async function stepDataForSeo(ctx: WizardContext, opts: CredentialStepOptions = {}): Promise<StepResult> {
   const step = "dataforseo";
   const ui = uiFor(ctx);
   const st = (await showStatus(ctx, ["dataforseo"])).get("dataforseo");
   const working = st?.state === "working";
-  if (!(await ctx.prompt.confirm(working ? "Change the DataForSEO credentials?" : "Set up DataForSEO now?", !working))) {
+  if (!opts.ticked && !(await ctx.prompt.confirm(working ? "Change the DataForSEO credentials?" : "Set up DataForSEO now?", !working))) {
     return { step, outcome: "skipped", message: working ? "Kept the current DataForSEO credentials." : "DataForSEO not set up (paid keyword, SERP and backlink tools stay unavailable)." };
   }
   ctx.out("DataForSEO powers keyword volumes, live rankings, competitors and backlinks.");
@@ -222,6 +246,7 @@ export async function stepDataForSeo(ctx: WizardContext): Promise<StepResult> {
       const balance = check.balanceUsd === null ? "unknown" : `$${check.balanceUsd.toFixed(2)}`;
       ui.success(`Credentials work. Mode: ${check.mode}. Balance: ${balance}.`);
       saveEnv(ctx, { DATAFORSEO_LOGIN: login, DATAFORSEO_PASSWORD: password, DATAFORSEO_BASE_URL: baseUrl });
+      markWorking(ctx, "dataforseo");
       return { step, outcome: "done", message: `DataForSEO works (${check.mode}, balance ${balance}).` };
     }
     if (check.credentialsWork === false) {
@@ -236,6 +261,124 @@ export async function stepDataForSeo(ctx: WizardContext): Promise<StepResult> {
     return { step, outcome: "failed", message: "DataForSEO unreachable; nothing saved." };
   }
   return { step, outcome: "failed", message: `DataForSEO credentials not saved after ${MAX_ATTEMPTS} attempts.` };
+}
+
+export async function stepAhrefs(ctx: WizardContext, opts: CredentialStepOptions = {}): Promise<StepResult> {
+  const step = "ahrefs";
+  const ui = uiFor(ctx);
+  const st = (await showStatus(ctx, ["ahrefs"])).get("ahrefs");
+  const working = st?.state === "working";
+  if (!opts.ticked && !(await ctx.prompt.confirm(working ? "Change the Ahrefs API key?" : "Set up Ahrefs now?", !working))) {
+    return { step, outcome: "skipped", message: working ? "Kept the current Ahrefs key." : "Ahrefs not set up." };
+  }
+  ctx.out("Ahrefs: keyword, ranking, competitor and backlink data (API v3, Lite plan or higher).");
+  ctx.out(`Create a key under Account settings > API keys (${LINKS.ahrefsApiKeys}; workspace owner or admin).`);
+  const current = existingEnv(ctx).AHREFS_API_KEY;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let key: string;
+    try {
+      key = await ctx.prompt.secret(current ? "Ahrefs API key (Enter keeps the current one)" : "Ahrefs API key");
+    } catch (err) {
+      if (err instanceof NeedsInputError) {
+        const keySet = Boolean(current) || st?.data?.keySet === true;
+        return { step, outcome: "skipped", message: keySet ? `Ahrefs key is set but untested; run ${ctx.cliDisplay} setup --step ahrefs` : `Ahrefs needs a key; run ${ctx.cliDisplay} setup --step ahrefs` };
+      }
+      throw err;
+    }
+    if (!key && current) key = current;
+    if (!key) {
+      ui.fail("No key entered.");
+      continue;
+    }
+    const check = await ui.spin("Checking with Ahrefs (free limits-and-usage call)...", () => checkAhrefsKey(key, ctx.fetch));
+    if (check.works === true) {
+      const account = describeAhrefsAccount(check);
+      ui.success(`Ahrefs works  ${account}`);
+      saveEnv(ctx, { AHREFS_API_KEY: key });
+      markWorking(ctx, "ahrefs");
+      return { step, outcome: "done", message: `Ahrefs works (${account}).` };
+    }
+    if (check.works === false) {
+      ui.fail(`Ahrefs rejected that key. Create one under Account settings > API keys (workspace owner or admin).`);
+      continue;
+    }
+    ui.warn(`Couldn't reach Ahrefs, so the key is untested: ${check.error}`);
+    if (await ctx.prompt.confirm("Save it anyway?", false)) {
+      saveEnv(ctx, { AHREFS_API_KEY: key });
+      return { step, outcome: "done", message: `Saved an untested Ahrefs key; check later with \`${ctx.cliDisplay} setup --step ahrefs\`.` };
+    }
+    return { step, outcome: "failed", message: "Ahrefs unreachable; nothing saved." };
+  }
+  return { step, outcome: "failed", message: `No working Ahrefs key after ${MAX_ATTEMPTS} attempts.` };
+}
+
+export async function stepSemrush(ctx: WizardContext, opts: CredentialStepOptions = {}): Promise<StepResult> {
+  const step = "semrush";
+  const ui = uiFor(ctx);
+  const st = (await showStatus(ctx, ["semrush"])).get("semrush");
+  const working = works("semrush", st);
+  if (!opts.ticked && !(await ctx.prompt.confirm(working ? "Change the Semrush API key?" : "Set up Semrush now?", !working))) {
+    return { step, outcome: "skipped", message: working ? "Kept the current Semrush key." : "Semrush not set up." };
+  }
+  ctx.out("Semrush: keyword, ranking, competitor and backlink data (needs an SEO Business plan plus an API unit package).");
+  ctx.out("Find the v3 API key under Subscription info > API units (https://www.semrush.com/accounts/subscription-info/api-units/).");
+  const env = existingEnv(ctx);
+  const current = env.SEMRUSH_API_KEY;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let key: string;
+    try {
+      key = await ctx.prompt.secret(current ? "Semrush API key, v3 (Enter keeps the current one)" : "Semrush API key (v3)");
+    } catch (err) {
+      if (err instanceof NeedsInputError) {
+        const keySet = Boolean(current) || st?.data?.keySet === true;
+        return { step, outcome: "skipped", message: keySet ? `Semrush key is set but untested; run ${ctx.cliDisplay} setup --step semrush` : `Semrush needs a key; run ${ctx.cliDisplay} setup --step semrush` };
+      }
+      throw err;
+    }
+    if (!key && current) key = current;
+    if (!key) {
+      ui.fail("No key entered.");
+      continue;
+    }
+    const check = await ui.spin("Checking with Semrush (free API units balance call)...", () => checkSemrushKey(key, ctx.fetch));
+    if (check.works === true) {
+      if (check.unitsLeft === 0) ui.warn("Key accepted but the balance is 0 units; Semrush API needs an SEO Business plan and a unit package.");
+      else ui.success(`Semrush key accepted  ${check.unitsLeft.toLocaleString("en-US")} API units left`);
+      saveEnv(ctx, { SEMRUSH_API_KEY: key });
+      markWorking(ctx, "semrush");
+      await semrushV4(ctx);
+      return { step, outcome: "done", message: `Semrush key accepted (${check.unitsLeft.toLocaleString("en-US")} API units left).` };
+    }
+    if (check.works === false) {
+      ui.fail(`Semrush rejected that key${"errorCode" in check && check.errorCode ? ` (ERROR ${check.errorCode})` : ""}. Find the v3 key under Subscription info > API units.`);
+      continue;
+    }
+    ui.warn(`Couldn't reach Semrush's balance check, so the key is untested: ${check.error}`);
+    if (await ctx.prompt.confirm("Save it anyway?", false)) {
+      saveEnv(ctx, { SEMRUSH_API_KEY: key });
+      await semrushV4(ctx);
+      return { step, outcome: "done", message: `Saved an untested Semrush key; check later with \`${ctx.cliDisplay} setup --step semrush\`.` };
+    }
+    return { step, outcome: "failed", message: "Semrush unreachable; nothing saved." };
+  }
+  return { step, outcome: "failed", message: `No accepted Semrush key after ${MAX_ATTEMPTS} attempts.` };
+}
+
+/** The optional v4 key (backlinks): saved untested, since Semrush has no free check for it (N15). Skipped under --yes. */
+async function semrushV4(ctx: WizardContext): Promise<void> {
+  if (ctx.yes) return;
+  if (!(await ctx.prompt.confirm("Add a Semrush v4 key too? (backlinks use the v4 overview; without it they use the older v3 report)", false))) return;
+  const v4 = await ctx.prompt.secret("Semrush API key (v4, from your profile > API keys)");
+  if (!v4) {
+    uiFor(ctx).info("No v4 key entered; backlinks keep using the v3 report.");
+    return;
+  }
+  saveEnv(ctx, { SEMRUSH_V4_API_KEY: v4 });
+  uiFor(ctx).info(
+    ctx.dryRun
+      ? "Semrush has no free check for v4 keys, so it would be checked the first time backlinks_summary runs."
+      : "Saved; Semrush has no free check for v4 keys, so it's checked the first time backlinks_summary runs.",
+  );
 }
 
 const GOOGLE_OPTIONS = [
@@ -455,18 +598,181 @@ export async function stepRegister(ctx: WizardContext): Promise<StepResult> {
   return registerApps(ctx);
 }
 
-const STEPS: Record<StepName, { title: string; run: (ctx: WizardContext) => Promise<StepResult> }> = {
+// ------------------------------------------------------------------ SEO data providers (Phase 9)
+
+/** Provider credential steps, in the order the full run takes them (task 7 adds Semrush). */
+const PROVIDER_STEPS: readonly ProviderId[] = ["dataforseo", "ahrefs", "semrush"];
+const PROVIDER_ORDER: readonly ProviderId[] = ["dataforseo", "ahrefs", "semrush"];
+
+const PROVIDER_HINTS: Record<ProviderId, string> = {
+  dataforseo: "pay per call; free sandbox; also live SERPs, on-page, crawls",
+  ahrefs: "API v3, Lite plan or higher",
+  semrush: "Business plan + API unit package",
+};
+
+/** What the wizard says when a provider isn't set up and --yes can't ask for its key. */
+const NEEDS_KEY: Record<ProviderId, (cli: string) => string> = {
+  dataforseo: (cli) => `DataForSEO needs a login; run ${cli} setup --step dataforseo`,
+  ahrefs: (cli) => `Ahrefs needs a key; run ${cli} setup --step ahrefs`,
+  semrush: (cli) => `Semrush needs a key; run ${cli} setup --step semrush`,
+};
+
+/** How to forget a provider's credentials (the wizard never deletes them: D10). */
+const KEY_VARS: Record<ProviderId, string> = {
+  dataforseo: "DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD",
+  ahrefs: "AHREFS_API_KEY",
+  semrush: "SEMRUSH_API_KEY (and SEMRUSH_V4_API_KEY)",
+};
+
+const STATE_WORD: Record<IntegrationStatus["state"], string> = { working: "working", configured: "set, untested", error: "error", missing: "not set up" };
+
+/** Read status rows without printing them (under a spinner in fancy mode). */
+async function readStatus(ctx: WizardContext, only: IntegrationId[]): Promise<Map<IntegrationId, IntegrationStatus>> {
+  const map = new Map<IntegrationId, IntegrationStatus>();
+  try {
+    const report = await uiFor(ctx).spin("Checking the current status...", () => ctx.status(only), { plain: false });
+    for (const i of report.integrations) map.set(i.id, i);
+  } catch (err) {
+    ctx.out(`  (Couldn't read the current status: ${(err as Error).message})`);
+  }
+  return map;
+}
+
+const providerIds = (): ProviderId[] => PROVIDER_ORDER.filter((id) => PROVIDER_STEPS.includes(id));
+/** A provider's setup_status row id (every provider with a credential step has one). */
+const rowId = (id: ProviderId) => id as IntegrationId;
+/** A provider counts as working: its row is working, or (Semrush) its key was accepted with units left and only the v4 key is untested. */
+const works = (id: ProviderId, s: IntegrationStatus | undefined) =>
+  s?.state === "working" || (id === "semrush" && s?.state === "configured" && typeof s.data?.unitsLeft === "number" && s.data.unitsLeft > 0);
+const hasKey = (id: ProviderId, s: IntegrationStatus | undefined) => (id === "dataforseo" ? s !== undefined && s.state !== "missing" : s?.data?.keySet === true);
+
+function describeDefault(seo: IntegrationStatus | undefined): string {
+  const d = seo?.data as { default?: ProviderId | null; source?: string; invalidValue?: string } | undefined;
+  if (!d) return "Default provider: unknown.";
+  if (d.default === null || d.default === undefined) return `Default provider: invalid value ${quoteProviderValue(displayProviderValue(d.invalidValue ?? ""))} in SEO_DATA_PROVIDER.`;
+  const from = d.source === "envFile" ? ".env" : d.source === "env" ? "shell env" : "default";
+  return `Default provider: ${PROVIDER_LABELS[d.default]} (${from}).`;
+}
+
+/**
+ * provider:pick. Shows the providers' status and the current default, then asks which
+ * providers the user has. Pre-ticked: the ones with a key (DataForSEO alone on a fresh home;
+ * none under --yes). Never deletes a key (D10).
+ */
+export async function stepProviderPick(ctx: WizardContext): Promise<{ result: StepResult; statuses: Map<IntegrationId, IntegrationStatus> }> {
+  const ui = uiFor(ctx);
+  const ids = providerIds();
+  const st = await readStatus(ctx, ["seoprovider", ...ids.map(rowId)]);
+  ctx.out(`SEO data providers: ${ids.map((id) => `${PROVIDER_LABELS[id]} (${(works(id, st.get(rowId(id))) ? "working" : STATE_WORD[st.get(rowId(id))?.state ?? "missing"])})`).join(", ")}`);
+  ctx.out(describeDefault(st.get("seoprovider")));
+  ctx.out("Keyword volumes, rankings, competitors and backlinks come from a paid provider. Pick the ones you have an API key for (none is required).");
+  const keyed = ids.filter((id) => hasKey(id, st.get(rowId(id))));
+  const defaults = ctx.yes ? keyed : keyed.length ? keyed : (["dataforseo"] as ProviderId[]);
+  const choices = ids.map((id) => ({ value: id, label: PROVIDER_LABELS[id], hint: PROVIDER_HINTS[id] }));
+  const picked = ctx.prompt.multiselect ? await ctx.prompt.multiselect("Which SEO data providers do you have?", choices, defaults) : [...defaults];
+  const selected = new Set(picked);
+  const working = new Set(ids.filter((id) => selected.has(id) && works(id, st.get(rowId(id)))));
+  ctx.providers = { selected, working: new Set([...(ctx.providers?.working ?? []), ...working]) };
+  if (selected.size === 0) ui.info("No paid provider selected. Free tools (Search Console, GA4, audits) still work. Add one later with setup --step provider.");
+  if (!selected.has("dataforseo") && (selected.has("ahrefs") || selected.has("semrush"))) {
+    ui.warn("Live SERPs, on-page checks and crawls need DataForSEO; without it those parts of run_audit and serp_check are skipped.");
+  }
+  for (const id of keyed.filter((k) => !selected.has(k))) {
+    ui.info(`${PROVIDER_LABELS[id]} ${id === "dataforseo" ? "login" : "key"} kept in .env but not used as the default. Remove ${KEY_VARS[id]} from .env to forget it.`);
+  }
+  const names = ids.filter((id) => selected.has(id)).map((id) => PROVIDER_LABELS[id]);
+  return { result: { step: "provider", outcome: "done", message: names.length ? `Selected: ${names.join(", ")}.` : "No paid provider selected." }, statuses: st };
+}
+
+/**
+ * provider:default. W = the working providers (still ticked, when this run had a pick).
+ * 0: nothing written. 1: that one, written only if it differs from the effective default.
+ * 2+: a select, pre-selecting the current default when it works, else the first of
+ * dataforseo, ahrefs, semrush. --yes takes the pre-selection (D9).
+ */
+export async function stepProviderDefault(ctx: WizardContext): Promise<StepResult> {
+  const step = "provider";
+  const ui = uiFor(ctx);
+  const st = await readStatus(ctx, ["seoprovider", ...providerIds().map(rowId)]);
+  const selected = ctx.providers?.selected;
+  const workingNow = new Set<ProviderId>([...(ctx.providers?.working ?? []), ...providerIds().filter((id) => works(id, st.get(rowId(id))))]);
+  const W = PROVIDER_ORDER.filter((id) => workingNow.has(id) && (!selected || selected.has(id)));
+  const seo = st.get("seoprovider")?.data as { default?: ProviderId | null; invalidValue?: string } | undefined;
+  // Unset counts as dataforseo; an invalid value matches nothing, so any working provider replaces it.
+  const effective: ProviderId | null = seo?.invalidValue !== undefined || seo?.default === null ? null : (seo?.default ?? "dataforseo");
+  const dfsNote = `Live SERPs, on-page checks and crawls still use DataForSEO${W.includes("dataforseo") ? "" : " (not set up)"}.`;
+  // A valid default whose key is set stays the default unless it was unticked or its key was rejected
+  // (D2, D9): a check that failed this run (network, 5xx, 429, a Semrush balance of 0) never moves
+  // paid calls to another account. Under --yes it is always kept; interactively, when it didn't pass this run.
+  const effRow = effective ? st.get(rowId(effective)) : undefined;
+  const keepable =
+    effective !== null &&
+    PROVIDER_STEPS.includes(effective) &&
+    (!selected || selected.has(effective)) &&
+    hasKey(effective, effRow) &&
+    effRow?.state !== "error";
+  if (keepable && (ctx.yes || !W.includes(effective))) {
+    const why = W.includes(effective) ? "" : " Its key is set but wasn't confirmed working in this run, so it stays the default.";
+    return { step, outcome: "done", message: `Default: ${PROVIDER_LABELS[effective]} (kept).${why} ${dfsNote}`, defaultProvider: effective };
+  }
+  if (W.length === 0) {
+    return { step, outcome: "skipped", message: "No working provider yet; paid tools stay unavailable." };
+  }
+  let choice: ProviderId;
+  let message: string;
+  if (W.length === 1) {
+    choice = W[0]!;
+    message = `Default: ${PROVIDER_LABELS[choice]} (the only provider set up).`;
+  } else {
+    ctx.out("Each client can override this (dataProvider in clients.yaml, or clients set <client> --provider).");
+    const pre = effective && W.includes(effective) ? effective : W[0]!;
+    choice = await ctx.prompt.choose(
+      "Default provider for keyword, competitor and backlink data",
+      W.map((id) => ({ value: id, label: id })),
+      pre,
+    );
+    message = `Default: ${PROVIDER_LABELS[choice]}.`;
+  }
+  if (choice !== effective) saveEnv(ctx, { SEO_DATA_PROVIDER: choice });
+  else if (ctx.shellEnvKeys.has("SEO_DATA_PROVIDER")) {
+    ui.warn("Warning: your shell (or the MCP client config) also sets SEO_DATA_PROVIDER, which overrides .env. Unset it there for the .env value to take effect.");
+  }
+  return { step, outcome: "done", message: `${message} ${dfsNote}`, defaultProvider: choice };
+}
+
+type StepRun = (ctx: WizardContext, opts?: CredentialStepOptions) => Promise<StepResult>;
+
+const STEPS: Record<Exclude<StepName, "provider">, { title: string; run: StepRun }> = {
   node: { title: "Node and build", run: stepNode },
   dataforseo: { title: "DataForSEO", run: stepDataForSeo },
+  ahrefs: { title: "Ahrefs", run: stepAhrefs },
+  semrush: { title: "Semrush", run: stepSemrush },
   google: { title: "Google", run: stepGoogle },
   psi: { title: "PageSpeed Insights key (optional)", run: stepPsi },
   discovery: { title: "Clients", run: stepDiscovery },
   register: { title: "Register with Claude", run: stepRegister },
 };
 
+/** A run's phases: the public steps plus the provider pick and default phases (not --step values). */
+export type Phase = Exclude<StepName, "provider"> | "provider:pick" | "provider:default";
+
+const isProviderStep = (p: Phase): p is ProviderId & Phase => (PROVIDER_STEPS as readonly string[]).includes(p);
+
+/** The run plan (spec 9.6) for a full run or one --step. */
+export function runPlan(step?: StepName): Phase[] {
+  const creds = PROVIDER_STEPS as readonly Phase[];
+  if (!step) return ["node", "provider:pick", ...creds, "provider:default", "google", "psi", "discovery", "register"];
+  if (step === "provider") return ["provider:pick", ...creds, "provider:default"];
+  if (isProviderStep(step)) return [step, "provider:default"];
+  return [step];
+}
+
 const SUMMARY_LABELS: Record<Exclude<StepName, "register">, string> = {
   node: "Node",
+  provider: "Data provider",
   dataforseo: "DataForSEO",
+  ahrefs: "Ahrefs",
+  semrush: "Semrush",
   google: "Google",
   psi: "PageSpeed",
   discovery: "Clients",
@@ -501,6 +807,7 @@ export function appsTally(apps: AppOutcome[]): string {
 export function summarize(ctx: Pick<WizardContext, "cliDisplay" | "dryRun">, results: StepResult[]): { rows: SummaryRow[]; next: string[] } {
   const rows: SummaryRow[] = [];
   const next: string[] = [];
+  const defaultProvider = results.find((r) => r.step === "provider" && r.defaultProvider)?.defaultProvider;
   for (const r of results) {
     if (r.step === "register") {
       for (const a of r.apps ?? []) rows.push({ label: APP_LABELS[a.id], outcome: APP_OUTCOME[a.status], ...(a.status === "dry-run" ? { note: "(dry run)" } : {}) });
@@ -510,32 +817,74 @@ export function summarize(ctx: Pick<WizardContext, "cliDisplay" | "dryRun">, res
       if (changed.has("codex")) next.push("Restart Codex");
       continue;
     }
-    rows.push({ label: SUMMARY_LABELS[r.step], outcome: r.outcome, ...(r.outcome === "skipped" ? { note: "(skipped)" } : {}) });
+    // The default is shown as "(default)" on its provider's cell, not as a cell of its own.
+    if (r.step === "provider") continue;
+    const note = r.step === defaultProvider ? "(default)" : r.outcome === "skipped" ? "(skipped)" : undefined;
+    rows.push({ label: SUMMARY_LABELS[r.step], outcome: r.outcome, ...(note ? { note } : {}) });
     if (r.outcome === "failed" || r.outcome === "needs-input") next.unshift(`Fix ${SUMMARY_LABELS[r.step]}: ${ctx.cliDisplay} setup --step ${r.step}`);
   }
   next.push("In Claude, run the getting-started prompt");
   next.push(`Change one step: ${ctx.cliDisplay} setup --step <${STEP_NAMES.join("|")}>`);
+  if (results.some((r) => r.step === "provider")) next.push(`Change providers: ${ctx.cliDisplay} setup --step provider`);
   return { rows, next };
 }
 
-/** Run every step (or one). Steps never throw: failures and missing input are results. Ctrl-C stops the run. */
+/**
+ * Run the plan for every step (or one). Steps never throw: failures and missing input are
+ * results. Ctrl-C stops the run. With a provider pick, a credential step whose provider
+ * wasn't ticked is "Not selected." (full run) or left out (--step provider), and one that
+ * already works runs no prompt.
+ */
 export async function runWizard(ctx: WizardContext, opts: { step?: StepName } = {}): Promise<StepResult[]> {
   const ui = uiFor(ctx);
   ui.intro({ command: ctx.command ?? "setup", version: ctx.version ?? "", home: ctx.paths.home, dryRun: ctx.dryRun });
-  const names = opts.step ? [opts.step] : STEP_NAMES;
+  const phases = runPlan(opts.step);
   const results: StepResult[] = [];
-  for (const [i, name] of names.entries()) {
-    ui.step(STEPS[name].title, opts.step ? undefined : { index: i + 1, total: names.length });
-    let result: StepResult;
-    try {
-      result = await STEPS[name].run(ctx);
-    } catch (err) {
-      if (err instanceof PromptAbortedError) throw err;
-      result = err instanceof NeedsInputError ? { step: name, outcome: "needs-input", message: err.message } : { step: name, outcome: "failed", message: (err as Error).message };
+  let picked: Map<IntegrationId, IntegrationStatus> | undefined;
+  let index = 0;
+  for (const name of phases) {
+    let result: StepResult | undefined;
+    let record = true;
+    const run = async (title: string, fn: () => Promise<StepResult>): Promise<StepResult> => {
+      index++;
+      ui.step(title, opts.step ? undefined : { index, total: phases.length });
+      try {
+        return await fn();
+      } catch (err) {
+        if (err instanceof PromptAbortedError) throw err;
+        const step: StepName = name === "provider:pick" || name === "provider:default" ? "provider" : name;
+        return err instanceof NeedsInputError ? { step, outcome: "needs-input" as const, message: err.message } : { step, outcome: "failed" as const, message: (err as Error).message };
+      }
+    };
+    if (name === "provider:pick") {
+      result = await run("SEO data providers", async () => {
+        const r = await stepProviderPick(ctx);
+        picked = r.statuses;
+        return r.result;
+      });
+      // The pick's line is shown; the summary's "provider" entry is the default phase's result.
+      record = false;
+    } else if (name === "provider:default") {
+      result = await run("Default data provider", () => stepProviderDefault(ctx));
+    } else if (isProviderStep(name) && picked) {
+      const id = name as ProviderId;
+      const selected = ctx.providers?.selected?.has(id) ?? false;
+      const working = works(id, picked.get(rowId(id)));
+      if (opts.step === "provider" && (!selected || working)) continue;
+      if (!selected) {
+        result = await run(STEPS[name].title, async () => ({ step: name, outcome: "skipped", message: ctx.yes && !hasKey(id, picked!.get(rowId(id))) ? NEEDS_KEY[id](ctx.cliDisplay) : "Not selected." }));
+      } else if (working) {
+        result = await run(STEPS[name].title, async () => ({ step: name, outcome: "done", message: `${PROVIDER_LABELS[id]} already works; change it with ${ctx.cliDisplay} setup --step ${id}.` }));
+      } else {
+        result = await run(STEPS[name].title, () => STEPS[name].run(ctx, { ticked: true }));
+      }
+    } else {
+      const step = name as Exclude<Phase, "provider:pick" | "provider:default">;
+      result = await run(STEPS[step].title, () => STEPS[step].run(ctx));
     }
     // Fancy mode already showed each app's line; its result is a short tally instead of all of them again.
     ui.result(result.outcome, ui.fancy && result.apps ? appsTally(result.apps) : result.message);
-    results.push(result);
+    if (record) results.push(result);
     if (name === "node" && result.outcome === "failed") break;
   }
   const { rows, next } = summarize(ctx, results);

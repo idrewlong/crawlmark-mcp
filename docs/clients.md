@@ -30,10 +30,42 @@ Every field is in `config/clients.example.yaml`. The file is re-read on every ca
 | `locationCode`, `languageCode` | `DEFAULT_LOCATION_CODE` (2840, United States) and `DEFAULT_LANGUAGE_CODE` (`en`) |
 | `keyPages` | The homepage: the GA4 stream URL, else `https://<domain>/` |
 | `competitors`, `trackedKeywords` | Empty |
-| `area`, `niche` | Unset: suggestions search the `locationCode` market and use tracked keywords and Search Console queries as seeds, falling back to the client's DataForSEO ranked keywords (paid) when there are none |
+| `area`, `niche` | Unset: suggestions search the `locationCode` market and use tracked keywords and Search Console queries as seeds, falling back to the client's ranked keywords from its data provider (paid) when there are none |
 | `monthlyBudgetUsd` | `DEFAULT_CLIENT_MONTHLY_BUDGET_USD` (5) |
+| `dataProvider` | `SEO_DATA_PROVIDER` (blank means `dataforseo`) |
+| `country` | The country of a country-level `locationCode` (2840 gives `US`, 2826 gives `GB`); none for a city or region code |
+| `monthlyUnits.ahrefs`, `monthlyUnits.semrush` | `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS` (10,000) and `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` (5,000) |
 
 Arrays you set (`competitors`, `trackedKeywords`, `keyPages`) replace the defaults rather than append.
+
+### Data provider, country and unit caps
+
+Three optional fields choose where a client's paid keyword, ranking, competitor and backlink data comes from, and what it may spend:
+
+```yaml
+clients:
+  example:
+    domain: example.com
+    dataProvider: ahrefs          # dataforseo, ahrefs or semrush; overrides SEO_DATA_PROVIDER for this client
+    country: US                   # ISO alpha-2 market for Ahrefs and Semrush; else from a country-level locationCode
+    monthlyUnits:                 # per-client API unit caps; else the DEFAULT_CLIENT_MONTHLY_* values
+      ahrefs: 20000
+      semrush: 5000
+```
+
+- `dataProvider` picks whose data is used, not credentials: the key itself is in `.env` (or the Claude Desktop extension settings). With no key for the chosen provider, the client's paid calls fail with the command to fix it; crawlmark never falls back to another provider's account. Live SERPs, on-page checks and crawls always use DataForSEO.
+- `country` is stored uppercase. Semrush uses its database for that country (`GB` is Semrush's `uk`); a country Semrush has no database for makes Semrush unavailable for the client. A client with a city-level `locationCode` and no `country` can't use Ahrefs or Semrush until `country` is set.
+- `languageCode` and `area` stay DataForSEO-only.
+- An invalid `dataProvider` or `country` is a config error naming the allowed values.
+
+Set or clear them with the CLI or the `set_client_profile` tool (`""` clears a value there):
+
+```bash
+crawlmark-cli clients set example.com --provider ahrefs --country GB
+crawlmark-cli clients set example.com --provider none --country none   # back to the default; country from the location code
+```
+
+`list_clients` shows each client's resolved `dataProvider` (marked `(default)` when it comes from `SEO_DATA_PROVIDER`) and `country`.
 
 ### When discovery doesn't run or fails
 
@@ -71,8 +103,8 @@ Competitors are stored as bare domains (`https://www.rival.example/page` becomes
 
 `suggest_competitors` (or the `find-competitors` prompt) proposes competitors from two sources:
 
-1. **Organic overlap:** DataForSEO's list of domains ranking for the same keywords as the client.
-2. **Local search presence:** live Google results for up to 5 seed keywords, searched in the client's `area` (or its `locationCode` market when no area is set). Seeds are, in order: `seeds` the AI passes (3-5 non-branded service keywords, confirmed with you), the `niche`, tracked keywords, then the top non-branded Search Console queries of the last 28 days (free; needs Google). When seeds or a niche are given, a Search Console query is used only if it shares a meaningful word with them. Only if none of those exist does it fall back to the client's DataForSEO ranked keywords.
+1. **Organic overlap:** the client's data provider's list of domains ranking for the same keywords as the client (DataForSEO, Ahrefs or Semrush).
+2. **Local search presence** (DataForSEO only; skipped with a note when DataForSEO isn't set up): live Google results for up to 5 seed keywords, searched in the client's `area` (or its `locationCode` market when no area is set). Seeds are, in order: `seeds` the AI passes (3-5 non-branded service keywords, confirmed with you), the `niche`, tracked keywords, then the top non-branded Search Console queries of the last 28 days (free; needs Google). When seeds or a niche are given, a Search Console query is used only if it shares a meaningful word with them. Only if none of those exist does it fall back to the client's ranked keywords from its data provider.
 
 **Pass service-keyword `seeds`.** A small site's own ranked keywords are mostly branded, so organic overlap returns companies that share its name. `find-competitors` has the AI propose 3-5 non-branded service keywords, confirm them with you, and pass them as `seeds`. Candidates whose domain starts or ends with the client's brand initialism (`abbuild.com`, `buildingwithab.com`) or contains a longer brand name are excluded with reason `brand-lookalike` (still listed under `excluded`); common-word brand names are never used for this.
 
@@ -100,7 +132,7 @@ The split sums query-level rows (up to 5,000 per month), which leave out anonymi
 
 A domain often isn't how people search for a business: `casaluna.example` gets searched as "casa luna pizza" and "casa luna menu", which the domain-stem matching misses. `suggest_brand_terms` finds those names in the client's own queries:
 
-1. **Data.** Search Console query rows for the last 90 days (up to 1,000; free). Only when Search Console isn't usable at all (Google isn't set up, or the client has no property) does it use DataForSEO ranked keywords for the client's own domain (top 100, paid, about $0.02, cached 7 days, through the budget cap). If Search Console returns fewer than 20 rows, the paid fallback runs only with `allowPaid: true` (the `review-brand-terms` prompt asks you first); `allowPaid: false` turns it off. A Search Console error is reported and never falls back to the paid source.
+1. **Data.** Search Console query rows for the last 90 days (up to 1,000; free). Only when Search Console isn't usable at all (Google isn't set up, or the client has no property) does it use ranked keywords for the client's own domain from its data provider (top 100, paid: about $0.02 on DataForSEO, or Ahrefs/Semrush units; cached 7 days, through the budget or unit cap). If Search Console returns fewer than 20 rows, the paid fallback runs only with `allowPaid: true` (the `review-brand-terms` prompt asks you first); `allowPaid: false` turns it off. A Search Console error is reported and never falls back to the paid source.
 2. **Candidates.** 1-3 word phrases from queries the client's current matching doesn't already cover. Generic words never start or end a candidate: stop words, intent words ("near", "best", "how"), navigational modifiers ("menu", "hours", "reviews"), the niche, the area, US state names, and trade words seen in the queries. So "pizza near me" never becomes a brand term, however well the site does for it.
 3. **Signals.** (a) Name similarity to the *distinctive part* of the domain stem, client name or GA4 name: the name minus trade words, places and company suffixes. (b) Navigational behaviour, Search Console only: the phrase's queries average position 2 or better with CTR well above the expected curve. (c) Concentration: the phrase recurs across several queries that carry a real share of the site's clicks, on page one.
 4. **Confidence.** `high` needs strong name similarity plus navigational behaviour or concentration, at an average position of 3 or better. Behaviour without name similarity is at most `medium`. A similar name the site ranks poorly for is usually another business, so it stays `low`. The response's `method` string has every threshold.
