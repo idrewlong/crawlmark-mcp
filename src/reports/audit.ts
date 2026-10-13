@@ -2,6 +2,7 @@ import type { Client } from "../config.js";
 import { runAxe, type AxeResult, type WcagLevel } from "../providers/axe.js";
 import { backlinksSummary, instantPage, onPageStartCrawl } from "../providers/dataforseo.js";
 import { gscInspectUrl, gscSitemaps } from "../providers/gsc.js";
+import { checkRender, type RenderCheck } from "../providers/render.js";
 import { runLighthouse, type FormFactor, type LighthouseResult } from "../providers/lighthouse.js";
 import { checkedPairs, extractFindings } from "../analysis/findings.js";
 import { newAuditId, saveAudit } from "../lib/audits.js";
@@ -25,6 +26,7 @@ interface PageAudit {
   url: string;
   lighthouse: Section<LighthouseResult>;
   accessibility: Section<AxeResult>;
+  rendering: Section<RenderCheck>;
   indexing: Section<Awaited<ReturnType<typeof gscInspectUrl>>>;
   onPage: Section<unknown>;
 }
@@ -70,11 +72,12 @@ async function collectAudit(client: Client, opts: AuditOptions) {
   for (const url of urls) {
     const lighthouse = await section(() => runLighthouse(url, formFactor, cacheOpts));
     const accessibility = await section(() => runAxe(url, wcagLevel, cacheOpts));
+    const rendering = await section(() => checkRender(url, cacheOpts));
     const [indexing, onPage] = await Promise.all([
       section(() => gscInspectUrl(client, url, cacheOpts)),
       section(async () => (await instantPage(client, url, cacheOpts)).page),
     ]);
-    pages.push({ url, lighthouse, accessibility, indexing, onPage });
+    pages.push({ url, lighthouse, accessibility, rendering, indexing, onPage });
   }
 
   return {
@@ -136,7 +139,7 @@ function summarize(pages: PageAudit[]) {
       .map(([id, v]) => ({ id, ...v })),
     notIndexed,
     failedChecks: pages.flatMap((p) =>
-      (["lighthouse", "accessibility", "indexing", "onPage"] as const)
+      (["lighthouse", "accessibility", "rendering", "indexing", "onPage"] as const)
         .filter((k) => !p[k].ok)
         .map((k) => ({ url: p.url, check: k, error: (p[k] as { error: string }).error })),
     ),

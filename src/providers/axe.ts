@@ -1,7 +1,7 @@
 import { AxePuppeteer } from "@axe-core/puppeteer";
 import puppeteer from "puppeteer";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
-import { CHROME_FLAGS, chromePath } from "./browser.js";
+import { CHROME_FLAGS, chromePath, guardPage } from "./browser.js";
 
 export type WcagLevel = "A" | "AA" | "AAA";
 
@@ -39,6 +39,7 @@ export async function runAxe(url: string, level: WcagLevel = "AA", opts: { refre
     const browser = await puppeteer.launch({ executablePath: await chromePath(), args: CHROME_FLAGS });
     try {
       const page = await browser.newPage();
+      await guardPage(page);
       await page.setViewport({ width: 1366, height: 900 });
       await page.goto(url, { waitUntil: "networkidle2", timeout: 60_000 });
       const res = await new AxePuppeteer(page).withTags(TAGS[level]).analyze();

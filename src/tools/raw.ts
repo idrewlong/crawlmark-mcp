@@ -7,6 +7,7 @@ import { backlinksSummary, competitorDomains, rankedKeywords, searchVolume, serp
 import { ga4Report } from "../providers/ga4.js";
 import { gscInspectUrl, gscQuery } from "../providers/gsc.js";
 import { runLighthouse } from "../providers/lighthouse.js";
+import { checkRender } from "../providers/render.js";
 import { handler, READ_ONLY } from "./util.js";
 
 /**
@@ -171,5 +172,20 @@ export function registerRawTools(server: McpServer) {
       annotations: READ_ONLY,
     },
     handler(({ url, level }) => runAxe(url, level)),
+  );
+
+  server.registerTool(
+    "render_check",
+    {
+      title: "Rendered vs raw HTML check",
+      description:
+        "Fetch a URL twice, as plain HTML (Googlebot-like user agent, no JavaScript) and as rendered by headless Chrome, then compare title, " +
+        "meta description, canonical, robots meta, H1s, links, JSON-LD types, hreflang, Open Graph and visible word count. " +
+        "Flags SEO elements that only appear after JavaScript runs (rules like title-js-only, canonical-mismatch, content-js-dependent). " +
+        "http/https only; private and loopback IP literals are refused unless ALLOW_PRIVATE_URLS=true; hostname-resolution checks come in Phase 6d. Free, ~15s, cached 1 day.",
+      inputSchema: { url: z.string().url(), refresh: z.boolean().optional().describe("Bypass the one-day cache.") },
+      annotations: READ_ONLY,
+    },
+    handler(({ url, refresh }) => checkRender(url, { refresh: refresh ?? false })),
   );
 }

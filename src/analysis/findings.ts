@@ -3,8 +3,7 @@ import type { AuditResult } from "../reports/audit.js";
 
 /**
  * Normalised audit findings. Pure: no I/O, so it is tested with hand-built
- * fixtures. `rendering` and `crawl` are part of the type for later phases but
- * `runAudit` does not collect them yet, so nothing emits them today.
+ * fixtures. `crawl` is part of the type for a later phase; nothing emits it yet.
  */
 export type FindingSource = "lighthouse" | "axe" | "indexing" | "onpage" | "rendering" | "crawl" | "site";
 export type Severity = "critical" | "high" | "medium" | "low";
@@ -183,6 +182,12 @@ export function extractFindings(audit: AuditResult): Finding[] {
       }
     }
 
+    if (page.rendering?.ok) {
+      for (const f of page.rendering.data.flags) {
+        add({ source: "rendering", rule: f.rule, url, severity: f.severity, title: f.title, evidence: f.evidence });
+      }
+    }
+
     if (page.onPage.ok) {
       const op = page.onPage.data as { failedChecks?: string[] } | null;
       for (const check of op?.failedChecks ?? []) {
@@ -215,6 +220,8 @@ export function checkedPairs(audit: AuditResult): CheckedPair[] {
     // A missing verdict means Google gave no index status, so nothing was verified.
     if (p.indexing.ok && p.indexing.data.verdict) out.push({ url, source: "indexing" });
     if (p.onPage.ok && p.onPage.data) out.push({ url, source: "onpage" });
+    // Only when both the raw and the rendered fetch succeeded.
+    if (p.rendering?.ok) out.push({ url, source: "rendering" });
   }
   if (audit.site.sitemaps.ok) out.push({ url: SITE_CHECK_URL, source: "site" });
   return out;

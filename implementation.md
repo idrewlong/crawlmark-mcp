@@ -290,6 +290,7 @@ This catches SEO elements that only appear after JavaScript runs, which is commo
    - Rendered word count more than 3× raw, meaning content depends on JS: `medium`.
    - JSON-LD present only after render: `medium`.
    - Links present only after render (rendered internal links more than 2× raw): `medium`.
+   - Deviations: `content-js-dependent` also needs rendered words >= 50 and at least 30 more than raw; robots directives compare normalised (case, spacing, order); a non-2xx, non-HTML or failed fetch produces no comparison, and a truncated raw body skips the word-count rule. HTML extraction runs in a worker thread (10s timeout, 256 MB heap) so hostile markup cannot hang the server.
 5. **Tool.** `render_check({ url })` returns both extractions plus flags.
 6. **Audit integration.** `run_audit` adds a `rendering` section per page and feeds its flags into findings as source `rendering`.
 
@@ -358,6 +359,8 @@ Keep the MCP server itself stateless. Scheduling lives in a separate CLI entry p
   - Resolve the hostname and refuse loopback, private (10/8, 172.16/12, 192.168/16), link-local (169.254/16, which includes cloud metadata endpoints), CGNAT, and IPv6 equivalents.
   - Add `ALLOW_PRIVATE_URLS=true` to bypass this for local development.
   - Add `RESTRICT_TO_CLIENT_DOMAINS=true` to only allow URLs on client domains in `clients.yaml` (including their subdomains).
+  - Chrome guard (replaces the interim `guardPage` request interception, which only sees http(s) requests and checks IP literals): start Chrome with `--proxy-server` pointing at an in-process forward proxy that resolves DNS itself and checks the resolved IP for every connection (CONNECT included), plus `--proxy-bypass-list=<-loopback>` so loopback is not exempted. That covers WebSockets, popups, service workers, DNS rebinding and Lighthouse (chrome-launcher) as well as axe and the rendered fetch. `guardPage` is an interim measure until then.
+  - Add the remaining ranges to the guard: SIIT `::ffff:0:0/96` and NAT64 local-use `64:ff9b:1::/48`.
 - **Timeouts.** Add a `withTimeout(promise, ms, label)` helper and apply it per tool: browser tools 90s, network calls 30s, `run_audit` overall 10 minutes. The timeout must also close the browser.
 - **Usage log.** Write one row per tool call to a `tool_calls` table (tool name, client, duration, ok/error). Add a `usage_summary` tool.
 

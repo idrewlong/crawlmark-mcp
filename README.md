@@ -26,10 +26,11 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `low_ctr` | Queries at positions 1-5 with CTR under 60% of expected (title and meta rewrite candidates) |
 | `cannibalization` | Queries where 2+ pages each hold at least 10% of the impressions |
 | `declining_pages` | Pages whose clicks fell versus the previous equal-length period, with the queries that lost the most |
-| `run_audit` | Lighthouse + axe + GSC index status + on-page check per key page, sitemap health; optional full crawl and backlinks. Every run is saved and returns an `auditId`. Runs are fresh by default (the response cache is skipped, so the on-page check is a paid call per page); `fresh: false` reuses results up to a day old, and `compare_audits` warns when the later audit was not fresh |
+| `run_audit` | Lighthouse + axe + a rendered-vs-raw HTML check (`rendering`) + GSC index status + on-page check per key page, sitemap health; optional full crawl and backlinks. Every run is saved and returns an `auditId`. Runs are fresh by default (the response cache is skipped, so the on-page check is a paid call per page); `fresh: false` reuses results up to a day old, and `compare_audits` warns when the later audit was not fresh |
 | `list_audits` | A client's saved audits, newest first: ID, run time, page count, average scores, finding count |
 | `get_audit` | One saved audit's full result and normalised findings, by ID |
 | `compare_audits` | Diffs two saved audits (default: latest vs the one before): `new`, `resolved`, `persistent` and `unverified` findings plus Lighthouse score changes. A finding is `resolved` only if its check ran in the later audit; otherwise it is `unverified` |
+| `render_check` | Fetches a URL as plain HTML (Googlebot-like user agent) and as rendered by headless Chrome, extracts title, description, canonical, robots, H1s, links, JSON-LD types, hreflang, Open Graph and visible word count from each, and flags SEO elements that only exist after JavaScript runs (`title-js-only`, `canonical-mismatch`, `robots-js-only`, `content-js-dependent`, `jsonld-js-only`, `links-js-only`, ...). http/https only; private and loopback IP literals are refused unless `ALLOW_PRIVATE_URLS=true` (hostname-resolution checks come in Phase 6d). Free, cached 1 day; `refresh` bypasses |
 | `crawl_status` | Progress and issue counts for a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check (e.g. `no_description`) |
 | `spend_summary` | Paid API spend this month by client |
@@ -60,7 +61,7 @@ Prompt text lives in `src/prompts/templates/*.md` (copied to `dist/` by `npm run
 
 **Lower-level tools** (for follow-up questions)
 
-`gsc_query`, `gsc_inspect_url`, `ga4_report`, `keyword_volume`, `serp_check`, `ranked_keywords`, `competitor_domains`, `backlinks_summary`, `lighthouse`, `accessibility_check`
+`gsc_query`, `gsc_inspect_url`, `ga4_report`, `keyword_volume`, `serp_check`, `ranked_keywords`, `competitor_domains`, `backlinks_summary`, `lighthouse`, `accessibility_check`, `render_check`
 
 Tools that take a `client` accept its domain (`example.com`), any URL or `www.` form of it, or its `clients.yaml` key. See [Clients](#clients).
 
@@ -381,9 +382,11 @@ src/
     spend.ts            spend-ledger key and alias merging (pure)
     concurrency.ts      mapLimit: bounded-concurrency map (pure)
     google-auth.ts      Google auth mode selection, consent URL, callback check, token merge, error messages (pure)
+    url-guard.ts        http/https only; refuses loopback/private/link-local IP literals (no DNS resolution until Phase 6d) unless ALLOW_PRIVATE_URLS=true (pure)
     token-store.ts      OAuth token file: atomic 0600 write, read, delete
   providers/            one file per data source
     gsc.ts  ga4.ts  dataforseo.ts  lighthouse.ts  axe.ts  browser.ts
+    render.ts           fetchRaw (Googlebot UA, 20s, 5 MB cap, guarded redirects), fetchRendered (headless Chrome), checkRender; both cached 1 day
     discovery.ts        lists Search Console sites and GA4 properties + web streams (cached 1 day)
     google.ts           googleAuth(): OAuth client or service account, by GOOGLE_AUTH_MODE or auto-detected; googleAuthStatus()
     google-login.ts     OAuth loopback login flow
@@ -395,6 +398,8 @@ src/
     brand-terms.ts      brand-term candidates from query rows: n-grams, signals, confidence, other-client exclusion (pure)
     ctr-curve.ts        expected CTR by position (editable constant)
     opportunities.ts    striking distance, quick wins, low CTR, cannibalization, declining pages (pure)
+    render-extract.ts   extractSeo(): SEO elements from an HTML string with cheerio (pure)
+    render.ts           compareRender(): raw vs rendered flags (pure)
     findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
     diff.ts             diffAudits: new / resolved / persistent / unverified, score changes (pure)
   prompts/
