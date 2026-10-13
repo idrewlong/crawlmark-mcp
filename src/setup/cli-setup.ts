@@ -5,16 +5,21 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { ENV_FILE, ENV_FILE_KEYS, HOME, PROJECT_ROOT } from "../config.js";
-import { claudeDesktopConfigPath, shellQuote } from "../lib/claude-config.js";
+import { claudeDesktopConfigPath, cursorConfigPath, shellQuote } from "../lib/claude-config.js";
+import { codexConfigPath } from "../lib/codex-config.js";
 import { formatTable } from "../lib/clients.js";
 import { closeEgressProxy } from "../lib/egress-proxy.js";
 import { expandPath } from "../lib/home.js";
 import { winCmdArgs } from "../lib/win-quote.js";
 import { executeMigration, planMigration } from "../lib/migrate.js";
 import { checkServiceAccountKeyFile } from "../providers/google.js";
+import { packageVersion } from "../lib/entry.js";
+import { stripControl } from "../lib/terminal-text.js";
 import { autoPrompter, PromptAbortedError, terminalPrompter, type Prompter } from "./prompter.js";
+import { chooseRenderer, plainUi, type Ui } from "./ui.js";
 import { INTEGRATIONS, type IntegrationId, type SetupStatusReport } from "./status.js";
-import { cliBase, cliInvocation, setupStatus } from "./status-providers.js";
+import { cliPrefix, isCheckout, onPath, setupStatus } from "./status-providers.js";
+import { renderStatus, statusWidth, supportsColor, supportsUnicode } from "./status-render.js";
 import { runWizard, STEP_NAMES, type ExecResult, type StepName, type WizardContext } from "./wizard.js";
 
 export interface SetupFlags {
@@ -29,6 +34,8 @@ export interface SetupFlags {
 }
 
 const out = (line = "") => process.stdout.write(line + "\n");
+/** The wizard's own output: control characters stripped (it prints other apps' server names and child output). */
+const wizardOut = (line = "") => out(stripControl(line));
 const warn = (line: string) => process.stderr.write(line + "\n");
 
 /**
@@ -88,16 +95,39 @@ async function childStatus(only: IntegrationId[], opts: { refresh?: boolean } = 
   return JSON.parse(r.stdout) as SetupStatusReport;
 }
 
+/** The shell's environment without the keys loaded from the home's .env (pure). */
+export function shellOnlyEnv(processEnv: NodeJS.ProcessEnv, envFileKeys: ReadonlySet<string>): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(processEnv).filter(([k]) => !envFileKeys.has(k)));
+}
+
+/**
+ * Which app config files the register step reads, edits and backs up (pure).
+ * Built from the shell env only: a CODEX_HOME, XDG_CONFIG_HOME or APPDATA in the
+ * home's .env must not redirect the edit, and child processes (which never see
+ * .env keys) must agree on the file. The CRAWLMARK_* overrides are test-only.
+ */
+export function appConfigPaths(shell: Record<string, string | undefined>, userHome: string, platform: NodeJS.Platform): { desktopConfig: string | undefined; cursorConfig: string; codexConfig: string } {
+  const pick = (k: string) => shell[k] || undefined;
+  return {
+    desktopConfig: pick("CRAWLMARK_CLAUDE_DESKTOP_CONFIG") ?? claudeDesktopConfigPath(platform, userHome, shell),
+    cursorConfig: pick("CRAWLMARK_CURSOR_CONFIG") ?? cursorConfigPath(userHome),
+    codexConfig: pick("CRAWLMARK_CODEX_CONFIG") ?? codexConfigPath(shell, userHome),
+  };
+}
+
 export function realWizardContext(prompt: Prompter, dryRun: boolean): WizardContext {
   const shellEnvKeys = new Set(Object.keys(process.env).filter((k) => !ENV_FILE_KEYS.has(k) && k !== "CRAWLMARK_HOME"));
-  // Overrides for testing the wizard against a fake Claude (never needed in normal use).
+  // Overrides for testing the wizard against fake apps (never needed in normal use; see docs/development.md).
   // Honoured only from the shell, never from the home's .env.
   const fromShell = (k: string) => (ENV_FILE_KEYS.has(k) ? undefined : process.env[k]) || undefined;
-  const claudeBin = fromShell("CRAWLMARK_CLAUDE_BIN") ?? "claude";
+  const bins: Record<string, string> = {
+    claude: fromShell("CRAWLMARK_CLAUDE_BIN") ?? "claude",
+    codex: fromShell("CRAWLMARK_CODEX_BIN") ?? "codex",
+  };
   return {
     prompt,
-    out,
-    exec: (cmd, args, opts = {}) => run(cmd === "claude" ? claudeBin : cmd, args, opts),
+    out: wizardOut,
+    exec: (cmd, args, opts = {}) => run(bins[cmd] ?? cmd, args, opts),
     cli: runSelf,
     fetch: (...a) => fetch(...a),
     status: childStatus,
@@ -109,10 +139,11 @@ export function realWizardContext(prompt: Prompter, dryRun: boolean): WizardCont
       envFile: ENV_FILE,
       userHome: homedir(),
       cwd: process.cwd(),
-      desktopConfig: fromShell("CRAWLMARK_CLAUDE_DESKTOP_CONFIG") ?? claudeDesktopConfigPath(process.platform, homedir(), process.env),
+      ...appConfigPaths(shellOnlyEnv(process.env, ENV_FILE_KEYS), homedir(), process.platform),
     },
+    which: (name) => onPath(name),
     node: { version: process.version, execPath: process.execPath },
-    cliDisplay: cliInvocation(),
+    cliDisplay: cliPrefix(),
     shellEnvKeys,
     dryRun,
   };
@@ -139,8 +170,14 @@ async function statusCommand(flags: SetupFlags): Promise<number> {
     out(JSON.stringify(report, null, 2));
     return 0;
   }
-  out(`Config home: ${report.home.dir} (${report.home.reason})`);
-  out(formatTable(["INTEGRATION", "STATE", "DETAIL", "NEXT"], report.integrations.map((i) => [i.label, i.state, i.detail, i.next ?? "-"])));
+  const lines = renderStatus(report, {
+    width: statusWidth(process.stdout.columns, process.stdout.isTTY),
+    color: supportsColor(process.env, process.stdout.isTTY),
+    unicode: supportsUnicode(process.env),
+    userHome: homedir(),
+    checkoutRoot: isCheckout() ? PROJECT_ROOT : undefined,
+  });
+  for (const line of lines) out(line);
   return 0;
 }
 
@@ -180,11 +217,11 @@ async function migrateCommand(flags: SetupFlags): Promise<number> {
   const r = executeMigration(plan);
   out(`Copied ${r.copied} file(s)${r.skipped ? `, skipped ${r.skipped} existing` : ""}. The originals in ${plan.from} are unchanged.`);
   const home = `CRAWLMARK_HOME=${shellQuote(plan.to)}`;
-  out(`To use it, add \`export ${home}\` to your shell profile, then point Claude at it: \`${home} ${cliBase()} setup --step register\`.`);
+  out(`To use it, add \`export ${home}\` to your shell profile, then point Claude at it: \`${home} ${cliPrefix({ withHome: false })} setup --step register\`.`);
   return 0;
 }
 
-async function wizardCommand(flags: SetupFlags, args: string[]): Promise<number> {
+async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setup" | "init"): Promise<number> {
   if (args.length) {
     warn(`Unexpected argument(s): ${args.join(" ")}`);
     return 2;
@@ -194,9 +231,27 @@ async function wizardCommand(flags: SetupFlags, args: string[]): Promise<number>
     warn(`Unknown step: ${step}. Steps: ${STEP_NAMES.join(", ")}.`);
     return 2;
   }
-  const prompt = flags.yes ? autoPrompter(out) : terminalPrompter();
+  const renderer = chooseRenderer({ stdinTTY: process.stdin.isTTY, stdoutTTY: process.stdout.isTTY, env: process.env, yes: flags.yes });
+  let ui: Ui;
+  let prompt: Prompter;
+  if (renderer === "fancy") {
+    // Loaded only here, so the plain path never loads @clack/prompts.
+    const clack = await import("./ui-clack.js");
+    ui = clack.clackUi();
+    prompt = clack.clackPrompter();
+  } else {
+    ui = plainUi(out);
+    prompt = flags.yes ? autoPrompter(wizardOut) : terminalPrompter();
+  }
+  const ctx = realWizardContext(prompt, flags["dry-run"]);
+  ctx.ui = ui;
+  ctx.command = invokedAs;
+  // packageVersion expects a module directly under src/ or dist/; this one is a level deeper.
+  ctx.version = packageVersion(new URL("../index.js", import.meta.url).href);
+  if (ui.fancy) ctx.out = (line = "") => ui.line(line);
   try {
-    const results = await runWizard(realWizardContext(prompt, flags["dry-run"]), step ? { step: step as StepName } : {});
+    const results = await runWizard(ctx, step ? { step: step as StepName } : {});
+    if (isCheckout()) out(`Run commands from ${PROJECT_ROOT}`);
     return results.some((r) => r.outcome === "failed") ? 1 : 0;
   } catch (err) {
     if (err instanceof PromptAbortedError) {
@@ -209,12 +264,17 @@ async function wizardCommand(flags: SetupFlags, args: string[]): Promise<number>
   }
 }
 
-export async function setupCommand(command: string | undefined, args: string[], flags: SetupFlags): Promise<number> {
+/** `setup`, `setup status`, `setup migrate`, and `init` (the wizard, worded as init). */
+export async function setupCommand(command: string | undefined, args: string[], flags: SetupFlags, invokedAs: "setup" | "init" = "setup"): Promise<number> {
+  if (invokedAs === "init") {
+    const extra = [command, ...args].filter((a): a is string => a !== undefined);
+    return wizardCommand(flags, extra, "init");
+  }
   if (command === "status") return args.length ? (warn(`Unexpected argument(s): ${args.join(" ")}`), 2) : statusCommand(flags);
   if (command === "migrate") return args.length ? (warn(`Unexpected argument(s): ${args.join(" ")}`), 2) : migrateCommand(flags);
   if (command !== undefined) {
     warn(`Unknown command: setup ${command}. Use setup, setup status or setup migrate.`);
     return 2;
   }
-  return wizardCommand(flags, args);
+  return wizardCommand(flags, args, "setup");
 }

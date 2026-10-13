@@ -19,11 +19,15 @@ Every source is optional. Your client list fills itself from the Search Console 
 Install crawlmark
 -----------------
 
-Requires **Node 22.13 or later** (crawlmark uses the built-in `node:sqlite`). Choose one installation method, then [set up your credentials](#set-up-credentials).
+```bash
+npx crawlmark-mcp@latest init
+```
+
+That one command sets up crawlmark and adds it to your AI apps: **Claude Code, Claude Desktop, Cursor and Codex**. It needs **Node 22.13 or later** (crawlmark uses the built-in `node:sqlite`). Other ways to install are below; whichever you pick, [set up your credentials](#set-up-credentials) next.
 
 | System or use | Installation method |
 |---|---|
-| Claude Code, or any MCP client | [npx and the setup wizard](#npx-and-the-setup-wizard) |
+| Claude Code, Claude Desktop, Cursor, Codex, or any MCP client | [npx and the setup wizard](#npx-and-the-setup-wizard) |
 | Claude Desktop | [Claude Desktop bundle (MCPB)](#claude-desktop-bundle-mcpb) |
 | Scheduled jobs, development, or before the first release | [From source](#from-source) |
 
@@ -32,10 +36,21 @@ Requires **Node 22.13 or later** (crawlmark uses the built-in `node:sqlite`). Ch
 ### npx and the setup wizard
 
 ```bash
-npx crawlmark-mcp setup
+npx crawlmark-mcp@latest init
 ```
 
-The wizard checks Node, asks for each credential and checks it live, discovers your clients, and registers crawlmark with Claude Code or Claude Desktop (showing the change first). Your settings live in `~/.crawlmark`.
+The wizard checks Node, asks for each credential and checks it live, and discovers your clients. Then it asks which AI apps to add crawlmark to, with the ones it found on your machine already ticked:
+
+| App | How crawlmark is added |
+|---|---|
+| Claude Code | `claude mcp add` (user scope, so every project sees it) |
+| Claude Desktop | An entry in `claude_desktop_config.json` |
+| Cursor | An entry in `~/.cursor/mcp.json` (global, not per project) |
+| Codex | `codex mcp add`, or an entry in `~/.codex/config.toml` when the `codex` command isn't installed |
+
+Every change is shown before it's made, other servers are listed by name only, and each config file keeps a `.bak` copy. An app that already has a different crawlmark entry is only changed if you say yes. Your settings live in `~/.crawlmark`.
+
+In a terminal you get arrow-key choices, masked secrets and a spinner for each live check. With piped input, `CI=true`, `TERM=dumb`, `NO_COLOR` or `--yes`, the same steps run as plain numbered prompts. `init` and `setup` are the same command.
 
 `crawlmark-mcp` with no arguments is the MCP server, which is what clients launch. With a subcommand it runs the admin CLI instead, so `npx crawlmark-mcp setup status` and `npx crawlmark-mcp clients list` work too.
 
@@ -76,13 +91,30 @@ The setup wizard covers everything here. Each step shows its current status firs
 
 | Command | Does |
 |---|---|
-| `crawlmark-cli setup` | The whole wizard |
+| `crawlmark-cli init` (or `setup`) | The whole wizard |
 | `crawlmark-cli setup --step <node\|dataforseo\|google\|psi\|discovery\|register>` | One step |
 | `crawlmark-cli setup --dry-run` | Runs the free checks and shows what each step would do, without writing, signing in or registering anything |
 | `crawlmark-cli setup --yes` | Accepts every default. Steps that need input (a password, a key file) are skipped |
 | `crawlmark-cli setup status` | Each integration's state and the next step (`--json` for machine output) |
 
-From a source checkout, run these as `npm run cli -- setup …`. With npx, use `npx crawlmark-mcp setup …`.
+From a source checkout, run these as `npm run cli -- setup …` from the project folder. With npx, use `npx crawlmark-mcp setup …`. The commands that `setup status` and the wizard print already use the right form for your install.
+
+`setup status` prints one line per integration, with the next step under anything that needs attention:
+
+```
+crawlmark status   home ~/.crawlmark (installed package)
+
+✔ DataForSEO          Credentials work (sandbox mode, balance $1.00). Sandbox
+                      returns sample data at no cost.
+✖ Google              Google rejected the key: invalid_grant
+                      → npx crawlmark-mcp setup --step google
+○ PageSpeed Insights  Optional. Without a key, Lighthouse still runs locally but
+                      without real-user (CrUX) field data.
+                      → npx crawlmark-mcp setup --step psi
+…
+
+5 working · 0 needs attention · 2 errors · 2 not set up
+```
 
 Secrets are typed into the terminal without echo and saved to `.env` with mode `0600`. Never paste them into a chat.
 
@@ -176,7 +208,7 @@ claude mcp add crawlmark -s user -- npx -y crawlmark-mcp
 claude mcp add crawlmark -s user -- node --disable-warning=ExperimentalWarning /absolute/path/to/crawlmark-mcp/dist/index.js
 ```
 
-**Claude Desktop and other clients** (`mcpServers` config):
+**Claude Desktop, Cursor and other clients** (`mcpServers` config; Cursor's global file is `~/.cursor/mcp.json`):
 
 ```json
 {
@@ -189,7 +221,15 @@ claude mcp add crawlmark -s user -- node --disable-warning=ExperimentalWarning /
 }
 ```
 
-For a source checkout, use `"command": "node"` and `"args": ["--disable-warning=ExperimentalWarning", "/absolute/path/to/crawlmark-mcp/dist/index.js"]`. Claude Desktop doesn't load your shell's `PATH`, so if it can't find `node` or `npx`, use the absolute path (`which node`). Credentials come from `.env` in the config home, so no `env` block is needed unless your settings live somewhere other than the default; then add `"env": { "CRAWLMARK_HOME": "/path/to/home" }`.
+**Codex** (`~/.codex/config.toml`, or run `codex mcp add crawlmark -- npx -y crawlmark-mcp`):
+
+```toml
+[mcp_servers.crawlmark]
+command = "npx"
+args = ["-y", "crawlmark-mcp"]
+```
+
+For a source checkout, use `"command": "node"` and `"args": ["--disable-warning=ExperimentalWarning", "/absolute/path/to/crawlmark-mcp/dist/index.js"]`. Claude Desktop, Cursor and Codex may not load your shell's `PATH`, so if one can't find `node` or `npx`, use the absolute path (`which node`). Credentials come from `.env` in the config home, so no `env` block is needed unless your settings live somewhere other than the default; then add `"env": { "CRAWLMARK_HOME": "/path/to/home" }`.
 
 Once connected, run the **`getting-started`** prompt. It checks what's set up, explains what crawlmark can do with it, and offers a first report for your busiest client.
 
@@ -367,11 +407,11 @@ Relative paths resolve against the config home, so the server works whichever di
 CLI
 ---
 
-`crawlmark-cli` (or `npx crawlmark-mcp <command>`, or `npm run cli -- <command>` from source) handles local admin tasks. Run `crawlmark-cli --help` for every flag.
+`crawlmark-cli` (or `npx crawlmark-mcp <command>`, or `npm run cli -- <command>` from source) handles local admin tasks. Run `crawlmark-cli --help` for an overview and `crawlmark-cli help <command>` for a command's options.
 
 | Command | Does |
 |---|---|
-| `setup`, `setup status`, `setup migrate --to <dir>` | Guided setup, status report, copy settings to a new home |
+| `init` (same as `setup`), `setup status`, `setup migrate --to <dir>` | Guided setup and app registration, status report, copy settings to a new home |
 | `auth login`, `auth status`, `auth logout` | Google OAuth sign-in, check and sign-out |
 | `clients list [--refresh]` | Discover and list clients |
 | `clients add <domain>...`, `clients remove <domain>... [--ignore]` | Add or remove clients by hand |

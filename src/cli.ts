@@ -33,68 +33,16 @@ import { runAudits, runTrafficChecks, type Skipped } from "./scheduled.js";
 import { assertSafeUrl } from "./lib/url-guard.js";
 import { packageVersion } from "./lib/entry.js";
 import { setupCommand } from "./setup/cli-setup.js";
+import { groupHelp, HELP_GROUPS, isHelpGroup, programName, topHelp } from "./cli-help.js";
 
-const USAGE = `Usage: crawlmark-cli <command>
+/** Help for a group (or the top level), for stdout (bold on a TTY) or stderr (plain). */
+function helpText(group: string | undefined, stream: "stdout" | "stderr" = "stdout"): string {
+  const o = { prog: programName(process.argv[1]), bold: stream === "stdout" && Boolean(process.stdout.isTTY) && !process.env.NO_COLOR };
+  return isHelpGroup(group) ? groupHelp(group, o) : topHelp(o);
+}
 
-Commands:
-  setup [--step <node|dataforseo|google|psi|discovery|register>] [--dry-run] [--yes]
-                Guided setup: checks Node (and builds from source), enters and live-checks each
-                credential, discovers clients and registers crawlmark with Claude. Re-runnable;
-                each step shows its status first and can be skipped. --dry-run writes nothing;
-                --yes accepts every default without asking (steps that need input are skipped)
-  setup status [--json] [--only <id,id>] [--refresh]
-                Same checks as the setup_status tool: each integration's state and next step
-  setup migrate --to <dir> [--force] [--yes] [--dry-run]
-                Copy (never move) .env, config/clients.yaml, data/ and secrets/ from the current
-                config home to <dir>, skipping files that exist unless --force. Asks first unless --yes
-  auth login    Sign in to Google in your browser (OAuth mode) and store the token
-  auth status   Show the active Google auth mode, account and granted scopes
-  auth logout   Revoke the stored Google token and delete it
-  clients list [--refresh]
-                Show every client. When Google is set up, newly discovered Search Console
-                and GA4 domains are added to clients.yaml first
-  clients add <domain>... [--name <name>]
-                Add clients by hand (works without Google, e.g. for DataForSEO);
-                --name only with a single domain
-  clients remove <domain>... [--ignore]
-                Delete clients' entries from clients.yaml; --ignore hides them for good instead
-  clients set <client> [--area <location>] [--niche <text>] [--name <name>] [--brand-terms "a,b"]
-                Set a client's area (DataForSEO location name, e.g. "Austin,Texas,United States"),
-                niche, display name and brand terms (comma-separated; replaces the list; they add to the
-                built-in domain/name matching for the branded split); pass "" to clear one
-  competitors list <client>
-  competitors add <client> <domain>... [--note <text>]
-  competitors remove <client> <domain>...
-                Manage a client's competitors (URLs and www. forms become bare domains)
-  keywords list <client>
-  keywords add <client> <keyword>... [--note <text>]
-  keywords remove <client> <keyword>...
-                Manage a client's tracked keywords (quote keywords with spaces)
-  brand list <client>
-  brand add <client> <term>...
-  brand remove <client> <term>...
-                Manage a client's brand terms (quote terms with spaces)
-  brand suggest <client>|--all [--apply] [--min-confidence high|medium] [--paid] [--paid-sparse] [--no-paid]
-                Infer brand terms from Search Console (free). With --all, DataForSEO (paid,
-                ~$0.02 a client) is never used unless --paid (clients with no Search Console
-                property) or --paid-sparse (also clients with under 20 Search Console rows).
-                For one client it is used when the client has no Search Console property,
-                also for sparse data with --paid-sparse, never with --no-paid; never after a
-                Search Console error. --apply saves candidates at or above --min-confidence
-                (default high) that match the distinctive part of the client's name; AUTO shows
-                "yes" for high candidates that qualify, else why it needs review
-  audit --client <domain|slug> [--urls <url,url>] [--dry-run]
-  audit --all [--dry-run]
-                Scheduled audit: runs discovery (--all), a fresh run_audit per client (one at a time),
-                saves the snapshot and diffs it against the previous one. --urls overrides the page
-                list (one client). Clients that can't be audited are skipped and reported.
-  check-traffic --client <domain|slug> | --all [--dry-run]
-                Compares the last 7 complete Search Console days with the 7 before, branded vs
-                non-branded. Free. Clients without Search Console are skipped.
-                Both print JSON to stdout and POST a text summary to ALERT_WEBHOOK_URL when there are
-                alerts (new critical/high finding; non-branded clicks down by ALERT_TRAFFIC_DROP_PCT
-                and at least ALERT_MIN_CLICKS_LOST). Exit code: 0 no alerts, 1 error, 2 alerts.
-`;
+/** The command group being run, so a usage error shows that group's help. */
+let currentGroup: string | undefined;
 
 // A reader that closes early (e.g. `| head -1`) is not an error.
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -433,7 +381,7 @@ type ScheduledFlags = { client?: string | undefined; all: boolean; urls?: string
 /** Usage problems in the scheduled commands exit 1, because 2 means "alerts" to a cron wrapper. */
 function scheduledUsage(problem: string): number {
   warn(`${problem}\n`);
-  warn(USAGE);
+  warn(helpText(currentGroup, "stderr"));
   return 1;
 }
 
@@ -484,7 +432,7 @@ async function scheduledCommand(kind: "audit" | "check-traffic", args: string[],
 
 function usageError(problem: string): number {
   warn(`${problem}\n`);
-  warn(USAGE);
+  warn(helpText(currentGroup, "stderr"));
   return 2;
 }
 
@@ -523,8 +471,9 @@ async function main(argv: string[]): Promise<number> {
     },
   });
   const [group, command, ...args] = positionals;
+  currentGroup = group;
   if (values.help) {
-    out(USAGE);
+    out(helpText(group === "help" ? command : group));
     return 0;
   }
   if (group === "audit" || group === "check-traffic") return scheduledCommand(group, command ? [command, ...args] : args, values);
@@ -535,6 +484,7 @@ async function main(argv: string[]): Promise<number> {
   if (group === "keywords") return keywordsCommand(command, args, values.note);
   if (group === "brand") return brandCommand(command, args, values);
   if (group === "setup") return setupCommand(command, args, values);
+  if (group === "init") return setupCommand(command, args, values, "init");
   // Every other command takes no further arguments.
   if (args.length) return usageError(`Unexpected argument${args.length > 1 ? "s" : ""}: ${args.join(" ")}`);
   if (group === "clients") {
@@ -545,12 +495,20 @@ async function main(argv: string[]): Promise<number> {
     if (command === "status") return status();
     if (command === "logout") return logout();
   }
-  if (!group || group === "help") {
-    out(USAGE);
+  if (!group) {
+    out(helpText(undefined));
     return 0;
   }
+  if (group === "help") {
+    if (command === undefined || isHelpGroup(command)) {
+      out(helpText(command));
+      return 0;
+    }
+    currentGroup = undefined;
+    return usageError(`No help for "${command}". Commands: ${HELP_GROUPS.join(", ")}.`);
+  }
   warn(`Unknown command: ${argv.join(" ")}\n`);
-  warn(USAGE);
+  warn(helpText(undefined, "stderr"));
   // 1, not 2: a cron wrapper reads 2 as "alerts".
   return 1;
 }

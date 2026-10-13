@@ -21,7 +21,32 @@ Notes for working on crawlmark itself. Users don't need any of this; see the [RE
 CRAWLMARK_HOME=$(mktemp -d) node scripts/mcp-list.mjs node dist/index.js
 ```
 
-Tests use fixtures in `test/fixtures/` and never call paid APIs. `scripts/record-fixtures.ts` records raw DataForSEO **sandbox** responses (it refuses the live API); scrub them before committing. To test the setup wizard's Claude registration without touching your real config, set `CRAWLMARK_CLAUDE_DESKTOP_CONFIG` and `CRAWLMARK_CLAUDE_BIN` in the shell.
+Tests use fixtures in `test/fixtures/` and never call paid APIs. `scripts/record-fixtures.ts` records raw DataForSEO **sandbox** responses (it refuses the live API); scrub them before committing.
+
+### Testing the setup wizard against fake apps
+
+The register step reads and writes real app configs and runs `claude` and `codex`. To try it without touching yours, point these overrides at temp files and fake scripts. They're read from the shell only (never from the home's `.env`) and aren't needed in normal use:
+
+| Variable | Replaces |
+|---|---|
+| `CRAWLMARK_CLAUDE_BIN` | The `claude` command |
+| `CRAWLMARK_CLAUDE_DESKTOP_CONFIG` | Claude Desktop's `claude_desktop_config.json` |
+| `CRAWLMARK_CURSOR_CONFIG` | Cursor's `~/.cursor/mcp.json` (its folder is also what detection looks for) |
+| `CRAWLMARK_CODEX_BIN` | The `codex` command (a path that doesn't exist makes the wizard use the `config.toml` text edit) |
+| `CRAWLMARK_CODEX_CONFIG` | Codex's `config.toml` (default `$CODEX_HOME/config.toml`, else `~/.codex/config.toml`) |
+
+Also set `CRAWLMARK_HOME` to a temp folder, and `HOME` too if `cursor` is on your `PATH`. `test/setup.ts` sets all five (plus `HOME` and `CODEX_HOME`) for every test run, with both binaries pointing at paths that don't exist, so no test can reach a real config or binary.
+
+```bash
+T=$(mktemp -d)
+printf '#!/bin/sh\nexit 1\n' > "$T/claude"; chmod +x "$T/claude"
+CRAWLMARK_HOME=$T/home CRAWLMARK_CLAUDE_BIN=$T/claude CRAWLMARK_CODEX_BIN=$T/no-codex \
+  CRAWLMARK_CLAUDE_DESKTOP_CONFIG=$T/desktop/claude_desktop_config.json \
+  CRAWLMARK_CURSOR_CONFIG=$T/cursor/mcp.json CRAWLMARK_CODEX_CONFIG=$T/codex/config.toml \
+  npm run cli -- init --dry-run
+```
+
+The wizard's display goes through `src/setup/ui.ts`: `plainUi` prints the line-by-line text (pipes, CI, `NO_COLOR`, `--yes`), and `src/setup/ui-clack.ts` is the only module that imports `@clack/prompts`.
 
 ## Layout
 
@@ -29,7 +54,7 @@ Tests use fixtures in `test/fixtures/` and never call paid APIs. `scripts/record
 src/
   index.ts        entry: no args starts the stdio server; a CLI subcommand, --help or --version runs the CLI
   server.ts       the stdio MCP server
-  cli.ts          crawlmark-cli
+  cli.ts          crawlmark-cli (help text in cli-help.ts)
   scheduled.ts    scheduled audits and traffic checks
   config.ts       config home, env loading and validation, client defaults
   clients.ts      client resolution, discovery sync and clients.yaml edits
@@ -39,7 +64,7 @@ src/
   reports/        report composers (monthly, audit, site hygiene, gtm), each section isolated
   tools/          MCP tool registrations
   prompts/        MCP prompts; text in templates/*.md, copied to dist/ at build
-  setup/          setup wizard, prompts, setup_status checks
+  setup/          setup wizard, prompts, renderers (plain and clack), app registration, setup_status checks
 mcpb/manifest.json  Claude Desktop bundle manifest
 scripts/            build-mcpb, mcp-list, prepublish guard, fixture recorder
 test/               vitest tests and fixtures

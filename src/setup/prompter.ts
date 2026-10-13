@@ -10,6 +10,8 @@ import { createInterface, type Interface } from "node:readline/promises";
 export interface Choice<T extends string> {
   value: T;
   label: string;
+  /** A short note shown next to the label (fancy: dimmed; plain: in parentheses). */
+  hint?: string;
 }
 
 export interface Prompter {
@@ -19,7 +21,30 @@ export interface Prompter {
   secret(question: string): Promise<string>;
   confirm(question: string, defaultYes: boolean): Promise<boolean>;
   choose<T extends string>(question: string, choices: readonly Choice<T>[], defaultValue: T): Promise<T>;
+  /**
+   * Pick any number of choices; Enter keeps `defaults`. `summary` is the one-line
+   * question a line-based prompter asks first ("Register with: A, B. Use these?");
+   * answering no shows the numbered list. Optional: a prompter without it (an
+   * older test double) takes the defaults.
+   */
+  multiselect?<T extends string>(question: string, choices: readonly Choice<T>[], defaults: readonly T[], opts?: { summary?: string }): Promise<T[]>;
   close(): void;
+}
+
+/** Parse a comma list of numbers or names against the choices (pure). Empty input is undefined (take the defaults). */
+export function parseMultiSelect<T extends string>(answer: string, choices: readonly Choice<T>[]): { values: T[] } | { unknown: string[] } | undefined {
+  const a = answer.trim().toLowerCase();
+  if (a === "") return undefined;
+  if (a === "none" || a === "-") return { values: [] };
+  const values: T[] = [];
+  const unknown: string[] = [];
+  for (const raw of a.split(",").map((t) => t.trim()).filter(Boolean)) {
+    const n = Number(raw);
+    const hit = Number.isInteger(n) && n >= 1 && n <= choices.length ? choices[n - 1] : choices.find((c) => c.value.toLowerCase() === raw || c.label.toLowerCase() === raw);
+    if (!hit) unknown.push(raw);
+    else if (!values.includes(hit.value)) values.push(hit.value);
+  }
+  return unknown.length ? { unknown } : { values };
 }
 
 /** The user pressed Ctrl-C. */
@@ -83,6 +108,24 @@ export function createPrompter(src: LineSource, out: (s: string) => void): Promp
         out("Not one of the options.");
       }
     },
+    async multiselect(question, choices, defaults, opts = {}) {
+      if (opts.summary && defaults.length) {
+        for (;;) {
+          const v = parseYesNo(await src.line(`${opts.summary} [Y/n] `), true);
+          if (v === true) return [...defaults];
+          if (v === false) break;
+          out("Please answer y or n.");
+        }
+      }
+      out(question);
+      choices.forEach((c, i) => out(`  ${i + 1}) ${c.label}${c.hint ? ` (${c.hint})` : ""}${defaults.includes(c.value) ? " (default)" : ""}`));
+      for (;;) {
+        const parsed = parseMultiSelect(await src.line(`Choose numbers or names, comma-separated, or "none" [${defaults.join(",") || "none"}]: `), choices);
+        if (parsed === undefined) return [...defaults];
+        if ("values" in parsed) return parsed.values;
+        out(`Not one of the options: ${parsed.unknown.join(", ")}.`);
+      }
+    },
     close: () => src.close(),
   };
 }
@@ -105,6 +148,11 @@ export function autoPrompter(out: (s: string) => void): Prompter {
     async choose(question, choices, defaultValue) {
       out(`${question} ${choices.find((c) => c.value === defaultValue)?.label ?? defaultValue} (--yes)`);
       return defaultValue;
+    },
+    async multiselect(question, choices, defaults) {
+      const labels = defaults.map((d) => choices.find((c) => c.value === d)?.label ?? d);
+      out(`${question} ${labels.length ? labels.join(", ") : "none"} (--yes)`);
+      return [...defaults];
     },
     close() {},
   };
@@ -198,15 +246,21 @@ export function terminalPrompter(input: NodeJS.ReadStream = process.stdin, outpu
   const src: LineSource = {
     async line(prompt) {
       if (!input.isTTY) return nextPipedLine(prompt);
-      const rl = createInterface({ input, output, terminal: true });
+      // Line editing (and its cursor escape codes) only when output is a terminal too:
+      // `crawlmark-cli setup | cat -v` stays plain text. Ctrl-C then arrives as a signal.
+      const terminal = Boolean(output.isTTY);
+      const rl = createInterface({ input, output, terminal });
       const ac = new AbortController();
-      rl.once("SIGINT", () => ac.abort());
+      const abort = () => ac.abort();
+      if (terminal) rl.once("SIGINT", abort);
+      else process.once("SIGINT", abort);
       try {
         return await rl.question(prompt, { signal: ac.signal });
       } catch (err) {
         if (ac.signal.aborted) throw new PromptAbortedError();
         throw err;
       } finally {
+        process.removeListener("SIGINT", abort);
         rl.close();
       }
     },

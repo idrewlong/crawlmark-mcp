@@ -1,8 +1,10 @@
 import { accessSync, constants, existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { homedir } from "node:os";
+import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { loadOverrides } from "../clients.js";
 import { ENV_FILE, ENV_FILE_KEYS, env, HOME, PROJECT_ROOT } from "../config.js";
 import { shellQuote } from "../lib/claude-config.js";
+import { sourceCheckoutMarker, USER_HOME_DIRNAME, type HomeSource } from "../lib/home.js";
 import { withBrowser } from "../providers/browser.js";
 import { dataForSeoStatus } from "../providers/dataforseo.js";
 import { listGa4Properties, listGscSites } from "../providers/discovery.js";
@@ -27,17 +29,57 @@ export function onPath(name: string, pathEnv = process.env.PATH ?? "", platform 
   return false;
 }
 
-/**
- * How a user runs the CLI on this machine: `crawlmark-cli` when it's on PATH, else
- * `node <root>/dist/cli.js`; prefixed with CRAWLMARK_HOME when that's how the home was chosen.
- */
-export function cliInvocation(): string {
-  return HOME.source === "env" ? `CRAWLMARK_HOME=${shellQuote(HOME.dir)} ${cliBase()}` : cliBase();
+export interface CommandPrefixInputs {
+  /** Running from a source checkout (npm run cli works in its root). */
+  checkout: boolean;
+  /** `crawlmark-cli` is on PATH (a global install). */
+  cliOnPath: boolean;
+  homeSource: HomeSource;
+  homeDir: string;
+  /** The home this install uses without CRAWLMARK_HOME: the project root for a checkout, ~/.crawlmark otherwise. */
+  defaultHomeDir: string;
+  /** The user's home directory, shown as `~` in the printed CRAWLMARK_HOME. */
+  userHome?: string | undefined;
 }
 
-/** The CLI command without any CRAWLMARK_HOME prefix. */
-export function cliBase(): string {
-  return onPath("crawlmark-cli") ? "crawlmark-cli" : `node ${shellQuote(join(PROJECT_ROOT, "dist", "cli.js"))}`;
+/** CRAWLMARK_HOME's value for a printed command: `~/rest` when it's under the user's home and needs no quoting. */
+function displayHome(dir: string, userHome: string | undefined): string {
+  if (userHome) {
+    const rel = relative(userHome, dir);
+    if (rel && !rel.startsWith("..") && !isAbsolute(rel) && /^[A-Za-z0-9_./-]+$/.test(rel.split(sep).join("/"))) return `~/${rel.split(sep).join("/")}`;
+  }
+  return shellQuote(dir);
+}
+
+/**
+ * The short command for printed next steps (pure): `npm run cli --` in a source
+ * checkout, `crawlmark-cli` for a global install, else `npx crawlmark-mcp`.
+ * `CRAWLMARK_HOME=<dir>` goes in front only when the home came from the env and
+ * isn't this install's default.
+ */
+export function commandPrefix(i: CommandPrefixInputs): string {
+  const base = i.checkout ? "npm run cli --" : i.cliOnPath ? "crawlmark-cli" : "npx crawlmark-mcp";
+  if (i.homeSource !== "env" || resolve(i.homeDir) === resolve(i.defaultHomeDir)) return base;
+  return `CRAWLMARK_HOME=${displayHome(i.homeDir, i.userHome)} ${base}`;
+}
+
+/** True when this process runs from a source checkout (not an installed package). */
+export function isCheckout(): boolean {
+  return sourceCheckoutMarker(PROJECT_ROOT, existsSync) !== undefined;
+}
+
+/** commandPrefix for this process. `withHome: false` leaves out any CRAWLMARK_HOME prefix. */
+export function cliPrefix(opts: { withHome?: boolean } = {}): string {
+  const checkout = isCheckout();
+  const userHome = homedir();
+  return commandPrefix({
+    checkout,
+    cliOnPath: onPath("crawlmark-cli"),
+    homeSource: opts.withHome === false ? "user" : HOME.source,
+    homeDir: HOME.dir,
+    defaultHomeDir: checkout ? PROJECT_ROOT : join(userHome, USER_HOME_DIRNAME),
+    userHome,
+  });
 }
 
 /** Variables that configure an integration; any of them set outside .env means the setup is environment-driven. */
@@ -51,7 +93,7 @@ export const realStatusProviders: StatusProviders = {
     envFileExists: existsSync(ENV_FILE),
     configuredByEnv: CREDENTIAL_KEYS.some((k) => Boolean(process.env[k]) && !ENV_FILE_KEYS.has(k)),
   }),
-  cli: cliInvocation,
+  cli: () => cliPrefix(),
   dataforseo: () => dataForSeoStatus(),
   googleStatus: () => googleAuthStatus(),
   googleLive: () => checkGoogleAuthLive(),

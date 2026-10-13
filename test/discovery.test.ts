@@ -302,6 +302,20 @@ describe("Tag Manager discovery", () => {
     expect(fileText()).toBe(text);
   });
 
+  it("matches a container that lists no domains by its name, and says so in the notes", async () => {
+    state.identity = "test:gtm-by-name";
+    state.gtm.accounts = fixture("gtm-accounts.json");
+    state.gtm.containers = fixture("gtm-containers-by-name.json");
+    const r = await loadRegistry();
+    const com = r.clients.find((c) => c.domain === "example.com")!;
+    expect([com.gtmAccountId, com.gtmContainerId]).toEqual(["6000000001", "7000000011"]);
+    expect(r.discovery.notes).toContain(
+      'Tag Manager: matched GTM-NAMED01 "www.example.com/" to example.com by its name (the container lists no domains). If that\'s wrong, pin another with gtmContainerId in clients.yaml.',
+    );
+    // The container whose name isn't a host stays unmatched, with its numeric container ID shown for pinning.
+    expect(r.discovery.notes.some((n) => n.includes('GTM-EXAMPL2 "No domains" (account 6000000001, container 7000000002)'))).toBe(true);
+  });
+
   it("fills a missing pair on an existing entry", async () => {
     state.identity = "test:gtm-fill";
     useGtmFixtures();

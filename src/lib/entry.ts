@@ -4,6 +4,7 @@ import { projectRoot } from "./paths.js";
 
 /** First arguments that mean "run the admin CLI" when given to `crawlmark-mcp` (so `npx crawlmark-mcp setup` works). */
 export const CLI_SUBCOMMANDS: readonly string[] = [
+  "init",
   "setup",
   "auth",
   "clients",

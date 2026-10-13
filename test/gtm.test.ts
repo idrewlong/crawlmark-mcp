@@ -165,6 +165,58 @@ describe("container join", () => {
   });
 });
 
+describe("container join by name (no domain list)", () => {
+  const ref = (containerId: string, publicId: string, name: string, domainName: string[] = []) => ({ accountId: "6000000001", containerId, publicId, name, domainName });
+
+  it("matches www.example.com and www.example.com/ to example.com", () => {
+    for (const name of ["www.example.com", "www.example.com/", "https://www.example.com/"]) {
+      const { matches, unmatched } = joinGtmContainers([ref("1", "GTM-A", name)], normalizeHost);
+      expect(matches.get("example.com")).toMatchObject({ publicId: "GTM-A", matchedBy: "name", alternates: [] });
+      expect(unmatched).toEqual([]);
+    }
+  });
+
+  it("a domain-list match beats a name match for the same host; the name candidate stays unmatched", () => {
+    const { matches, unmatched } = joinGtmContainers([ref("2", "GTM-B", "www.example.com/"), ref("1", "GTM-Z", "Site", ["example.com"])], normalizeHost);
+    expect(matches.get("example.com")).toMatchObject({ publicId: "GTM-Z", matchedBy: "domain", alternates: [] });
+    expect(unmatched.map((c) => c.publicId)).toEqual(["GTM-B"]);
+  });
+
+  it("two name matches for one host give one alternate, lowest GTM ID first", () => {
+    const { matches, unmatched } = joinGtmContainers([ref("2", "GTM-D", "example.com"), ref("1", "GTM-C", "www.example.com/")], normalizeHost);
+    expect(matches.get("example.com")).toMatchObject({ publicId: "GTM-C", matchedBy: "name" });
+    expect(matches.get("example.com")!.alternates).toEqual([{ gtmAccountId: "6000000001", gtmContainerId: "2", publicId: "GTM-D" }]);
+    expect(unmatched).toEqual([]);
+  });
+
+  it("names without a dot, or with spaces, stay unmatched", () => {
+    const { matches, unmatched } = joinGtmContainers([ref("1", "GTM-E", "Main site"), ref("2", "GTM-F", "localhost"), ref("3", "GTM-G", "example.com website")], normalizeHost);
+    expect(matches.size).toBe(0);
+    expect(unmatched.map((c) => c.publicId)).toEqual(["GTM-E", "GTM-F", "GTM-G"]);
+  });
+
+  it("notes a name match, shows the numeric container ID for unmatched ones, and skips the note for pinned hosts", () => {
+    const containers = [ref("11", "GTM-H", "www.example.com/"), ref("12", "GTM-I", "No domains")];
+    const { matches, unmatched } = joinGtmContainers(containers, normalizeHost);
+    const listing = { containers, errors: [] };
+    const notes = gtmNotes(listing, matches, unmatched);
+    expect(notes).toContain('Tag Manager: matched GTM-H "www.example.com/" to example.com by its name (the container lists no domains). If that\'s wrong, pin another with gtmContainerId in clients.yaml.');
+    expect(notes.some((n) => n.includes('GTM-I "No domains" (account 6000000001, container 12)'))).toBe(true);
+    expect(gtmNotes(listing, matches, unmatched, new Set(["example.com"])).some((n) => n.includes("by its name"))).toBe(false);
+  });
+
+  it("planSync never overwrites a pin with a name match", () => {
+    const { matches } = joinGtmContainers([ref("11", "GTM-H", "www.example.com/")], normalizeHost);
+    const plan = planSync(parseOverrides({ clients: { "example.com": { domain: "example.com", gtmContainerId: "999" } } }, "test"), [], matches);
+    expect(plan.fill).toEqual([]);
+    const fresh = planSync(parseOverrides({ clients: { "example.com": { domain: "example.com" } } }, "test"), [], matches);
+    expect(fresh.fill).toEqual([
+      { key: "example.com", domain: "example.com", field: "gtmAccountId", value: "6000000001" },
+      { key: "example.com", domain: "example.com", field: "gtmContainerId", value: "11" },
+    ]);
+  });
+});
+
 describe("planSync with Tag Manager containers", () => {
   const { matches } = joinGtmContainers(Object.values(containerFixtures).flatMap((r) => containersFromResponse(r)), normalizeHost);
   const overrides = (yaml: object) => parseOverrides(yaml, "test");
@@ -240,5 +292,16 @@ describe("Tag Manager errors", () => {
     expect(classifyGtmError(apiErrorInfo(new Error("socket hang up")))).toBe("other");
     expect(gtmApiError(gaxios(404, "Not found"), "accounts/1/containers/2", sa).message).toContain("not the GTM-XXXX ID");
     expect(gtmApiError(new Error("socket hang up"), "accounts/1/containers/2", sa).message).toContain("socket hang up");
+  });
+});
+
+describe("SEC-3: container names are shown without control characters", () => {
+  it("strips escapes from the matched-by-name and no-domain notes", () => {
+    const ref = (containerId: string, publicId: string, name: string) => ({ accountId: "1", containerId, publicId, name, domainName: [] as string[] });
+    const containers = [ref("1", "GTM-A", "www.example.com/"), ref("2", "GTM-B", "Bad\u001b[31m name\u0007")];
+    const { matches, unmatched } = joinGtmContainers(containers, normalizeHost);
+    const notes = gtmNotes({ containers, errors: [] }, matches, unmatched).join("\n");
+    expect(notes).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
+    expect(notes).toContain('"Bad[31m name"');
   });
 });

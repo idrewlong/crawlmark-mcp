@@ -614,7 +614,14 @@ export function gtmFromOutcome(gtm: Settled<GtmListing> | undefined, overrides: 
   if (!gtm) return { matches: new Map(), notes: [] };
   if (!gtm.ok) return { matches: new Map(), notes: [`Tag Manager containers could not be listed (gtm_audit may still work with gtmAccountId and gtmContainerId in clients.yaml): ${errText(gtm.error)}`] };
   const { matches, unmatched } = joinGtmContainers(gtm.value.containers, normalizeHost);
-  return { matches, notes: gtmNotes(gtm.value, matches, unmatched, new Set(overrides.filter((o) => o.gtmContainerId).map((o) => o.domain))) };
+  // A pin is a container set in clients.yaml. Discovery writes a name match there itself, so the
+  // matched-by-name note keeps showing until the user pins a different container.
+  const pinned = overrides.filter((o) => {
+    if (!o.gtmContainerId && !o.gtmAccountId) return false;
+    const m = matches.get(o.domain);
+    return !(m?.matchedBy === "name" && o.gtmContainerId === m.gtmContainerId);
+  });
+  return { matches, notes: gtmNotes(gtm.value, matches, unmatched, new Set(pinned.map((o) => o.domain))) };
 }
 
 /** Discovery didn't run because no Google auth is configured. Not an error. */

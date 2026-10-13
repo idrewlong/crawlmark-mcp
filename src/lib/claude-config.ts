@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 import { writeFileAtomic } from "./atomic-file.js";
 
 /**
- * Registering crawlmark with Claude: the Claude Code command line and the Claude
- * Desktop `mcpServers` entry. Path, merge and the printable change summary are
+ * Registering crawlmark with Claude Code (its command line), and with Claude
+ * Desktop and Cursor (an `mcpServers` entry in their JSON config). Path, merge and the printable change summary are
  * pure; the write is atomic and keeps a 0600 `.bak` of the previous file.
  */
 
@@ -113,30 +113,49 @@ export interface DesktopMerge {
 }
 
 /**
- * Add or replace `mcpServers.crawlmark`, keeping every other key and server.
- * Throws on a file that isn't a JSON object, so a hand-edited file is never clobbered.
+ * Add or replace `mcpServers.<name>` in an app's JSON config (Claude Desktop,
+ * Cursor), keeping every other key and server. Throws on a file that isn't a
+ * JSON object, so a hand-edited file is never clobbered; the message names the app.
  */
-export function mergeDesktopConfig(existing: string | undefined, entry: Record<string, unknown>, name = SERVER_NAME): DesktopMerge {
+export function mergeMcpServersJson(existing: string | undefined, entry: Record<string, unknown>, opts: { app: string; name?: string }): DesktopMerge {
+  const name = opts.name ?? SERVER_NAME;
   let config: Record<string, unknown> = {};
   if (existing !== undefined && existing.trim() !== "") {
     let parsed: unknown;
     try {
       parsed = JSON.parse(existing);
     } catch (err) {
-      throw new Error(`The Claude Desktop config isn't valid JSON (${(err as Error).message}); fix it by hand first.`);
+      // Only the position: JSON.parse quotes the text around the error, which may be another server's secret.
+      const where = /at position \d+(?: \(line \d+ column \d+\))?/.exec((err as Error).message)?.[0];
+      throw new Error(`The ${opts.app} config isn't valid JSON${where ? ` (${where})` : ""}; fix it by hand first.`);
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("The Claude Desktop config isn't a JSON object; fix it by hand first.");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`The ${opts.app} config isn't a JSON object; fix it by hand first.`);
     config = parsed as Record<string, unknown>;
   }
   const servers = config.mcpServers;
   if (servers !== undefined && (!servers || typeof servers !== "object" || Array.isArray(servers))) {
-    throw new Error("The Claude Desktop config's mcpServers isn't an object; fix it by hand first.");
+    throw new Error(`The ${opts.app} config's mcpServers isn't an object; fix it by hand first.`);
   }
   const current = (servers ?? {}) as Record<string, unknown>;
   const replaced = name in current;
   const changed = JSON.stringify(current[name]) !== JSON.stringify(entry);
   const next = { ...config, mcpServers: { ...current, [name]: entry } };
   return { text: JSON.stringify(next, null, 2) + "\n", changed, replaced, previous: current[name], otherServers: Object.keys(current).filter((k) => k !== name) };
+}
+
+/** Claude Desktop's merge (kept for existing callers): mergeMcpServersJson for "Claude Desktop". */
+export function mergeDesktopConfig(existing: string | undefined, entry: Record<string, unknown>, name = SERVER_NAME): DesktopMerge {
+  return mergeMcpServersJson(existing, entry, { app: "Claude Desktop", name });
+}
+
+/** Cursor's global MCP config (Cursor docs: `~/.cursor/mcp.json`). Project-level `.cursor/mcp.json` files are never touched. */
+export function cursorConfigPath(userHome: string): string {
+  return join(userHome, ".cursor", "mcp.json");
+}
+
+/** Cursor's `mcpServers` entry: like Claude Desktop's, with `type: "stdio"`. */
+export function cursorEntry(launch: ServerLaunch): Record<string, unknown> {
+  return { type: "stdio", ...desktopEntry(launch) };
 }
 
 /** A server entry with every env value replaced by `<hidden>`, for display. */
@@ -173,24 +192,36 @@ export function describeDesktopChange(merge: DesktopMerge, entry: Record<string,
 }
 
 /**
- * Write the config atomically (temp file, then rename) after saving the current
- * file to `<path>.bak` the same way, with mode 0600 (it can hold other servers'
- * secrets). Keeps the existing file mode; a new file gets 0600. Returns the
- * backup path, or undefined when there was no file to back up.
+ * Write a config file atomically (temp file, then rename) after saving the
+ * current file to `<path>.bak` the same way, with mode 0600 (it can hold other
+ * servers' secrets). Keeps the existing file mode; a new file gets 0600. A
+ * symlinked config is written through to its target. Returns the backup path,
+ * or undefined when there was no file to back up.
  */
-export function writeDesktopConfig(file: string, text: string): string | undefined {
-  const path = existsSync(file) ? realpathSync(file) : file;
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+export function writeConfigWithBackup(file: string, text: string): string | undefined {
+  // A symlinked config (e.g. from a dotfiles repo) is written through to its target, but the
+  // .bak, which holds every server's secrets, stays next to the configured path, not in the repo.
+  const target = existsSync(file) ? realpathSync(file) : file;
+  mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
   let backup: string | undefined;
   let mode = 0o600;
-  if (existsSync(path)) {
-    mode = statSync(path).mode & 0o777;
-    backup = `${path}.bak`;
-    writeFileAtomic(backup, readFileSync(path), 0o600);
+  if (existsSync(target)) {
+    mode = statSync(target).mode & 0o777;
+    backup = backupFile(file);
   }
-  writeFileAtomic(path, text, mode);
+  writeFileAtomic(target, text, mode);
   return backup;
 }
+
+/** Copy `path` (following a symlink to read it) to `<path>.bak` next to the path itself (mode 0600, atomic). Returns the backup path. */
+export function backupFile(path: string): string {
+  const backup = `${path}.bak`;
+  writeFileAtomic(backup, readFileSync(path), 0o600);
+  return backup;
+}
+
+/** Claude Desktop's writer (kept for existing callers). */
+export const writeDesktopConfig = writeConfigWithBackup;
 
 export function readIfExists(path: string): string | undefined {
   return existsSync(path) ? readFileSync(path, "utf8") : undefined;

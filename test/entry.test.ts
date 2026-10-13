@@ -11,10 +11,16 @@ describe("entryAction", () => {
   });
 
   it("hands every CLI subcommand to the CLI, so `npx crawlmark-mcp setup` runs the wizard", () => {
-    for (const cmd of ["setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "help"]) {
+    for (const cmd of ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "help"]) {
       expect(CLI_SUBCOMMANDS).toContain(cmd);
       expect(entryAction([cmd, "x"])).toBe("cli");
     }
+  });
+
+  it("`init` dispatches to the CLI", () => {
+    expect(CLI_SUBCOMMANDS[0]).toBe("init");
+    expect(entryAction(["init"])).toBe("cli");
+    expect(entryAction(["init", "--dry-run"])).toBe("cli");
   });
 
   it("answers --version itself and sends --help (and typos) to the CLI instead of starting a server", () => {
@@ -49,9 +55,21 @@ describe("crawlmark-mcp entry point", () => {
   it("--help prints the CLI usage and exits without starting the server", () => {
     const r = run(["--help"]);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain("Usage: crawlmark-cli");
+    expect(r.stdout).toContain("Usage: crawlmark-mcp <command>");
     expect(r.stdout).toContain("setup");
   });
+
+  it("help <command>, <command> --help and init --help print that command's options", () => {
+    for (const args of [["help", "setup"], ["setup", "--help"], ["init", "--help"], ["help", "init"]]) {
+      const r = run(args);
+      expect(r.status, args.join(" ")).toBe(0);
+      expect(r.stdout).toContain("Usage: crawlmark-mcp init");
+      expect(r.stdout).toContain("--refresh");
+    }
+    const bad = run(["help", "nope"]);
+    expect(bad.status).toBe(2);
+    expect(bad.stderr).toContain('No help for "nope"');
+  }, 60_000);
 
   it("an unknown word is a usage error, not a hung server", () => {
     const r = run(["stp"]);

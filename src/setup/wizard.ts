@@ -8,13 +8,14 @@
  */
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { claudeCodeAddArgs, describeDesktopChange, describeRegistration, desktopEntry, mergeDesktopConfig, parseClaudeMcpGet, sameRegistration, readIfExists, SERVER_NAME, shellQuote, writeDesktopConfig, type ServerLaunch } from "../lib/claude-config.js";
+import { APP_LABELS, registerApps, type AppOutcome } from "./apps.js";
 import { copyFileAtomic } from "../lib/atomic-file.js";
 import { readEnvFile, writeEnvFile } from "../lib/env-file.js";
 import { expandPath, sourceCheckoutMarker, type HomeSource } from "../lib/home.js";
 import { checkDataForSeoCredentials } from "../providers/dataforseo.js";
 import { checkPsiKey } from "./checks.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
+import { uiFor, type SummaryRow, type Ui } from "./ui.js";
 import { DFS_LIVE_URL, DFS_SANDBOX_URL } from "../lib/env.js";
 import { LINKS, type IntegrationId, type IntegrationStatus, type SetupStatusReport } from "./status.js";
 
@@ -57,7 +58,19 @@ export interface WizardContext {
     cwd: string;
     /** Claude Desktop's config for this OS, if it has one. */
     desktopConfig: string | undefined;
+    /** Cursor's global mcp.json. Cursor is offered only when this is set. */
+    cursorConfig?: string | undefined;
+    /** Codex's config.toml. Codex is offered only when this is set. */
+    codexConfig?: string | undefined;
   };
+  /** True when a program is on PATH (Cursor detection). */
+  which?(name: string): boolean;
+  /** How progress is shown. Unset means plain text through `out` (today's output). */
+  ui?: Ui | undefined;
+  /** `setup` or `init`, for the intro. */
+  command?: "setup" | "init";
+  /** crawlmark's version, for the fancy intro. */
+  version?: string;
   node: { version: string; execPath: string };
   /** How the user runs the CLI here, for printed instructions. */
   cliDisplay: string;
@@ -72,6 +85,8 @@ export interface StepResult {
   step: StepName;
   outcome: StepOutcome;
   message: string;
+  /** The register step: what happened with each app. */
+  apps?: AppOutcome[];
 }
 
 const MAX_ATTEMPTS = 3;
@@ -82,7 +97,7 @@ const stateTag = (s: IntegrationStatus["state"]) => ({ working: "OK", configured
 async function showStatus(ctx: WizardContext, only: IntegrationId[], opts: { refresh?: boolean } = {}): Promise<Map<IntegrationId, IntegrationStatus>> {
   const map = new Map<IntegrationId, IntegrationStatus>();
   try {
-    const report = await ctx.status(only, opts);
+    const report = await uiFor(ctx).spin("Checking the current status...", () => ctx.status(only, opts), { plain: false });
     for (const i of report.integrations) {
       map.set(i.id, i);
       ctx.out(`  [${stateTag(i.state)}] ${i.label}: ${i.detail}`);
@@ -97,25 +112,22 @@ async function showStatus(ctx: WizardContext, only: IntegrationId[], opts: { ref
 /** Write keys to <home>/.env (0600), or say what would be written in a dry run. Values are never printed. */
 function saveEnv(ctx: WizardContext, updates: Record<string, string>): void {
   const keys = Object.keys(updates).join(", ");
+  const ui = uiFor(ctx);
   if (ctx.dryRun) {
-    ctx.out(`Dry run: would set ${keys} in ${ctx.paths.envFile} (mode 0600).`);
+    ui.info(`Dry run: would set ${keys} in ${ctx.paths.envFile} (mode 0600).`);
     return;
   }
   const r = writeEnvFile(ctx.paths.envFile, updates);
   const changed = [...r.updated, ...r.added];
-  ctx.out(changed.length ? `Saved ${changed.join(", ")} to ${ctx.paths.envFile} (mode 0600).` : `${ctx.paths.envFile} already had these values.`);
+  ui.success(changed.length ? `Saved ${changed.join(", ")} to ${ctx.paths.envFile} (mode 0600).` : `${ctx.paths.envFile} already had these values.`);
   const shadowed = Object.keys(updates).filter((k) => ctx.shellEnvKeys.has(k));
   if (shadowed.length) {
-    ctx.out(`Warning: your shell (or the MCP client config) also sets ${shadowed.join(", ")}, which overrides .env. Unset it there for the new value to take effect.`);
+    ui.warn(`Warning: your shell (or the MCP client config) also sets ${shadowed.join(", ")}, which overrides .env. Unset it there for the new value to take effect.`);
   }
 }
 
 function existingEnv(ctx: WizardContext): Record<string, string> {
   return readEnvFile(ctx.paths.envFile);
-}
-
-function cmdLine(cmd: string, args: string[]): string {
-  return [cmd, ...args].map(shellQuote).join(" ");
 }
 
 function versionAtLeast(version: string, min: readonly [number, number]): boolean {
@@ -169,6 +181,7 @@ export async function stepNode(ctx: WizardContext): Promise<StepResult> {
 
 export async function stepDataForSeo(ctx: WizardContext): Promise<StepResult> {
   const step = "dataforseo";
+  const ui = uiFor(ctx);
   const st = (await showStatus(ctx, ["dataforseo"])).get("dataforseo");
   const working = st?.state === "working";
   if (!(await ctx.prompt.confirm(working ? "Change the DataForSEO credentials?" : "Set up DataForSEO now?", !working))) {
@@ -201,22 +214,21 @@ export async function stepDataForSeo(ctx: WizardContext): Promise<StepResult> {
     let password = await ctx.prompt.secret(env.DATAFORSEO_PASSWORD ? "API password (Enter keeps the current one)" : "API password");
     if (!password && env.DATAFORSEO_PASSWORD) password = env.DATAFORSEO_PASSWORD;
     if (!login || !password) {
-      ctx.out("Both the API login and the API password are needed.");
+      ui.fail("Both the API login and the API password are needed.");
       continue;
     }
-    ctx.out(`Checking with DataForSEO's free account call (${new URL(baseUrl).hostname})...`);
-    const check = await checkDataForSeoCredentials({ login, password, baseUrl }, ctx.fetch);
+    const check = await ui.spin(`Checking with DataForSEO's free account call (${new URL(baseUrl).hostname})...`, () => checkDataForSeoCredentials({ login, password, baseUrl }, ctx.fetch));
     if (check.credentialsWork === true) {
       const balance = check.balanceUsd === null ? "unknown" : `$${check.balanceUsd.toFixed(2)}`;
-      ctx.out(`Credentials work. Mode: ${check.mode}. Balance: ${balance}.`);
+      ui.success(`Credentials work. Mode: ${check.mode}. Balance: ${balance}.`);
       saveEnv(ctx, { DATAFORSEO_LOGIN: login, DATAFORSEO_PASSWORD: password, DATAFORSEO_BASE_URL: baseUrl });
       return { step, outcome: "done", message: `DataForSEO works (${check.mode}, balance ${balance}).` };
     }
     if (check.credentialsWork === false) {
-      ctx.out("DataForSEO rejected that login and password. Use the API password from the API access page, not your account password.");
+      ui.fail("DataForSEO rejected that login and password. Use the API password from the API access page, not your account password.");
       continue;
     }
-    ctx.out(`Couldn't reach DataForSEO, so the credentials are untested: ${check.error}`);
+    ui.warn(`Couldn't reach DataForSEO, so the credentials are untested: ${check.error}`);
     if (await ctx.prompt.confirm("Save them anyway?", false)) {
       saveEnv(ctx, { DATAFORSEO_LOGIN: login, DATAFORSEO_PASSWORD: password, DATAFORSEO_BASE_URL: baseUrl });
       return { step, outcome: "done", message: `Saved untested DataForSEO credentials; check later with \`${ctx.cliDisplay} setup --step dataforseo\`.` };
@@ -266,27 +278,27 @@ function printOAuthSteps(ctx: WizardContext, option: "A" | "B"): void {
 }
 
 async function googleOptionC(ctx: WizardContext, env: Record<string, string>): Promise<{ outcome: StepOutcome; message: string }> {
+  const ui = uiFor(ctx);
   printServiceAccountSteps(ctx);
   const dest = join(ctx.paths.home, KEY_FILE_REL);
   const current = env.GOOGLE_APPLICATION_CREDENTIALS ? expandPath(env.GOOGLE_APPLICATION_CREDENTIALS, ctx.paths.userHome, ctx.paths.home) : undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const answer = await ctx.prompt.ask("Path to the service-account JSON key (absolute, or starting with ~)", { default: current && existsSync(current) ? current : undefined });
     if (!answer) {
-      ctx.out("A key file path is needed.");
+      ui.fail("A key file path is needed.");
       continue;
     }
     const src = expandPath(answer, ctx.paths.userHome, ctx.paths.cwd);
     if (!existsSync(src) || !statSync(src).isFile()) {
-      ctx.out(`No file at ${src}.`);
+      ui.fail(`No file at ${src}.`);
       continue;
     }
-    ctx.out("Checking the key with Google...");
-    const check = await ctx.checkKeyFile(src);
+    const check = await ui.spin("Checking the key with Google...", () => ctx.checkKeyFile(src));
     if (!check.ok) {
-      ctx.out(`That key didn't work: ${check.problem}`);
+      ui.fail(`That key didn't work: ${check.problem}`);
       continue;
     }
-    ctx.out(`The key works. Service account: ${check.email}`);
+    ui.success(`The key works. Service account: ${check.email}`);
     if (ctx.dryRun) ctx.out(`Dry run: would copy the key to ${dest} (mode 0600).`);
     else if (resolve(src) !== resolve(dest)) {
       mkdirSync(dirname(dest), { recursive: true, mode: 0o700 });
@@ -307,7 +319,7 @@ async function googleOAuth(ctx: WizardContext, env: Record<string, string>, opti
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const clientId = await ctx.prompt.ask("OAuth client ID", { default: env.GOOGLE_OAUTH_CLIENT_ID });
     if (!OAUTH_CLIENT_ID_RE.test(clientId)) {
-      ctx.out("That doesn't look like an OAuth client ID (it ends in .apps.googleusercontent.com).");
+      uiFor(ctx).fail("That doesn't look like an OAuth client ID (it ends in .apps.googleusercontent.com).");
       continue;
     }
     let secret = await ctx.prompt.secret(env.GOOGLE_OAUTH_CLIENT_SECRET ? "OAuth client secret (Enter keeps the current one)" : "OAuth client secret");
@@ -382,20 +394,34 @@ export async function stepPsi(ctx: WizardContext): Promise<StepResult> {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const key = await ctx.prompt.secret("PageSpeed Insights API key");
     if (!key) {
-      ctx.out("No key entered.");
+      uiFor(ctx).fail("No key entered.");
       continue;
     }
-    ctx.out("Checking the key with one PageSpeed request (can take up to a minute)...");
-    const check = await checkPsiKey(key, ctx.fetch);
+    const check = await uiFor(ctx).spin("Checking the key with one PageSpeed request (can take up to a minute)...", () => checkPsiKey(key, ctx.fetch));
     if (!check.ok) {
-      ctx.out(check.problem);
+      uiFor(ctx).fail(check.problem);
       continue;
     }
-    if (check.note) ctx.out(check.note);
+    if (uiFor(ctx).fancy) uiFor(ctx).success("The PageSpeed Insights key works.");
+    if (check.note) uiFor(ctx).info(check.note);
     saveEnv(ctx, { PSI_API_KEY: key });
     return { step, outcome: "done", message: "PageSpeed Insights key works." };
   }
   return { step, outcome: "failed", message: `No working PageSpeed Insights key after ${MAX_ATTEMPTS} attempts.` };
+}
+
+/**
+ * Run crawlmark-cli in a child process. Plain mode gives it the terminal, as
+ * before; fancy mode captures its output behind a spinner and then prints it
+ * inside the frame (stderr only when it failed).
+ */
+async function runCliStep(ctx: WizardContext, label: string, args: string[]): Promise<ExecResult> {
+  const ui = uiFor(ctx);
+  if (!ui.fancy) return ctx.cli(args, { inherit: true });
+  const r = await ui.spin(label, () => ctx.cli(args));
+  const text = (r.code === 0 ? r.stdout : `${r.stdout}\n${r.stderr}`).trim();
+  for (const line of text ? text.split(/\r?\n/) : []) ctx.out(line);
+  return r;
 }
 
 export async function stepDiscovery(ctx: WizardContext): Promise<StepResult> {
@@ -409,139 +435,24 @@ export async function stepDiscovery(ctx: WizardContext): Promise<StepResult> {
   }
   if (ctx.dryRun) ctx.out(`Dry run: would run \`${ctx.cliDisplay} clients list --refresh\`.`);
   else {
-    const r = await ctx.cli(["clients", "list", "--refresh"], { inherit: true });
+    const r = await runCliStep(ctx, "Discovering clients...", ["clients", "list", "--refresh"]);
     if (r.code !== 0) return { step, outcome: "failed", message: `Discovery failed (exit ${r.code}); see the output above.` };
   }
   if (await ctx.prompt.confirm("Infer each client's brand terms from Search Console (free, no DataForSEO) and save the high-confidence ones?", true)) {
     if (ctx.dryRun) ctx.out(`Dry run: would run \`${ctx.cliDisplay} brand suggest --all --no-paid --apply\`.`);
     else {
-      const r = await ctx.cli(["brand", "suggest", "--all", "--no-paid", "--apply"], { inherit: true });
-      if (r.code !== 0) ctx.out(`Brand-term inference failed (exit ${r.code}); you can run it later with \`${ctx.cliDisplay} brand suggest --all --no-paid\`.`);
+      const r = await runCliStep(ctx, "Inferring brand terms...", ["brand", "suggest", "--all", "--no-paid", "--apply"]);
+      if (r.code !== 0) uiFor(ctx).warn(`Brand-term inference failed (exit ${r.code}); you can run it later with \`${ctx.cliDisplay} brand suggest --all --no-paid\`.`);
     }
   }
   return { step, outcome: "done", message: ctx.dryRun ? "Dry run: discovery not run." : "Clients discovered and saved to clients.yaml." };
 }
 
-/** Running from an npx cache (`.../_npx/<hash>/node_modules/...`): that path is temporary and must not be registered. */
-export function isNpxCache(projectRoot: string): boolean {
-  return projectRoot.split(/[\\/]/).includes("_npx");
-}
+export { isNpxCache, serverLaunch } from "./apps.js";
 
-/**
- * How Claude should start the server. CRAWLMARK_HOME is passed when the home isn't
- * the project root. From an npx cache, `npx -y crawlmark-mcp` is registered instead
- * of the cache path. `nodeCommand` is `node` (Claude Code) or an absolute path (Desktop).
- */
-export function serverLaunch(ctx: WizardContext, nodeCommand: string): ServerLaunch {
-  const env = ctx.paths.homeSource === "project" ? undefined : { CRAWLMARK_HOME: ctx.paths.home };
-  if (isNpxCache(ctx.paths.projectRoot)) {
-    const npx = nodeCommand === "node" ? "npx" : join(dirname(nodeCommand), process.platform === "win32" ? "npx.cmd" : "npx");
-    return { command: npx, args: ["-y", "crawlmark-mcp"], ...(env ? { env } : {}) };
-  }
-  return { command: nodeCommand, args: ["--disable-warning=ExperimentalWarning", join(ctx.paths.projectRoot, "dist", "index.js")], ...(env ? { env } : {}) };
-}
-
-/** Claude Code: register, or replace a different existing registration after showing both. */
-async function registerClaudeCode(ctx: WizardContext, messages: string[]): Promise<boolean> {
-  const launch = serverLaunch(ctx, "node");
-  const addArgs = claudeCodeAddArgs(launch);
-  const existing = await ctx.exec("claude", ["mcp", "get", SERVER_NAME]);
-  if (existing.code !== 0) {
-    ctx.out("Claude Code is installed. This registers crawlmark for all your projects:");
-    ctx.out(`  ${cmdLine("claude", addArgs)}`);
-    if (!(await ctx.prompt.confirm("Register crawlmark with Claude Code?", true))) {
-      messages.push("Skipped Claude Code.");
-      return false;
-    }
-    if (ctx.dryRun) {
-      messages.push("Dry run: Claude Code registration not run.");
-      return false;
-    }
-    const r = await ctx.exec("claude", addArgs, { inherit: true });
-    messages.push(r.code === 0 ? "Registered with Claude Code." : `\`claude mcp add\` failed (exit ${r.code}).`);
-    return r.code === 0;
-  }
-
-  const current = parseClaudeMcpGet(existing.stdout);
-  if (current && sameRegistration(current, launch)) {
-    messages.push(`Claude Code: crawlmark is already registered with this command${current.scope ? ` (${current.scope} scope)` : ""}.`);
-    return true;
-  }
-  if (!current) {
-    // Never remove a registration we couldn't read, not even under --yes.
-    ctx.out("Claude Code has a crawlmark entry the wizard can't read; leaving it alone.");
-    messages.push(`To replace it yourself: claude mcp remove ${SERVER_NAME} -s <scope>, then ${cmdLine("claude", addArgs)}`);
-    return false;
-  }
-  const scope = current.scope ?? "user";
-  ctx.out("Claude Code already has a crawlmark server, with a different command:");
-  ctx.out(`  current: ${describeRegistration(current)}`);
-  ctx.out(`  new:     ${describeRegistration({ ...launch, scope: "user" })}`);
-  // Default no, so --yes never removes an existing registration.
-  if (!(await ctx.prompt.confirm(`Replace it (claude mcp remove ${SERVER_NAME} -s ${scope}, then add)?`, false))) {
-    messages.push("Kept the existing Claude Code registration.");
-    return false;
-  }
-  if (ctx.dryRun) {
-    messages.push("Dry run: Claude Code registration not replaced.");
-    return false;
-  }
-  const removed = await ctx.exec("claude", ["mcp", "remove", SERVER_NAME, "-s", scope], { inherit: true });
-  if (removed.code !== 0) {
-    messages.push(`\`claude mcp remove ${SERVER_NAME} -s ${scope}\` failed (exit ${removed.code}); nothing was added.`);
-    return false;
-  }
-  const r = await ctx.exec("claude", addArgs, { inherit: true });
-  messages.push(r.code === 0 ? "Replaced the Claude Code registration." : `Removed the old registration, but \`claude mcp add\` failed (exit ${r.code}). Run: ${cmdLine("claude", addArgs)}`);
-  return r.code === 0;
-}
-
+/** Register crawlmark with the AI apps the user picks (src/setup/apps.ts). */
 export async function stepRegister(ctx: WizardContext): Promise<StepResult> {
-  const step = "register";
-  const messages: string[] = [];
-  let registered = false;
-  if (isNpxCache(ctx.paths.projectRoot)) {
-    ctx.out("crawlmark is running from a temporary npx cache, so Claude will start it with `npx -y crawlmark-mcp` instead of this path.");
-  }
-
-  const addArgs = claudeCodeAddArgs(serverLaunch(ctx, "node"));
-  const hasClaude = (await ctx.exec("claude", ["--version"])).code === 0;
-  if (hasClaude && (await registerClaudeCode(ctx, messages))) registered = true;
-
-  // Claude Desktop: absolute node path, since Desktop doesn't load your shell's PATH.
-  const desktop = ctx.paths.desktopConfig;
-  const desktopEntryValue = desktopEntry(serverLaunch(ctx, ctx.node.execPath));
-  if (desktop && (existsSync(desktop) || existsSync(dirname(desktop)))) {
-    try {
-      const before = readIfExists(desktop);
-      const merge = mergeDesktopConfig(before, desktopEntryValue);
-      if (!merge.changed) messages.push(`Claude Desktop already has this crawlmark entry (${desktop}).`);
-      else {
-        ctx.out(`Claude Desktop config: ${desktop}`);
-        for (const line of describeDesktopChange(merge, desktopEntryValue)) ctx.out(line);
-        if (await ctx.prompt.confirm("Write this change? (the current file is kept as .bak)", true)) {
-          if (ctx.dryRun) messages.push("Dry run: Claude Desktop config not written.");
-          else {
-            const backup = writeDesktopConfig(desktop, merge.text);
-            registered = true;
-            messages.push(`Updated Claude Desktop's config${backup ? ` (backup: ${backup})` : ""}. Restart Claude Desktop to load crawlmark.`);
-          }
-        } else messages.push("Skipped Claude Desktop.");
-      }
-    } catch (err) {
-      messages.push(`Couldn't update Claude Desktop's config: ${(err as Error).message}`);
-    }
-  }
-
-  if (!registered) {
-    ctx.out("");
-    ctx.out("To add crawlmark to a client yourself:");
-    ctx.out(`  Claude Code:    ${cmdLine("claude", addArgs)}`);
-    ctx.out("  Claude Desktop and other MCP clients (mcpServers config):");
-    ctx.out(JSON.stringify({ mcpServers: { [SERVER_NAME]: desktopEntryValue } }, null, 2).split("\n").map((l) => `    ${l}`).join("\n"));
-  }
-  for (const m of messages) ctx.out(m);
-  return { step, outcome: registered || ctx.dryRun ? "done" : "skipped", message: messages.join(" ") || "Printed the config snippet." };
+  return registerApps(ctx);
 }
 
 const STEPS: Record<StepName, { title: string; run: (ctx: WizardContext) => Promise<StepResult> }> = {
@@ -553,15 +464,68 @@ const STEPS: Record<StepName, { title: string; run: (ctx: WizardContext) => Prom
   register: { title: "Register with Claude", run: stepRegister },
 };
 
+const SUMMARY_LABELS: Record<Exclude<StepName, "register">, string> = {
+  node: "Node",
+  dataforseo: "DataForSEO",
+  google: "Google",
+  psi: "PageSpeed",
+  discovery: "Clients",
+};
+
+const APP_OUTCOME: Record<AppOutcome["status"], StepOutcome> = {
+  registered: "done",
+  already: "done",
+  skipped: "skipped",
+  manual: "skipped",
+  "dry-run": "skipped",
+  failed: "failed",
+};
+
+/** "Registered: A, B. Already set up: C." for the fancy register result (pure). */
+export function appsTally(apps: AppOutcome[]): string {
+  const groups: [string, AppOutcome["status"][]][] = [
+    ["Registered", ["registered"]],
+    ["Already set up", ["already"]],
+    ["Dry run, not changed", ["dry-run"]],
+    ["Skipped", ["skipped", "manual"]],
+    ["Failed", ["failed"]],
+  ];
+  const parts = groups.flatMap(([label, statuses]) => {
+    const names = apps.filter((a) => statuses.includes(a.status)).map((a) => APP_LABELS[a.id]);
+    return names.length ? [`${label}: ${names.join(", ")}.`] : [];
+  });
+  return parts.join(" ") || "No apps picked; the snippets above add crawlmark by hand.";
+}
+
+/** The fancy summary: one cell per step and app, then numbered next steps (pure). */
+export function summarize(ctx: Pick<WizardContext, "cliDisplay" | "dryRun">, results: StepResult[]): { rows: SummaryRow[]; next: string[] } {
+  const rows: SummaryRow[] = [];
+  const next: string[] = [];
+  for (const r of results) {
+    if (r.step === "register") {
+      for (const a of r.apps ?? []) rows.push({ label: APP_LABELS[a.id], outcome: APP_OUTCOME[a.status], ...(a.status === "dry-run" ? { note: "(dry run)" } : {}) });
+      const changed = new Set((r.apps ?? []).filter((a) => a.status === "registered").map((a) => a.id));
+      if (changed.has("claude-desktop")) next.push("Restart Claude Desktop");
+      if (changed.has("cursor")) next.push("Restart Cursor (or reload its MCP servers)");
+      if (changed.has("codex")) next.push("Restart Codex");
+      continue;
+    }
+    rows.push({ label: SUMMARY_LABELS[r.step], outcome: r.outcome, ...(r.outcome === "skipped" ? { note: "(skipped)" } : {}) });
+    if (r.outcome === "failed" || r.outcome === "needs-input") next.unshift(`Fix ${SUMMARY_LABELS[r.step]}: ${ctx.cliDisplay} setup --step ${r.step}`);
+  }
+  next.push("In Claude, run the getting-started prompt");
+  next.push(`Change one step: ${ctx.cliDisplay} setup --step <${STEP_NAMES.join("|")}>`);
+  return { rows, next };
+}
+
 /** Run every step (or one). Steps never throw: failures and missing input are results. Ctrl-C stops the run. */
 export async function runWizard(ctx: WizardContext, opts: { step?: StepName } = {}): Promise<StepResult[]> {
-  ctx.out(`crawlmark setup. Config home: ${ctx.paths.home}`);
-  if (ctx.dryRun) ctx.out("Dry run: nothing will be written or registered. Free read-only checks still run.");
+  const ui = uiFor(ctx);
+  ui.intro({ command: ctx.command ?? "setup", version: ctx.version ?? "", home: ctx.paths.home, dryRun: ctx.dryRun });
   const names = opts.step ? [opts.step] : STEP_NAMES;
   const results: StepResult[] = [];
   for (const [i, name] of names.entries()) {
-    ctx.out("");
-    ctx.out(`== ${opts.step ? "" : `${i + 1}/${names.length} `}${STEPS[name].title} ==`);
+    ui.step(STEPS[name].title, opts.step ? undefined : { index: i + 1, total: names.length });
     let result: StepResult;
     try {
       result = await STEPS[name].run(ctx);
@@ -569,13 +533,18 @@ export async function runWizard(ctx: WizardContext, opts: { step?: StepName } = 
       if (err instanceof PromptAbortedError) throw err;
       result = err instanceof NeedsInputError ? { step: name, outcome: "needs-input", message: err.message } : { step: name, outcome: "failed", message: (err as Error).message };
     }
-    ctx.out(`-> ${result.outcome}: ${result.message}`);
+    // Fancy mode already showed each app's line; its result is a short tally instead of all of them again.
+    ui.result(result.outcome, ui.fancy && result.apps ? appsTally(result.apps) : result.message);
     results.push(result);
     if (name === "node" && result.outcome === "failed") break;
   }
-  ctx.out("");
-  ctx.out("Summary:");
-  for (const r of results) ctx.out(`  ${r.step.padEnd(10)} ${r.outcome}`);
-  ctx.out(`Re-run one step with \`${ctx.cliDisplay} setup --step <${STEP_NAMES.join("|")}>\`. In Claude, the setup_status tool shows the same checks.`);
+  const { rows, next } = summarize(ctx, results);
+  ui.summary({
+    steps: results.map((r) => ({ step: r.step, outcome: r.outcome })),
+    rows,
+    next,
+    rerun: `Re-run one step with \`${ctx.cliDisplay} setup --step <${STEP_NAMES.join("|")}>\`. In Claude, the setup_status tool shows the same checks.`,
+  });
+  ui.outro(results.some((r) => r.outcome === "failed") ? "Finished, with problems above" : "Done");
   return results;
 }

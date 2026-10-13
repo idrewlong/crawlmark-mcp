@@ -4,6 +4,7 @@
  * the error messages. The I/O lives in src/providers/gtm.ts.
  */
 import { GTM_SCOPE_MESSAGE } from "./google-auth.js";
+import { stripControl } from "./terminal-text.js";
 
 export interface GtmContainerRef {
   accountId: string;
@@ -27,6 +28,8 @@ export interface GtmMatch {
   gtmContainerId: string;
   publicId: string;
   name: string;
+  /** How the container was matched: a domain on its domain list, or its name (when it lists no domains). */
+  matchedBy: "domain" | "name";
   /** Other containers listing the same host (not used). */
   alternates: { gtmAccountId: string; gtmContainerId: string; publicId: string }[];
 }
@@ -61,38 +64,61 @@ export function containersFromResponse(data: { container?: ApiContainer[] | null
 const byIds = (a: GtmContainerRef, b: GtmContainerRef) =>
   a.publicId < b.publicId ? -1 : a.publicId > b.publicId ? 1 : Number(a.containerId) - Number(b.containerId);
 
+/** A container name that is itself a host (`www.example.com/`): the normalised host, else undefined. Names with spaces never qualify. */
+function hostFromName(name: string, normalizeHost: (input: string) => string | undefined): string | undefined {
+  const trimmed = name.trim();
+  if (!trimmed || /\s/.test(trimmed)) return undefined;
+  const host = normalizeHost(trimmed);
+  return host && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : undefined;
+}
+
+function toMatch(list: GtmContainerRef[], matchedBy: GtmMatch["matchedBy"]): GtmMatch {
+  const [first, ...rest] = list;
+  return {
+    gtmAccountId: first!.accountId,
+    gtmContainerId: first!.containerId,
+    publicId: first!.publicId,
+    name: first!.name,
+    matchedBy,
+    alternates: rest.map((c) => ({ gtmAccountId: c.accountId, gtmContainerId: c.containerId, publicId: c.publicId })),
+  };
+}
+
 /**
  * Match containers to client domains. Each listed domain goes through
-
- * normalizeHost, the Phase 0c host normaliser passed in by the caller (`https://www.x.com/` and `x.com` both give `x.com`). When
- * several containers list one host, the lowest `GTM-` ID wins and the others
- * become alternates. Containers with no domain list are returned unmatched.
+ * normalizeHost, the Phase 0c host normaliser passed in by the caller
+ * (`https://www.x.com/` and `x.com` both give `x.com`). When several containers
+ * list one host, the lowest `GTM-` ID wins and the others become alternates.
+ *
+ * Then a container with no domain list is matched by its name when the name is
+ * a host (`www.example.com/` gives `example.com`), unless some container's
+ * domain list already claims that host. Name candidates for a host follow the
+ * same lowest-ID rule. Everything else is returned unmatched.
  */
 export function joinGtmContainers(
   containers: GtmContainerRef[],
   normalizeHost: (input: string) => string | undefined,
 ): { matches: Map<string, GtmMatch>; unmatched: GtmContainerRef[] } {
   const byHost = new Map<string, GtmContainerRef[]>();
-  const unmatched: GtmContainerRef[] = [];
+  const noDomains: GtmContainerRef[] = [];
   for (const c of [...containers].sort(byIds)) {
     const hosts = new Set(c.domainName.flatMap((d) => normalizeHost(d) ?? []));
     if (hosts.size === 0) {
-      unmatched.push(c);
+      noDomains.push(c);
       continue;
     }
     for (const h of hosts) byHost.set(h, [...(byHost.get(h) ?? []), c]);
   }
-  const matches = new Map<string, GtmMatch>();
-  for (const [host, list] of byHost) {
-    const [first, ...rest] = list;
-    matches.set(host, {
-      gtmAccountId: first!.accountId,
-      gtmContainerId: first!.containerId,
-      publicId: first!.publicId,
-      name: first!.name,
-      alternates: rest.map((c) => ({ gtmAccountId: c.accountId, gtmContainerId: c.containerId, publicId: c.publicId })),
-    });
+  const byName = new Map<string, GtmContainerRef[]>();
+  const unmatched: GtmContainerRef[] = [];
+  for (const c of noDomains) {
+    const host = hostFromName(c.name, normalizeHost);
+    if (host === undefined || byHost.has(host)) unmatched.push(c);
+    else byName.set(host, [...(byName.get(host) ?? []), c]);
   }
+  const matches = new Map<string, GtmMatch>();
+  for (const [host, list] of byHost) matches.set(host, toMatch(list, "domain"));
+  for (const [host, list] of byName) matches.set(host, toMatch(list, "name"));
   return { matches, unmatched };
 }
 
@@ -108,17 +134,26 @@ export function gtmNotes(
 ): string[] {
   const notes: string[] = [];
   if (unmatched.length) {
-    const shown = unmatched.slice(0, MAX_LISTED).map((c) => `${c.publicId || c.containerId} "${c.name}" (account ${c.accountId})`);
+    const shown = unmatched.slice(0, MAX_LISTED).map((c) => `${c.publicId || c.containerId} "${stripControl(c.name)}" (account ${c.accountId}, container ${c.containerId})`);
     const more = unmatched.length > shown.length ? ` and ${unmatched.length - shown.length} more` : "";
     notes.push(
       `Tag Manager: ${unmatched.length} web container(s) list no domain, so they can't be matched to a client: ${shown.join(", ")}${more}. ` +
         "Set gtmAccountId and gtmContainerId on the client in clients.yaml to use one.",
     );
   }
+  const names = new Map(listing.containers.map((c) => [`${c.accountId}/${c.containerId}`, c.name]));
   for (const [host, m] of matches) {
+    if (m.matchedBy === "name" && !pinned.has(host)) {
+      // Container names come from Tag Manager and are shown in a terminal: no control characters.
+      const name = stripControl(names.get(`${m.gtmAccountId}/${m.gtmContainerId}`) ?? m.name);
+      notes.push(
+        `Tag Manager: matched ${m.publicId || m.gtmContainerId} "${name}" to ${host} by its name (the container lists no domains). ` +
+          "If that's wrong, pin another with gtmContainerId in clients.yaml.",
+      );
+    }
     if (m.alternates.length && !pinned.has(host)) {
       notes.push(
-        `Tag Manager: ${host} is listed by ${m.alternates.length + 1} containers; using ${m.publicId || m.gtmContainerId}. ` +
+        `Tag Manager: ${host} is ${m.matchedBy === "name" ? "the name of" : "listed by"} ${m.alternates.length + 1} containers; using ${m.publicId || m.gtmContainerId}. ` +
           `Others: ${m.alternates.map((a) => a.publicId || a.gtmContainerId).join(", ")}. Pin one with gtmContainerId in clients.yaml.`,
       );
     }

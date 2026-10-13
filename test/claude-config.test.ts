@@ -1,8 +1,8 @@
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { claudeCodeAddArgs, claudeDesktopConfigPath, describeDesktopChange, describeRegistration, desktopEntry, maskEntry, mergeDesktopConfig, parseClaudeMcpGet, sameRegistration, shellQuote, writeDesktopConfig } from "../src/lib/claude-config.js";
+import { backupFile, claudeCodeAddArgs, claudeDesktopConfigPath, cursorConfigPath, cursorEntry, describeDesktopChange, mergeMcpServersJson, writeConfigWithBackup, describeRegistration, desktopEntry, maskEntry, mergeDesktopConfig, parseClaudeMcpGet, sameRegistration, shellQuote, writeDesktopConfig } from "../src/lib/claude-config.js";
 
 const launch = { command: "/usr/bin/node", args: ["--disable-warning=ExperimentalWarning", "/opt/cm/dist/index.js"], env: { CRAWLMARK_HOME: "/home/u/.crawlmark" } };
 
@@ -113,5 +113,86 @@ To remove this server, run: claude mcp remove "crawlmark" -s user
     expect(readFileSync(path, "utf8")).toBe('{"new":true}\n');
     expect(statSync(path).mode & 0o777).toBe(0o644);
     expect(readdirSync(join(dir, "Claude")).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+});
+
+describe("Cursor config (shared mcpServers JSON merge)", () => {
+  const SENTINEL = "cursor-SENTINEL-token-5678";
+  const existing = JSON.stringify({ theme: "dark", mcpServers: { other: { command: "x", env: { TOKEN: SENTINEL } } } }, null, 2);
+
+  it("lives at ~/.cursor/mcp.json, and the entry is a stdio entry", () => {
+    expect(cursorConfigPath("/home/u")).toBe(join("/home/u", ".cursor", "mcp.json"));
+    expect(cursorEntry(launch)).toEqual({ type: "stdio", command: launch.command, args: launch.args, env: launch.env });
+  });
+
+  it("keeps other servers and keys", () => {
+    const merge = mergeMcpServersJson(existing, cursorEntry(launch), { app: "Cursor" });
+    const next = JSON.parse(merge.text);
+    expect(next.theme).toBe("dark");
+    expect(next.mcpServers.other).toEqual({ command: "x", env: { TOKEN: SENTINEL } });
+    expect(next.mcpServers.crawlmark.type).toBe("stdio");
+    expect(merge).toMatchObject({ changed: true, replaced: false, otherServers: ["other"] });
+    expect(mergeMcpServersJson(merge.text, cursorEntry(launch), { app: "Cursor" }).changed).toBe(false);
+  });
+
+  it("refuses invalid JSON, a non-object file and a non-object mcpServers, naming the app", () => {
+    expect(() => mergeMcpServersJson("{nope", {}, { app: "Cursor" })).toThrow(/Cursor config isn't valid JSON/);
+    expect(() => mergeMcpServersJson("[1]", {}, { app: "Cursor" })).toThrow(/Cursor config isn't a JSON object/);
+    expect(() => mergeMcpServersJson('{"mcpServers":[]}', {}, { app: "Cursor" })).toThrow(/Cursor config's mcpServers isn't an object/);
+  });
+
+  it("shows other servers by name only, with env values hidden", () => {
+    const entry = cursorEntry(launch);
+    const text = describeDesktopChange(mergeMcpServersJson(existing, entry, { app: "Cursor" }), entry).join("\n");
+    expect(text).toContain("Other servers kept unchanged: other");
+    expect(text).toContain('"CRAWLMARK_HOME": "<hidden>"');
+    expect(text).not.toContain(SENTINEL);
+    expect(text).not.toContain("/home/u/.crawlmark");
+  });
+
+  it("writeConfigWithBackup keeps a 0600 .bak", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "crawlmark-cursor-")));
+    const path = join(dir, ".cursor", "mcp.json");
+    expect(writeConfigWithBackup(path, existing)).toBeUndefined();
+    const backup = writeConfigWithBackup(path, "{}\n");
+    expect(statSync(backup!).mode & 0o777).toBe(0o600);
+    expect(readFileSync(backup!, "utf8")).toBe(existing);
+  });
+});
+
+describe("SEC-1: JSON errors quote no file content", () => {
+  it("keeps only the position", () => {
+    const secret = "sk-LEAK-CHECK-4242";
+    for (const text of [`{"mcpServers":{"o":{"env":{"T":'${secret}'}}}}`, `{"mcpServers":{"o":{"env":{"T":"${secret}"}}} trailing`]) {
+      let msg = "";
+      try {
+        mergeMcpServersJson(text, {}, { app: "Cursor" });
+      } catch (err) {
+        msg = (err as Error).message;
+      }
+      expect(msg).toMatch(/^The Cursor config isn't valid JSON( \(at position \d+( \(line \d+ column \d+\))?\))?; fix it by hand first\.$/);
+      expect(msg).not.toContain("LEAK");
+    }
+  });
+});
+
+describe("SEC-4: a symlinked config keeps its .bak next to the link", () => {
+  it("writes through the symlink but backs up beside the configured path", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "crawlmark-symlink-")));
+    mkdirSync(join(dir, "dotfiles"));
+    mkdirSync(join(dir, ".cursor"));
+    const target = join(dir, "dotfiles", "mcp.json");
+    const link = join(dir, ".cursor", "mcp.json");
+    writeFileSync(target, '{"mcpServers":{"other":{"env":{"T":"secret"}}}}\n');
+    symlinkSync(target, link);
+    const backup = writeConfigWithBackup(link, '{"new":true}\n');
+    expect(backup).toBe(`${link}.bak`);
+    expect(readFileSync(backup!, "utf8")).toContain('"secret"');
+    expect(statSync(backup!).mode & 0o777).toBe(0o600);
+    expect(existsSync(`${target}.bak`)).toBe(false);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(readFileSync(target, "utf8")).toBe('{"new":true}\n');
+    expect(backupFile(link)).toBe(`${link}.bak`);
+    expect(existsSync(`${target}.bak`)).toBe(false);
   });
 });
