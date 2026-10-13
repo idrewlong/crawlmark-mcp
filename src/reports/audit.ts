@@ -1,0 +1,117 @@
+import type { Client } from "../config.js";
+import { runAxe, type AxeResult, type WcagLevel } from "../providers/axe.js";
+import { backlinksSummary, instantPage, onPageStartCrawl } from "../providers/dataforseo.js";
+import { gscInspectUrl, gscSitemaps } from "../providers/gsc.js";
+import { runLighthouse, type FormFactor, type LighthouseResult } from "../providers/lighthouse.js";
+import { section, type Section } from "./section.js";
+
+export interface AuditOptions {
+  /** Override the client's keyPages for this run. */
+  urls?: string[];
+  formFactor?: FormFactor;
+  wcagLevel?: WcagLevel;
+  /** Kick off a full-site DataForSEO crawl (paid, async). Returns a taskId to poll with crawl_status. */
+  fullCrawl?: boolean;
+  maxCrawlPages?: number;
+  /** Include a DataForSEO backlinks summary (paid). */
+  backlinks?: boolean;
+}
+
+interface PageAudit {
+  url: string;
+  lighthouse: Section<LighthouseResult>;
+  accessibility: Section<AxeResult>;
+  indexing: Section<Awaited<ReturnType<typeof gscInspectUrl>>>;
+  onPage: Section<unknown>;
+}
+
+export async function runAudit(client: Client, opts: AuditOptions = {}) {
+  const urls = opts.urls?.length ? opts.urls : client.keyPages;
+  const formFactor = opts.formFactor ?? "mobile";
+  const wcagLevel = opts.wcagLevel ?? "AA";
+
+  // Site-level checks run in parallel; they're all network calls.
+  const [sitemaps, crawl, links] = await Promise.all([
+    section(() => gscSitemaps(client)),
+    opts.fullCrawl ? section(() => onPageStartCrawl(client, opts.maxCrawlPages ?? 100)) : Promise.resolve(null),
+    opts.backlinks ? section(() => backlinksSummary(client)) : Promise.resolve(null),
+  ]);
+
+  // Page-level browser checks run one page at a time so Chrome instances don't
+  // fight over CPU and skew Lighthouse timings.
+  const pages: PageAudit[] = [];
+  for (const url of urls) {
+    const lighthouse = await section(() => runLighthouse(url, formFactor));
+    const accessibility = await section(() => runAxe(url, wcagLevel));
+    const [indexing, onPage] = await Promise.all([
+      section(() => gscInspectUrl(client, url)),
+      section(async () => (await instantPage(client, url)).result[0]),
+    ]);
+    pages.push({ url, lighthouse, accessibility, indexing, onPage });
+  }
+
+  return {
+    client: { slug: client.slug, name: client.name, domain: client.domain },
+    ranAt: new Date().toISOString(),
+    settings: { formFactor, wcagLevel, pages: urls.length },
+    summary: summarize(pages),
+    site: { sitemaps, crawl, backlinks: links },
+    pages,
+    next: opts.fullCrawl
+      ? "A full crawl was started. Call crawl_status with the taskId in site.crawl; crawls of 100 pages usually finish in a few minutes."
+      : undefined,
+  };
+}
+
+/** Roll page results up into the numbers a report leads with. */
+function summarize(pages: PageAudit[]) {
+  const lh = pages.flatMap((p) => (p.lighthouse.ok ? [p.lighthouse.data] : []));
+  const ax = pages.flatMap((p) => (p.accessibility.ok ? [p.accessibility.data] : []));
+  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+
+  const notIndexed = pages
+    .filter((p) => p.indexing.ok && p.indexing.data.verdict !== "PASS")
+    .map((p) => ({ url: p.url, coverage: p.indexing.ok ? p.indexing.data.coverageState : undefined }));
+
+  const a11yTotals = ax.reduce(
+    (t, r) => ({
+      critical: t.critical + r.counts.critical,
+      serious: t.serious + r.counts.serious,
+      moderate: t.moderate + r.counts.moderate,
+      minor: t.minor + r.counts.minor,
+    }),
+    { critical: 0, serious: 0, moderate: 0, minor: 0 },
+  );
+
+  // Most common a11y rules across pages, so fixes can be templated once.
+  const ruleCounts = new Map<string, { help: string; impact: string | null; pages: number; nodes: number }>();
+  for (const r of ax) {
+    for (const v of r.violations) {
+      const cur = ruleCounts.get(v.id) ?? { help: v.help, impact: v.impact, pages: 0, nodes: 0 };
+      cur.pages += 1;
+      cur.nodes += v.nodes;
+      ruleCounts.set(v.id, cur);
+    }
+  }
+
+  return {
+    avgScores: {
+      performance: avg(lh.map((r) => r.scores.performance)),
+      accessibility: avg(lh.map((r) => r.scores.accessibility)),
+      bestPractices: avg(lh.map((r) => r.scores.bestPractices)),
+      seo: avg(lh.map((r) => r.scores.seo)),
+    },
+    slowestPages: [...lh].sort((a, b) => b.lab.lcpMs - a.lab.lcpMs).slice(0, 5).map((r) => ({ url: r.url, lcpMs: r.lab.lcpMs })),
+    accessibilityIssues: a11yTotals,
+    topAccessibilityRules: [...ruleCounts.entries()]
+      .sort(([, a], [, b]) => b.pages - a.pages || b.nodes - a.nodes)
+      .slice(0, 10)
+      .map(([id, v]) => ({ id, ...v })),
+    notIndexed,
+    failedChecks: pages.flatMap((p) =>
+      (["lighthouse", "accessibility", "indexing", "onPage"] as const)
+        .filter((k) => !p[k].ok)
+        .map((k) => ({ url: p.url, check: k, error: (p[k] as { error: string }).error })),
+    ),
+  };
+}

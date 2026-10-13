@@ -1,0 +1,105 @@
+import { google } from "googleapis";
+import type { Client } from "../config.js";
+import { cached, cacheKey, TTL } from "../lib/cache.js";
+import type { DateRange } from "../lib/dates.js";
+import { googleAuth } from "./google.js";
+
+export type GscDimension = "query" | "page" | "country" | "device" | "date";
+
+export interface GscRow {
+  keys: string[];
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface GscQueryOptions extends DateRange {
+  dimensions?: GscDimension[];
+  rowLimit?: number;
+  /** Filter to rows whose page contains this string, e.g. "/blog/". */
+  pageContains?: string;
+  /** Filter to rows whose query contains this string. */
+  queryContains?: string;
+}
+
+function requireProperty(client: Client): string {
+  if (!client.gscProperty) throw new Error(`${client.slug} has no gscProperty in clients.yaml`);
+  return client.gscProperty;
+}
+
+/** Search Analytics query. GSC data lags ~2-3 days, so completed months are safe to cache long. */
+export async function gscQuery(client: Client, opts: GscQueryOptions): Promise<GscRow[]> {
+  const siteUrl = requireProperty(client);
+  const filters = [
+    opts.pageContains && { dimension: "page", operator: "contains", expression: opts.pageContains },
+    opts.queryContains && { dimension: "query", operator: "contains", expression: opts.queryContains },
+  ].filter(Boolean) as { dimension: string; operator: string; expression: string }[];
+
+  const key = cacheKey("gsc", siteUrl, opts);
+  const { value } = await cached(key, TTL.day, async () => {
+    const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
+    const res = await sc.searchanalytics.query({
+      siteUrl,
+      requestBody: {
+        startDate: opts.startDate,
+        endDate: opts.endDate,
+        dimensions: opts.dimensions ?? [],
+        rowLimit: opts.rowLimit ?? 1000,
+        dimensionFilterGroups: filters.length ? [{ filters }] : undefined,
+      },
+    });
+    return (res.data.rows ?? []).map((r) => ({
+      keys: r.keys ?? [],
+      clicks: r.clicks ?? 0,
+      impressions: r.impressions ?? 0,
+      ctr: Number(((r.ctr ?? 0) * 100).toFixed(2)),
+      position: Number((r.position ?? 0).toFixed(1)),
+    }));
+  });
+  return value;
+}
+
+/** Totals for a date range (no dimensions → one aggregate row). */
+export async function gscTotals(client: Client, range: DateRange) {
+  const [row] = await gscQuery(client, { ...range, dimensions: [] });
+  return row ?? { keys: [], clicks: 0, impressions: 0, ctr: 0, position: 0 };
+}
+
+/** URL Inspection: index status, canonical, mobile usability for one URL. */
+export async function gscInspectUrl(client: Client, url: string) {
+  const siteUrl = requireProperty(client);
+  const { value } = await cached(cacheKey("gsc-inspect", siteUrl, url), TTL.day, async () => {
+    const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
+    const res = await sc.urlInspection.index.inspect({
+      requestBody: { inspectionUrl: url, siteUrl },
+    });
+    const r = res.data.inspectionResult;
+    return {
+      url,
+      verdict: r?.indexStatusResult?.verdict,
+      coverageState: r?.indexStatusResult?.coverageState,
+      googleCanonical: r?.indexStatusResult?.googleCanonical,
+      userCanonical: r?.indexStatusResult?.userCanonical,
+      lastCrawlTime: r?.indexStatusResult?.lastCrawlTime,
+      robotsTxtState: r?.indexStatusResult?.robotsTxtState,
+      mobileVerdict: r?.mobileUsabilityResult?.verdict,
+      richResults: r?.richResultsResult?.detectedItems?.map((i) => i.richResultType),
+    };
+  });
+  return value;
+}
+
+export async function gscSitemaps(client: Client) {
+  const siteUrl = requireProperty(client);
+  const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
+  const res = await sc.sitemaps.list({ siteUrl });
+  return (res.data.sitemap ?? []).map((s) => ({
+    path: s.path,
+    lastSubmitted: s.lastSubmitted,
+    lastDownloaded: s.lastDownloaded,
+    isPending: s.isPending,
+    errors: Number(s.errors ?? 0),
+    warnings: Number(s.warnings ?? 0),
+  }));
+}

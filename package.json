@@ -1,0 +1,38 @@
+{
+  "name": "seo-ops-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for automated SEO audits and reports (GSC, GA4, DataForSEO, Lighthouse, axe)",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "inspect": "npx @modelcontextprotocol/inspector tsx src/index.ts"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@axe-core/puppeteer": "^4.13.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "chrome-launcher": "^1.2.2",
+    "googleapis": "^185.0.0",
+    "lighthouse": "^13.5.0",
+    "puppeteer": "^25.13.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "type": "module",
+  "bin": {
+    "seo-ops-mcp": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "private": true
+}

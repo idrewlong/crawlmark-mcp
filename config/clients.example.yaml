@@ -1,0 +1,27 @@
+# Copy to clients.yaml (gitignored). One entry per client.
+# The slug is what you pass to tools: run_audit({ client: "acme-plumbing" })
+
+clients:
+  acme-plumbing:
+    name: Acme Plumbing
+    domain: acmeplumbing.com
+    # GSC: "sc-domain:acmeplumbing.com" for domain properties,
+    # or "https://www.acmeplumbing.com/" for URL-prefix properties.
+    gscProperty: sc-domain:acmeplumbing.com
+    ga4PropertyId: "123456789"
+    # DataForSEO location/language. 2840 = United States.
+    locationCode: 2840
+    languageCode: en
+    competitors:
+      - rivalplumbing.com
+      - quickfixplumbers.com
+    trackedKeywords:
+      - plumber near me
+      - emergency plumber biloxi
+      - water heater repair
+    # Pages Lighthouse + axe check in an audit (defaults to the homepage).
+    keyPages:
+      - https://acmeplumbing.com/
+      - https://acmeplumbing.com/services/
+      - https://acmeplumbing.com/contact/
+    monthlyBudgetUsd: 5
