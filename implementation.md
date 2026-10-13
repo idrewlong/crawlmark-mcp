@@ -361,6 +361,25 @@ Keep the MCP server itself stateless. Scheduling lives in a separate CLI entry p
 - **Timeouts.** Add a `withTimeout(promise, ms, label)` helper and apply it per tool: browser tools 90s, network calls 30s, `run_audit` overall 10 minutes. The timeout must also close the browser.
 - **Usage log.** Write one row per tool call to a `tool_calls` table (tool name, client, duration, ok/error). Add a `usage_summary` tool.
 
+## Phase 6s: Guided setup and distribution
+
+Goal: a new user can install crawlmark, enter credentials once with each one checked live, and have it registered with Claude, without reading the whole README. Secrets are never pasted into chat.
+
+1. **Per-user config home.** Resolve `.env`, `clients.yaml`, `data/` and `secrets/` from `CRAWLMARK_HOME` (default `~/.crawlmark`) when crawlmark runs as an installed package, and keep the project root for a source checkout. `CRAWLMARK_HOME` overrides both. Migrating an existing project-root setup is a copy with a confirmation, never a move.
+2. **Setup wizard.** `crawlmark-cli setup` (and `npx crawlmark-mcp setup`) walks through each step and can be re-run to change one:
+   - Node version check, and a build if running from source.
+   - DataForSEO login and password, checked with the free `/v3/appendix/user_data` call (shows the balance). The wizard explains that the API password differs from the account password, and offers sandbox or live.
+   - Google: choose option A, B or C (see the README), show the matching Google Cloud steps, then check the key file or run `auth login`. It ends by listing the Search Console and GA4 properties found.
+   - Optional PageSpeed Insights key, checked with one request.
+   - Discover clients, write `clients.yaml`, and offer to run brand-term inference (GSC only, free).
+   - Register with Claude: `claude mcp add crawlmark …` for Claude Code, or add the server to Claude Desktop's config file (after showing the change and asking). Otherwise print the snippet.
+   - Write secrets to `CRAWLMARK_HOME/.env` with mode `0600`.
+3. **In-Claude guidance.** A `setup_status` tool reports, per integration, configured / working / missing and the exact next step (a command to run, never a request to paste a secret). A `getting-started` prompt calls `setup_status`, explains what crawlmark can do, and runs a first useful flow (`list_clients`, then an opportunities or audit summary for one client).
+4. **npm package.** Make the package publishable: `bin` entries for `crawlmark-mcp` and `crawlmark-cli`, a `files` allowlist (no tests, fixtures, data or secrets), a `prepublishOnly` build, and a README install section using `npx`. Verify with `npm pack` and an install from the tarball in a clean directory. **Publishing needs the user's explicit go-ahead.**
+5. **Claude Desktop bundle.** Add an MCP bundle (`.mcpb`) manifest whose `user_config` collects the DataForSEO login and password (sensitive), the Google key file (file picker), the optional OAuth client ID and secret (sensitive) and the PSI key (sensitive), and passes them to the server as env vars. Build the bundle in CI or with a script, and check it installs in Claude Desktop.
+
+**Done when** a fresh machine (or a clean `CRAWLMARK_HOME` and a tarball install) gets from nothing to a working `list_clients` in Claude Code and in Claude Desktop by following only the wizard or the bundle form, and `setup_status` reports every integration correctly in each state.
+
 ## Phase 7: OAuth end-to-end verification
 
 Deferred from Phase 0b until there's a way to test it. The OAuth code is built and unit tested; this phase proves it against Google.
