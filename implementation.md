@@ -395,7 +395,7 @@ Deferred from Phase 0b until there's a way to test it. The OAuth code is built a
 4. **Logout and re-login.** `auth logout` revokes and deletes the token; tools then return the "run `crawlmark-cli auth login`" error; a fresh login works again. For External-Testing apps, confirm the `invalid_grant` message after the 7-day expiry (or after revoking access at myaccount.google.com).
 5. **Docs.** Remove the "OAuth not yet verified" notes from the README and `.env.example`.
 
-**Done when** all of the above works on a real account and the README's Status section lists OAuth as tested.
+**Done when** all of the above works on a real account and the README's Known limits and Google sections no longer say OAuth is unverified.
 
 ## Final checklist
 
