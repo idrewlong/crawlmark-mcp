@@ -359,6 +359,12 @@ export type DataForSeoStatusResult =
       costUsd: 0;
     };
 
+export interface DataForSeoCredentials {
+  login?: string | undefined;
+  password?: string | undefined;
+  baseUrl: string;
+}
+
 /**
  * Free account check: `GET /appendix/user_data`. Reports the mode (from the base
  * URL), the balance and whether the credentials work. Not cached (the balance
@@ -366,17 +372,28 @@ export type DataForSeoStatusResult =
  * rejected login (`credentialsWork: false`) and an unreachable API (network
  * error, 5xx, 429, timeout: `credentialsWork: null`, `reachable: false`) are
  * reported in the result, not thrown, so a health check can show them. The
- * error text never includes the credentials.
+ * error text never includes the credentials. Takes explicit credentials so the
+ * setup wizard can check them before saving; `dataForSeoStatus` uses the env.
  */
-export async function dataForSeoStatus(): Promise<DataForSeoStatusResult> {
-  const mode = dataForSeoMode(env.DATAFORSEO_BASE_URL);
-  const apiHost = new URL(env.DATAFORSEO_BASE_URL).hostname;
-  if (!env.DATAFORSEO_LOGIN || !env.DATAFORSEO_PASSWORD) {
+export async function checkDataForSeoCredentials(c: DataForSeoCredentials, fetchImpl: typeof fetch = fetch): Promise<DataForSeoStatusResult> {
+  const mode = dataForSeoMode(c.baseUrl);
+  const apiHost = new URL(c.baseUrl).hostname;
+  if (!c.login || !c.password) {
     return { credentialsConfigured: false, credentialsWork: false, reachable: true, mode, apiHost, error: "DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD are not set.", costUsd: 0 };
   }
+  const path = "/appendix/user_data";
   try {
-    const task = await request<RawUserData>("GET", "/appendix/user_data");
-    return { credentialsConfigured: true, credentialsWork: true, reachable: true, ...mapUserData(task.result?.[0], env.DATAFORSEO_BASE_URL), costUsd: 0 };
+    const res = await fetchImpl(`${c.baseUrl}${path}`, {
+      method: "GET",
+      headers: { Authorization: "Basic " + Buffer.from(`${c.login}:${c.password}`).toString("base64") },
+      signal: AbortSignal.timeout(TIMEOUTS.networkMs),
+    });
+    if (!res.ok) throw new Error(`DataForSEO ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const json = (await res.json()) as DfsResponse<RawUserData>;
+    const task = json.tasks?.[0];
+    if (!task) throw new Error(`DataForSEO ${path}: empty response (${json.status_message})`);
+    if (task.status_code >= 40000) throw new Error(`DataForSEO ${path} ${task.status_code}: ${task.status_message}`);
+    return { credentialsConfigured: true, credentialsWork: true, reachable: true, ...mapUserData(task.result?.[0], c.baseUrl), costUsd: 0 };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const rejected = isAuthRejection(message);
@@ -390,4 +407,9 @@ export async function dataForSeoStatus(): Promise<DataForSeoStatusResult> {
       costUsd: 0,
     };
   }
+}
+
+/** The free account check with the configured credentials (the `dataforseo_status` tool). */
+export function dataForSeoStatus(): Promise<DataForSeoStatusResult> {
+  return checkDataForSeoCredentials({ login: env.DATAFORSEO_LOGIN, password: env.DATAFORSEO_PASSWORD, baseUrl: env.DATAFORSEO_BASE_URL });
 }

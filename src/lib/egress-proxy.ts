@@ -126,6 +126,8 @@ export async function startEgressProxy(opts: EgressProxyOptions = {}): Promise<E
       const upstream = connect({ host, port, lookup: pinnedLookup(addresses) });
       track(upstream);
       const timer = setTimeout(() => upstream.destroy(new Error(`connect to ${host}:${port} timed out`)), connectTimeoutMs);
+      // Destroyed without an error (the proxy closing): don't let the timer hold the process open.
+      upstream.once("close", () => clearTimeout(timer));
       upstream.once("connect", () => {
         clearTimeout(timer);
         resolve(upstream);

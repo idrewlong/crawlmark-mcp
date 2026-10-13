@@ -381,3 +381,33 @@ export function describeAuthStatus(s: GoogleAuthStatus): string {
   if (s.mode === "oauth") return `Google auth: OAuth, signed in as ${s.email ?? "an unknown account"}`;
   return `Google auth: service account ${s.email ?? "(email unknown)"}`;
 }
+
+// ---------------------------------------------------------------- key files
+
+/**
+ * Check a service-account key file's JSON before using it: it must be an
+ * object with type "service_account", a client_email and a private_key.
+ * Returns the email, or a message saying what's wrong (never the key itself).
+ */
+export function inspectServiceAccountKey(text: string): { ok: true; email: string } | { ok: false; problem: string } {
+  let key: unknown;
+  try {
+    key = JSON.parse(text);
+  } catch {
+    return { ok: false, problem: "The file isn't valid JSON. Download the key again (IAM & Admin > Service accounts > Keys > Add key > JSON)." };
+  }
+  if (!key || typeof key !== "object" || Array.isArray(key)) return { ok: false, problem: "The file isn't a JSON object, so it isn't a service-account key." };
+  const k = key as Record<string, unknown>;
+  if (k.type !== "service_account") {
+    return {
+      ok: false,
+      problem:
+        k.type === undefined && "installed" in k
+          ? "This is an OAuth client file, not a service-account key. For option C, create a JSON key under IAM & Admin > Service accounts > Keys."
+          : `The file's type is ${JSON.stringify(k.type ?? null)}, not "service_account".`,
+    };
+  }
+  if (typeof k.client_email !== "string" || !k.client_email) return { ok: false, problem: "The key has no client_email." };
+  if (typeof k.private_key !== "string" || !k.private_key.includes("PRIVATE KEY")) return { ok: false, problem: "The key has no private_key." };
+  return { ok: true, email: k.client_email };
+}

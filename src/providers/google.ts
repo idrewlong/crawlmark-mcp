@@ -4,6 +4,10 @@ import { Auth, google } from "googleapis";
 import { env } from "../config.js";
 import {
   authIdentityKey,
+  inspectServiceAccountKey,
+  mapTokenError,
+  missingDataScopes,
+  missingGtmScope,
   SERVICE_ACCOUNT_SCOPES,
   authModeNote,
   GOOGLE_NOT_CONFIGURED_MESSAGE,
@@ -137,4 +141,78 @@ export function googleAuthIdentity(): string {
     }
   }
   return authIdentityKey(status, hash);
+}
+
+export interface GoogleLiveCheck {
+  ok: boolean;
+  /** OAuth only: scopes on the refreshed token. */
+  scopes?: string[];
+  /** OAuth only: data scopes not granted (the check fails when any are missing). */
+  missingScopes?: string[];
+  /** OAuth only: true when Tag Manager isn't granted (gtm_audit won't work; not a failure). */
+  gtmScopeMissing?: boolean;
+  error?: string;
+}
+
+const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** Get an access token from a service-account GoogleAuth: proves the key is valid and not revoked. */
+async function serviceAccountTokenCheck(auth: Auth.GoogleAuth): Promise<GoogleLiveCheck> {
+  try {
+    const token = await auth.getAccessToken();
+    if (!token) throw new Error("No access token returned.");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: errorText(err) };
+  }
+}
+
+/**
+ * Live check of the active Google auth: a service account gets an access token;
+ * OAuth forces a refresh (so the refresh token is exercised, not a cached access
+ * token) and reads the granted scopes. Throws nothing; the result says what failed.
+ */
+export async function checkGoogleAuthLive(): Promise<GoogleLiveCheck> {
+  let auth: Auth.OAuth2Client | Auth.GoogleAuth;
+  try {
+    auth = googleAuth();
+  } catch (err) {
+    return { ok: false, error: errorText(err) };
+  }
+  if (selectGoogleAuthConfig(env).mode === "service_account") return serviceAccountTokenCheck(auth as Auth.GoogleAuth);
+  const client = auth as Auth.OAuth2Client;
+  try {
+    // The client's `tokens` listener saves the new access token.
+    const { credentials } = await client.refreshAccessToken();
+    const token = credentials.access_token;
+    if (!token) throw new Error("No access token returned.");
+    const info = await client.getTokenInfo(token);
+    const missing = missingDataScopes(info.scopes);
+    return {
+      ok: missing.length === 0,
+      scopes: info.scopes,
+      missingScopes: missing,
+      gtmScopeMissing: missingGtmScope(info.scopes),
+      ...(missing.length ? { error: `Missing scopes: ${missing.join(", ")}.` } : {}),
+    };
+  } catch (err) {
+    return { ok: false, error: errorText(mapTokenError(err)) };
+  }
+}
+
+/**
+ * Check a service-account key file that isn't configured yet (the setup wizard):
+ * its JSON shape, then a live token request. Never returns key material.
+ */
+export async function checkServiceAccountKeyFile(keyFile: string): Promise<{ ok: true; email: string } | { ok: false; problem: string }> {
+  let text: string;
+  try {
+    text = readFileSync(keyFile, "utf8");
+  } catch (err) {
+    return { ok: false, problem: `Can't read ${keyFile}: ${(err as NodeJS.ErrnoException).code ?? errorText(err)}.` };
+  }
+  const shape = inspectServiceAccountKey(text);
+  if (!shape.ok) return shape;
+  const live = await serviceAccountTokenCheck(new google.auth.GoogleAuth({ keyFile, scopes: [...SERVICE_ACCOUNT_SCOPES] }));
+  return live.ok ? { ok: true, email: shape.email } : { ok: false, problem: `Google rejected the key: ${live.error}` };
 }

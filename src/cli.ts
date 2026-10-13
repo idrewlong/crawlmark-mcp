@@ -22,18 +22,30 @@ import {
   type ListAddResult,
   type ListRemoveResult,
 } from "./clients.js";
-import { env, type Client } from "./config.js";
+import { env, HOME, type Client } from "./config.js";
 import { formatTable, missingPieces } from "./lib/clients.js";
-import { describeAuthMode, mapTokenError, missingDataScopes, missingGtmScope } from "./lib/google-auth.js";
+import { describeAuthMode } from "./lib/google-auth.js";
+import { describeHome } from "./lib/home.js";
 import { deleteTokenFile, readTokenFile } from "./lib/token-store.js";
-import { googleAuth, googleAuthMode, googleAuthModeNote, googleAuthStatus } from "./providers/google.js";
+import { checkGoogleAuthLive, googleAuthMode, googleAuthModeNote, googleAuthStatus } from "./providers/google.js";
 import { loopbackLogin } from "./providers/google-login.js";
 import { runAudits, runTrafficChecks, type Skipped } from "./scheduled.js";
 import { assertSafeUrl } from "./lib/url-guard.js";
+import { setupCommand } from "./setup/cli-setup.js";
 
 const USAGE = `Usage: crawlmark-cli <command>
 
 Commands:
+  setup [--step <node|dataforseo|google|psi|discovery|register>] [--dry-run] [--yes]
+                Guided setup: checks Node (and builds from source), enters and live-checks each
+                credential, discovers clients and registers crawlmark with Claude. Re-runnable;
+                each step shows its status first and can be skipped. --dry-run writes nothing;
+                --yes accepts every default without asking (steps that need input are skipped)
+  setup status [--json] [--only <id,id>] [--refresh]
+                Same checks as the setup_status tool: each integration's state and next step
+  setup migrate --to <dir> [--force] [--yes] [--dry-run]
+                Copy (never move) .env, config/clients.yaml, data/ and secrets/ from the current
+                config home to <dir>, skipping files that exist unless --force. Asks first unless --yes
   auth login    Sign in to Google in your browser (OAuth mode) and store the token
   auth status   Show the active Google auth mode, account and granted scopes
   auth logout   Revoke the stored Google token and delete it
@@ -117,6 +129,7 @@ async function login(): Promise<number> {
 
 async function status(): Promise<number> {
   const s = googleAuthStatus();
+  out(`Home: ${describeHome(HOME)}`);
   out(`Mode: ${describeAuthMode(s)}`);
   const note = googleAuthModeNote();
   if (note) out(`Note: ${note}`);
@@ -133,42 +146,29 @@ async function status(): Promise<number> {
   if (s.mode === "service_account") {
     out(`Service account: ${s.email}`);
     out(`Key file: ${s.keyFile}`);
-    try {
-      await (googleAuth() as Auth.GoogleAuth).getAccessToken();
-      out("Key check: OK (obtained an access token)");
-      return 0;
-    } catch (err) {
-      out(`Key check failed: ${message(err)}`);
-      return 1;
-    }
+    const check = await checkGoogleAuthLive();
+    out(check.ok ? "Key check: OK (obtained an access token)" : `Key check failed: ${check.error}`);
+    return check.ok ? 0 : 1;
   }
 
   out(`Signed in as: ${s.email ?? "(unknown)"}`);
   out(`Token file: ${s.tokenFile}`);
-  try {
-    const client = googleAuth() as Auth.OAuth2Client;
-    // Force a refresh so the check exercises the refresh token, not a cached
-    // access token. The client's `tokens` listener saves the new access token.
-    const { credentials } = await client.refreshAccessToken();
-    const token = credentials.access_token;
-    if (!token) throw new Error("No access token returned.");
-    const info = await client.getTokenInfo(token);
-    out(`Scopes: ${info.scopes.join(" ")}`);
-    out("Token check: OK");
-    if (missingGtmScope(info.scopes)) {
-      out("Note: Tag Manager access isn't granted, so gtm_audit won't work. Run `crawlmark-cli auth login` again to add it.");
-    }
-    const missing = missingDataScopes(info.scopes);
-    if (missing.length) {
-      out(`Missing scopes: ${missing.join(", ")}. Run \`crawlmark-cli auth login\` again and grant all of them.`);
-      return 1;
-    }
-    return 0;
-  } catch (err) {
+  const check = await checkGoogleAuthLive();
+  if (!check.scopes) {
     if (s.scopes) out(`Scopes (at login): ${s.scopes.join(" ")}`);
-    out(`Token check failed: ${message(mapTokenError(err))}`);
+    out(`Token check failed: ${check.error}`);
     return 1;
   }
+  out(`Scopes: ${check.scopes.join(" ")}`);
+  out("Token check: OK");
+  if (check.gtmScopeMissing) {
+    out("Note: Tag Manager access isn't granted, so gtm_audit won't work. Run `crawlmark-cli auth login` again to add it.");
+  }
+  if (check.missingScopes?.length) {
+    out(`Missing scopes: ${check.missingScopes.join(", ")}. Run \`crawlmark-cli auth login\` again and grant all of them.`);
+    return 1;
+  }
+  return 0;
 }
 
 async function logout(): Promise<number> {
@@ -508,6 +508,12 @@ async function main(argv: string[]): Promise<number> {
       client: { type: "string" },
       urls: { type: "string" },
       "dry-run": { type: "boolean", default: false },
+      step: { type: "string" },
+      yes: { type: "boolean", short: "y", default: false },
+      json: { type: "boolean", default: false },
+      only: { type: "string" },
+      to: { type: "string" },
+      force: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -523,6 +529,7 @@ async function main(argv: string[]): Promise<number> {
   if (group === "competitors") return competitorsCommand(command, args, values.note);
   if (group === "keywords") return keywordsCommand(command, args, values.note);
   if (group === "brand") return brandCommand(command, args, values);
+  if (group === "setup") return setupCommand(command, args, values);
   // Every other command takes no further arguments.
   if (args.length) return usageError(`Unexpected argument${args.length > 1 ? "s" : ""}: ${args.join(" ")}`);
   if (group === "clients") {

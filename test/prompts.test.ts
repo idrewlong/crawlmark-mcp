@@ -8,7 +8,9 @@ import { registerBrandTools } from "../src/tools/brand.js";
 import { registerCompetitorTools } from "../src/tools/competitors.js";
 import { registerOpportunityTools } from "../src/tools/opportunities.js";
 import { registerRawTools } from "../src/tools/raw.js";
+import { registerGtmTools } from "../src/tools/gtm.js";
 import { registerReportTools } from "../src/tools/reports.js";
+import { registerSetupTools } from "../src/tools/setup.js";
 
 const TEMPLATE_DIR = new URL("../src/prompts/templates/", import.meta.url);
 const templateFiles = readdirSync(TEMPLATE_DIR).filter((f) => f.endsWith(".md"));
@@ -20,6 +22,8 @@ async function connect() {
   registerBrandTools(server);
   registerOpportunityTools(server);
   registerRawTools(server);
+  registerGtmTools(server);
+  registerSetupTools(server);
   registerPrompts(server);
   const client = new Client({ name: "test-client", version: "0.0.0" });
   const [a, b] = InMemoryTransport.createLinkedPair();
@@ -34,7 +38,11 @@ const EXPECTED_PROMPTS: Record<string, { required: string[]; optional: string[] 
   "audit-findings": { required: ["client"], optional: [] },
   "opportunity-review": { required: ["client"], optional: [] },
   "client-health-check": { required: ["client"], optional: [] },
+  "getting-started": { required: [], optional: [] },
 };
+
+/** Prompts with no client argument. */
+const NO_CLIENT = new Set(["getting-started"]);
 
 describe("registered prompts", () => {
   it("registers every prompt with the right args", async () => {
@@ -53,12 +61,12 @@ describe("registered prompts", () => {
   it("every prompt renders with no unfilled placeholders and says to prefer free tools and not to guess", async () => {
     const client = await connect();
     for (const name of Object.keys(EXPECTED_PROMPTS)) {
-      const r = await client.getPrompt({ name, arguments: { client: "example.com" } });
+      const r = await client.getPrompt({ name, arguments: NO_CLIENT.has(name) ? {} : { client: "example.com" } });
       const t = r.messages[0]!.content;
       expect(t.type).toBe("text");
       const text = (t as { text: string }).text;
       expect(text, name).not.toMatch(/\{\{\w+\}\}/);
-      expect(text, name).toContain("example.com");
+      if (!NO_CLIENT.has(name)) expect(text, name).toContain("example.com");
       expect(text.toLowerCase(), name).toContain("free");
       expect(text.toLowerCase(), name).toMatch(/unavailable/);
     }
@@ -96,11 +104,31 @@ describe("tool names mentioned in templates", () => {
       "audit-findings": ["list_audits", "get_audit", "run_audit", "compare_audits"],
       "opportunity-review": ["striking_distance", "quick_wins", "low_ctr", "cannibalization", "declining_pages", "list_competitors", "ranked_keywords", "suggest_competitors"],
       "client-health-check": ["list_clients", "gsc_query", "ga4_report", "render_check", "dataforseo_status"],
+      "getting-started": ["setup_status", "list_clients", "gsc_query", "striking_distance", "monthly_report"],
     };
     for (const [file, names] of Object.entries(need)) {
       const text = readFileSync(new URL(`${file}.md`, TEMPLATE_DIR), "utf8");
       for (const n of names) expect(text, `${file} should mention ${n}`).toContain(`\`${n}\``);
     }
+  });
+});
+
+describe("getting-started", () => {
+  it("checks setup first, never asks for secrets in chat, and offers the two free first flows", () => {
+    const text = readFileSync(new URL("getting-started.md", TEMPLATE_DIR), "utf8");
+    expect(text.indexOf("`setup_status`")).toBeLessThan(text.indexOf("`list_clients`"));
+    expect(text).toMatch(/Never ask me to paste a password, API key/);
+    expect(text).toContain("crawlmark-cli setup");
+    expect(text).toContain("`opportunity-review`");
+    expect(text).toContain("`monthly-report-writeup`");
+    expect(text).toMatch(/most Search Console data/);
+  });
+
+  it("setup_status is registered as a read-only tool", async () => {
+    const client = await connect();
+    const tool = (await client.listTools()).tools.find((t) => t.name === "setup_status");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    expect(tool?.description).toMatch(/Never ask the user to paste/);
   });
 });
 

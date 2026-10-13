@@ -7,7 +7,8 @@ import { env } from "../config.js";
  * One SQLite file holds the response cache, the spend ledger, saved audits and the tool-call log.
  * node:sqlite ships with Node 22.13+, so there is no native module to build.
  */
-mkdirSync(resolve(env.DATA_DIR), { recursive: true });
+// 0700: a new data/ holds the OAuth token and cached client data. An existing directory keeps its mode.
+mkdirSync(resolve(env.DATA_DIR), { recursive: true, mode: 0o700 });
 export const db = new DatabaseSync(join(resolve(env.DATA_DIR), "crawlmark.db"));
 
 db.exec(`

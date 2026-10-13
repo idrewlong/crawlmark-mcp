@@ -1,17 +1,38 @@
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { z } from "zod";
 import type { ClientDefaults } from "./lib/clients.js";
 import { stripEmptyValues } from "./lib/env.js";
 import { GOOGLE_AUTH_MODES } from "./lib/google-auth.js";
+import { resolveHome, type HomeInfo } from "./lib/home.js";
 import { projectRoot, resolveFromRoot } from "./lib/paths.js";
 
-/** Directory above src/ or dist/. Relative paths in config resolve from here, not the cwd. */
+/** Directory above src/ or dist/ (the code, prompt templates and dist/ entry points). */
 export const PROJECT_ROOT = projectRoot(import.meta.url);
 
+/**
+ * The config home: CRAWLMARK_HOME, else the project root for a source checkout,
+ * else ~/.crawlmark. `.env` is loaded from here, and relative CLIENTS_FILE,
+ * DATA_DIR, COMPETITOR_DENYLIST_FILE and GOOGLE_APPLICATION_CREDENTIALS resolve against it.
+ */
+export const HOME: HomeInfo = resolveHome({
+  crawlmarkHome: process.env.CRAWLMARK_HOME,
+  projectRoot: PROJECT_ROOT,
+  userHome: homedir(),
+  cwd: process.cwd(),
+  exists: existsSync,
+});
+
+/** `<home>/.env`. */
+export const ENV_FILE = resolve(HOME.dir, ".env");
+
 // Must run before EnvSchema.parse. A missing .env is fine (env may come from the client config).
-const envFile = resolve(PROJECT_ROOT, ".env");
-if (existsSync(envFile)) process.loadEnvFile(envFile);
+// loadEnvFile never overrides variables already set (shell or client config win).
+const keysBefore = new Set(Object.keys(process.env));
+if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
+/** Variables that came from ENV_FILE (not the shell). The setup wizard drops them when it starts a child, so the child re-reads the edited file. */
+export const ENV_FILE_KEYS: ReadonlySet<string> = new Set(Object.keys(process.env).filter((k) => !keysBefore.has(k)));
 
 const EnvSchema = z.object({
   // Unset: auto-detect (service account if GOOGLE_APPLICATION_CREDENTIALS is set, else OAuth if its client is set, else no Google).
@@ -41,17 +62,17 @@ const EnvSchema = z.object({
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
 
-const dataDir = resolveFromRoot(PROJECT_ROOT, parsedEnv.DATA_DIR);
+const dataDir = resolveFromRoot(HOME.dir, parsedEnv.DATA_DIR);
 
 export const env = {
   ...parsedEnv,
-  CLIENTS_FILE: resolveFromRoot(PROJECT_ROOT, parsedEnv.CLIENTS_FILE),
+  CLIENTS_FILE: resolveFromRoot(HOME.dir, parsedEnv.CLIENTS_FILE),
   DATA_DIR: dataDir,
-  COMPETITOR_DENYLIST_FILE: resolveFromRoot(PROJECT_ROOT, parsedEnv.COMPETITOR_DENYLIST_FILE),
+  COMPETITOR_DENYLIST_FILE: resolveFromRoot(HOME.dir, parsedEnv.COMPETITOR_DENYLIST_FILE),
   /** OAuth refresh token written by `crawlmark-cli auth login` (mode 0600). */
   GOOGLE_TOKEN_FILE: resolve(dataDir, "google-token.json"),
   GOOGLE_APPLICATION_CREDENTIALS: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS
-    ? resolveFromRoot(PROJECT_ROOT, parsedEnv.GOOGLE_APPLICATION_CREDENTIALS)
+    ? resolveFromRoot(HOME.dir, parsedEnv.GOOGLE_APPLICATION_CREDENTIALS)
     : undefined,
 };
 

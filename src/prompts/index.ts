@@ -97,6 +97,16 @@ export function registerPrompts(server: McpServer) {
   );
 
   server.registerPrompt(
+    "getting-started",
+    {
+      title: "Getting started",
+      description:
+        "Check what's set up with setup_status (with the exact command for anything missing), explain what crawlmark can do, then pick the client with the most Search Console data and offer an opportunity review or a monthly report write-up. Never asks for credentials in chat.",
+    },
+    () => text(template("getting-started", {})),
+  );
+
+  server.registerPrompt(
     "client-health-check",
     {
       title: "Client health check",

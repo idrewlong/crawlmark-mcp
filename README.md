@@ -13,12 +13,45 @@ An MCP server for automated SEO audits and monthly reports. It combines:
 
 On top of the raw sources it adds a client list in `config/clients.yaml` that fills itself from Google (every Search Console site and GA4 property your Google account can see is added automatically) and that you can add to by hand, so the DataForSEO, Lighthouse and axe tools work even without Google, a SQLite response cache, a per-client and global monthly spend cap, and report-shaped tools.
 
+## Quick start
+
+Requires Node 22.13+ (crawlmark uses the built-in `node:sqlite`).
+
+```bash
+npm install            # also downloads a Chrome build for Lighthouse + axe
+npm run build
+npm run cli -- setup   # the setup wizard (or: crawlmark-cli setup, after npm link)
+```
+
+The wizard walks through every integration. Each step shows its current status first and can be skipped, so it's safe to re-run, and anything you don't need (Google, DataForSEO, PageSpeed) can be left out:
+
+1. **Node and build.** Checks the Node version and, from a source checkout, rebuilds `dist/` when it's missing or older than `src/`.
+2. **DataForSEO** (optional, paid per call). Asks for the API login and API password from [API access](https://app.dataforseo.com/api-access). The API password is generated there and is not your account password. Checks them with DataForSEO's free account call (shows the mode and balance). Sandbox (free sample data) is the default; live is billed and asks twice.
+3. **Google** (optional). Pick option A, B or C from [Choose a setup](#choose-a-setup). The wizard prints the matching Google Cloud steps with links (including enabling the Tag Manager API), then checks the service-account key with Google and copies it into `secrets/` (mode `0600`), or saves the OAuth client and runs `auth login`. It ends by listing the Search Console sites, GA4 properties and Tag Manager containers it can see.
+4. **PageSpeed Insights key** (optional). Checked with one PageSpeed request.
+5. **Clients.** Discovers your clients from Search Console and GA4 into `clients.yaml`, then offers to infer brand terms from Search Console (free; no DataForSEO).
+6. **Register with Claude.** Offers `claude mcp add crawlmark -s user -- node .../dist/index.js` when the `claude` CLI is installed, and adds crawlmark to Claude Desktop's config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\…` on Windows, `~/.config/Claude/…` on Linux) after showing the change: only the crawlmark entry is shown (env values as `<hidden>`), and other servers are listed by name, never their config. The file is written atomically and the old one is kept as a `0600` `.bak`. If crawlmark is already registered with Claude Code (`claude mcp get crawlmark`), an identical registration is left alone; a different one is shown next to the new command and replaced (`claude mcp remove`, then `add`) only after you confirm. From a temporary `npx` cache it registers `npx -y crawlmark-mcp` instead of the cache path. Otherwise it prints the snippet to paste.
+
+Secrets are typed into the terminal with no echo (if input is piped rather than a terminal, the wizard warns that it can't hide them) and saved to the config home's `.env` with mode `0600` (existing comments and keys are kept; a key is updated in place, never duplicated). Never paste them into a chat.
+
+| Command | Does |
+|---|---|
+| `crawlmark-cli setup` | The whole wizard |
+| `crawlmark-cli setup --step <node\|dataforseo\|google\|psi\|discovery\|register>` | One step |
+| `crawlmark-cli setup --dry-run` | Shows what each step would do: the checks still run (free), but nothing is written, built, signed in or registered |
+| `crawlmark-cli setup --yes` | Accepts every default without asking. Steps that need input (a password, a key file) are reported as `needs-input` and skipped |
+| `crawlmark-cli setup status [--json] [--only <id,...>] [--refresh]` | The same report as the `setup_status` tool |
+| `crawlmark-cli setup migrate --to <dir> [--force] [--yes] [--dry-run]` | Copies the config home to another directory (see [Config home](#config-home-crawlmark_home)); a relative `--to` resolves from the current directory |
+
+Then, in Claude, run the **`getting-started`** prompt: it calls `setup_status`, explains what crawlmark can do with what you've set up, and offers a first report for the client with the most Search Console data. The detailed setup for each integration is below if you'd rather configure things by hand.
+
 ## Tools
 
 **Report tools** (start here)
 
 | Tool | Does |
 |---|---|
+| `setup_status` | Free. For each integration (config home, DataForSEO, Google, Search Console, GA4, Tag Manager, PageSpeed Insights key, Chrome, clients): `working`, `configured` (set but not verified), `missing` or `error`, a plain-language detail, and the exact next step (a `crawlmark-cli` command or a URL, never "paste your key here"). Includes the DataForSEO mode and balance, the Google mode and account email, property and container counts. Cheap live checks, cached 60 seconds (`refresh: true` re-checks) |
 | `list_clients` | Every client: domain, name, sources, GSC property, GA4 property, alternates, what's missing, what was just added to `clients.yaml`, and discovery status (its notes include brand terms added automatically for new clients). `refresh: true` re-lists from Google |
 | `monthly_report` | GSC + GA4 month vs previous month and last year (`vsPreviousMonth` and `vsLastYear` include a `previous` object, and `change` is null when the earlier period has no impressions), top/moving queries and pages, landing pages, tracked keyword positions, an [`opportunities`](#opportunities) section (top 5 each of striking distance, low CTR and cannibalization), a [branded vs non-branded split](#branded-queries) (`search.branded`, `search.nonBranded`; query rows and tracked keywords carry `branded: boolean`), and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
 | `striking_distance` | Queries at positions 5-20 with top page and estimated extra clicks if they reached position 3. Free, Search Console only; see [Opportunities](#opportunities) |
@@ -62,6 +95,7 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `monthly-report-writeup` | `client`, `month` (optional, `YYYY-MM`) | Calls `monthly_report` and writes a client-facing report: 3-sentence summary, what went up and down and why, branded vs non-branded, issues fixed since the last audit, top 3 opportunities, next month's priorities. Plain language, percentages always beside absolute numbers; unavailable sections are named, not guessed |
 | `audit-findings` | `client` | Uses the latest stored audit if it's under 7 days old (`list_audits`, `get_audit`), otherwise runs `run_audit`; then `compare_audits` (or says there's nothing to compare against). Findings by severity with URLs, why it matters and a fix, a prioritized fix list, and the manual accessibility review caveat |
 | `opportunity-review` | `client` | Runs the five free opportunity tools, reads competitors from `list_competitors`, and writes a prioritized action list with estimated click upside. Paid checks (`ranked_keywords`, `suggest_competitors`) are offered with their approximate cost, never run unasked |
+| `getting-started` | none | Calls `setup_status` and gives the exact command for anything missing (credentials are entered with `crawlmark-cli setup`, never pasted into chat), explains what crawlmark does in plain language, picks the client with the most Search Console clicks, and offers an opportunity review or a monthly report write-up for it |
 | `client-health-check` | `client` | `list_clients`, then one cheap check per source: a small `gsc_query`, a small `ga4_report`, a `render_check` of the homepage (proves Chrome works) and `dataforseo_status`; ends with a status table and a fix list. Useful when onboarding |
 
 Every prompt says to prefer free tools and to say so when a section was unavailable instead of guessing.
@@ -78,11 +112,11 @@ Report tools return structured JSON. The agent (or a skill) turns that into the 
 
 ## Setup
 
-Requires Node 22.13+ (uses the built-in `node:sqlite`).
+The [Quick start](#quick-start) wizard does all of this. To set things up by hand instead (requires Node 22.13+):
 
 ```bash
 npm install            # also downloads a Chrome build for Lighthouse + axe
-cp .env.example .env
+cp .env.example .env   # in the config home; for a source checkout that's the project root
 npm run build
 ```
 
@@ -92,7 +126,19 @@ Scripts: `npm run dev` (tsx), `npm run build`, `npm start` (runs `dist/` with th
 
 ### Config and paths
 
-Settings come from environment variables, with `.env` in the project root loaded automatically (a missing `.env` is fine). `.env.example` lists every variable. Relative `CLIENTS_FILE` (the client list, see [Clients](#clients)), `DATA_DIR` (which also holds the Google OAuth token), `COMPETITOR_DENYLIST_FILE` and `GOOGLE_APPLICATION_CREDENTIALS` values resolve against the project root (the directory above `src/` or `dist/`), not the working directory, so the server works no matter where a client launches it. Absolute paths are used as-is.
+Settings come from environment variables, with `.env` in the **config home** loaded automatically (a missing `.env` is fine; variables already set by your shell or the MCP client config win over it). `.env.example` lists every variable. Relative `CLIENTS_FILE` (the client list, see [Clients](#clients)), `DATA_DIR` (which also holds the Google OAuth token), `COMPETITOR_DENYLIST_FILE` and `GOOGLE_APPLICATION_CREDENTIALS` values resolve against the config home, not the working directory, so the server works no matter where a client launches it. Absolute paths are used as-is.
+
+#### Config home (`CRAWLMARK_HOME`)
+
+The config home holds `.env`, `config/clients.yaml`, `data/` and `secrets/`. It is, in order:
+
+1. `CRAWLMARK_HOME`, when set. It must be an absolute path or start with `~` (expanded to your home directory); a relative value is refused with an error, so the `.env` crawlmark loads never depends on the directory it was started from;
+2. the project root, when crawlmark runs from a source checkout: the project root (the directory above `src/` or `dist/`) has a `.git` directory, `src/` next to `dist/`, or an existing `.env` or `config/clients.yaml`. An existing setup in a checkout therefore keeps working unchanged. A copy inside `node_modules` is never treated as a checkout;
+3. `~/.crawlmark` otherwise (an installed package).
+
+`crawlmark-cli auth status`, `crawlmark-cli setup status` and the `setup_status` tool show which home is in use and why. When the home isn't the project root, the wizard registers the server with `CRAWLMARK_HOME` in its environment.
+
+To move an existing setup, copy it: `crawlmark-cli setup migrate --to ~/.crawlmark` copies `.env`, `config/clients.yaml`, `config/competitor-denylist.txt`, `data/` and `secrets/` after showing the plan and asking (`--yes` skips the question, `--dry-run` only shows the plan). It never moves or deletes anything, skips files that already exist at the target unless `--force`, writes secret files (`.env`, everything in `secrets/`, the OAuth token) with mode `0600` from the moment they exist (temp file, then rename), and warns about absolute paths in `.env` that point into the old home. Then set `CRAWLMARK_HOME` to the new directory in your shell profile and re-run `crawlmark-cli setup --step register` so Claude uses it too. From a source checkout the project root still wins without `CRAWLMARK_HOME`, because it has a `.env`.
 
 ### Google
 
@@ -187,8 +233,11 @@ It prints the mode (`auto → service_account` when auto-detected, or `auto → 
 
 | Command | Does |
 |---|---|
+| `crawlmark-cli setup [--step <name>] [--dry-run] [--yes]` | The setup wizard; see [Quick start](#quick-start). |
+| `crawlmark-cli setup status [--json] [--only <id,...>] [--refresh]` | Each integration's state and next step (the `setup_status` tool). IDs: `home`, `dataforseo`, `google`, `gsc`, `ga4`, `tagmanager`, `psi`, `chrome`, `clients`. |
+| `crawlmark-cli setup migrate --to <dir> [--force] [--yes] [--dry-run]` | Copies the config home to `<dir>`; see [Config home](#config-home-crawlmark_home). |
 | `crawlmark-cli auth login` | OAuth loopback sign-in (`127.0.0.1`, random port, PKCE, state check, 5-minute timeout). Stores the token at `DATA_DIR/google-token.json` with mode `0600`. |
-| `crawlmark-cli auth status` | Shows the active mode and account (OAuth email or service-account email), then checks the token or key against Google and lists the granted scopes. Exits non-zero with setup guidance if something is missing. |
+| `crawlmark-cli auth status` | Shows the config home, the active mode and account (OAuth email or service-account email), then checks the token or key against Google and lists the granted scopes. Exits non-zero with setup guidance if something is missing. |
 | `crawlmark-cli auth logout` | Revokes the stored token with Google and deletes the file. If revoking fails it still deletes the file and warns. |
 | `crawlmark-cli clients list [--refresh]` | Runs discovery (when Google is set up), adds any new domains to `clients.yaml`, then prints every client: domain, name, sources, GSC property, GA4 ID, what's missing, aliases and alternate properties, followed by what was added, ignored domains, and discovery warnings and notes. `--refresh` skips the one-day discovery cache. Exits 0 when Google isn't set up; non-zero only if a configured Google fails entirely. |
 | `crawlmark-cli clients add <domain>... [--name <name>]` | Adds clients to `clients.yaml`, keyed by their normalised domains. No Google needed. If a domain is there with `ignore: true`, removes the `ignore`. `--name` only with one domain. |
@@ -322,13 +371,15 @@ Give the `traffic` job the same `CLIENTS_YAML` step. (The `schedule` above runs 
 
 ### DataForSEO
 
-1. Create an account and copy the API login and password from the dashboard into `.env`.
+`crawlmark-cli setup --step dataforseo` does this and checks the credentials. By hand:
+
+1. Create an account and copy the API login and API password from [API access](https://app.dataforseo.com/api-access) into `.env` (the API password is not your account password).
 2. Leave `DATAFORSEO_BASE_URL` on the **sandbox** while building. It's free and returns fake data in the real response shape.
 3. Switch to `https://api.dataforseo.com/v3` when you're ready, and fund the account.
 
 ### PageSpeed Insights (optional)
 
-Create an API key in Google Cloud with the PageSpeed Insights API enabled and set `PSI_API_KEY`. Without it, Lighthouse still runs locally; you just don't get real-user field data.
+Create an API key in Google Cloud with the PageSpeed Insights API enabled and set `PSI_API_KEY` (or run `crawlmark-cli setup --step psi`, which checks the key with one request). Without it, Lighthouse still runs locally; you just don't get real-user field data.
 
 ### Clients
 
@@ -410,17 +461,19 @@ Arrays you set (`competitors`, `trackedKeywords`, `keyPages`) replace the defaul
 
 ## Connect it
 
+`crawlmark-cli setup --step register` does this for you (Claude Code and Claude Desktop). By hand:
+
 **Claude Code**
 
 ```bash
 claude mcp add crawlmark -- node --disable-warning=ExperimentalWarning /absolute/path/to/crawlmark-mcp/dist/index.js
 ```
 
-The `--disable-warning=ExperimentalWarning` flag hides Node's `node:sqlite` warning. The `crawlmark-mcp` bin entry has the same flag in its shebang. Config paths resolve from the project root, so the working directory doesn't matter.
+The `--disable-warning=ExperimentalWarning` flag hides Node's `node:sqlite` warning. The `crawlmark-mcp` bin entry has the same flag in its shebang. Config paths resolve from the config home, so the working directory doesn't matter. If the config home isn't the project root, add `-e CRAWLMARK_HOME=/path/to/home` after the server name.
 
 **Claude Desktop / other clients** (`mcpServers` config)
 
-Secrets and paths come from the project's `.env`, so no `env` block is needed (you can still set one to override).
+Secrets and paths come from the config home's `.env`, so no `env` block is needed (you can still set one to override, and you need `"env": { "CRAWLMARK_HOME": "..." }` when the home isn't the project root). Claude Desktop doesn't load your shell's `PATH`, so if it can't find `node`, use its absolute path (`which node`).
 
 ```json
 {
@@ -526,9 +579,9 @@ A sub-check that could not finish (fetch error, a cap reached, a page whose HTML
 ```
 src/
   index.ts              server entry (stdio)
-  cli.ts                crawlmark-cli: auth, clients, competitors, keywords, brand, audit, check-traffic
+  cli.ts                crawlmark-cli: setup, auth, clients, competitors, keywords, brand, audit, check-traffic
   scheduled.ts          scheduled audits and traffic checks: per-client loop, skipping, alerts, webhook, exit code
-  config.ts             env loading and validation (paths resolved from project root), client defaults
+  config.ts             config home, env loading and validation (paths resolved from the home), client defaults
   clients.ts            resolveClient()/loadRegistry(): discovery, clients.yaml sync (atomic, serialised), add/remove,
                         competitor/keyword edits, set_client_profile
   competitors.ts        suggest_competitors: gathers overlap + seed SERPs, loads the denylist
@@ -546,6 +599,10 @@ src/
     budget.ts           per-client / global spend caps
     dates.ts            month ranges and comparisons
     paths.ts            project-root path resolution (pure)
+    home.ts             config home resolution: CRAWLMARK_HOME, source checkout, ~/.crawlmark (pure)
+    env-file.ts         comment-preserving .env editor (pure) and atomic 0600 write
+    claude-config.ts    Claude Code `mcp add` args, Claude Desktop config path/merge/diff, atomic write with .bak
+    migrate.ts          setup migrate: copy plan (skip existing unless --force) and copy with 0600 secrets
     env.ts              empty env values count as unset (pure)
     clients.ts          host normaliser, GSC/GA4 join, clients.yaml schema + merge, sync plan, resolution (pure)
     clients-file.ts     comment-preserving clients.yaml edits via the yaml Document API (pure)
@@ -585,6 +642,13 @@ src/
     gtm.ts              Tag Manager container audit rules and workspace-change summary (pure)
     findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
     diff.ts             diffAudits: new / resolved / persistent / unverified, score changes (pure)
+  setup/
+    wizard.ts           setup wizard steps (node, dataforseo, google, psi, discovery, register) with injected I/O
+    prompter.ts         readline prompts, no-echo secret input, --yes auto-answers
+    checks.ts           PageSpeed key check (one request) and response classification
+    status.ts           setup_status: per-integration state and next step from injected checks, 60s cache
+    status-providers.ts the real checks behind setup_status
+    cli-setup.ts        `crawlmark-cli setup`, `setup status`, `setup migrate` wiring (child processes, terminal)
   prompts/
     index.ts            MCP prompt registrations
     templates/          prompt text (markdown), copied to dist/ at build
@@ -602,6 +666,7 @@ src/
     competitors.ts      competitor, keyword, profile and suggestion tool registrations
     brand.ts            add_brand_terms, remove_brand_terms, suggest_brand_terms
     gtm.ts              gtm_audit
+    setup.ts            setup_status
 scripts/
   record-fixtures.ts    records raw DataForSEO sandbox responses (refuses non-sandbox); scrub before committing
 test/
@@ -627,3 +692,4 @@ Scaffold. It typechecks and the server starts and serves all tools.
   - DataForSEO calls against the paid API. The ranked keywords, competitors, backlinks, instant page and SERP mappers are tested only against scrubbed sandbox recordings (see `test/fixtures/dataforseo/README.md`).
   - Lighthouse and axe beyond a single simple page, and PageSpeed Insights field data.
   - Google OAuth end to end against a real account. The login flow is unit tested only (Phase 7).
+  - The setup wizard's interactive steps against real credentials. Every step is unit tested with fake input, and `setup --dry-run --yes` and `setup_status` were run live against a scratch `CRAWLMARK_HOME` (service account, DataForSEO sandbox); entering credentials, `auth login` from the wizard and the Claude registration writes haven't been run for real.

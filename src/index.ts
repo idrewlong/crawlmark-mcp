@@ -11,6 +11,7 @@ import { registerGtmTools } from "./tools/gtm.js";
 import { registerOpportunityTools } from "./tools/opportunities.js";
 import { registerRawTools } from "./tools/raw.js";
 import { registerReportTools } from "./tools/reports.js";
+import { registerSetupTools } from "./tools/setup.js";
 
 // Fail at boot, not on the first URL, when RESTRICT_TO_CLIENT_DOMAINS has a typo.
 restrictToClientDomains();
@@ -20,7 +21,7 @@ const server = new McpServer(
   {
     instructions:
       "SEO audit and reporting tools across Google Search Console, GA4, DataForSEO, Lighthouse and axe-core. " +
-      "Start with list_clients. Manage a client's competitors and tracked keywords with the add_/remove_/list_ tools; " +
+      "Start with list_clients. If something isn't set up, call setup_status and give the user its next step; never ask them to paste credentials into the chat. Manage a client's competitors and tracked keywords with the add_/remove_/list_ tools; " +
       "suggest_competitors proposes more (show them to the user and add only the ones they confirm). " +
       "suggest_brand_terms infers the names people search a client by; confirm medium and low candidates with the user before add_brand_terms. For routine work use monthly_report and run_audit; use the lower-level tools for follow-up questions. " +
       "Tools marked paid spend DataForSEO credit and are capped per client per month; prefer the free Google tools when they answer the question. " +
@@ -34,6 +35,7 @@ registerBrandTools(server);
 registerOpportunityTools(server);
 registerGtmTools(server);
 registerRawTools(server);
+registerSetupTools(server);
 registerPrompts(server);
 
 // On shutdown (signal, or the MCP client closing stdin) close every headless Chrome
