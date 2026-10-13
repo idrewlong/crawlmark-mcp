@@ -335,7 +335,6 @@ type Series = { unit: "ms" | "score"; p75: (number | null)[];
 | `src/reports/highlights.ts` (new) | `computeHighlights` (pure) |
 | `src/reports/render/doc.ts`, `sections.ts`, `markdown.ts`, `html.ts`, `docx.ts`, `pdf.ts`, `narrative.ts`, `escape.ts` (new) | D1, D4–D6; `narrative.ts` parses the Markdown subset |
 | `src/reports/export.ts` (new) | `exportReport` (paths D7, formats, inline), `safeSegment`, `reportPath` |
-| `src/lib/zip.ts` (new) | minimal ZIP writer |
 | `src/providers/crux.ts` (new) | `cruxHistory` client (key, redaction, cache, 404 → unavailable) |
 | `src/analysis/crux.ts` (new) | p75 parsing (CLS strings), ratings, trend, crux findings (pure) |
 | `src/analysis/findings.ts` | `"gtm"`, `"crux"` sources; mapping; `checkOf`/`checkedPairs` for both |
