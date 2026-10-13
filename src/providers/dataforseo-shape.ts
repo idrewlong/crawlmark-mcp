@@ -229,3 +229,47 @@ export function mapInstantPage(raw: RawInstantPages | undefined): InstantPage | 
     failedChecks,
   };
 }
+
+// --------------------------------------------------------------------- SERP
+
+export interface SerpOrganicItem {
+  /** Organic rank (DataForSEO rank_group): 1 is the first organic result. */
+  position: number;
+  /** Host as returned, e.g. `www.example.com`. */
+  domain: string;
+  url: string | null;
+  title: string | null;
+}
+
+export interface SerpOrganicResult {
+  keyword: string | null;
+  /** DataForSEO's resolved location code (also set when the request used location_name). */
+  locationCode: number | null;
+  items: SerpOrganicItem[];
+}
+
+export interface RawSerp {
+  keyword?: string | null;
+  location_code?: number | null;
+  items?: {
+    type?: string | null;
+    rank_group?: number | null;
+    domain?: string | null;
+    url?: string | null;
+    title?: string | null;
+  }[] | null;
+}
+
+/** Organic results only (local packs, ads and other features are dropped), in rank order. */
+export function mapSerpOrganic(raw: RawSerp | undefined): SerpOrganicResult {
+  const items: SerpOrganicItem[] = [];
+  for (const i of raw?.items ?? []) {
+    if (i.type !== "organic") continue;
+    const domain = str(i.domain);
+    const position = num(i.rank_group);
+    if (!domain || position === null) continue;
+    items.push({ position, domain, url: str(i.url), title: str(i.title) });
+  }
+  items.sort((a, b) => a.position - b.position);
+  return { keyword: str(raw?.keyword), locationCode: num(raw?.location_code), items };
+}

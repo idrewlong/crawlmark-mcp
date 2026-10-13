@@ -3,7 +3,7 @@
  * comments, ordering and formatting a user wrote survive every edit. Callers
  * validate the result with parseOverrides before writing it.
  */
-import { isMap, parseDocument, YAMLMap, type Document } from "yaml";
+import { isMap, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq, type Document } from "yaml";
 import type { NewEntry, SyncPlan } from "./clients.js";
 
 /** Header for a clients.yaml that crawlmark creates. */
@@ -97,5 +97,68 @@ export function setIgnore(text: string, key: string, ignore: boolean): string {
   if (!isMap(entry)) throw new Error(`clients.yaml has no entry ${key}.`);
   if (ignore) entry.set("ignore", true);
   else entry.delete("ignore");
+  return serialize(doc);
+}
+
+/** List fields crawlmark edits on a client entry. */
+export type ListField = "competitors" | "trackedKeywords";
+
+function entryMap(doc: Document, key: string): YAMLMap {
+  const entry = clientsMap(doc).get(key, true);
+  if (!isMap(entry)) throw new Error(`clients.yaml has no entry ${key}.`);
+  return entry;
+}
+
+/**
+ * Append items to a list field on the entry under `key`, creating the field if
+ * needed. A flow-style list (`[a, b]`) is switched to block style so each item
+ * gets its own line; existing items, comments and values are kept.
+ */
+export function appendListItems(text: string, key: string, field: ListField, items: unknown[]): string {
+  if (items.length === 0) return text;
+  const doc = load(text);
+  const entry = entryMap(doc, key);
+  let seq: unknown = entry.get(field, true);
+  // Missing, or written as `competitors:` with no value.
+  if (seq === undefined || seq === null || (isScalar(seq) && seq.value === null)) {
+    seq = new YAMLSeq();
+    entry.set(field, seq);
+  }
+  if (!isSeq(seq)) throw new Error(`clients.yaml entry ${key}: ${field} is not a list.`);
+  seq.flow = false;
+  for (const item of items) seq.items.push(doc.createNode(item));
+  return serialize(doc);
+}
+
+/**
+ * Remove items by index from a list field on the entry under `key`. Indexes
+ * are positions in the list as written. A list left empty is removed.
+ */
+export function removeListItems(text: string, key: string, field: ListField, indexes: number[]): string {
+  if (indexes.length === 0) return text;
+  const doc = load(text);
+  const entry = entryMap(doc, key);
+  const seq = entry.get(field, true);
+  if (!isSeq(seq)) throw new Error(`clients.yaml entry ${key}: ${field} is not a list.`);
+  for (const i of [...new Set(indexes)].sort((a, b) => b - a)) {
+    if (i < 0 || i >= seq.items.length) throw new Error(`clients.yaml entry ${key}: ${field} has no item ${i}.`);
+    seq.items.splice(i, 1);
+  }
+  if (seq.items.length === 0) entry.delete(field);
+  return serialize(doc);
+}
+
+/**
+ * Set string fields on the entry under `key`. `undefined` leaves a field
+ * alone; an empty string removes it.
+ */
+export function setEntryFields(text: string, key: string, fields: Record<string, string | undefined>): string {
+  const doc = load(text);
+  const entry = entryMap(doc, key);
+  for (const [field, value] of Object.entries(fields)) {
+    if (value === undefined) continue;
+    if (value === "") entry.delete(field);
+    else entry.set(field, value);
+  }
   return serialize(doc);
 }

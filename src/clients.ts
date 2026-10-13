@@ -3,19 +3,41 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSyn
 import { dirname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { clientDefaults, env } from "./config.js";
-import { addEntry, applySync, removeEntry, setIgnore } from "./lib/clients-file.js";
+import {
+  planAddCompetitors,
+  planAddKeywords,
+  planRemoveCompetitors,
+  planRemoveKeywords,
+  today,
+  type Skipped,
+} from "./lib/client-lists.js";
+import {
+  addEntry,
+  appendListItems,
+  applySync,
+  removeEntry,
+  removeListItems,
+  setEntryFields,
+  setIgnore,
+} from "./lib/clients-file.js";
 import {
   assembleRegistry,
   findClient,
   joinDiscovered,
+  normalizeArea,
   normalizeHost,
   parseOverrides,
   planSync,
+  toCompetitorEntries,
+  toKeywordEntries,
   unknownClientMessage,
   type Client,
   type ClientOverride,
   type ClientRegistry,
+  type CompetitorEntry,
   type DiscoveryOutcome,
+  type EntrySource,
+  type KeywordEntry,
   type DiscoverySkipped,
   type Settled,
 } from "./lib/clients.js";
@@ -266,4 +288,151 @@ export function removeClient(idOrDomain: string, opts: { ignore?: boolean } = {}
     if (!entry) return { result: { status: "not-found", domain } };
     return { text: removeEntry(text!, entry.slug), result: { status: "removed", domain } };
   });
+}
+
+// ---------------------------------------------------------------- competitors, keywords, profile
+
+/**
+ * The clients.yaml entry for a resolved client. A client discovery found but
+ * couldn't write (e.g. the sync failed) gets a `domain:`-only entry first.
+ */
+function entryFor(text: string | undefined, path: string, client: Client): { text: string; entry: ClientOverride } {
+  const entry = parseText(text, path).find((o) => o.domain === client.domain);
+  if (entry?.ignore) throw new Error(`${client.domain} is marked ignore: true in clients.yaml.`);
+  if (entry) return { text: text ?? "", entry };
+  return { text: addEntry(text, { domain: client.domain }), entry: { slug: client.domain, domain: client.domain } };
+}
+
+export interface ListAddResult<E> {
+  client: string;
+  added: (E & { input: string })[];
+  skipped: Skipped[];
+  /** The full list after the change. */
+  list: E[];
+  clientsFile: string;
+}
+
+export interface ListRemoveResult<E> {
+  client: string;
+  removed: string[];
+  skipped: Skipped[];
+  list: E[];
+  clientsFile: string;
+}
+
+export interface AddOptions {
+  note?: string | undefined;
+  source?: EntrySource | undefined;
+}
+
+/**
+ * Add competitor domains to a client in clients.yaml. URLs and `www.` forms
+ * become bare domains; the client's own domain, existing competitors, repeats
+ * and non-domains are skipped with a reason.
+ */
+export async function addCompetitors(idOrDomain: string, domains: string[], opts: AddOptions = {}): Promise<ListAddResult<CompetitorEntry>> {
+  const client = await resolveClient(idOrDomain);
+  return editClientsFile((text, path) => {
+    const { text: base, entry } = entryFor(text, path, client);
+    const plan = planAddCompetitors(entry.competitors, domains, client.domain, { ...opts, addedAt: today() });
+    const result: ListAddResult<CompetitorEntry> = {
+      client: client.domain,
+      added: plan.add.map((e, i) => ({ ...e, input: plan.inputs[i]! })),
+      skipped: plan.skipped,
+      list: [...toCompetitorEntries(entry.competitors), ...plan.add],
+      clientsFile: path,
+    };
+    return plan.add.length ? { text: appendListItems(base, entry.slug, "competitors", plan.add), result } : { result };
+  });
+}
+
+/** Remove competitor domains (any URL or `www.` form) from a client. */
+export async function removeCompetitors(idOrDomain: string, domains: string[]): Promise<ListRemoveResult<CompetitorEntry>> {
+  const client = await resolveClient(idOrDomain);
+  return editClientsFile((text, path) => {
+    const entry = parseText(text, path).find((o) => o.domain === client.domain);
+    const plan = planRemoveCompetitors(entry?.competitors, domains);
+    const kept = (entry?.competitors ?? []).filter((_, i) => !plan.indexes.includes(i));
+    const result = { client: client.domain, removed: plan.removed, skipped: plan.skipped, list: toCompetitorEntries(kept), clientsFile: path };
+    return entry && plan.indexes.length ? { text: removeListItems(text!, entry.slug, "competitors", plan.indexes), result } : { result };
+  });
+}
+
+/** Add tracked keywords to a client (normalised to lowercase with single spaces). */
+export async function addKeywords(idOrDomain: string, keywords: string[], opts: AddOptions = {}): Promise<ListAddResult<KeywordEntry>> {
+  const client = await resolveClient(idOrDomain);
+  return editClientsFile((text, path) => {
+    const { text: base, entry } = entryFor(text, path, client);
+    const plan = planAddKeywords(entry.trackedKeywords, keywords, { ...opts, addedAt: today() });
+    const result: ListAddResult<KeywordEntry> = {
+      client: client.domain,
+      added: plan.add.map((e, i) => ({ ...e, input: plan.inputs[i]! })),
+      skipped: plan.skipped,
+      list: [...toKeywordEntries(entry.trackedKeywords), ...plan.add],
+      clientsFile: path,
+    };
+    return plan.add.length ? { text: appendListItems(base, entry.slug, "trackedKeywords", plan.add), result } : { result };
+  });
+}
+
+/** Remove tracked keywords from a client (matched case- and spacing-insensitively). */
+export async function removeKeywords(idOrDomain: string, keywords: string[]): Promise<ListRemoveResult<KeywordEntry>> {
+  const client = await resolveClient(idOrDomain);
+  return editClientsFile((text, path) => {
+    const entry = parseText(text, path).find((o) => o.domain === client.domain);
+    const plan = planRemoveKeywords(entry?.trackedKeywords, keywords);
+    const kept = (entry?.trackedKeywords ?? []).filter((_, i) => !plan.indexes.includes(i));
+    const result = { client: client.domain, removed: plan.removed, skipped: plan.skipped, list: toKeywordEntries(kept), clientsFile: path };
+    return entry && plan.indexes.length ? { text: removeListItems(text!, entry.slug, "trackedKeywords", plan.indexes), result } : { result };
+  });
+}
+
+export interface ProfileUpdate {
+  /** DataForSEO location_name, e.g. "Austin,Texas,United States". Empty string clears it. */
+  area?: string | undefined;
+  /** A few words on what the client does. Empty string clears it. */
+  niche?: string | undefined;
+  /** Display name. Empty string clears it (back to the GA4 name or the domain). */
+  name?: string | undefined;
+}
+
+export interface ProfileResult {
+  client: string;
+  set: Record<string, string>;
+  cleared: string[];
+  profile: { name: string; area: string | null; niche: string | null };
+  clientsFile: string;
+}
+
+/** Set or clear a client's area, niche and name in clients.yaml. */
+export async function setClientProfile(idOrDomain: string, update: ProfileUpdate): Promise<ProfileResult> {
+  const fields: Record<string, string | undefined> = {};
+  for (const key of ["area", "niche", "name"] as const) {
+    const raw = update[key];
+    if (raw === undefined) continue;
+    const trimmed = raw.replace(/\s+/g, " ").trim();
+    if (trimmed === "") {
+      fields[key] = "";
+    } else if (key === "area") {
+      const area = normalizeArea(trimmed);
+      if (!area) throw new Error(`"${raw}" is not a location name. Use DataForSEO's form, e.g. "Austin,Texas,United States".`);
+      fields[key] = area;
+    } else {
+      fields[key] = trimmed;
+    }
+  }
+  if (Object.keys(fields).length === 0) throw new Error("Nothing to set: pass area, niche or name.");
+  const client = await resolveClient(idOrDomain);
+  await editClientsFile((text, path) => {
+    const { text: base, entry } = entryFor(text, path, client);
+    return { text: setEntryFields(base, entry.slug, fields), result: undefined };
+  });
+  const updated = await resolveClient(client.domain);
+  return {
+    client: client.domain,
+    set: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== "")) as Record<string, string>,
+    cleared: Object.entries(fields).filter(([, v]) => v === "").map(([k]) => k),
+    profile: { name: updated.name, area: updated.area ?? null, niche: updated.niche ?? null },
+    clientsFile: env.CLIENTS_FILE,
+  };
 }

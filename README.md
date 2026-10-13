@@ -27,6 +27,25 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | `spend_summary` | Paid API spend this month by client |
 | `purge_cache` | Drop expired cache entries |
 
+**Competitors and keywords** (free and local, except `suggest_competitors`)
+
+| Tool | Does |
+|---|---|
+| `list_competitors` | A client's competitors with any note, source (`manual` or `suggested`) and date added, plus its `area` and `niche` |
+| `add_competitors` | Adds domains (bare, `www.` or full URLs; saved as the bare domain). Skips the client's own domain and subdomains, ones already listed, repeats and non-domains, and says why. Takes `note` and `source` |
+| `remove_competitors` | Removes domains, in any URL or `www.` form |
+| `list_keywords`, `add_keywords`, `remove_keywords` | The same for tracked keywords (saved lowercase with single spaces). `monthly_report` reports their positions |
+| `set_client_profile` | Sets or clears (`""`) a client's `area` (a DataForSEO location name, e.g. `Austin,Texas,United States`), `niche` (e.g. `emergency plumber`) and `name` |
+| `suggest_competitors` | **Paid, read-only.** Ranked candidate competitors with evidence, from DataForSEO organic keyword overlap and live Google results for up to 5 seed keywords in the client's area. Never saves; the agent shows you the candidates and adds only the ones you confirm. See [Competitor suggestions](#competitor-suggestions) |
+
+**Prompts**
+
+| Prompt | Args | Does |
+|---|---|---|
+| `find-competitors` | `client` | Confirms or sets the client's area and niche, runs `suggest_competitors`, presents the candidates with evidence, asks which to add, then adds them |
+
+Prompt text lives in `src/prompts/templates/*.md` (copied to `dist/` by `npm run build`), so wording can be edited without touching code.
+
 **Lower-level tools** (for follow-up questions)
 
 `gsc_query`, `gsc_inspect_url`, `ga4_report`, `keyword_volume`, `serp_check`, `ranked_keywords`, `competitor_domains`, `backlinks_summary`, `lighthouse`, `accessibility_check`
@@ -51,7 +70,7 @@ Scripts: `npm run dev` (tsx), `npm run build`, `npm start` (runs `dist/` with th
 
 ### Config and paths
 
-Settings come from environment variables, with `.env` in the project root loaded automatically (a missing `.env` is fine). `.env.example` lists every variable. Relative `CLIENTS_FILE` (the client list, see [Clients](#clients)), `DATA_DIR` (which also holds the Google OAuth token) and `GOOGLE_APPLICATION_CREDENTIALS` values resolve against the project root (the directory above `src/` or `dist/`), not the working directory, so the server works no matter where a client launches it. Absolute paths are used as-is.
+Settings come from environment variables, with `.env` in the project root loaded automatically (a missing `.env` is fine). `.env.example` lists every variable. Relative `CLIENTS_FILE` (the client list, see [Clients](#clients)), `DATA_DIR` (which also holds the Google OAuth token), `COMPETITOR_DENYLIST_FILE` and `GOOGLE_APPLICATION_CREDENTIALS` values resolve against the project root (the directory above `src/` or `dist/`), not the working directory, so the server works no matter where a client launches it. Absolute paths are used as-is.
 
 ### Google
 
@@ -140,6 +159,11 @@ It prints the mode (`auto → service_account` when auto-detected, or `auto → 
 | `crawlmark-cli clients list [--refresh]` | Runs discovery (when Google is set up), adds any new domains to `clients.yaml`, then prints every client: domain, name, sources, GSC property, GA4 ID, what's missing, aliases and alternate properties, followed by what was added, ignored domains, and discovery warnings and notes. `--refresh` skips the one-day discovery cache. Exits 0 when Google isn't set up; non-zero only if a configured Google fails entirely. |
 | `crawlmark-cli clients add <domain>... [--name <name>]` | Adds clients to `clients.yaml`, keyed by their normalised domains. No Google needed. If a domain is there with `ignore: true`, removes the `ignore`. `--name` only with one domain. |
 | `crawlmark-cli clients remove <domain>... [--ignore]` | Deletes the clients' entries. If Google still lists the domain, discovery adds it back on the next run; `--ignore` instead keeps the entry with `ignore: true`, which hides it and stops discovery re-adding it. |
+| `crawlmark-cli clients set <client> [--area <location>] [--niche <text>] [--name <name>]` | Sets a client's area (DataForSEO location name, e.g. `--area "Austin,Texas,United States"`), niche and display name. `--niche ""` clears one. |
+| `crawlmark-cli competitors list <client>` | Lists the client's competitors with source, date added and note, plus its area and niche. |
+| `crawlmark-cli competitors add <client> <domain>... [--note <text>]` | Adds competitors (URLs and `www.` forms become bare domains) and prints what was skipped and why. Exits 1 only if nothing valid was given. |
+| `crawlmark-cli competitors remove <client> <domain>...` | Removes competitors. Exits 1 if none were listed. |
+| `crawlmark-cli keywords list\|add\|remove <client> [keyword...] [--note <text>]` | The same for tracked keywords. Quote keywords with spaces: `keywords add example.com "emergency plumber"`. |
 
 The server reads the token on demand and picks up a new login without a restart. Refreshed access tokens are written back to the same file. Never commit or share `google-token.json`; it's gitignored.
 
@@ -164,6 +188,36 @@ The client list is `config/clients.yaml` (path set by `CLIENTS_FILE`, gitignored
 
 Every field is in `config/clients.example.yaml`. The file is re-read on every call, so edits apply without a restart.
 
+**Competitors, tracked keywords, area and niche**
+
+Add them whenever you like, with the tools above, the CLI (`crawlmark-cli competitors add example.com rival.example`) or by editing the file. Each competitor is a domain string or an object with a note, source and date; tracked keywords work the same way. The tools and CLI write the object form:
+
+```yaml
+    competitors:
+      - rival.example                 # a plain string is fine
+      - domain: other.example
+        note: Same neighbourhood
+        source: suggested             # manual (default) or suggested
+        addedAt: 2026-10-12
+    trackedKeywords:
+      - emergency plumber
+    area: Austin,Texas,United States  # DataForSEO location name, for local searches
+    niche: emergency plumber
+```
+
+Competitors are stored as bare domains (`https://www.rival.example/page` becomes `rival.example`), keywords lowercase with single spaces, and duplicates are skipped. The client's own domain can't be a competitor.
+
+#### Competitor suggestions
+
+`suggest_competitors` (or the `find-competitors` prompt) proposes competitors from two sources:
+
+1. **Organic overlap:** DataForSEO's list of domains ranking for the same keywords as the client.
+2. **Local search presence:** live Google results for up to 5 seed keywords, searched in the client's `area` (or its `locationCode` market when no area is set). Seeds are, in order: the `niche`, tracked keywords, then the top non-branded Search Console queries of the last 28 days (free; needs Google). Only if none of those exist does it fall back to the client's DataForSEO ranked keywords.
+
+It drops the client's own site, current competitors, `ignore: true` domains, and a built-in denylist of platforms that rank for everything (social networks, review and listing sites, marketplaces, encyclopedias, video sites, big-box retailers, search engines, `.gov`/`.edu` and similar). Add your own rules in `config/competitor-denylist.txt` (optional, gitignored; one per line) or `COMPETITOR_DENYLIST` (comma-separated): `directory.example` (that domain and its subdomains), `*.example-tld`, `portal.*` (any short suffix), and `!domain` to exempt one.
+
+Each candidate has a score from 0 to 100: half from keyword overlap (relative to the strongest candidate) and half from local search presence (the average over seeds of `(21 − position) ÷ 20`, so position 1 counts 1.0 and position 20 counts 0.05). If one source contributes nothing (it failed, returned no rows, or all its domains were filtered out), the other counts fully. The response includes the evidence (shared keywords, average position, appearances, positions per seed, a sample URL), excluded domains with reasons, `costUsd` and `fromCache`. A run costs one overlap call plus one SERP call per seed (cached 30 days and 1 day). It never saves anything; add the ones you want with `add_competitors` (`source: "suggested"`).
+
 **How matching works**
 
 - Every site is reduced to a host: lowercased, with the scheme, path, port and a leading `www.` dropped. `sc-domain:example.com`, `https://www.example.com/` and an `https://example.com` GA4 stream all become `example.com`. Internationalised domains are compared in punycode, so `bücher.example` and `xn--bcher-kva.example` match. Subdomains stay separate (`shop.example.com` is its own client).
@@ -180,6 +234,7 @@ Every field is in `config/clients.example.yaml`. The file is re-read on every ca
 | `locationCode`, `languageCode` | `DEFAULT_LOCATION_CODE` (2840, United States) and `DEFAULT_LANGUAGE_CODE` (`en`) |
 | `keyPages` | The homepage: the GA4 stream URL, else `https://<domain>/` |
 | `competitors`, `trackedKeywords` | Empty |
+| `area`, `niche` | Unset: suggestions search the `locationCode` market and use tracked keywords and Search Console queries as seeds, falling back to the client's DataForSEO ranked keywords (paid) when there are none |
 | `monthlyBudgetUsd` | `DEFAULT_CLIENT_MONTHLY_BUDGET_USD` (5) |
 
 Arrays you set (`competitors`, `trackedKeywords`, `keyPages`) replace the defaults rather than append.
@@ -227,6 +282,7 @@ npm run inspect
 - Every paid call checks the client's `monthlyBudgetUsd` (default `DEFAULT_CLIENT_MONTHLY_BUDGET_USD`) and the global `GLOBAL_MONTHLY_BUDGET_USD` before running, and refuses with a clear error once a cap would be crossed.
 - The actual cost DataForSEO reports is written to a ledger; `spend_summary` reads it.
 - Responses are cached in `data/crawlmark.db` (volume 30 days, ranked keywords and backlinks 7 days, SERPs, Google data and client discovery 1 day), so re-running a report mostly costs nothing.
+- `suggest_competitors` is the only paid competitor tool; managing competitors and keywords is free.
 - `monthly_report` is free by default. Live rank checks (`liveRanks: true`), full crawls and backlinks are opt-in.
 - The pre-flight estimates in `src/providers/dataforseo.ts` are conservative placeholders. Tune them against DataForSEO's pricing page.
 
@@ -235,9 +291,11 @@ npm run inspect
 ```
 src/
   index.ts              server entry (stdio)
-  cli.ts                crawlmark-cli: auth login | status | logout, clients list | add | remove
+  cli.ts                crawlmark-cli: auth, clients list | add | remove | set, competitors, keywords
   config.ts             env loading and validation (paths resolved from project root), client defaults
-  clients.ts            resolveClient()/loadRegistry(): discovery, clients.yaml sync (atomic, serialised), add/remove
+  clients.ts            resolveClient()/loadRegistry(): discovery, clients.yaml sync (atomic, serialised), add/remove,
+                        competitor/keyword edits, set_client_profile
+  competitors.ts        suggest_competitors: gathers overlap + seed SERPs, loads the denylist
   lib/
     store.ts            SQLite (cache + spend ledger)
     cache.ts            TTL cache wrapper
@@ -247,6 +305,8 @@ src/
     env.ts              empty env values count as unset (pure)
     clients.ts          host normaliser, GSC/GA4 join, clients.yaml schema + merge, sync plan, resolution (pure)
     clients-file.ts     comment-preserving clients.yaml edits via the yaml Document API (pure)
+    client-lists.ts     competitor/keyword add and remove planning with skip reasons (pure)
+    competitor-denylist.ts  built-in platform denylist and rule matching (pure)
     spend.ts            spend-ledger key and alias merging (pure)
     concurrency.ts      mapLimit: bounded-concurrency map (pure)
     google-auth.ts      Google auth mode selection, consent URL, callback check, token merge, error messages (pure)
@@ -258,6 +318,11 @@ src/
     google-login.ts     OAuth loopback login flow
     google-oauth-client.ts  OAuth2Client that maps invalid_grant; token-file client loader (refresh persistence)
     dataforseo-shape.ts pure mappers: raw DataForSEO results -> typed compact objects
+  analysis/
+    competitor-suggestions.ts  seed picking, merge, filter and score for suggest_competitors (pure)
+  prompts/
+    index.ts            MCP prompt registrations
+    templates/          prompt text (markdown), copied to dist/ at build
   reports/
     monthly.ts          monthly_report composer
     audit.ts            run_audit composer
@@ -265,6 +330,7 @@ src/
   tools/
     reports.ts          report tool registrations
     raw.ts              lower-level tool registrations
+    competitors.ts      competitor, keyword, profile and suggestion tool registrations
 scripts/
   record-fixtures.ts    records raw DataForSEO sandbox responses (refuses non-sandbox); scrub before committing
 test/
@@ -287,6 +353,6 @@ Scaffold. It typechecks and the server starts and serves all tools.
 
 - **Tested live:** Google in `service_account` mode: discovery lists real Search Console sites and GA4 properties and writes them to `clients.yaml`, and `gsc_query` and `ga4_report` return real data for discovered clients. A hand-added client with Google switched off works with the DataForSEO sandbox, and `run_audit` on it ran Lighthouse and axe on one page in local Chrome, with only the Google sections failing.
 - **Not yet tested live:**
-  - DataForSEO calls against the paid API. The ranked keywords, competitors, backlinks and instant page mappers are tested only against scrubbed sandbox recordings (see `test/fixtures/dataforseo/README.md`).
+  - DataForSEO calls against the paid API. The ranked keywords, competitors, backlinks, instant page and SERP mappers are tested only against scrubbed sandbox recordings (see `test/fixtures/dataforseo/README.md`).
   - Lighthouse and axe beyond a single simple page, and PageSpeed Insights field data.
   - Google OAuth end to end against a real account. The login flow is unit tested only (Phase 7).

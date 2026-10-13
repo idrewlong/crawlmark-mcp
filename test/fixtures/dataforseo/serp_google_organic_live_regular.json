@@ -1,0 +1,188 @@
+{
+  "version": "0.1.20260917",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0 sec.",
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0 sec.",
+      "result_count": 1,
+      "path": [
+        "v3",
+        "serp",
+        "google",
+        "organic",
+        "live",
+        "regular"
+      ],
+      "data": {
+        "api": "serp",
+        "function": "live",
+        "se": "google",
+        "se_type": "organic",
+        "keyword": "example keyword",
+        "depth": 20,
+        "location_name": "Austin,Texas,United States",
+        "language_code": "en"
+      },
+      "result": [
+        {
+          "keyword": "example keyword",
+          "type": "organic",
+          "se_domain": "example.com",
+          "location_code": 1006886,
+          "language_code": "en",
+          "check_url": "https://www.example.com/search?q=example+keyword&hl=en&gl=US&ie=UTF-8",
+          "datetime": "2026-10-11 08:17:16 +00:00",
+          "spell": null,
+          "refinement_chips": null,
+          "item_types": [
+            "find_results_on",
+            "local_pack",
+            "organic",
+            "people_also_ask",
+            "related_searches",
+            "google_reviews",
+            "knowledge_graph"
+          ],
+          "se_results_count": 1150000000,
+          "pages_count": 1,
+          "items_count": 12,
+          "items": [
+            {
+              "type": "local_pack",
+              "rank_group": 1,
+              "rank_absolute": 1,
+              "domain": "local-pack.example",
+              "title": "Example local pack entry",
+              "url": "https://local-pack.example/"
+            },
+            {
+              "type": "organic",
+              "rank_group": 1,
+              "rank_absolute": 5,
+              "page": 1,
+              "domain": "www.competitor-one.example",
+              "title": "Example result title 1",
+              "description": "Example result description 1.",
+              "url": "https://www.competitor-one.example/services/",
+              "breadcrumb": "https://www.competitor-one.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 2,
+              "rank_absolute": 6,
+              "page": 1,
+              "domain": "directory.example",
+              "title": "Example result title 2",
+              "description": "Example result description 2.",
+              "url": "https://directory.example/plumbers/austin",
+              "breadcrumb": "https://directory.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 3,
+              "rank_absolute": 7,
+              "page": 1,
+              "domain": "www.competitor-two.example",
+              "title": "Example result title 3",
+              "description": "Example result description 3.",
+              "url": "https://www.competitor-two.example/",
+              "breadcrumb": "https://www.competitor-two.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 4,
+              "rank_absolute": 8,
+              "page": 1,
+              "domain": "competitor-three.example",
+              "title": "Example result title 4",
+              "description": "Example result description 4.",
+              "url": "https://competitor-three.example/",
+              "breadcrumb": "https://competitor-three.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 5,
+              "rank_absolute": 10,
+              "page": 1,
+              "domain": "www.competitor-four.example",
+              "title": "Example result title 5",
+              "description": "Example result description 5.",
+              "url": "https://www.competitor-four.example/blog/best-example-keyword",
+              "breadcrumb": "https://www.competitor-four.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 6,
+              "rank_absolute": 11,
+              "page": 1,
+              "domain": "competitor-one.example",
+              "title": "Example result title 6",
+              "description": "Example result description 6.",
+              "url": "https://competitor-one.example/about/",
+              "breadcrumb": "https://competitor-one.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 7,
+              "rank_absolute": 12,
+              "page": 1,
+              "domain": "www.competitor-five.example",
+              "title": "Example result title 7",
+              "description": "Example result description 7.",
+              "url": "https://www.competitor-five.example/",
+              "breadcrumb": "https://www.competitor-five.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 8,
+              "rank_absolute": 13,
+              "page": 1,
+              "domain": "directory.example",
+              "title": "Example result title 8",
+              "description": "Example result description 8.",
+              "url": "https://directory.example/best-example-keyword-austin",
+              "breadcrumb": "https://directory.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 9,
+              "rank_absolute": 14,
+              "page": 1,
+              "domain": "www.competitor-six.example",
+              "title": "Example result title 9",
+              "description": "Example result description 9.",
+              "url": "https://www.competitor-six.example/",
+              "breadcrumb": "https://www.competitor-six.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 10,
+              "rank_absolute": 15,
+              "page": 1,
+              "domain": "social.example",
+              "title": "Example result title 10",
+              "description": "Example result description 10.",
+              "url": "https://social.example/p/12345/",
+              "breadcrumb": "https://social.example \u203a example"
+            },
+            {
+              "type": "organic",
+              "rank_group": 11,
+              "rank_absolute": 16,
+              "page": 2,
+              "domain": null,
+              "title": "Edge case: organic item with no domain",
+              "url": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

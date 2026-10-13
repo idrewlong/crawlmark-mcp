@@ -8,6 +8,7 @@ data/
 google-token.json
 google-token.json.*.tmp
 config/clients.yaml
+config/competitor-denylist.txt
 .DS_Store
 recordings/
 secrets/

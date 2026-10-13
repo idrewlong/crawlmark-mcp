@@ -216,6 +216,102 @@ export function joinDiscovered(sites: GscSite[], properties: Ga4Property[]): Joi
   return { clients, notes };
 }
 
+// ---------------------------------------------------------------- competitors and tracked keywords
+
+/** Who added a competitor or keyword: a person (`manual`) or a confirmed suggestion. */
+export const ENTRY_SOURCES = ["manual", "suggested"] as const;
+export type EntrySource = (typeof ENTRY_SOURCES)[number];
+
+export interface CompetitorEntry {
+  /** Normalised host, e.g. `competitor.example`. */
+  domain: string;
+  note?: string;
+  source?: EntrySource;
+  /** ISO date (YYYY-MM-DD) the entry was added. */
+  addedAt?: string;
+}
+
+export interface KeywordEntry {
+  /** Normalised keyword: lowercase, single spaces. */
+  keyword: string;
+  note?: string;
+  source?: EntrySource;
+  addedAt?: string;
+}
+
+const entryMeta = {
+  note: z.string().optional(),
+  source: z.enum(ENTRY_SOURCES).optional(),
+  addedAt: z.string().optional(),
+};
+
+/** A competitor is a plain domain string or `{ domain, note?, source?, addedAt? }`. */
+const CompetitorItemSchema = z.union([z.string().min(1), z.object({ domain: z.string().min(1), ...entryMeta })]);
+/** A tracked keyword is a plain string or `{ keyword, note?, source?, addedAt? }`. */
+const KeywordItemSchema = z.union([z.string().min(1), z.object({ keyword: z.string().min(1), ...entryMeta })]);
+
+export type CompetitorItem = z.infer<typeof CompetitorItemSchema>;
+export type KeywordItem = z.infer<typeof KeywordItemSchema>;
+
+/** A competitor's bare domain (any URL or `www.` form works), or undefined if it isn't a domain. */
+export function normalizeCompetitorDomain(input: string): string | undefined {
+  const host = normalizeHost(input);
+  return host && host.includes(".") ? host : undefined;
+}
+
+/** Longest keyword accepted; DataForSEO's keyword endpoints cap well below this. */
+export const MAX_KEYWORD_LENGTH = 200;
+
+/** Lowercase, Unicode NFC, whitespace collapsed. Undefined when empty or too long. */
+export function normalizeKeyword(input: string): string | undefined {
+  const k = input.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
+  return k && k.length <= MAX_KEYWORD_LENGTH ? k : undefined;
+}
+
+function withMeta<T extends object>(base: T, item: { note?: string | undefined; source?: EntrySource | undefined; addedAt?: string | undefined }) {
+  const out: T & { note?: string; source?: EntrySource; addedAt?: string } = { ...base };
+  if (item.note?.trim()) out.note = item.note.trim();
+  if (item.source) out.source = item.source;
+  if (item.addedAt) out.addedAt = item.addedAt;
+  return out;
+}
+
+/** clients.yaml competitor items -> normalised entries. The first of any duplicates wins; invalid ones are dropped. */
+export function toCompetitorEntries(items: CompetitorItem[] | undefined): CompetitorEntry[] {
+  const seen = new Set<string>();
+  const out: CompetitorEntry[] = [];
+  for (const item of items ?? []) {
+    const domain = normalizeCompetitorDomain(typeof item === "string" ? item : item.domain);
+    if (!domain || seen.has(domain)) continue;
+    seen.add(domain);
+    out.push(typeof item === "string" ? { domain } : withMeta({ domain }, item));
+  }
+  return out;
+}
+
+/** clients.yaml keyword items -> normalised entries. The first of any duplicates wins; invalid ones are dropped. */
+export function toKeywordEntries(items: KeywordItem[] | undefined): KeywordEntry[] {
+  const seen = new Set<string>();
+  const out: KeywordEntry[] = [];
+  for (const item of items ?? []) {
+    const keyword = normalizeKeyword(typeof item === "string" ? item : item.keyword);
+    if (!keyword || seen.has(keyword)) continue;
+    seen.add(keyword);
+    out.push(typeof item === "string" ? { keyword } : withMeta({ keyword }, item));
+  }
+  return out;
+}
+
+/**
+ * A DataForSEO `location_name`, e.g. `Austin,Texas,United States`. Trims each
+ * part and drops the spaces after commas that people tend to type. Undefined when empty.
+ */
+export function normalizeArea(input: string): string | undefined {
+  const parts = input.split(",").map((p) => p.replace(/\s+/g, " ").trim());
+  if (parts.some((p) => p === "")) return undefined;
+  return parts.join(",");
+}
+
 // ---------------------------------------------------------------- clients.yaml overrides
 
 const OverrideSchema = z.object({
@@ -226,8 +322,12 @@ const OverrideSchema = z.object({
   ga4PropertyId: z.union([z.string(), z.number().int()]).transform(String).optional(),
   locationCode: z.number().int().optional(),
   languageCode: z.string().optional(),
-  competitors: z.array(z.string()).optional(),
-  trackedKeywords: z.array(z.string()).optional(),
+  competitors: z.array(CompetitorItemSchema).optional(),
+  trackedKeywords: z.array(KeywordItemSchema).optional(),
+  /** DataForSEO location_name for local searches, e.g. "Austin,Texas,United States". */
+  area: z.string().optional(),
+  /** What the client does, in a few words, e.g. "emergency plumber". */
+  niche: z.string().optional(),
   keyPages: z.array(z.string().url()).optional(),
   monthlyBudgetUsd: z.number().positive().optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
@@ -260,6 +360,18 @@ export function parseOverrides(raw: unknown, source = "clients.yaml"): ClientOve
     const prior = seen.get(host);
     if (prior) throw new Error(`Invalid ${source}: clients.${prior} and clients.${slug} both use domain ${host}.`);
     seen.set(host, slug);
+    entry.competitors?.forEach((c, i) => {
+      const value = typeof c === "string" ? c : c.domain;
+      if (!normalizeCompetitorDomain(value)) {
+        throw new Error(`Invalid ${source}: clients.${slug}.competitors[${i}] "${value}" is not a domain.`);
+      }
+    });
+    entry.trackedKeywords?.forEach((k, i) => {
+      const value = typeof k === "string" ? k : k.keyword;
+      if (!normalizeKeyword(value)) {
+        throw new Error(`Invalid ${source}: clients.${slug}.trackedKeywords[${i}] is empty or longer than ${MAX_KEYWORD_LENGTH} characters.`);
+      }
+    });
     return { ...entry, domain: host, slug };
   });
 }
@@ -283,8 +395,15 @@ export interface Client {
   ga4PropertyId?: string;
   locationCode: number;
   languageCode: string;
+  /** Competitor domains (normalised, de-duplicated). Details in competitorEntries. */
   competitors: string[];
+  competitorEntries: CompetitorEntry[];
+  /** Tracked keywords (normalised, de-duplicated). Details in keywordEntries. */
   trackedKeywords: string[];
+  keywordEntries: KeywordEntry[];
+  /** DataForSEO location_name for local searches; when unset, locationCode is used. */
+  area?: string;
+  niche?: string;
   keyPages: string[];
   monthlyBudgetUsd: number;
   /** clients.yaml slugs that also resolve to this client. */
@@ -313,14 +432,18 @@ export function mergeClients(
       if (d?.ga4PropertyId) sources.push("ga4");
       if (y) sources.push("yaml");
       const homepage = d?.homepage ?? `https://${domain}/`;
+      const competitorEntries = toCompetitorEntries(y?.competitors);
+      const keywordEntries = toKeywordEntries(y?.trackedKeywords);
       const client: Client = {
         slug: domain,
         domain,
         name: y?.name ?? d?.ga4DisplayName ?? domain,
         locationCode: y?.locationCode ?? defaults.locationCode,
         languageCode: y?.languageCode ?? defaults.languageCode,
-        competitors: y?.competitors ?? [],
-        trackedKeywords: y?.trackedKeywords ?? [],
+        competitors: competitorEntries.map((c) => c.domain),
+        competitorEntries,
+        trackedKeywords: keywordEntries.map((k) => k.keyword),
+        keywordEntries,
         keyPages: y?.keyPages?.length ? y.keyPages : [homepage],
         monthlyBudgetUsd: y?.monthlyBudgetUsd ?? defaults.monthlyBudgetUsd,
         aliases: y && normalizeHost(y.slug) !== domain ? [y.slug] : [],
@@ -331,6 +454,9 @@ export function mergeClients(
       const ga4PropertyId = y?.ga4PropertyId ?? d?.ga4PropertyId;
       if (gscProperty) client.gscProperty = gscProperty;
       if (ga4PropertyId) client.ga4PropertyId = ga4PropertyId;
+      const area = y?.area && normalizeArea(y.area);
+      if (area) client.area = area;
+      if (y?.niche?.trim()) client.niche = y.niche.trim();
       return client;
     });
 }

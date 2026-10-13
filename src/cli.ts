@@ -5,7 +5,19 @@
  */
 import { parseArgs } from "node:util";
 import { Auth } from "googleapis";
-import { addClient, loadRegistry, removeClient } from "./clients.js";
+import {
+  addClient,
+  addCompetitors,
+  addKeywords,
+  loadRegistry,
+  removeClient,
+  removeCompetitors,
+  removeKeywords,
+  resolveClient,
+  setClientProfile,
+  type ListAddResult,
+  type ListRemoveResult,
+} from "./clients.js";
 import { env } from "./config.js";
 import { formatTable, missingPieces } from "./lib/clients.js";
 import { describeAuthMode, mapTokenError, missingDataScopes } from "./lib/google-auth.js";
@@ -27,6 +39,17 @@ Commands:
                 --name only with a single domain
   clients remove <domain>... [--ignore]
                 Delete clients' entries from clients.yaml; --ignore hides them for good instead
+  clients set <client> [--area <location>] [--niche <text>] [--name <name>]
+                Set a client's area (DataForSEO location name, e.g. "Austin,Texas,United States"),
+                niche and display name; pass "" to clear one
+  competitors list <client>
+  competitors add <client> <domain>... [--note <text>]
+  competitors remove <client> <domain>...
+                Manage a client's competitors (URLs and www. forms become bare domains)
+  keywords list <client>
+  keywords add <client> <keyword>... [--note <text>]
+  keywords remove <client> <keyword>...
+                Manage a client's tracked keywords (quote keywords with spaces)
 `;
 
 // A reader that closes early (e.g. `| head -1`) is not an error.
@@ -227,6 +250,72 @@ async function clientsRemove(domains: string[], ignore: boolean): Promise<number
   return failed ? 1 : 0;
 }
 
+function printSkipped(skipped: { input: string; detail: string }[]): void {
+  for (const k of skipped) out(`Skipped ${k.input}: ${k.detail}`);
+}
+
+function printAdded<E>(r: ListAddResult<E>, label: (e: E) => string, noun: string): number {
+  for (const a of r.added) out(`Added ${label(a)}${a.input.trim() !== label(a) ? ` (from ${a.input})` : ""}.`);
+  printSkipped(r.skipped);
+  out(`${r.client} now has ${r.list.length} ${noun}. File: ${r.clientsFile}`);
+  // Only a request that was entirely invalid fails; duplicates are not errors.
+  return r.added.length === 0 && r.skipped.some((k) => k.reason === "invalid") ? 1 : 0;
+}
+
+function printRemoved<E>(r: ListRemoveResult<E>, noun: string): number {
+  for (const v of r.removed) out(`Removed ${v}.`);
+  printSkipped(r.skipped);
+  out(`${r.client} now has ${r.list.length} ${noun}. File: ${r.clientsFile}`);
+  return r.removed.length === 0 ? 1 : 0;
+}
+
+const meta = (e: { source?: string; addedAt?: string; note?: string }) => [e.source ?? "-", e.addedAt ?? "-", e.note ?? ""];
+
+async function competitorsCommand(command: string | undefined, args: string[], note: string | undefined): Promise<number> {
+  const [client, ...domains] = args;
+  if (!client) return usageError(`competitors ${command ?? ""} needs a client.`);
+  if (command === "list") {
+    if (domains.length) return usageError("competitors list takes only a client.");
+    const c = await resolveClient(client);
+    if (c.competitorEntries.length === 0) out(`${c.domain} has no competitors yet. Add some with: crawlmark-cli competitors add ${c.domain} <domain>...`);
+    else out(formatTable(["DOMAIN", "SOURCE", "ADDED", "NOTE"], c.competitorEntries.map((e) => [e.domain, ...meta(e)])));
+    out(`Area: ${c.area ?? "(not set)"}. Niche: ${c.niche ?? "(not set)"}.`);
+    return 0;
+  }
+  if (domains.length === 0) return usageError(`competitors ${command} needs at least one domain.`);
+  if (command === "add") return printAdded(await addCompetitors(client, domains, { note }), (e) => e.domain, "competitor(s)");
+  if (command === "remove") return printRemoved(await removeCompetitors(client, domains), "competitor(s)");
+  return usageError(`Unknown command: competitors ${command ?? ""}`);
+}
+
+async function keywordsCommand(command: string | undefined, args: string[], note: string | undefined): Promise<number> {
+  const [client, ...keywords] = args;
+  if (!client) return usageError(`keywords ${command ?? ""} needs a client.`);
+  if (command === "list") {
+    if (keywords.length) return usageError("keywords list takes only a client.");
+    const c = await resolveClient(client);
+    if (c.keywordEntries.length === 0) out(`${c.domain} has no tracked keywords yet. Add some with: crawlmark-cli keywords add ${c.domain} "<keyword>"...`);
+    else out(formatTable(["KEYWORD", "SOURCE", "ADDED", "NOTE"], c.keywordEntries.map((e) => [e.keyword, ...meta(e)])));
+    return 0;
+  }
+  if (keywords.length === 0) return usageError(`keywords ${command} needs at least one keyword.`);
+  if (command === "add") return printAdded(await addKeywords(client, keywords, { note }), (e) => e.keyword, "tracked keyword(s)");
+  if (command === "remove") return printRemoved(await removeKeywords(client, keywords), "tracked keyword(s)");
+  return usageError(`Unknown command: keywords ${command ?? ""}`);
+}
+
+async function clientsSet(args: string[], values: { area?: string | undefined; niche?: string | undefined; name?: string | undefined }): Promise<number> {
+  if (args.length !== 1) return usageError("clients set takes exactly one client.");
+  if (values.area === undefined && values.niche === undefined && values.name === undefined) {
+    return usageError("clients set needs --area, --niche or --name.");
+  }
+  const r = await setClientProfile(args[0]!, values);
+  for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
+  for (const k of r.cleared) out(`Cleared ${k}.`);
+  out(`${r.client}: name ${r.profile.name}; area ${r.profile.area ?? "(not set)"}; niche ${r.profile.niche ?? "(not set)"}. File: ${r.clientsFile}`);
+  return 0;
+}
+
 function usageError(problem: string): number {
   warn(`${problem}\n`);
   warn(USAGE);
@@ -241,6 +330,9 @@ async function main(argv: string[]): Promise<number> {
       refresh: { type: "boolean", default: false },
       ignore: { type: "boolean", default: false },
       name: { type: "string" },
+      note: { type: "string" },
+      area: { type: "string" },
+      niche: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -251,6 +343,9 @@ async function main(argv: string[]): Promise<number> {
   }
   if (group === "clients" && command === "add") return clientsAdd(args, values.name);
   if (group === "clients" && command === "remove") return clientsRemove(args, values.ignore);
+  if (group === "clients" && command === "set") return clientsSet(args, values);
+  if (group === "competitors") return competitorsCommand(command, args, values.note);
+  if (group === "keywords") return keywordsCommand(command, args, values.note);
   // Every other command takes no further arguments.
   if (args.length) return usageError(`Unexpected argument${args.length > 1 ? "s" : ""}: ${args.join(" ")}`);
   if (group === "clients") {

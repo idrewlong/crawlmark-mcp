@@ -8,6 +8,9 @@
 #
 # Each entry is keyed by a name you pass as `client` (crawlmark uses the domain).
 # Only `domain` is required. Tools also accept the domain in any URL or www. form.
+# Manage competitors, tracked keywords, area and niche with the MCP tools
+# (add_competitors, add_keywords, set_client_profile, ...) or the CLI
+# (`crawlmark-cli competitors add example.com rival.example`), or edit them here.
 
 clients:
   # A discovered client with your additions. Unset fields use the defaults shown.
@@ -18,8 +21,19 @@ clients:
     ga4PropertyId: "123456789" # Admin > Property details
     locationCode: 2840 # DataForSEO market; default DEFAULT_LOCATION_CODE (2840 = United States)
     languageCode: en # default DEFAULT_LANGUAGE_CODE
-    competitors: [competitor.example] # default: none
-    trackedKeywords: [example keyword] # default: none
+    area: Austin,Texas,United States # DataForSEO location_name for local searches (suggest_competitors); default: use locationCode
+    niche: emergency plumber # what the client does, in a few words; first seed keyword for suggest_competitors
+    competitors: # default: none. A domain, or an object; URLs and www. forms are saved as the bare domain
+      - competitor.example
+      - domain: other-competitor.example
+        note: Same neighbourhood # optional
+        source: suggested # manual (default) or suggested (from suggest_competitors, confirmed by you)
+        addedAt: 2026-10-12 # set by the tools and CLI
+    trackedKeywords: # default: none. A keyword, or an object with the same optional fields; saved lowercase
+      - example keyword
+      - keyword: emergency plumber near me
+        source: manual
+        addedAt: 2026-10-12
     keyPages: # pages run_audit checks; default: the homepage
       - https://example.com/
       - https://example.com/contact/

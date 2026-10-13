@@ -30,6 +30,9 @@ const EnvSchema = z.object({
   DEFAULT_LOCATION_CODE: z.coerce.number().int().positive().default(2840),
   DEFAULT_LANGUAGE_CODE: z.string().min(1).default("en"),
   DEFAULT_CLIENT_MONTHLY_BUDGET_USD: z.coerce.number().positive().default(5),
+  // Extra suggest_competitors denylist rules: a file (one per line; optional) and/or a comma-separated list.
+  COMPETITOR_DENYLIST_FILE: z.string().default("./config/competitor-denylist.txt"),
+  COMPETITOR_DENYLIST: z.string().optional(),
 });
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
@@ -40,6 +43,7 @@ export const env = {
   ...parsedEnv,
   CLIENTS_FILE: resolveFromRoot(PROJECT_ROOT, parsedEnv.CLIENTS_FILE),
   DATA_DIR: dataDir,
+  COMPETITOR_DENYLIST_FILE: resolveFromRoot(PROJECT_ROOT, parsedEnv.COMPETITOR_DENYLIST_FILE),
   /** OAuth refresh token written by `crawlmark-cli auth login` (mode 0600). */
   GOOGLE_TOKEN_FILE: resolve(dataDir, "google-token.json"),
   GOOGLE_APPLICATION_CREDENTIALS: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS

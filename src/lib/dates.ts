@@ -40,3 +40,13 @@ export function pctChange(current: number, previous: number): number | null {
   if (previous === 0) return null;
   return Number((((current - previous) / previous) * 100).toFixed(1));
 }
+
+/**
+ * The last `days` days of Search Console data, ending `lagDays` before today
+ * (GSC data lags ~2-3 days). On 2026-10-12, lastDays(28) is 2026-09-12..2026-10-09.
+ */
+export function lastDays(days: number, lagDays = 3, today = new Date()): DateRange {
+  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - lagDays));
+  const start = new Date(end.getTime() - (days - 1) * 86_400_000);
+  return { startDate: iso(start), endDate: iso(end) };
+}

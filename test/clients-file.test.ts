@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
-import { addEntry, applySync, NEW_FILE_HEADER, removeEntry, setIgnore } from "../src/lib/clients-file.js";
+import {
+  addEntry,
+  appendListItems,
+  applySync,
+  NEW_FILE_HEADER,
+  removeEntry,
+  removeListItems,
+  setEntryFields,
+  setIgnore,
+} from "../src/lib/clients-file.js";
 import { parseOverrides, type SyncPlan } from "../src/lib/clients.js";
 
 const USER_FILE = `# My clients. Hand-edited; keep this comment.
@@ -137,5 +146,73 @@ describe("addEntry / removeEntry / setIgnore", () => {
     const back = setIgnore(ignored, "example-co", false);
     expect(parseOverrides(parseYaml(back)).find((o) => o.slug === "example-co")!.ignore).toBeUndefined();
     expect(addEntry(undefined, { domain: "hidden.example", ignore: true })).toContain("ignore: true");
+  });
+});
+
+describe("list edits", () => {
+  const entry = { domain: "new.example", source: "manual", addedAt: "2026-10-12" };
+
+  it("appends to a flow list as block items, keeping comments and the plain strings", () => {
+    const out = appendListItems(USER_FILE, "example-co", "competitors", [entry]);
+    expect(out).toContain("# My clients. Hand-edited; keep this comment.");
+    expect(out).toContain("name: Mine # inline comment");
+    expect(out).toContain("    competitors:\n      - rival.example\n      - domain: new.example\n        source: manual\n        addedAt: 2026-10-12\n");
+    const o = parseOverrides(parseYaml(out)).find((x) => x.slug === "example-co")!;
+    expect(o.competitors).toEqual(["rival.example", entry]);
+    // Other entries are untouched.
+    expect(out).toContain('example.org: { domain: example.org, gscProperty: "http://example.org/" }');
+  });
+
+  it("creates the field, including on a flow-style entry and on an empty `field:`", () => {
+    const a = appendListItems(USER_FILE, "example.org", "trackedKeywords", [{ keyword: "plumber near me", source: "manual" }]);
+    expect(parseOverrides(parseYaml(a)).find((x) => x.slug === "example.org")!.trackedKeywords).toEqual([
+      { keyword: "plumber near me", source: "manual" },
+    ]);
+    const b = appendListItems("clients:\n  example.com:\n    domain: example.com\n    competitors:\n", "example.com", "competitors", [entry]);
+    expect(parseOverrides(parseYaml(b))[0]!.competitors).toEqual([entry]);
+  });
+
+  it("keeps addedAt a string when read back", () => {
+    const out = appendListItems(USER_FILE, "example-co", "competitors", [entry]);
+    const raw = parseYaml(out) as { clients: { "example-co": { competitors: unknown[] } } };
+    expect(raw.clients["example-co"].competitors[1]).toEqual(entry);
+  });
+
+  it("returns the text unchanged when there is nothing to add or remove", () => {
+    expect(appendListItems(USER_FILE, "example-co", "competitors", [])).toBe(USER_FILE);
+    expect(removeListItems(USER_FILE, "example-co", "competitors", [])).toBe(USER_FILE);
+  });
+
+  it("refuses a missing entry or a field that isn't a list", () => {
+    expect(() => appendListItems(USER_FILE, "nope", "competitors", [entry])).toThrow(/no entry nope/);
+    expect(() => appendListItems("clients:\n  a:\n    domain: example.com\n    competitors: rival.example\n", "a", "competitors", [entry])).toThrow(
+      /not a list/,
+    );
+  });
+
+  it("removes items by index and drops a list left empty", () => {
+    const two = appendListItems(USER_FILE, "example-co", "competitors", [entry]);
+    const one = removeListItems(two, "example-co", "competitors", [0]);
+    expect(parseOverrides(parseYaml(one)).find((x) => x.slug === "example-co")!.competitors).toEqual([entry]);
+    const none = removeListItems(one, "example-co", "competitors", [0]);
+    expect(none).not.toContain("competitors");
+    expect(none).toContain("name: Mine # inline comment");
+    expect(() => removeListItems(one, "example-co", "competitors", [5])).toThrow(/no item 5/);
+  });
+});
+
+describe("setEntryFields", () => {
+  it("sets, replaces and clears fields without touching others", () => {
+    const set = setEntryFields(USER_FILE, "example-co", { area: "Austin,Texas,United States", niche: "emergency plumber", name: undefined });
+    const o = parseOverrides(parseYaml(set)).find((x) => x.slug === "example-co")!;
+    expect(o.area).toBe("Austin,Texas,United States");
+    expect(o.niche).toBe("emergency plumber");
+    expect(o.name).toBe("Mine");
+    expect(set).toContain("name: Mine # inline comment");
+    const cleared = setEntryFields(set, "example-co", { niche: "", name: "New Name" });
+    const c = parseOverrides(parseYaml(cleared)).find((x) => x.slug === "example-co")!;
+    expect(c.niche).toBeUndefined();
+    expect(c.name).toBe("New Name");
+    expect(c.area).toBe("Austin,Texas,United States");
   });
 });

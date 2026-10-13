@@ -6,10 +6,12 @@ import {
   mapCompetitors,
   mapInstantPage,
   mapRankedKeywords,
+  mapSerpOrganic,
   type RawBacklinksSummary,
   type RawCompetitors,
   type RawInstantPages,
   type RawRankedKeywords,
+  type RawSerp,
 } from "./dataforseo-shape.js";
 
 export type {
@@ -19,6 +21,8 @@ export type {
   InstantPage,
   RankedKeyword,
   RankedKeywordsResult,
+  SerpOrganicItem,
+  SerpOrganicResult,
 } from "./dataforseo-shape.js";
 
 /**
@@ -132,13 +136,20 @@ interface SerpResult {
   items?: { type: string; rank_group: number; rank_absolute: number; domain?: string; url?: string; title?: string }[];
 }
 
+/**
+ * Market for a SERP request: a DataForSEO `location_name` (e.g.
+ * "Austin,Texas,United States") when given, else the client's location code.
+ */
+const serpGeo = (c: Client, locationName?: string) =>
+  locationName ? { location_name: locationName, language_code: c.languageCode } : geo(c);
+
 /** Live organic SERP for one keyword. Returns the client's rank if found. */
 export async function serp(client: Client, keyword: string, depth = 100) {
   const res = await paid<SerpResult>(
     client,
     "serp",
     "/serp/google/organic/live/regular",
-    [{ keyword, depth, ...geo(client) }],
+    [{ keyword, depth, ...serpGeo(client) }],
     TTL.day,
   );
   const items = (res.result[0]?.items ?? []).filter((i) => i.type === "organic");
@@ -151,6 +162,21 @@ export async function serp(client: Client, keyword: string, depth = 100) {
     costUsd: res.costUsd,
     fromCache: res.fromCache,
   };
+}
+
+/**
+ * Live organic SERP for one keyword, every organic result up to `depth`, in a
+ * named location (`locationName`) or the client's market. Paid, cached 1 day.
+ */
+export async function serpOrganic(client: Client, keyword: string, opts: { depth?: number; locationName?: string } = {}) {
+  const res = await paid<RawSerp>(
+    client,
+    "serp",
+    "/serp/google/organic/live/regular",
+    [{ keyword, depth: opts.depth ?? 20, ...serpGeo(client, opts.locationName) }],
+    TTL.day,
+  );
+  return { ...mapSerpOrganic(res.result[0]), costUsd: res.costUsd, fromCache: res.fromCache };
 }
 
 // ------------------------------------------------------- domain analytics
