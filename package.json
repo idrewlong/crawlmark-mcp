@@ -22,8 +22,8 @@
   "bugs": {
     "url": "https://github.com/idrewlong/crawlmark-mcp/issues"
   },
-  "author": "",
-  "license": "UNLICENSED",
+  "author": "Andrew Long (https://github.com/idrewlong)",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

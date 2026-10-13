@@ -508,7 +508,7 @@ npm run inspect      # MCP Inspector
 License
 -------
 
-No license has been chosen yet, so all rights are reserved.
+[MIT](LICENSE)
 
 Links
 -----
