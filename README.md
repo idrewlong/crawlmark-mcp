@@ -351,7 +351,7 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 
 | Tool | Description |
 |---|---|
-| `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers) and orphan pages (from the newest complete local or DataForSEO crawl). Free |
+| `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers), orphan pages (from the newest complete local or DataForSEO crawl), AI crawler access in robots.txt (AI search vs training-only crawlers) and llms.txt (informational: Google says it doesn't use it). Free |
 | `local_crawl` | Crawls the client's own site from your machine (free): status codes, redirects and chains, titles, meta descriptions, canonicals, H1s, internal links, depth, broken links, noindex pages and orphans against the sitemaps. Obeys robots.txt and Crawl-delay; same host only by default; up to 2,000 pages. Saved for `local_crawl_pages`, `site_hygiene` and audits |
 | `local_crawl_pages` | Pages from a saved local crawl, filtered by issue or status code. Free, local |
 | `render_check` | Compares a page's raw HTML with what Chrome renders and flags SEO elements that only appear after JavaScript. Free |
@@ -452,7 +452,7 @@ crawlmark-cli report --client example.com --format md,pdf,docx
 crawlmark-cli report --all --template quarterly --quarter 2026-Q3 --format pdf
 ```
 
-Optional sections are added with `--include` (`include` in Claude): `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings) and `ranks` (tracked keyword rank trends from the stored history). A template can also have a paid `keyword_gap` section, which runs only with `--paid` (`allowPaid`) after its estimate fits the caps.
+Optional sections are added with `--include` (`include` in Claude): `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history) and `ai` (llms.txt and AI crawler access from the newest saved audit). A template can also have a paid `keyword_gap` section, which runs only with `--paid` (`allowPaid`) after its estimate fits the caps.
 
 PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, branding, paths and the Docs handoff.
 

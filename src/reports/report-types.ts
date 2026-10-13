@@ -296,3 +296,39 @@ export interface TemplateReport {
   /** Operator-only problems (for example an invalid template file that was ignored). Never rendered into report files. */
   warnings?: string[];
 }
+
+/** llms.txt and AI crawler access from the newest saved audit's site hygiene (ai_readiness section). Text fields are stripControl'd. */
+export interface AiReadinessData {
+  auditId: string;
+  ranAt: string;
+  llmsTxt:
+    | { checked: false }
+    | {
+        checked: true;
+        url: string;
+        present: boolean;
+        status: number;
+        contentType: string | null;
+        bytes: number;
+        /** The H1, stripped of control characters; render as escaped text, never as Markdown. */
+        title: string | null;
+        hasSummary: boolean;
+        sections: number;
+        links: number;
+        hasOptionalSection: boolean;
+        /** crawlmark's own fixed text, one per format problem. */
+        issues: string[];
+        linksChecked: number;
+        brokenLinks: { url: string; status: number }[];
+        full: { present: boolean; status: number; bytes: number } | null;
+      };
+  crawlers:
+    | { checked: false }
+    | {
+        checked: true;
+        robotsFound: boolean;
+        /** Key pages other than the homepage. */
+        keyPages: number;
+        rows: { bot: string; vendor: string; purpose: "search" | "user" | "training"; honorsRobots: boolean; group: "named" | "*" | "none"; access: "allowed" | "partial" | "blocked"; homepage: "allowed" | "blocked"; blockedKeyPages: number }[];
+      };
+}

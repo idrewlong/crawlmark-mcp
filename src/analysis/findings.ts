@@ -66,8 +66,17 @@ export function siteCheckUrl(rule: string, url: string): string {
   if (rule.startsWith("schema-")) return `site:schema ${normalizeUrl(url)}`;
   if (rule.startsWith("hreflang-")) return `site:hreflang ${normalizeUrl(url)}`;
   if (rule === "orphan-page") return "site:orphans";
+  // The AI crawler table is part of the robots.txt check.
+  if (rule === "ai-search-crawler-blocked") return "site:robots";
+  if (rule === "llms-txt-malformed") return LLMS_TXT_KEY;
+  if (rule === "llms-txt-broken-link") return llmsLinkKey(url);
   return SITE_CHECK_URL;
 }
+
+/** llms.txt was read (or confirmed absent). */
+export const LLMS_TXT_KEY = "site:llms-txt";
+/** One sampled llms.txt link was fetched. */
+export const llmsLinkKey = (url: string) => `site:llms-txt-link ${normalizeUrl(url)}`;
 
 const siteKeyUrl = (u: string) => (u.startsWith("site") ? u : normalizeUrl(u));
 

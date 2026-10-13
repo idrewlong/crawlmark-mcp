@@ -129,13 +129,19 @@ describe("clients.yaml Phase 9 fields", () => {
   });
 });
 
+// Under a loaded machine (load average ~25) spawning tsx or launching Chrome can take tens of seconds. A spawned child is killed
+// outright (SIGKILL) after SPAWN_TIMEOUT_MS, and each test allows that much per spawn, so the child always goes first.
+const SPAWN_TIMEOUT_MS = 45_000;
+const perSpawns = (n: number) => n * SPAWN_TIMEOUT_MS + 15_000;
+
 describe("clients set --provider/--country (CLI)", () => {
   const dir = mkdtempSync(join(tmpdir(), "crawlmark-clientsset-"));
   const file = join(dir, "clients.yaml");
   const run = (args: string[]) =>
     spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--import", "tsx", join(root, "src", "cli.ts"), ...args], {
       encoding: "utf8",
-      timeout: 60_000,
+      timeout: SPAWN_TIMEOUT_MS,
+      killSignal: "SIGKILL",
       env: { ...process.env, CRAWLMARK_HOME: dir, CLIENTS_FILE: file, DATA_DIR: join(dir, "data") },
     });
   const entry = () => (parseYaml(readFileSync(file, "utf8")) as { clients: Record<string, Record<string, unknown>> }).clients["example.com"]!;
@@ -152,7 +158,7 @@ describe("clients set --provider/--country (CLI)", () => {
     expect(cleared.status, cleared.stderr).toBe(0);
     expect(entry().dataProvider).toBeUndefined();
     expect(entry().country).toBeUndefined();
-  }, 60_000);
+  }, perSpawns(2));
 
   it("an unknown provider is a usage error (exit 2) naming the allowed values", () => {
     writeFileSync(file, "clients:\n  example.com:\n    domain: example.com\n");
@@ -160,7 +166,7 @@ describe("clients set --provider/--country (CLI)", () => {
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--provider must be one of dataforseo, ahrefs, semrush or none");
     expect(entry().dataProvider).toBeUndefined();
-  }, 60_000);
+  }, perSpawns(1));
 });
 
 describe("set_client_profile dataProvider/country (setClientProfile)", () => {
@@ -211,12 +217,13 @@ describe("SEC-2: provider URL overrides", () => {
     const home = mkdtempSync(join(tmpdir(), "crawlmark-urlnotice-"));
     const r = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--import", "tsx", join(root, "src", "cli.ts"), "setup", "status", "--only", "home", "--json"], {
       encoding: "utf8",
-      timeout: 60_000,
+      timeout: SPAWN_TIMEOUT_MS,
+      killSignal: "SIGKILL",
       env: { ...process.env, CRAWLMARK_HOME: home },
     });
     expect(r.status, r.stderr).toBe(0);
     expect(r.stderr).toContain("crawlmark: test-only provider URL override in use: AHREFS_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BALANCE_URL -> http://127.0.0.1:9, CRUX_BASE_URL -> http://127.0.0.1:9, BING_BASE_URL -> http://127.0.0.1:9, CRAWLER_IPRANGES_BASE_URL -> http://127.0.0.1:9.");
-  }, 60_000);
+  }, perSpawns(1));
 });
 
 describe("SEC-3: an invalid SEO_DATA_PROVIDER that might be a pasted key is never echoed", () => {

@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 process.env.DATA_DIR ??= mkdtempSync(join(tmpdir(), "crawlmark-hreflang-"));
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// Under a loaded machine (load average ~25) spawning tsx or launching Chrome can take tens of seconds.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 import type { Client } from "../src/config.js";
 import { diffAudits, type StoredAudit } from "../src/analysis/diff.js";
 import { checkedPairs, extractFindings } from "../src/analysis/findings.js";

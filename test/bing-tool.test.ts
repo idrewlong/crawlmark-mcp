@@ -90,6 +90,11 @@ describe("bing_report tool", () => {
   });
 });
 
+// Under a loaded machine (load average ~25) spawning tsx or launching Chrome can take tens of seconds. A spawned child is killed
+// outright (SIGKILL) after SPAWN_TIMEOUT_MS, and each test allows that much per spawn, so the child always goes first.
+const SPAWN_TIMEOUT_MS = 45_000;
+const perSpawns = (n: number) => n * SPAWN_TIMEOUT_MS + 15_000;
+
 describe("clients set --bing-site (CLI)", () => {
   it("refuses a site on another host with exit 1 and writes nothing", async () => {
     const { spawnSync } = await import("node:child_process");
@@ -101,7 +106,8 @@ describe("clients set --bing-site (CLI)", () => {
     const run = (args: string[]) =>
       spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--import", "tsx", join(import.meta.dirname, "..", "src", "cli.ts"), ...args], {
         encoding: "utf8",
-        timeout: 60_000,
+        timeout: SPAWN_TIMEOUT_MS,
+        killSignal: "SIGKILL",
         env: { ...process.env, CRAWLMARK_HOME: dir, CLIENTS_FILE: file, DATA_DIR: join(dir, "data") },
       });
     const bad = run(["clients", "set", "example.com", "--bing-site", "https://example.org/"]);
@@ -112,7 +118,7 @@ describe("clients set --bing-site (CLI)", () => {
     expect(ok.status, ok.stderr).toBe(0);
     expect(ok.stdout).toContain("Bing site https://www.example.com/");
     expect(run(["clients", "set", "example.com", "--bing-site", "none"]).stdout).toContain("Bing site (matched by domain)");
-  }, 60_000);
+  }, perSpawns(3));
 });
 
 describe("clients.yaml bingSite", () => {

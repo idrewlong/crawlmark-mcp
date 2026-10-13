@@ -297,7 +297,9 @@ export function registerReportTools(server: McpServer) {
         "Site-level checks that need no browser: robots.txt (missing, blocks everything, blocks key pages, no Sitemap line), " +
         "sitemaps (found via robots.txt and Search Console, indexes followed to depth 2 and 50 children; up to 50 URLs sampled for non-200, redirects and noindex; key pages missing from every sitemap), " +
         "basic JSON-LD validation on key pages (required properties for Organization, LocalBusiness, Article, Product, BreadcrumbList, FAQPage; not the Rich Results Test), " +
-        "hreflang (self-reference, reciprocity, x-default) and orphan pages (only when a complete crawl is already stored: the newest of a local_crawl (free) or a DataForSEO crawl, within 30 days; never starts a crawl). " +
+        "hreflang (self-reference, reciprocity, x-default), orphan pages (only when a complete crawl is already stored: the newest of a local_crawl (free) or a DataForSEO crawl, within 30 days; never starts a crawl), " +
+          "AI crawler access in robots.txt (GPTBot, OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended and others: AI search vs training-only; a low finding only when an AI search crawler is blocked from the homepage or a key page) " +
+          "and llms.txt (informational: presence, llmstxt.org format, up to 10 same-host links checked; Google says it doesn't use llms.txt, so a missing file is not a finding). " +
         "Every fetch is SSRF-guarded and size-capped. Uses raw HTML; run_audit uses the rendered DOM where it has a rendering result. Findings use source `site`; run_audit includes the same checks.",
       inputSchema: {
         client: clientArg,

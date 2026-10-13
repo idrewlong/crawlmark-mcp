@@ -36,6 +36,11 @@ describe("entryAction", () => {
   });
 });
 
+// Under a loaded machine (load average ~25) spawning tsx or launching Chrome can take tens of seconds. A spawned child is killed
+// outright (SIGKILL) after SPAWN_TIMEOUT_MS, and each test allows that much per spawn, so the child always goes first.
+const SPAWN_TIMEOUT_MS = 45_000;
+const perSpawns = (n: number) => n * SPAWN_TIMEOUT_MS + 15_000;
+
 describe("crawlmark-mcp entry point", () => {
   const root = join(import.meta.dirname, "..");
   const home = mkdtempSync(join(tmpdir(), "crawlmark-entry-"));
@@ -43,7 +48,7 @@ describe("crawlmark-mcp entry point", () => {
     spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--import", "tsx", join(root, "src", "index.ts"), ...args], {
       encoding: "utf8",
       // A hung child is killed outright (SIGTERM can be ignored) so the suite never stalls.
-      timeout: 20_000,
+      timeout: SPAWN_TIMEOUT_MS,
       killSignal: "SIGKILL",
       env: { ...process.env, CRAWLMARK_HOME: home },
     });
@@ -52,14 +57,14 @@ describe("crawlmark-mcp entry point", () => {
     const r = run(["--version"]);
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  });
+  }, perSpawns(1));
 
   it("--help prints the CLI usage and exits without starting the server", () => {
     const r = run(["--help"]);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("Usage: crawlmark-mcp <command>");
     expect(r.stdout).toContain("setup");
-  });
+  }, perSpawns(1));
 
   it("help <command>, <command> --help and init --help print that command's options", () => {
     for (const args of [["help", "setup"], ["setup", "--help"], ["init", "--help"], ["help", "init"]]) {
@@ -71,11 +76,11 @@ describe("crawlmark-mcp entry point", () => {
     const bad = run(["help", "nope"]);
     expect(bad.status).toBe(2);
     expect(bad.stderr).toContain('No help for "nope"');
-  }, 60_000);
+  }, perSpawns(5));
 
   it("an unknown word is a usage error, not a hung server", () => {
     const r = run(["stp"]);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("Unknown command");
-  });
+  }, perSpawns(1));
 });

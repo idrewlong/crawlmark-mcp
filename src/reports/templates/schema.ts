@@ -93,6 +93,8 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("site_crawl"), limit: limit(50) }),
   // Phase 12 C3: Bing Webmaster Tools for the report period (free with the user's own Bing key).
   z.strictObject({ ...common, type: z.literal("bing_overview"), limit: limit(25) }),
+  // llms.txt and AI crawler access from the newest saved audit (free, local; never fetches).
+  z.strictObject({ ...common, type: z.literal("ai_readiness") }),
   z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
 ] as const;
 
@@ -122,6 +124,7 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   keyword_gap: "Competitor keyword gap",
   site_crawl: "Site crawl",
   bing_overview: "Bing search performance",
+  ai_readiness: "AI readiness",
   text: "Note",
 };
 

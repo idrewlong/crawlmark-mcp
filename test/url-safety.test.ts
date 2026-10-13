@@ -1,7 +1,11 @@
 import { createServer, request, type Server } from "node:http";
 import { connect, type AddressInfo } from "node:net";
 import type { LookupAddress } from "node:dns";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import type { Browser } from "puppeteer";
+
+// Under a loaded machine (load average ~25) spawning tsx or launching Chrome can take tens of seconds.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 import {
   assertOnClientDomain,
   assertSafeUrlResolved,
@@ -270,6 +274,13 @@ describe("headless Chrome behind the egress proxy", () => {
     await new Promise((r) => blocked.server.close(r));
   });
 
+  /** Browsers still open: a test that timed out leaves its run() going, so they are killed after each test. */
+  const open = new Set<Browser>();
+  afterEach(() => {
+    for (const b of open) b.process()?.kill("SIGKILL");
+    open.clear();
+  });
+
   /** Load the allowed page in Chrome behind a proxy and let it try to reach the blocked server. */
   async function run(allowPrivate: boolean): Promise<unknown[]> {
     const puppeteer = (await import("puppeteer")).default;
@@ -280,7 +291,15 @@ describe("headless Chrome behind the egress proxy", () => {
       allowPrivate: () => allowPrivate,
       allowHost: (host, port) => host === "allowed.test" && port === allowedPort,
     });
-    const browser = await puppeteer.launch({ executablePath: await chromePath(), args: [...CHROME_FLAGS, ...proxyChromeFlags(proxy.port)] });
+    let browser: Browser;
+    try {
+      // A launch that takes longer than 60 s fails (puppeteer kills that Chrome) instead of its 30 s default.
+      browser = await puppeteer.launch({ executablePath: await chromePath(), args: [...CHROME_FLAGS, ...proxyChromeFlags(proxy.port)], timeout: 60_000 });
+    } catch (err) {
+      await proxy.close();
+      throw err;
+    }
+    open.add(browser);
     try {
       const page = await browser.newPage();
       await page.goto(`http://allowed.test:${allowedPort}/`, { waitUntil: "load" });
@@ -289,7 +308,8 @@ describe("headless Chrome behind the egress proxy", () => {
       await new Promise((r) => setTimeout(r, 1000)); // let the popup try to load
       return results;
     } finally {
-      await browser.close();
+      open.delete(browser);
+      await browser.close().catch(() => browser.process()?.kill("SIGKILL"));
       await proxy.close();
     }
   }
@@ -301,7 +321,7 @@ describe("headless Chrome behind the egress proxy", () => {
     expect(results.slice(0, 4)).toEqual(["err", "err", "err", "err"]);
     expect(blocked.hits()).toBe(0);
     expect(blocked.upgrades()).toBe(0);
-  }, 60_000);
+  }, 120_000);
 
   it("control: the same page does reach that host when private addresses are allowed", async () => {
     const before = blocked.hits();
@@ -309,7 +329,7 @@ describe("headless Chrome behind the egress proxy", () => {
     expect(results.at(-1)).toBe("pong");
     expect(blocked.hits()).toBeGreaterThan(before);
     expect(allowedHits).toBeGreaterThan(0);
-  }, 60_000);
+  }, 120_000);
 });
 
 // ------------------------------------------------------------------ timeouts

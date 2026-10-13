@@ -26,6 +26,7 @@ export const BUILTIN_MONTHLY: TemplateSpec = {
     { id: "cwv", type: "core_web_vitals_history", optional: true, formFactor: "PHONE", weeks: 25 },
     { id: "gtm", type: "tag_manager", optional: true, limit: 20 },
     { id: "ranks", type: "rank_trend", optional: true, since: "180d" },
+    { id: "ai", type: "ai_readiness", optional: true },
   ],
 };
 
@@ -69,6 +70,8 @@ templates:
       - { id: gtm, type: tag_manager, optional: true, limit: 20 }
       # Stored rank history (free; fill it with crawlmark-cli check-ranks): --include ranks.
       - { id: ranks, type: rank_trend, optional: true, since: 180d }
+      # llms.txt and AI crawler access from the newest saved audit (free): --include ai.
+      - { id: ai, type: ai_readiness, optional: true }
       # Paid example: competitor keyword gap (needs paid: true here and --paid / allowPaid at run time).
       # - { id: gap, type: keyword_gap, optional: true, paid: true, limit: 25 }
   quarterly:

@@ -43,6 +43,7 @@ templates:
       - { id: cwv, type: core_web_vitals_history, optional: true, formFactor: PHONE, weeks: 25 }
       - { id: gtm, type: tag_manager, optional: true, limit: 20 }
       - { id: ranks, type: rank_trend, optional: true, since: 180d }
+      - { id: ai, type: ai_readiness, optional: true }
       # - { id: gap, type: keyword_gap, optional: true, paid: true, limit: 25 }
 ```
 
@@ -79,6 +80,7 @@ A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, 
 | `keyword_gap` | Keywords competitors rank for and the client doesn't, from the client's SEO data provider. **Paid**: needs `paid: true` | `limit` (50 per competitor, up to 500), `competitors` (up to 5; default the client's saved ones, at most 3) |
 | `site_crawl` | The newest saved local crawl: pages fetched, broken links, redirects, missing and duplicate titles and descriptions, canonical issues, noindex and orphan counts, and the top issues. Local and free; it never starts a crawl (run `crawlmark-cli crawl` or `local_crawl` first) | `limit` (10 issues listed, up to 50) |
 | `bing_overview` | Bing Webmaster Tools for the report period vs its first comparison: clicks, impressions, CTR, the top queries and pages, and the latest crawl day (pages in Bing's index, crawled, crawl errors, URLs with issues). Free with a [Bing key](../README.md#bing-webmaster-tools-optional); unavailable without one. Bing's history is limited (crawl stats cover the last six months; how far traffic goes back isn't documented) and query and page stats update weekly, so a comparison period Bing has no data for shows n/a with a note | `limit` (10 queries and pages, up to 25) |
+| `ai_readiness` | From the newest saved audit: whether the site has an llms.txt (status, type, size, title, section and link counts, format issues, sampled links that don't return 200, and whether llms-full.txt exists), and a table of AI crawlers with their purpose (AI search, answering a user's question, or training only), the robots.txt group that applies, and whether the homepage and key pages are allowed. Local and free; it never fetches (run `run_audit` first). Nothing from the llms.txt file is rendered except its title (escaped text) and the URLs of sampled links that don't return 200 (as code). The builtin `monthly` has it as optional section `ai` | |
 | `data_spend` | Paid data used this month | |
 | `text` | Your own text | `text` |
 

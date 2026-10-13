@@ -9,13 +9,18 @@ import {
   sampleFlags,
   schemaFlags,
   type HygieneFlag,
+  type LlmsFileInfo,
+  type LlmsTxtResult,
   type SampleResult,
   type SiteHygiene,
 } from "../analysis/hygiene.js";
 import { extractHygieneIsolated, parseSitemapIsolated } from "../analysis/extract-isolated.js";
 import { checkHreflang, mergeHreflang, parseLinkHeader, type HreflangEntry, type HreflangSource } from "../analysis/hreflang.js";
-import { normalizeUrl } from "../analysis/findings.js";
+import { analyzeAiCrawlers } from "../analysis/ai-crawlers.js";
+import { LLMS_TXT_KEY, llmsLinkKey, normalizeUrl } from "../analysis/findings.js";
+import { parseLlmsTxt } from "../analysis/llms-txt.js";
 import { validateJsonLd } from "../analysis/structured-data.js";
+import { stripControl } from "../lib/terminal-text.js";
 import { cacheKey, peekCache, putCache, TTL } from "../lib/cache.js";
 import { latestCrawlTask } from "../lib/audits.js";
 import { crawledUrls } from "../analysis/crawl.js";
@@ -38,6 +43,8 @@ const HREFLANG_FETCH_LIMIT = 20;
 /** Most sitemap `xhtml:link` entries kept in memory per run; the rest are dropped and the run says so. */
 export const SITEMAP_HREFLANG_LIMIT = 50_000;
 const PAGE_LIMIT = 20;
+/** Most same-host llms.txt links fetched to check for non-200s. */
+export const LLMS_LINK_SAMPLE = 10;
 /** A stored crawl older than this no longer describes the site, so orphans are not judged from it. */
 export const ORPHAN_MAX_CRAWL_AGE_DAYS = 30;
 
@@ -194,7 +201,6 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
   const budget = AbortSignal.timeout(HYGIENE_BUDGET_MS);
   const signal = opts.signal ? AbortSignal.any([opts.signal, budget]) : budget;
   const refresh = opts.fresh ?? true;
-  const get = (url: string): Promise<RawFetch> => fetchRaw(url, { refresh, signal });
   const keyPages = (opts.urls?.length ? opts.urls : client.keyPages).slice(0, PAGE_LIMIT);
   const origin = opts.origin ?? `https://${client.domain}`;
   const restricted = restrictToClientDomains();
@@ -205,6 +211,9 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
       return false;
     }
   };
+  // With RESTRICT_TO_CLIENT_DOMAINS, every hygiene fetch and each of its redirect hops stays on the client's domain.
+  const get = (url: string, allowUrl?: (u: string) => boolean): Promise<RawFetch> =>
+    fetchRaw(url, { refresh, signal, ...(allowUrl ? { allowUrl } : restricted ? { allowUrl: onClientHost } : {}) });
 
   const flags: HygieneFlag[] = [];
   const checked: string[] = [];
@@ -217,17 +226,23 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
   let robots: SiteHygiene["robots"];
   let siteOrigin = origin;
   let robotsSitemaps: string[] = [];
+  let aiCrawlers: SiteHygiene["aiCrawlers"];
   try {
     const r = await get(`${origin}/robots.txt`);
     siteOrigin = new URL(r.finalUrl).origin;
-    const a = analyzeRobots(r.finalUrl, { status: r.status, contentType: r.contentType, text: r.html }, keyPages);
+    const fetched = { status: r.status, contentType: r.contentType, text: r.html };
+    const a = analyzeRobots(r.finalUrl, fetched, keyPages);
     robots = a.robots;
     robotsSitemaps = a.robots.sitemaps;
     flags.push(...a.flags);
+    const ai = analyzeAiCrawlers(r.finalUrl, a.file, a.robots, `${siteOrigin}/`, keyPages);
+    aiCrawlers = ai.aiCrawlers;
+    flags.push(...ai.flags);
     checked.push("site:robots");
-    if (r.truncated) notes.push("robots.txt was cut at the 5 MB cap.");
+    if (a.robots.truncated) notes.push("robots.txt is larger than 500 KiB; like Google (RFC 9309), only the first 500 KiB was read.");
   } catch (err) {
     robots = { error: (err as Error).message };
+    aiCrawlers = { error: (err as Error).message };
   }
 
   // ------------------------------------------------------------------ sitemaps
@@ -399,6 +414,20 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
   else notes.push("JSON-LD and hreflang were read from raw HTML (no rendering section in this run).");
   notes.push("hreflang is merged from page HTML, sitemap xhtml:link entries and HTTP Link headers (headers are read from the raw fetch, so not for pages read from their rendered DOM).");
 
+  // ------------------------------------------------------------------- llms.txt
+  // Informational: llms.txt is a proposal Google says it doesn't use. A missing file is not a finding.
+  let llmsTxt: SiteHygiene["llmsTxt"];
+  if (!onClientHost(siteOrigin)) {
+    // robots.txt redirected off the client's domain: llms.txt there isn't the client's file.
+    llmsTxt = { error: `not checked: robots.txt redirected to ${new URL(siteOrigin).host}, which isn't on ${client.domain}` };
+  } else {
+    try {
+      llmsTxt = await checkLlmsTxt({ siteOrigin, get, onClientHost, flags, checked, notes });
+    } catch (err) {
+      llmsTxt = { error: (err as Error).message };
+    }
+  }
+
   // -------------------------------------------------------------------- orphans
   // The newest exhaustive crawl within ORPHAN_MAX_CRAWL_AGE_DAYS decides: a local crawl (Phase 12 C1, free)
   // or the stored DataForSEO crawl. Neither is ever started here.
@@ -465,8 +494,83 @@ export async function siteHygiene(client: Client, opts: HygieneOptions = {}): Pr
     structuredData: { pages: sdPages.sort((a, b) => a.url.localeCompare(b.url)), errors: sdErrors },
     hreflang: { pages: hlPages.sort((a, b) => a.url.localeCompare(b.url)), errors: hlErrors },
     orphans,
+    llmsTxt,
+    aiCrawlers,
     flags,
     checked: [...new Set(checked)],
     notes,
   };
+}
+
+/** What a fetch says about an llms file: present, missing, or an error (thrown) for any other status. */
+function llmsFileInfo(url: string, r: RawFetch): LlmsFileInfo {
+  const base = { url, status: r.status, contentType: r.contentType ? stripControl(r.contentType).slice(0, 100) : null, bytes: Buffer.byteLength(r.html), truncated: r.truncated };
+  if (r.status === 404 || r.status === 410) return { ...base, present: false };
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+  // A site's catch-all page served at /llms.txt is not the file.
+  if (/html/i.test(r.contentType ?? "") || /^\s*<(!doctype|html)/i.test(r.html)) return { ...base, present: false, note: "The URL returns an HTML page, not a text file." };
+  return { ...base, present: true };
+}
+
+/**
+ * The llms.txt check: /llms.txt (format against the llmstxt.org proposal, and up to LLMS_LINK_SAMPLE
+ * same-host links checked for non-200s) and /llms-full.txt (presence only). Low findings only:
+ * `llms-txt-malformed` and `llms-txt-broken-link`. Throws when /llms.txt can't be read (not checked).
+ */
+async function checkLlmsTxt(o: {
+  siteOrigin: string;
+  get: (url: string, allowUrl?: (u: string) => boolean) => Promise<RawFetch>;
+  onClientHost: (url: string) => boolean;
+  flags: HygieneFlag[];
+  checked: string[];
+  notes: string[];
+}): Promise<LlmsTxtResult> {
+  const url = `${o.siteOrigin}/llms.txt`;
+  const r = await o.get(url);
+  const info = llmsFileInfo(url, r);
+  let fullTxt: LlmsTxtResult["llmsFullTxt"];
+  const fullUrl = `${o.siteOrigin}/llms-full.txt`;
+  try {
+    fullTxt = llmsFileInfo(fullUrl, await o.get(fullUrl));
+  } catch (err) {
+    fullTxt = { url: fullUrl, error: (err as Error).message };
+  }
+  o.notes.push("llms.txt is a proposed standard (llmstxt.org) that Google says it doesn't use; it is reported for information, not scored.");
+  if (!info.present) {
+    o.checked.push(LLMS_TXT_KEY);
+    return { llmsTxt: info, llmsFullTxt: fullTxt };
+  }
+
+  const { links, ...format } = parseLlmsTxt(r.html, r.finalUrl);
+  if (r.truncated) o.notes.push("llms.txt was cut at the 5 MB cap, so its format was checked on the first 5 MB only.");
+  if (format.issues.length) {
+    o.flags.push({ rule: "llms-txt-malformed", url, severity: "low", title: "llms.txt does not follow the llmstxt.org format (informational)", evidence: format.issues.join(" ") });
+  }
+  o.checked.push(LLMS_TXT_KEY);
+
+  const host = new URL(r.finalUrl).hostname.toLowerCase();
+  // Links, and every redirect hop they take, stay on llms.txt's own host on the client's domain.
+  const sameHostOnClient = (u: string) => {
+    try {
+      return new URL(u).hostname.toLowerCase() === host && o.onClientHost(u);
+    } catch {
+      return false;
+    }
+  };
+  const sameHost = links.filter(sameHostOnClient);
+  const sampled: { url: string; status: number; finalUrl: string }[] = [];
+  const errors: { url: string; error: string }[] = [];
+  await mapLimit(sameHost.slice(0, LLMS_LINK_SAMPLE), CONCURRENCY, async (link) => {
+    try {
+      const l = await o.get(link, sameHostOnClient);
+      sampled.push({ url: link, status: l.status, finalUrl: l.finalUrl });
+      if (l.status !== 200) o.flags.push({ rule: "llms-txt-broken-link", url: link, severity: "low", title: "llms.txt links to a URL that does not return 200 (informational)", evidence: `HTTP ${l.status}` });
+      o.checked.push(llmsLinkKey(link));
+    } catch (err) {
+      errors.push({ url: link, error: (err as Error).message });
+    }
+  });
+  sampled.sort((a, b) => a.url.localeCompare(b.url));
+  if (sameHost.length > LLMS_LINK_SAMPLE) o.notes.push(`Only the first ${LLMS_LINK_SAMPLE} of ${sameHost.length} same-host llms.txt links were checked.`);
+  return { llmsTxt: { ...info, format }, llmsFullTxt: fullTxt, links: { total: links.length, sameHost: sameHost.length, sampled, errors } };
 }

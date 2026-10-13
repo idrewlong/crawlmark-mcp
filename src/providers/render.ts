@@ -3,9 +3,9 @@ import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { pipeline, type Readable } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
-import { cached, cacheKey, TTL } from "../lib/cache.js";
+import { cached, cacheKey, peekCache, TTL } from "../lib/cache.js";
 import { onAbort } from "../lib/timeout.js";
-import { assertSafeUrlResolved, pinnedLookup } from "../lib/url-guard.js";
+import { assertSafeUrlResolved, pinnedLookup, UrlRefusedError } from "../lib/url-guard.js";
 import { compareRender, type RenderFlag } from "../analysis/render.js";
 import { extractIsolated } from "../analysis/extract-isolated.js";
 import type { SeoExtract } from "../analysis/render-extract.js";
@@ -170,14 +170,42 @@ export async function fetchHop(url: string, opts: HopOptions): Promise<Hop> {
   }
 }
 
+export interface FetchRawOptions {
+  refresh?: boolean;
+  signal?: AbortSignal;
+  /**
+   * Extra policy for the URL and every redirect hop (e.g. RESTRICT_TO_CLIENT_DOMAINS, or same host only).
+   * A refused hop throws UrlRefusedError. A cached response that followed redirects isn't reused under a
+   * policy (its hops weren't checked against it), so it is fetched again.
+   */
+  allowUrl?: (url: string) => boolean;
+}
+
 /**
  * Plain HTTP fetch as a crawler sees it. Redirects are followed by hand: each hop is
  * resolved, every address checked (assertSafeUrlResolved), and the connection pinned
  * to those addresses.
  */
-export async function fetchRaw(url: string, opts: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<RawFetch> {
+export async function fetchRaw(url: string, opts: FetchRawOptions = {}): Promise<RawFetch> {
+  const allow = opts.allowUrl;
+  const refuse = (u: string, hop: boolean) => {
+    let host = u;
+    try {
+      host = new URL(u).host;
+    } catch {
+      /* keep the raw text */
+    }
+    return new UrlRefusedError(`Refusing ${hop ? "a redirect to " : ""}${host}: not allowed for this check (it isn't on the client's site).`);
+  };
+  if (allow && !allow(url)) throw refuse(url, false);
   await assertSafeUrlResolved(url);
-  const { value } = await cached(cacheKey("render-raw", url), TTL.day, async () => {
+  const key = cacheKey("render-raw", url);
+  let refresh = opts.refresh;
+  if (allow && !refresh) {
+    const hit = peekCache<RawFetch>(key);
+    if (hit && (hit.redirects > 0 || !allow(hit.finalUrl))) refresh = true;
+  }
+  const { value } = await cached(key, TTL.day, async () => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), RAW_TIMEOUT_MS);
     const off = onAbort(opts.signal, () => ctrl.abort());
@@ -192,6 +220,7 @@ export async function fetchRaw(url: string, opts: { refresh?: boolean; signal?: 
           res.destroy();
           if (redirects >= MAX_REDIRECTS) throw new Error(`Too many redirects fetching ${url}`);
           current = new URL(location, current).toString();
+          if (allow && !allow(current)) throw refuse(current, true);
           continue;
         }
         const { text, truncated } = await readCapped(decoded(res, isGzipFile(current, status, header(res, "content-type"))));
@@ -214,7 +243,7 @@ export async function fetchRaw(url: string, opts: { refresh?: boolean; signal?: 
       clearTimeout(timer);
       off();
     }
-  }, { refresh: opts.refresh });
+  }, { refresh });
   return value;
 }
 

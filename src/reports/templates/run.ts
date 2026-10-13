@@ -20,7 +20,10 @@ import type { StoredAudit } from "../../analysis/diff.js";
 import type { GscQueryOptions, GscRow } from "../../providers/gsc.js";
 import { computeHighlights } from "../highlights.js";
 import { brandedSplitFor, compare, liveRanksAvailability, movers, organicTrafficCompare, QUERY_ROW_LIMIT, trackedKeywordRows, type Ga4Summary, type PeriodTotals } from "../monthly.js";
+import { aiReadinessFrom } from "../ai-readiness.js";
+import type { SiteHygiene } from "../../analysis/hygiene.js";
 import type {
+  AiReadinessData,
   AuditChangesData,
   BingOverviewData,
   BrandedSplitData,
@@ -410,6 +413,15 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
         if ((err as Error).name === "BingSiteError") throw new SectionUnavailableError(`no verified Bing Webmaster Tools site for ${client.domain} (set it with crawlmark-cli clients set ${client.domain} --bing-site <url>)`);
         throw err;
       }
+    },
+    ai_readiness: async (): Promise<AiReadinessData> => {
+      const audit = deps.latestAudit(client.slug);
+      if (!audit) throw new SectionUnavailableError(`no saved audit for ${client.domain} yet (run run_audit or crawlmark-cli audit)`);
+      const hygiene = (audit.result as { site?: { hygiene?: { ok: boolean; data?: SiteHygiene } } } | null)?.site?.hygiene;
+      if (!hygiene?.ok || !hygiene.data) throw new SectionUnavailableError("the newest saved audit has no site hygiene result");
+      const data = aiReadinessFrom(audit, hygiene.data);
+      if (!data) throw new SectionUnavailableError("the newest saved audit predates the llms.txt and AI crawler checks; run run_audit again");
+      return data;
     },
     keyword_gap: async (s: Extract<SectionSpec, { type: "keyword_gap" }>): Promise<KeywordGapData> => {
       let competitors: string[];

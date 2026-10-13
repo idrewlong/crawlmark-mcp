@@ -1,8 +1,10 @@
 import type { Severity } from "./findings.js";
 import { normalizeUrl } from "./findings.js";
 import type { HreflangIssue, HreflangSource } from "./hreflang.js";
-import { blocksEverything, isAllowed, parseRobots, pathOf, rulesFor } from "./robots.js";
+import { blocksEverything, isAllowed, parseRobots, pathOf, rulesFor, type RobotsFile } from "./robots.js";
 import type { SchemaResult } from "./structured-data.js";
+import type { AiCrawlersResult } from "./ai-crawlers.js";
+import type { LlmsTxtFormat } from "./llms-txt.js";
 
 /** One issue from the site hygiene checks. They become findings with source "site". */
 export interface HygieneFlag {
@@ -24,6 +26,8 @@ export interface RobotsSummary {
   disallowAll?: boolean;
   sitemaps: string[];
   blockedKeyPages: string[];
+  /** Longer than 500 KiB: only the first 500 KiB was read (RFC 9309; Google does the same). */
+  truncated?: boolean;
 }
 
 /** robots.txt analysis from a fetch result. `text` is the body when the file exists. Pure. */
@@ -31,7 +35,7 @@ export function analyzeRobots(
   robotsUrl: string,
   fetched: { status: number; contentType: string | null; text: string },
   keyPages: string[],
-): { robots: RobotsSummary; flags: HygieneFlag[] } {
+): { robots: RobotsSummary; flags: HygieneFlag[]; file: RobotsFile | null } {
   const flags: HygieneFlag[] = [];
   const looksHtml = /html/i.test(fetched.contentType ?? "") || /^\s*<(!doctype|html)/i.test(fetched.text);
   if (fetched.status === 404 || fetched.status === 410 || (fetched.status === 200 && looksHtml)) {
@@ -42,7 +46,7 @@ export function analyzeRobots(
       title: "robots.txt is missing",
       evidence: fetched.status === 200 ? "The URL returns an HTML page, not a robots.txt file." : `HTTP ${fetched.status}`,
     });
-    return { robots: { url: robotsUrl, status: fetched.status, found: false, sitemaps: [], blockedKeyPages: [] }, flags };
+    return { robots: { url: robotsUrl, status: fetched.status, found: false, sitemaps: [], blockedKeyPages: [] }, flags, file: null };
   }
   if (fetched.status !== 200) throw new Error(`robots.txt returned HTTP ${fetched.status}`);
 
@@ -66,7 +70,7 @@ export function analyzeRobots(
   if (file.sitemaps.length === 0) {
     flags.push({ rule: "robots-no-sitemap", url: robotsUrl, severity: "low", title: "robots.txt has no Sitemap line" });
   }
-  return { robots: { url: robotsUrl, status: 200, found: true, group: bot.matched, disallowAll, sitemaps: file.sitemaps, blockedKeyPages }, flags };
+  return { robots: { url: robotsUrl, status: 200, found: true, group: bot.matched, disallowAll, sitemaps: file.sitemaps, blockedKeyPages, ...(file.truncated ? { truncated: true } : {}) }, flags, file };
 }
 
 /** Compare key pages with the sitemap URL set (host's `www.` and the protocol are ignored). */
@@ -168,6 +172,32 @@ export function orphanUrls(sitemapUrls: Iterable<string>, crawled: Iterable<stri
 export const orphanFlags = (urls: string[]): HygieneFlag[] =>
   urls.map((u) => ({ rule: "orphan-page", url: u, severity: "medium" as const, title: "Sitemap URL the full crawl never reached through links (orphan page)" }));
 
+/** One fetched file of the llms.txt check: what the server returned, never the body. */
+export interface LlmsFileInfo {
+  url: string;
+  /** False for 404/410, or a 200 that is an HTML page (a site's catch-all page, not the file). */
+  present: boolean;
+  status: number;
+  contentType: string | null;
+  /** Body size in bytes (up to the fetch's 5 MB cap). */
+  bytes: number;
+  truncated: boolean;
+  note?: string;
+}
+
+/** The llms.txt check (informational: llms.txt is a proposal Google says it doesn't use). */
+export interface LlmsTxtResult {
+  llmsTxt: LlmsFileInfo & { format?: Omit<LlmsTxtFormat, "links"> };
+  llmsFullTxt: LlmsFileInfo | { url: string; error: string };
+  /** Linked URLs on the same host, up to LLMS_LINK_SAMPLE, checked for a non-200 final status. */
+  links?: {
+    total: number;
+    sameHost: number;
+    sampled: { url: string; status: number; finalUrl: string }[];
+    errors: { url: string; error: string }[];
+  };
+}
+
 /** The stored result of the site hygiene checks (audit `site.hygiene`). */
 export interface SiteHygiene {
   origin: string;
@@ -192,6 +222,10 @@ export interface SiteHygiene {
     | { available: true; crawlTaskId: string; crawledUrls: number; orphanCount: number; orphans: string[] }
     /** Phase 12 C1: from an exhaustive local crawl (local_crawl), newer than any stored DataForSEO crawl. */
     | { available: true; source: "local"; crawlId: string; crawledUrls: number; orphanCount: number; orphans: string[] };
+  /** llms.txt and llms-full.txt (absent from audits saved before this check existed). */
+  llmsTxt?: LlmsTxtResult | { error: string };
+  /** AI crawler access from robots.txt (absent from audits saved before this check existed). */
+  aiCrawlers?: AiCrawlersResult | { error: string };
   flags: HygieneFlag[];
   /** Check keys of the sub-checks that ran to completion (see siteCheckUrl in findings.ts); they feed the audit diff. */
   checked: string[];

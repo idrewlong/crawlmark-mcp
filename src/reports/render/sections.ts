@@ -4,6 +4,7 @@
  * types by adding a mapper here. Pure.
  */
 import type {
+  AiReadinessData,
   AuditChangesData,
   BingOverviewData,
   BrandedSplitData,
@@ -363,6 +364,50 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
       ...data.notes.filter((n) => n !== "Bing updates query stats weekly").map((n) => ({ kind: "note" as const, text: [t(n)] })),
       { kind: "note", text: [t("Bing updates query and page stats weekly, so the tables can lag the daily totals. Position is Bing's average for impressions; lower is better.")] },
     ];
+  },
+  // llms.txt and AI crawler access from the newest saved audit. llms.txt content is untrusted: only counts and the
+  // stripped title are shown (escaped as data), and URLs render as code.
+  ai_readiness: (data: AiReadinessData) => {
+    const l = data.llmsTxt;
+    const blocks: Block[] = [{ kind: "paragraph", text: [t(`From the saved audit of ${data.ranAt.slice(0, 10)}: whether the site has an llms.txt file, and which AI crawlers its robots.txt lets in.`)] }];
+    if (!l.checked) blocks.push({ kind: "paragraph", text: [t("llms.txt couldn't be checked in that audit.")] });
+    else if (!l.present) {
+      blocks.push({ kind: "paragraph", text: [t("No llms.txt at "), c(l.url), t(` (HTTP ${l.status}).`)] });
+    } else {
+      const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
+      const rows: [string, Text][] = [
+        ["llms.txt", [c(l.url)]],
+        ["HTTP status", cell(String(l.status))],
+        ["Content type", l.contentType ? d(l.contentType) : cell("not sent")],
+        ["Size", cell(kb(l.bytes))],
+        ["Title (H1)", l.title ? d(l.title) : cell("none")],
+        ["Summary (blockquote)", cell(l.hasSummary ? "yes" : "no")],
+        ["Link sections (H2)", cell(fmtInt(l.sections))],
+        ["Links", cell(fmtInt(l.links))],
+        ["\"Optional\" section", cell(l.hasOptionalSection ? "yes" : "no")],
+        ["Format", cell(l.issues.length ? `${l.issues.length} issue${l.issues.length === 1 ? "" : "s"}` : "follows the llmstxt.org proposal")],
+        ["Links checked", cell(`${fmtInt(l.linksChecked)} (${fmtInt(l.brokenLinks.length)} not returning 200)`)],
+        ["llms-full.txt", cell(l.full ? (l.full.present ? `present (${kb(l.full.bytes)})` : `missing (HTTP ${l.full.status})`) : "couldn't be checked")],
+      ];
+      blocks.push({ kind: "table", header: ["llms.txt", "Value"], rows: rows.map(([k, v]) => [cell(k), v]) });
+      if (l.issues.length) blocks.push({ kind: "list", items: l.issues.map((i) => cell(i)) });
+      if (l.brokenLinks.length) blocks.push({ kind: "table", header: ["Linked URL", "HTTP status"], rows: l.brokenLinks.map((b) => [[c(b.url)], cell(String(b.status))]), numeric: [false, true] });
+    }
+    const cr = data.crawlers;
+    if (!cr.checked) blocks.push({ kind: "paragraph", text: [t("AI crawler access couldn't be checked in that audit (robots.txt couldn't be read).")] });
+    else {
+      const PURPOSE = { search: "AI search", user: "Answers a user's question", training: "Training only" } as const;
+      const ACCESS = { allowed: "Allowed", partial: "Partly blocked", blocked: "Blocked (whole site)" } as const;
+      if (!cr.robotsFound) blocks.push({ kind: "paragraph", text: [t("The site has no robots.txt, so every crawler is allowed.")] });
+      blocks.push({
+        kind: "table",
+        header: ["Crawler", "Purpose", "robots.txt group", "Homepage", "Other key pages blocked", "Overall"],
+        rows: cr.rows.map((r) => [cell(`${r.bot} (${r.vendor})`), cell(PURPOSE[r.purpose]), cell(r.group === "named" ? "its own" : r.group === "*" ? "* (all crawlers)" : "none"), cell(r.homepage === "allowed" ? "Allowed" : "Blocked"), cell(`${fmtInt(r.blockedKeyPages)} of ${fmtInt(cr.keyPages)}`), cell(ACCESS[r.access])]),
+      });
+      blocks.push({ kind: "note", text: [t("Blocking an AI search crawler keeps the site out of that product's answers; blocking a training-only crawler is a legitimate choice and has no effect on search. ChatGPT-User and Perplexity-User may not follow robots.txt.")] });
+    }
+    blocks.push({ kind: "note", text: [t("llms.txt is a proposed standard (llmstxt.org). Google says Google Search doesn't use it, so it's reported for information, not scored.")] });
+    return blocks;
   },
   keyword_gap: (data: KeywordGapData) => {
     const metric = data.gaps.find((g) => g.difficulty.value !== null)?.difficulty.metric ?? data.gaps[0]?.difficulty.metric;

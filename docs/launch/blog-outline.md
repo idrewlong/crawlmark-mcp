@@ -136,6 +136,11 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - Read-only: crawlmark never submits URLs, sitemaps or IndexNow pings to Bing.
 - New tool: `bing_report` (Shipped). New setup step: `crawlmark-cli setup --step bing` (Shipped). New option: `crawlmark-cli clients set example.com --bing-site <url>` and `bingSite` in `set_client_profile` (Shipped). New report section `bing_overview` (Shipped).
 
+**Audits: AI search readiness** (Shipped)
+- Which AI crawlers robots.txt lets in, split into AI search crawlers (blocking them hides the site in ChatGPT search, Claude and Perplexity answers) and training-only crawlers (blocking them is a fair choice). *"Can ChatGPT search and Perplexity see example.com, and which AI crawlers does it block?"*
+- llms.txt check: present or not, format against the llmstxt.org proposal, and links that don't load. For information only, since Google says it doesn't use llms.txt.
+- Part of `site_hygiene` and `run_audit`, with a new optional `ai_readiness` report section.
+
 ## 6. How to use it (a 5-minute walkthrough)
 
 1. Install: `npx crawlmark-mcp@latest init`.

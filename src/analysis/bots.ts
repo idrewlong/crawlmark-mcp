@@ -33,7 +33,7 @@ export const BOTS: readonly BotDef[] = [
   { bot: "PerplexityBot", token: "perplexitybot", family: "ai-search" },
   { bot: "CCBot", token: "ccbot", family: "ai-training" },
   { bot: "Applebot", token: "applebot", family: "search" },
-  { bot: "Amazonbot", token: "amazonbot", family: "other" },
+  { bot: "Amazonbot", token: "amazonbot", family: "ai-training" },
   { bot: "Bytespider", token: "bytespider", family: "ai-training" },
   { bot: "Meta-ExternalAgent", token: "meta-externalagent", family: "ai-training" },
 ];

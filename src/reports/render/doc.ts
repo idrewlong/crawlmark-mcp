@@ -115,6 +115,7 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
   const extraSources: Text[] = [];
   if (ok("rank_trend")) extraSources.push([txt("Rank trends: crawlmark's stored rank checks (Search Console 7-day averages; live ranks from DataForSEO when they were checked).")]);
   if (ok("bing_overview")) extraSources.push([txt("Bing: Bing Webmaster Tools (free, read-only). Bing updates query and page stats weekly.")]);
+  if (ok("ai_readiness")) extraSources.push([txt("AI readiness: robots.txt and llms.txt as read by the newest saved crawlmark audit (free).")]);
   if (ok("site_crawl")) extraSources.push([txt("Site crawl: crawlmark's own crawl of the site from this machine (free), the newest one saved.")]);
   if (ok("keyword_gap")) extraSources.push([txt("Keyword gap: the client's SEO data provider (paid), named in that section.")]);
   if (extraSources.length) sourcesAndNotes.push({ kind: "list", items: extraSources });
