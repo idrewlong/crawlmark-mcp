@@ -46,6 +46,8 @@ CRAWLMARK_HOME=$T/home CRAWLMARK_CLAUDE_BIN=$T/claude CRAWLMARK_CODEX_BIN=$T/no-
   npm run cli -- init --dry-run
 ```
 
+For the fancy flow, also set `FORCE_HYPERLINK=1` to see the OSC 8 links in any terminal, and `CRAWLMARK_NO_UPDATE_CHECK=1` to skip the registry request (tests inject the fetch and never make it). The returning-user menu appears when the temp home has a `.env` and a working integration.
+
 The wizard's display goes through `src/setup/ui.ts`: `plainUi` prints the line-by-line text (pipes, CI, `NO_COLOR`, `--yes`), and `src/setup/ui-clack.ts` is the only module that imports `@clack/prompts`.
 
 ## Layout

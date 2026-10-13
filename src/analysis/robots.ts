@@ -13,7 +13,7 @@ export function parseRobots(text: string): RobotsFile {
   const sitemaps: string[] = [];
   let current: RobotsFile["groups"][number] | undefined;
   let lastWasAgent = false;
-  for (const raw of text.replace(/^﻿/, "").split(/\r\n|\r|\n/)) {
+  for (const raw of text.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
     const line = raw.replace(/#.*$/, "").trim();
     const i = line.indexOf(":");
     if (i < 1) continue;

@@ -20,6 +20,7 @@ import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type Provide
 import { checkPsiKey } from "./checks.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
 import { uiFor, type SummaryRow, type Ui } from "./ui.js";
+import { tryAskingExamples, type ExampleClient } from "./try-asking.js";
 import { DFS_LIVE_URL, DFS_SANDBOX_URL } from "../lib/env.js";
 import { LINKS, type IntegrationId, type IntegrationStatus, type SetupStatusReport } from "./status.js";
 
@@ -88,6 +89,16 @@ export interface WizardContext {
    * run has no pick), `working` grows as credential checks pass.
    */
   providers?: { selected?: ReadonlySet<ProviderId> | undefined; working: Set<ProviderId> } | undefined;
+  /**
+   * Phase 10: open a URL in the browser. The real CLI sets it in fancy mode only; unset means the
+   * wizard never offers "Press Enter to open" (plain mode, tests).
+   */
+  openUrl?: ((url: string) => boolean) | undefined;
+  /**
+   * Phase 10: the user's clients for the "Try asking Claude" examples, read from the local
+   * clients.yaml. The real CLI sets it in fancy mode only; unset means example.com.
+   */
+  exampleClients?: (() => ExampleClient[]) | undefined;
 }
 
 /** Options for a provider credential step. `ticked`: the user just picked it in the provider list, so don't ask again whether to set it up. */
@@ -154,6 +165,17 @@ function existingEnv(ctx: WizardContext): Record<string, string> {
   return readEnvFile(ctx.paths.envFile);
 }
 
+/**
+ * Phase 10: "Press Enter to open <page> in your browser (or s to skip)". Only in fancy mode with an
+ * opener, never in a dry run or under --yes. Anything but Enter skips.
+ */
+export async function offerOpen(ctx: WizardContext, page: string, url: string): Promise<void> {
+  if (!ctx.openUrl || ctx.dryRun || ctx.yes || !uiFor(ctx).fancy) return;
+  const answer = await ctx.prompt.ask(`Press Enter to open ${page} in your browser (or s to skip)`);
+  if (answer.trim() !== "") return;
+  if (!ctx.openUrl(url)) uiFor(ctx).info(`Couldn't open a browser. The page is ${url}`);
+}
+
 function versionAtLeast(version: string, min: readonly [number, number]): boolean {
   const [maj = 0, minor = 0] = version.replace(/^v/, "").split(".").map(Number);
   return maj > min[0] || (maj === min[0] && minor >= min[1]);
@@ -214,6 +236,7 @@ export async function stepDataForSeo(ctx: WizardContext, opts: CredentialStepOpt
   ctx.out("DataForSEO powers keyword volumes, live rankings, competitors and backlinks.");
   ctx.out(`Find the API login and API password at ${LINKS.dataforseoApiAccess}.`);
   ctx.out("The API password is generated on that page. It is NOT the password you use to log in to the dashboard.");
+  await offerOpen(ctx, "DataForSEO API access", LINKS.dataforseoApiAccess);
   const env = existingEnv(ctx);
 
   const mode = await ctx.prompt.choose(
@@ -273,6 +296,7 @@ export async function stepAhrefs(ctx: WizardContext, opts: CredentialStepOptions
   }
   ctx.out("Ahrefs: keyword, ranking, competitor and backlink data (API v3, Lite plan or higher).");
   ctx.out(`Create a key under Account settings > API keys (${LINKS.ahrefsApiKeys}; workspace owner or admin).`);
+  await offerOpen(ctx, "Ahrefs API keys", LINKS.ahrefsApiKeys);
   const current = existingEnv(ctx).AHREFS_API_KEY;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let key: string;
@@ -312,6 +336,10 @@ export async function stepAhrefs(ctx: WizardContext, opts: CredentialStepOptions
   return { step, outcome: "failed", message: `No working Ahrefs key after ${MAX_ATTEMPTS} attempts.` };
 }
 
+const SEMRUSH_API_UNITS = "https://www.semrush.com/accounts/subscription-info/api-units/";
+const GOOGLE_SERVICE_ACCOUNTS = "https://console.cloud.google.com/iam-admin/serviceaccounts";
+const GOOGLE_AUTH_OVERVIEW = "https://console.cloud.google.com/auth/overview";
+
 export async function stepSemrush(ctx: WizardContext, opts: CredentialStepOptions = {}): Promise<StepResult> {
   const step = "semrush";
   const ui = uiFor(ctx);
@@ -321,7 +349,8 @@ export async function stepSemrush(ctx: WizardContext, opts: CredentialStepOption
     return { step, outcome: "skipped", message: working ? "Kept the current Semrush key." : "Semrush not set up." };
   }
   ctx.out("Semrush: keyword, ranking, competitor and backlink data (needs an SEO Business plan plus an API unit package).");
-  ctx.out("Find the v3 API key under Subscription info > API units (https://www.semrush.com/accounts/subscription-info/api-units/).");
+  ctx.out(`Find the v3 API key under Subscription info > API units (${SEMRUSH_API_UNITS}).`);
+  await offerOpen(ctx, "Semrush API units", SEMRUSH_API_UNITS);
   const env = existingEnv(ctx);
   const current = env.SEMRUSH_API_KEY;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -399,7 +428,7 @@ function printCloudBasics(ctx: WizardContext): void {
 function printServiceAccountSteps(ctx: WizardContext): void {
   ctx.out("");
   ctx.out("Option C, service account:");
-  ctx.out("  1. Open https://console.cloud.google.com/iam-admin/serviceaccounts and create a service account (no roles needed).");
+  ctx.out(`  1. Open ${GOOGLE_SERVICE_ACCOUNTS} and create a service account (no roles needed).`);
   ctx.out("  2. On the account, open Keys > Add key > Create new key > JSON. A .json file downloads.");
   ctx.out("  3. Add the service account's email (shown after the check below) to each client's:");
   ctx.out(`     - Search Console property: Settings > Users and permissions (${LINKS.searchConsoleUsers})`);
@@ -410,7 +439,7 @@ function printServiceAccountSteps(ctx: WizardContext): void {
 function printOAuthSteps(ctx: WizardContext, option: "A" | "B"): void {
   ctx.out("");
   ctx.out(`Option ${option}, OAuth:`);
-  ctx.out("  1. Configure the consent screen at https://console.cloud.google.com/auth/overview");
+  ctx.out(`  1. Configure the consent screen at ${GOOGLE_AUTH_OVERVIEW}`);
   if (option === "A") ctx.out("     Audience: Internal (the project must belong to your Workspace organization).");
   else {
     ctx.out("     Audience: External, publishing status Testing. Under Audience > Test users (https://console.cloud.google.com/auth/audience)");
@@ -423,6 +452,7 @@ function printOAuthSteps(ctx: WizardContext, option: "A" | "B"): void {
 async function googleOptionC(ctx: WizardContext, env: Record<string, string>): Promise<{ outcome: StepOutcome; message: string }> {
   const ui = uiFor(ctx);
   printServiceAccountSteps(ctx);
+  await offerOpen(ctx, "Google Cloud service accounts", GOOGLE_SERVICE_ACCOUNTS);
   const dest = join(ctx.paths.home, KEY_FILE_REL);
   const current = env.GOOGLE_APPLICATION_CREDENTIALS ? expandPath(env.GOOGLE_APPLICATION_CREDENTIALS, ctx.paths.userHome, ctx.paths.home) : undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -459,6 +489,7 @@ const OAUTH_CLIENT_ID_RE = /^[\w.-]+\.apps\.googleusercontent\.com$/;
 
 async function googleOAuth(ctx: WizardContext, env: Record<string, string>, option: "A" | "B"): Promise<{ outcome: StepOutcome; message: string }> {
   printOAuthSteps(ctx, option);
+  await offerOpen(ctx, "Google Cloud's sign-in setup", GOOGLE_AUTH_OVERVIEW);
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const clientId = await ctx.prompt.ask("OAuth client ID", { default: env.GOOGLE_OAUTH_CLIENT_ID });
     if (!OAUTH_CLIENT_ID_RE.test(clientId)) {
@@ -534,6 +565,7 @@ export async function stepPsi(ctx: WizardContext): Promise<StepResult> {
   ctx.out(`1. Enable the PageSpeed Insights API: ${LINKS.enablePageSpeed}`);
   ctx.out(`2. Create an API key under APIs & Services > Credentials: ${LINKS.credentials}`);
   ctx.out("   (Optionally restrict it to the PageSpeed Insights API; don't add a website restriction.)");
+  await offerOpen(ctx, "the PageSpeed Insights API page", LINKS.enablePageSpeed);
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const key = await ctx.prompt.secret("PageSpeed Insights API key");
     if (!key) {
@@ -642,7 +674,7 @@ const providerIds = (): ProviderId[] => PROVIDER_ORDER.filter((id) => PROVIDER_S
 /** A provider's setup_status row id (every provider with a credential step has one). */
 const rowId = (id: ProviderId) => id as IntegrationId;
 /** A provider counts as working: its row is working, or (Semrush) its key was accepted with units left and only the v4 key is untested. */
-const works = (id: ProviderId, s: IntegrationStatus | undefined) =>
+export const works = (id: ProviderId, s: IntegrationStatus | undefined) =>
   s?.state === "working" || (id === "semrush" && s?.state === "configured" && typeof s.data?.unitsLeft === "number" && s.data.unitsLeft > 0);
 const hasKey = (id: ProviderId, s: IntegrationStatus | undefined) => (id === "dataforseo" ? s !== undefined && s.state !== "missing" : s?.data?.keySet === true);
 
@@ -830,14 +862,44 @@ export function summarize(ctx: Pick<WizardContext, "cliDisplay" | "dryRun">, res
 }
 
 /**
+ * Phase 10: a dim tip under a step's result (fancy only; plain mode's tip() prints nothing).
+ * Commands use ctx.cliDisplay, so a checkout, a global install and npx each show the right one.
+ */
+export function tipFor(ctx: Pick<WizardContext, "cliDisplay">, result: StepResult): string | undefined {
+  const cli = ctx.cliDisplay;
+  const { step, outcome } = result;
+  if (outcome === "done") {
+    if (step === "google") return `To switch accounts later: ${cli} setup --step google`;
+    if (step === "dataforseo") return `To switch between sandbox and live later: ${cli} setup --step dataforseo`;
+    if (step === "provider" && result.defaultProvider) return `To use another provider for one client: ${cli} clients set <domain> --provider <name>`;
+    if (step === "discovery") return `To add a client by hand: ${cli} clients add <domain>`;
+    if (step === "register") return `To check everything later: ${cli} setup status`;
+  }
+  if (outcome === "skipped" && step === "psi") return `To add a PageSpeed key later: ${cli} setup --step psi`;
+  return undefined;
+}
+
+/** The fancy box's examples: the user's clients when the context can read them, else example.com. A read error counts as none. */
+function examplesFor(ctx: WizardContext) {
+  let clients: ExampleClient[] | undefined;
+  try {
+    clients = ctx.exampleClients?.();
+  } catch {
+    clients = undefined;
+  }
+  return tryAskingExamples(clients, ctx.cliDisplay);
+}
+
+/**
  * Run the plan for every step (or one). Steps never throw: failures and missing input are
  * results. Ctrl-C stops the run. With a provider pick, a credential step whose provider
  * wasn't ticked is "Not selected." (full run) or left out (--step provider), and one that
  * already works runs no prompt.
  */
-export async function runWizard(ctx: WizardContext, opts: { step?: StepName } = {}): Promise<StepResult[]> {
+export async function runWizard(ctx: WizardContext, opts: { step?: StepName; introShown?: boolean } = {}): Promise<StepResult[]> {
   const ui = uiFor(ctx);
-  ui.intro({ command: ctx.command ?? "setup", version: ctx.version ?? "", home: ctx.paths.home, dryRun: ctx.dryRun });
+  // The returning-user menu (src/setup/menu.ts) shows the intro itself before it runs a step.
+  if (!opts.introShown) ui.intro({ command: ctx.command ?? "setup", version: ctx.version ?? "", home: ctx.paths.home, dryRun: ctx.dryRun });
   const phases = runPlan(opts.step);
   const results: StepResult[] = [];
   let picked: Map<IntegrationId, IntegrationStatus> | undefined;
@@ -884,6 +946,10 @@ export async function runWizard(ctx: WizardContext, opts: { step?: StepName } = 
     }
     // Fancy mode already showed each app's line; its result is a short tally instead of all of them again.
     ui.result(result.outcome, ui.fancy && result.apps ? appsTally(result.apps) : result.message);
+    if (ui.fancy) {
+      const tip = tipFor(ctx, result);
+      if (tip) ui.tip(tip);
+    }
     if (record) results.push(result);
     if (name === "node" && result.outcome === "failed") break;
   }
@@ -893,6 +959,8 @@ export async function runWizard(ctx: WizardContext, opts: { step?: StepName } = 
     rows,
     next,
     rerun: `Re-run one step with \`${ctx.cliDisplay} setup --step <${STEP_NAMES.join("|")}>\`. In Claude, the setup_status tool shows the same checks.`,
+    // Fancy only: plain mode prints exactly what it did before Phase 10.
+    ...(ui.fancy && (!opts.step || opts.step === "discovery") ? { tryAsking: examplesFor(ctx) } : {}),
   });
   ui.outro(results.some((r) => r.outcome === "failed") ? "Finished, with problems above" : "Done");
   return results;

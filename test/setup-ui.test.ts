@@ -2,7 +2,7 @@ import { Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { autoPrompter, createPrompter, parseMultiSelect, PromptAbortedError, type LineSource } from "../src/setup/prompter.js";
 import { stripControl } from "../src/lib/terminal-text.js";
-import { chooseRenderer, plainUi, recordingUi } from "../src/setup/ui.js";
+import { chooseRenderer, formatElapsed, formatTotal, plainUi, recordingUi } from "../src/setup/ui.js";
 import { clackPrompter, clackUi, SECRET_MASK, type ClackPromptFns } from "../src/setup/ui-clack.js";
 
 const CANCEL = Symbol("clack:cancel");
@@ -257,7 +257,8 @@ describe("clackUi keeps real colour codes intact (SEC-3 regression)", () => {
       expect(text).toMatch(/\u001b\[1m/);
       expect(text).toMatch(/\u001b\[2m/);
       // ...and no SGR code ever appears without its ESC (the regression printed literal "[1m").
-      expect(text).not.toMatch(/(?<!\u001b)\[\d+(?:;\d+)*m/);
+      // (A spinner's "[0ms]" timing is text, not a code: the "s" after the "m" tells them apart.)
+      expect(text).not.toMatch(/(?<!\u001b)\[\d+(?:;\d+)*m(?!s\])/);
       expect(text).not.toContain("\u001b[2J");
       expect(text).not.toContain("\u001b]0;pwned");
       expect(text).toContain("]0;pwned");
@@ -265,5 +266,92 @@ describe("clackUi keeps real colour codes intact (SEC-3 regression)", () => {
       if (before === undefined) delete process.env.FORCE_COLOR;
       else process.env.FORCE_COLOR = before;
     }
+  });
+});
+
+describe("Phase 10: timings, tips, links and the Try asking section", () => {
+  const capture = () => {
+    let text = "";
+    const output = new Writable({
+      write(chunk, _enc, cb) {
+        text += chunk.toString();
+        cb();
+      },
+    });
+    return { output, text: () => text, plain: () => text.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "") };
+  };
+
+  it("formatElapsed and formatTotal", () => {
+    expect([0, 340, 999, 1000, 1234, 59_999, 65_000].map(formatElapsed)).toEqual(["0ms", "340ms", "999ms", "1.0s", "1.2s", "59.9s", "1m 5s"]);
+    // Never "1000ms": the millisecond branch rounds down.
+    expect([999.7, 999.2, 0.4].map(formatElapsed)).toEqual(["999ms", "999ms", "0ms"]);
+    expect([450, 9_960, 14_200, 59_999, 65_000].map(formatTotal)).toEqual(["0.4s", "9.9s", "14s", "59s", "1m 5s"]);
+  });
+
+  it("clackUi: spinner results carry [elapsed], the outro says Done in Ns (injected clock)", async () => {
+    const o = capture();
+    let t = 1000;
+    const ui = clackUi({ output: o.output, banner: false, now: () => t, hyperlinks: false });
+    await ui.spin("Checking with DataForSEO...", async () => {
+      t += 1234;
+    });
+    t += 12_766;
+    ui.outro("Done");
+    expect(o.plain()).toContain("Checking with DataForSEO [1.2s]");
+    expect(o.plain()).toContain("Done in 14s");
+  });
+
+  it("clackUi: a failed run's outro keeps its words; a failed spinner shows the time too", async () => {
+    const o = capture();
+    let t = 0;
+    const ui = clackUi({ output: o.output, banner: false, now: () => t, hyperlinks: false });
+    await expect(
+      ui.spin("Checking...", async () => {
+        t += 340;
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    ui.outro("Finished, with problems above");
+    expect(o.plain()).toContain("Checking: boom [340ms]");
+    expect(o.plain()).toContain("Finished in 0.3s, with problems above");
+  });
+
+  it("clackUi: tips are dim `> ` lines; links are OSC 8 only when enabled", () => {
+    const on = capture();
+    const ui = clackUi({ output: on.output, banner: false, hyperlinks: true });
+    ui.tip("To switch accounts later: npx crawlmark-mcp setup --step google");
+    ui.line("Find it at https://app.dataforseo.com/api-access.");
+    ui.info("Open \u001b]8;;https://evil.example/\u0007https://example.com/\u001b]8;;\u0007 now");
+    expect(on.plain()).toContain("> To switch accounts later: npx crawlmark-mcp setup --step google");
+    expect(on.text()).toContain("\u001b]8;;https://app.dataforseo.com/api-access\u0007https://app.dataforseo.com/api-access\u001b]8;;\u0007.");
+    expect(on.text()).not.toContain("evil.example/\u0007");
+    const off = capture();
+    const ui2 = clackUi({ output: off.output, banner: false, hyperlinks: false });
+    ui2.line("Find it at https://app.dataforseo.com/api-access.");
+    expect(off.text()).not.toContain("\u001b]8;;");
+    expect(off.plain()).toContain("Find it at https://app.dataforseo.com/api-access.");
+  });
+
+  it("clackUi: the summary box has a Try asking Claude section with the hint", () => {
+    const o = capture();
+    const ui = clackUi({ output: o.output, banner: false, hyperlinks: false });
+    ui.summary({
+      steps: [{ step: "node", outcome: "done" }],
+      rows: [{ label: "Node", outcome: "done" }],
+      next: [],
+      rerun: "",
+      tryAsking: { prompts: ["What are the quick wins for example.com?"], hint: "Add your own: npx crawlmark-mcp clients add <domain>" },
+    });
+    expect(o.plain()).toContain("Try asking Claude:");
+    expect(o.plain()).toContain('"What are the quick wins for example.com?"');
+    expect(o.plain()).toContain("Add your own: npx crawlmark-mcp clients add <domain>");
+  });
+
+  it("plainUi: tips and Try asking print nothing (plain output unchanged)", () => {
+    const lines: string[] = [];
+    const ui = plainUi((l = "") => lines.push(l));
+    ui.tip("anything");
+    ui.summary({ steps: [{ step: "node", outcome: "done" }], rows: [], next: [], rerun: "Re-run.", tryAsking: { prompts: ["x"], hint: "y" } });
+    expect(lines).toEqual(["", "Summary:", "  node       done", "Re-run."]);
   });
 });

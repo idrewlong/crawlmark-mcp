@@ -42,7 +42,9 @@ describe("crawlmark-mcp entry point", () => {
   const run = (args: string[]) =>
     spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--import", "tsx", join(root, "src", "index.ts"), ...args], {
       encoding: "utf8",
-      timeout: 60_000,
+      // A hung child is killed outright (SIGTERM can be ignored) so the suite never stalls.
+      timeout: 20_000,
+      killSignal: "SIGKILL",
       env: { ...process.env, CRAWLMARK_HOME: home },
     });
 

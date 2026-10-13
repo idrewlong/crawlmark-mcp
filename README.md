@@ -51,7 +51,11 @@ The wizard checks Node, asks which SEO data providers you have (DataForSEO, Ahre
 
 Every change is shown before it's made, other servers are listed by name only, and each config file keeps a `.bak` copy. An app that already has a different crawlmark entry is only changed if you say yes. Your settings live in `~/.crawlmark`.
 
-In a terminal you get arrow-key choices, masked secrets and a spinner for each live check. With piped input, `CI=true`, `TERM=dumb`, `NO_COLOR` or `--yes`, the same steps run as plain numbered prompts. `init` and `setup` are the same command.
+In a terminal you get arrow-key choices, masked secrets, a spinner with the time taken for each live check, and a short tip under each result. Links are clickable in terminals that support it (iTerm2, WezTerm, VS Code, Ghostty, Windows Terminal, kitty and recent GNOME terminals; `FORCE_HYPERLINK=1` or `0` overrides), and the steps that need a web page (DataForSEO API access, Ahrefs and Semrush keys, Google Cloud, PageSpeed) offer to open it with Enter. The summary box ends with three things to try asking Claude, using up to three of your own clients from `clients.yaml` (read locally and only shown in your terminal; `example.com` when you have none). With piped input, `CI=true`, `TERM=dumb`, `NO_COLOR` or `--yes`, the same steps run as plain numbered prompts without any of that. `init` and `setup` are the same command.
+
+Run `init` again once crawlmark is set up (a `.env` in its config home and at least one working data source) and it shows a menu instead of every step: add or change a data provider, change the Google sign-in, re-register your AI apps, refresh clients, check status, run the full setup again, or exit. `setup --step <name>` still goes straight to one step.
+
+`init`, `setup`, `--help` and `--version` check npm for a newer crawlmark at most once a day (a plain request for the latest version number, with a 1.5 second timeout and nothing about you or your clients) and print `Update available` when there is one. It never runs in CI, when output isn't a terminal, or with `--json`. Set `CRAWLMARK_NO_UPDATE_CHECK=1` (or the common `NO_UPDATE_NOTIFIER=1`) to turn it off; the MCP server itself never checks.
 
 `crawlmark-mcp` with no arguments is the MCP server, which is what clients launch. With a subcommand it runs the admin CLI instead, so `npx crawlmark-mcp setup status` and `npx crawlmark-mcp clients list` work too.
 
@@ -89,7 +93,7 @@ npm run build
 npm run cli -- setup
 ```
 
-A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration). The wizard asks which SEO data providers you have; to change that later, run `npm run cli -- setup --step provider`.
+A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration). The wizard asks which SEO data providers you have; to change that later, run `npm run cli -- setup --step provider`, or run `npm run cli -- init` again and pick it from the menu. Set `CRAWLMARK_NO_UPDATE_CHECK=1` to turn off the daily update check.
 
 Set up credentials
 ------------------
@@ -459,6 +463,7 @@ The config home holds `.env`, `config/clients.yaml`, `data/` (cache, saved audit
 | `RESTRICT_TO_CLIENT_DOMAINS` | | `true` only accepts URLs on your clients' domains |
 | `ALERT_TRAFFIC_DROP_PCT`, `ALERT_MIN_CLICKS_LOST` | `25`, `50` | Traffic-drop alert thresholds |
 | `ALERT_WEBHOOK_URL` | | Incoming webhook for alerts |
+| `CRAWLMARK_NO_UPDATE_CHECK` | | `1` turns off the daily "Update available" check in `init`, `setup`, `--help` and `--version` (`NO_UPDATE_NOTIFIER=1` works too) |
 
 Relative paths resolve against the config home, so the server works whichever directory a client launches it from.
 

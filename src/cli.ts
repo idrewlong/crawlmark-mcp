@@ -35,6 +35,12 @@ import { assertSafeUrl } from "./lib/url-guard.js";
 import { packageVersion } from "./lib/entry.js";
 import { setupCommand } from "./setup/cli-setup.js";
 import { groupHelp, HELP_GROUPS, isHelpGroup, programName, topHelp } from "./cli-help.js";
+import { printUpdateNotice, updateCacheFile } from "./lib/update-check.js";
+
+/** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
+async function updateNoticeAfterHelp(json = false): Promise<void> {
+  await printUpdateNotice({ current: packageVersion(import.meta.url), cacheFile: updateCacheFile(env.DATA_DIR), json });
+}
 
 /** Help for a group (or the top level), for stdout (bold on a TTY) or stderr (plain). */
 function helpText(group: string | undefined, stream: "stdout" | "stderr" = "stdout"): string {
@@ -464,6 +470,7 @@ function usageError(problem: string): number {
 async function main(argv: string[]): Promise<number> {
   if (argv[0] === "--version" || argv[0] === "-v") {
     out(packageVersion(import.meta.url));
+    await updateNoticeAfterHelp();
     return 0;
   }
   const { values, positionals } = parseArgs({
@@ -501,6 +508,7 @@ async function main(argv: string[]): Promise<number> {
   currentGroup = group;
   if (values.help) {
     out(helpText(group === "help" ? command : group));
+    await updateNoticeAfterHelp(values.json);
     return 0;
   }
   if (group === "audit" || group === "check-traffic") return scheduledCommand(group, command ? [command, ...args] : args, values);
@@ -524,11 +532,13 @@ async function main(argv: string[]): Promise<number> {
   }
   if (!group) {
     out(helpText(undefined));
+    await updateNoticeAfterHelp(values.json);
     return 0;
   }
   if (group === "help") {
     if (command === undefined || isHelpGroup(command)) {
       out(helpText(command));
+      await updateNoticeAfterHelp(values.json);
       return 0;
     }
     currentGroup = undefined;

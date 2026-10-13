@@ -129,7 +129,7 @@ function splitLine(line: string): string[] {
  * value), CRLF, a trailing newline and quoted fields are fine. Extra trailing columns are ignored.
  */
 export function parseSemrushCsv(text: string, exportColumns: readonly string[]): Record<string, string>[] {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length === 0) return [];
   const header = splitLine(lines[0]!).map((h) => h.trim());
   exportColumns.forEach((code, i) => {

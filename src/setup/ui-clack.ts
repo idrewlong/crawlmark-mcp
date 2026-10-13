@@ -8,8 +8,9 @@ import type { Writable } from "node:stream";
 import { styleText } from "node:util";
 import * as clack from "@clack/prompts";
 import { PromptAbortedError, type Choice, type Prompter } from "./prompter.js";
-import type { Outcome, Ui } from "./ui.js";
+import { formatElapsed, formatTotal, type Outcome, type Ui } from "./ui.js";
 import { stripControl } from "../lib/terminal-text.js";
+import { linkify, supportsHyperlinks } from "../lib/terminal-links.js";
 import { printBanner } from "./banner.js";
 
 /** The clack prompt functions the prompter uses (injected in tests). */
@@ -87,9 +88,16 @@ export const CANCELLED_MESSAGE = "Setup cancelled. Anything already saved stays 
  *   PromptAbortedError instead). Clack's spinner reads the keyboard in raw mode
  *   and exits with code 0 on Ctrl-C, or reports SIGINT through onCancel; either
  *   way the default prints the cancel message once and makes the exit code 130.
+ * @param opts.now The clock for spinner timings and the outro's "Done in Ns" (milliseconds; injected in tests).
+ * @param opts.hyperlinks Wrap https URLs as OSC 8 links. Default: what the terminal supports (src/lib/terminal-links.ts).
  */
-export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt?: () => void; banner?: boolean } = {}): Ui {
+export function clackUi(
+  opts: { output?: Writable; fns?: ClackUiFns; onInterrupt?: () => void; banner?: boolean; now?: () => number; hyperlinks?: boolean } = {},
+): Ui {
   const output = opts.output ?? process.stdout;
+  const now = opts.now ?? (() => performance.now());
+  const started = now();
+  const links = opts.hyperlinks ?? supportsHyperlinks(process.env, (output as Writable & { isTTY?: boolean }).isTTY);
   let interrupted = false;
   const onInterrupt =
     opts.onInterrupt ??
@@ -103,6 +111,8 @@ export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt
   // Untrusted text is cleaned on the way in, before any styling: our styleText codes
   // and clack's own colours are added afterwards and must never be stripped.
   const c = stripControl;
+  // Untrusted text stripped first, then links added (linkify does both in that order).
+  const L = (t: string) => linkify(t, links);
   const common = { output };
   const write = (s: string) => void output.write(s);
   const dim = (s: string) => styleText("dim", s);
@@ -120,7 +130,7 @@ export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt
       fns.log.step(`${styleText("bold", c(title))}${position ? dim(`  ${position.index}/${position.total}`) : ""}`, { ...common, spacing: 0 });
     },
     line(text = "") {
-      for (const l of stripControl(text).split("\n")) write(l ? `${bar()}  ${l}\n` : `${bar()}\n`);
+      for (const l of stripControl(text).split("\n")) write(l ? `${bar()}  ${L(l)}\n` : `${bar()}\n`);
     },
     async spin(label, fn) {
       const s = fns.spinner({
@@ -134,22 +144,24 @@ export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt
       // Clack's raw-mode Ctrl-C handler calls process.exit(0) while the spinner runs.
       process.once("exit", onInterrupt);
       const clean = c(label);
+      const t0 = now();
+      const took = () => dim(`[${formatElapsed(now() - t0)}]`);
       s.start(clean.replace(/\.\.\.$/, "…"));
       try {
         const r = await fn();
-        s.stop(clean.replace(/\s*\.\.\.$|…$/, ""));
+        s.stop(`${clean.replace(/\s*\.\.\.$|…$/, "")} ${took()}`);
         return r;
       } catch (err) {
-        s.error(`${clean.replace(/\s*\.\.\.$|…$/, "")}: ${c((err as Error).message)}`);
+        s.error(`${clean.replace(/\s*\.\.\.$|…$/, "")}: ${c((err as Error).message)} ${took()}`);
         throw err;
       } finally {
         process.removeListener("exit", onInterrupt);
       }
     },
-    success: (t) => fns.log.success(c(t), common),
-    fail: (t) => fns.log.error(c(t), common),
-    warn: (t) => fns.log.warn(c(t), common),
-    info: (t) => fns.log.info(c(t), common),
+    success: (t) => fns.log.success(L(t), common),
+    fail: (t) => fns.log.error(L(t), common),
+    warn: (t) => fns.log.warn(L(t), common),
+    info: (t) => fns.log.info(L(t), common),
     preview(title, lines) {
       // "<App> config: <path>": the app as the title, the path inside, so a long path doesn't stretch the frame.
       const t = c(title);
@@ -158,11 +170,14 @@ export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt
       fns.note((m ? [m[2]!, "", ...body] : body).join("\n"), m ? m[1] : t, common);
     },
     result(outcome, message) {
-      const text = `${ICON[outcome]} ${c(message)}`;
+      const text = `${ICON[outcome]} ${L(message)}`;
       if (outcome === "done") fns.log.success(text, common);
       else if (outcome === "failed") fns.log.error(text, common);
       else if (outcome === "needs-input") fns.log.warn(text, common);
       else fns.log.info(dim(text), common);
+    },
+    tip(text) {
+      write(`${bar()}  ${dim(`> ${L(text)}`)}\n`);
     },
     summary(info) {
       const cells = info.rows.map((r) => `${ICON[r.outcome]} ${c(r.label)}${r.note ? ` ${c(r.note)}` : ""}`);
@@ -176,16 +191,25 @@ export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt
       }
       if (row) rows.push(row);
       const next = info.next.length ? ["", "Next:", ...info.next.map((n, i) => `  ${i + 1}. ${c(n)}`)] : [];
+      const t = info.tryAsking;
+      const tryAsking = t?.prompts.length ? ["", "Try asking Claude:", ...t.prompts.map((p) => `  "${c(p)}"`), ...(t.hint ? [dim(`  ${c(t.hint)}`)] : [])] : [];
       const failed = info.steps.some((s) => s.outcome === "failed");
       write(`${bar()}\n`);
       const title = failed ? " crawlmark setup finished, with problems " : " crawlmark is ready ";
       try {
-        fns.box([...rows, ...next].join("\n"), title, { ...common, rounded: true, width: "auto" });
+        fns.box([...rows, ...next, ...tryAsking].join("\n"), title, { ...common, rounded: true, width: "auto" });
       } catch {
         // A terminal too narrow for the box: the same content without the frame.
-        for (const l of [title.trim(), ...rows, ...next]) write(`${bar()}  ${l}\n`);
+        for (const l of [title.trim(), ...rows, ...next, ...tryAsking]) write(`${bar()}  ${l}\n`);
       }
     },
-    outro: (t) => fns.outro(c(t), common),
+    outro(t) {
+      // "Done in 14s"; any other closing line keeps its words and gets the time in brackets.
+      const total = formatTotal(now() - started);
+      const text = c(t);
+      if (text === "Done") fns.outro(`Done in ${total}`, common);
+      else if (text === "Finished, with problems above") fns.outro(`Finished in ${total}, with problems above`, common);
+      else fns.outro(`${text} ${dim(`[${total}]`)}`, common);
+    },
   };
 }

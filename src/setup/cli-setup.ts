@@ -4,7 +4,8 @@
  */
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { ENV_FILE, ENV_FILE_KEYS, HOME, PROJECT_ROOT, providerUrlNotice } from "../config.js";
+import { styleText } from "node:util";
+import { ENV_FILE, ENV_FILE_KEYS, env, HOME, PROJECT_ROOT, providerUrlNotice } from "../config.js";
 import { claudeDesktopConfigPath, cursorConfigPath, shellQuote } from "../lib/claude-config.js";
 import { codexConfigPath } from "../lib/codex-config.js";
 import { formatTable } from "../lib/clients.js";
@@ -15,6 +16,10 @@ import { executeMigration, planMigration } from "../lib/migrate.js";
 import { checkServiceAccountKeyFile } from "../providers/google.js";
 import { packageVersion } from "../lib/entry.js";
 import { stripControl } from "../lib/terminal-text.js";
+import { loadOverrides } from "../clients.js";
+import { openUrl } from "../lib/terminal-links.js";
+import { checkForUpdate, updateCacheFile, updateCheckAllowed, updateNotice } from "../lib/update-check.js";
+import { menuStep, returningUserMenu } from "./menu.js";
 import { autoPrompter, PromptAbortedError, terminalPrompter, type Prompter } from "./prompter.js";
 import { chooseRenderer, plainUi, type Ui } from "./ui.js";
 import { INTEGRATIONS, type IntegrationId, type SetupStatusReport } from "./status.js";
@@ -249,10 +254,48 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
   ctx.command = invokedAs;
   // packageVersion expects a module directly under src/ or dist/; this one is a level deeper.
   ctx.version = packageVersion(new URL("../index.js", import.meta.url).href);
-  if (ui.fancy) ctx.out = (line = "") => ui.line(line);
+  // Phase 10: the update check starts now (it runs while the user answers) and is shown after the
+  // outro. Fancy mode only; never in CI or with an opt-out variable; a dry run never writes its cache.
+  const version = ctx.version;
+  const update =
+    ui.fancy && updateCheckAllowed({ env: process.env, stdoutTTY: process.stdout.isTTY })
+      ? checkForUpdate({ current: version, cacheFile: updateCacheFile(env.DATA_DIR), write: !flags["dry-run"] })
+      : undefined;
+  const showUpdate = async () => {
+    const latest = await update;
+    if (latest) out(`   ${styleText("dim", updateNotice(version, latest))}`);
+  };
+  if (ui.fancy) {
+    ctx.out = (line = "") => ui.line(line);
+    // Phase 10, fancy mode only (both streams are TTYs, no CI, no --yes): browser shortcuts, and the
+    // "Try asking Claude" examples from the local clients.yaml. The examples are only printed here.
+    ctx.openUrl = (url) => openUrl(url);
+    ctx.exampleClients = () => loadOverrides().map((o) => ({ domain: o.domain, name: o.name, gsc: Boolean(o.gscProperty), ignore: o.ignore }));
+  }
   try {
-    const results = await runWizard(ctx, step ? { step: step as StepName } : {});
+    let runStep = step as StepName | undefined;
+    let introShown = false;
+    if (ui.fancy && !runStep) {
+      // Phase 10: a returning user picks what to do instead of walking through every step.
+      ui.intro({ command: invokedAs, version: ctx.version, home: ctx.paths.home, dryRun: ctx.dryRun });
+      introShown = true;
+      const action = await returningUserMenu(ctx);
+      if (action === "exit") {
+        ui.outro("Nothing changed");
+        await showUpdate();
+        return 0;
+      }
+      if (action === "status") {
+        const code = await statusCommand({ ...flags, json: false, only: undefined, refresh: false });
+        ui.outro("Done");
+        await showUpdate();
+        return code;
+      }
+      if (action) runStep = menuStep(action);
+    }
+    const results = await runWizard(ctx, { ...(runStep ? { step: runStep } : {}), introShown });
     if (isCheckout()) out(`Run commands from ${PROJECT_ROOT}`);
+    await showUpdate();
     return results.some((r) => r.outcome === "failed") ? 1 : 0;
   } catch (err) {
     if (err instanceof PromptAbortedError) {

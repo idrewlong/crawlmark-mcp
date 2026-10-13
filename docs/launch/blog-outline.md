@@ -86,8 +86,13 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - Provider choice at install, whichever way you install: the `init` wizard asks which providers you have and which is the default (`setup --step provider` to change it later, `--step ahrefs` / `--step semrush` for one key), and the Claude Desktop bundle has a "Default SEO data provider" field plus key and unit-cap fields.
 - New free tools `ahrefs_status` and `semrush_status` check a key without spending units; `setup_status` shows the default provider and where it's set.
 
-**Installer polish** (Coming, Phase 10)
-- A menu when you re-run setup, step timings, clickable links, "try asking Claude" examples using your own clients, and update notices.
+**Installer polish** (Shipped)
+- A menu when you re-run `init` on a finished setup: add or change a data provider, change the Google sign-in, re-register AI apps, refresh clients, check status, run everything again, or exit. A one-line status (which sources work, how many clients) sits above it.
+- Every live check shows how long it took (`[1.2s]`), and the run ends with `Done in 14s`.
+- A short tip under results, with the exact command for your install, e.g. `To switch accounts later: npx crawlmark-mcp setup --step google`.
+- Clickable links in terminals that support them, and "Press Enter to open" for the pages a step needs (DataForSEO API access, Ahrefs and Semrush keys, Google Cloud, PageSpeed).
+- "Try asking Claude" in the final summary: three ready-made questions using up to three of your own clients, read from your local `clients.yaml` and shown only in your terminal (example.com when you have none; CI and piped runs don't show them at all).
+- A daily "Update available" notice from `init`, `--help` and `--version`: one request for the latest version number, no data about you or your clients, never in CI, and off with `CRAWLMARK_NO_UPDATE_CHECK=1`. The MCP server itself never checks.
 
 ## 6. How to use it (a 5-minute walkthrough)
 
