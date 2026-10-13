@@ -22,12 +22,14 @@ import {
   type ListAddResult,
   type ListRemoveResult,
 } from "./clients.js";
-import { env } from "./config.js";
+import { env, type Client } from "./config.js";
 import { formatTable, missingPieces } from "./lib/clients.js";
 import { describeAuthMode, mapTokenError, missingDataScopes } from "./lib/google-auth.js";
 import { deleteTokenFile, readTokenFile } from "./lib/token-store.js";
 import { googleAuth, googleAuthMode, googleAuthModeNote, googleAuthStatus } from "./providers/google.js";
 import { loopbackLogin } from "./providers/google-login.js";
+import { runAudits, runTrafficChecks, type Skipped } from "./scheduled.js";
+import { assertSafeUrl } from "./lib/url-guard.js";
 
 const USAGE = `Usage: crawlmark-cli <command>
 
@@ -68,6 +70,17 @@ Commands:
                 Search Console error. --apply saves candidates at or above --min-confidence
                 (default high) that match the distinctive part of the client's name; AUTO shows
                 "yes" for high candidates that qualify, else why it needs review
+  audit --client <domain|slug> [--urls <url,url>] [--dry-run]
+  audit --all [--dry-run]
+                Scheduled audit: runs discovery (--all), a fresh run_audit per client (one at a time),
+                saves the snapshot and diffs it against the previous one. --urls overrides the page
+                list (one client). Clients that can't be audited are skipped and reported.
+  check-traffic --client <domain|slug> | --all [--dry-run]
+                Compares the last 7 complete Search Console days with the 7 before, branded vs
+                non-branded. Free. Clients without Search Console are skipped.
+                Both print JSON to stdout and POST a text summary to ALERT_WEBHOOK_URL when there are
+                alerts (new critical/high finding; non-branded clicks down by ALERT_TRAFFIC_DROP_PCT
+                and at least ALERT_MIN_CLICKS_LOST). Exit code: 0 no alerts, 1 error, 2 alerts.
 `;
 
 // A reader that closes early (e.g. `| head -1`) is not an error.
@@ -411,6 +424,60 @@ async function clientsSet(args: string[], values: { area?: string | undefined; n
   return 0;
 }
 
+type ScheduledFlags = { client?: string | undefined; all: boolean; urls?: string | undefined; "dry-run": boolean };
+
+/** Usage problems in the scheduled commands exit 1, because 2 means "alerts" to a cron wrapper. */
+function scheduledUsage(problem: string): number {
+  warn(`${problem}\n`);
+  warn(USAGE);
+  return 1;
+}
+
+async function scheduledCommand(kind: "audit" | "check-traffic", args: string[], values: ScheduledFlags): Promise<number> {
+  if (args.length) return scheduledUsage(`${kind} takes only flags, got: ${args.join(" ")}`);
+  if (values.all === (values.client !== undefined)) return scheduledUsage(`${kind} takes --client <domain|slug> or --all.`);
+  if (values.urls !== undefined && (kind !== "audit" || values.all)) return scheduledUsage("--urls works only with `audit --client`.");
+
+  let urls: string[] | undefined;
+  if (values.urls !== undefined) {
+    urls = values.urls.split(",").map((u) => u.trim()).filter(Boolean);
+    if (!urls.length) return scheduledUsage("--urls needs at least one URL.");
+    for (const u of urls) await assertSafeUrl(u);
+  }
+
+  let clients: Client[];
+  const skipped: Skipped[] = [];
+  let discovery: unknown;
+  let discoveryError: string | undefined;
+  if (values.all) {
+    const registry = await loadRegistry({ refresh: true });
+    clients = registry.clients;
+    for (const domain of registry.ignored) skipped.push({ client: domain, reason: "ignore: true in clients.yaml" });
+    const d = registry.discovery;
+    discoveryError = d.error;
+    discovery = { ok: d.ok, skipped: d.skipped ?? false, error: d.error, warnings: d.warnings };
+    if (d.error) warn(`Discovery failed, using clients.yaml entries only: ${d.error}`);
+  } else {
+    try {
+      clients = [await resolveClient(values.client!)];
+    } catch (err) {
+      // A typo in a scheduled job should be noticed, so an unknown or ignored client is an error here.
+      warn(`Error: ${message(err)}`);
+      return 1;
+    }
+  }
+
+  const common = { dryRun: values["dry-run"], skipped, discoveryError, webhookUrl: env.ALERT_WEBHOOK_URL };
+  const thresholds = { trafficDropPct: env.ALERT_TRAFFIC_DROP_PCT, minClicksLost: env.ALERT_MIN_CLICKS_LOST };
+  const report =
+    kind === "audit"
+      ? await runAudits(clients, { ...common, ...(urls ? { urls } : {}) })
+      : await runTrafficChecks(clients, { ...common, thresholds });
+  out(JSON.stringify({ ...report, discovery }, null, 2));
+  for (const e of report.errors) warn(`Error: ${e}`);
+  return report.exitCode;
+}
+
 function usageError(problem: string): number {
   warn(`${problem}\n`);
   warn(USAGE);
@@ -435,6 +502,9 @@ async function main(argv: string[]): Promise<number> {
       "no-paid": { type: "boolean", default: false },
       paid: { type: "boolean", default: false },
       "paid-sparse": { type: "boolean", default: false },
+      client: { type: "string" },
+      urls: { type: "string" },
+      "dry-run": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -443,6 +513,7 @@ async function main(argv: string[]): Promise<number> {
     out(USAGE);
     return 0;
   }
+  if (group === "audit" || group === "check-traffic") return scheduledCommand(group, command ? [command, ...args] : args, values);
   if (group === "clients" && command === "add") return clientsAdd(args, values.name);
   if (group === "clients" && command === "remove") return clientsRemove(args, values.ignore);
   if (group === "clients" && command === "set") return clientsSet(args, values);
@@ -465,7 +536,8 @@ async function main(argv: string[]): Promise<number> {
   }
   warn(`Unknown command: ${argv.join(" ")}\n`);
   warn(USAGE);
-  return 2;
+  // 1, not 2: a cron wrapper reads 2 as "alerts".
+  return 1;
 }
 
 try {

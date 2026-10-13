@@ -186,8 +186,125 @@ It prints the mode (`auto → service_account` when auto-detected, or `auto → 
 | `crawlmark-cli keywords list\|add\|remove <client> [keyword...] [--note <text>]` | The same for tracked keywords. Quote keywords with spaces: `keywords add example.com "emergency plumber"`. |
 | `crawlmark-cli brand list\|add\|remove <client> [term...]` | Lists, adds or removes a client's brand terms (with source and date). Quote terms with spaces. |
 | `crawlmark-cli brand suggest <client>\|--all [--apply] [--min-confidence high\|medium] [--paid] [--paid-sparse] [--no-paid]` | Infers brand terms and prints a table of candidates (term, confidence, score, source, signals, `AUTO`: `yes` or why it needs review, saved) and any `other-client-brand` exclusions. **`--all` makes no paid calls** unless you pass `--paid` (DataForSEO, about $0.02 a client, for clients that still have no candidates and no Search Console property, including when Google isn't set up) or `--paid-sparse` (also clients whose Search Console returned under 20 rows). For a single client, DataForSEO is used when it has no Search Console property, also for sparse data with `--paid-sparse`, never with `--no-paid`. A Search Console error is reported and never retried on the paid source. `--apply` saves only candidates at or above `--min-confidence` (default `high`) that match the distinctive part of the client's name (see strict auto-add below). |
+| `crawlmark-cli audit --client <domain\|slug> [--urls <url,url>] [--dry-run]` / `audit --all` | Scheduled audit: a fresh `run_audit` per client (one at a time), saved and diffed against the previous audit. `--all` runs discovery first. See [Scheduled audits and alerts](#scheduled-audits-and-alerts). |
+| `crawlmark-cli check-traffic --client <domain\|slug>` / `check-traffic --all [--dry-run]` | Last 7 complete Search Console days vs the 7 before, branded vs non-branded. Free. See below. |
 
 The server reads the token on demand and picks up a new login without a restart. Refreshed access tokens are written back to the same file. Never commit or share `google-token.json`; it's gitignored.
+
+#### Scheduled audits and alerts
+
+`audit` and `check-traffic` are meant for cron or another scheduler. The MCP server stays stateless; these commands are separate runs that print JSON to stdout.
+
+- **`audit`** runs a fresh `run_audit` for each client, one after another (each audit launches Chrome), saves the snapshot and diffs it against that client's previous audit. A client's first audit is saved as the baseline and raises no alerts. `--all` runs discovery first, so new domains are included. `--urls a,b` overrides the page list for one client. The on-page check inside the audit is the only paid call (DataForSEO, per `DATAFORSEO_BASE_URL`; the sandbox by default).
+- **`check-traffic`** compares the last 7 complete Search Console days (ending 3 days ago, because Search Console lags) with the 7 days before, split into branded and non-branded with the same matching as the monthly report. It uses Search Console only, so it is free. Clients without a Search Console property are skipped. The split comes from query rows, which leave out anonymized queries.
+- **Skipping.** A client that is ignored, has no Search Console property (for `check-traffic`) or fails with an error is listed under `skipped` and never fails the run. Only when every client that was tried fails, or an explicit `--client` can't be found, does the run count as an error.
+- **`--dry-run`** lists what would run and calls nothing but discovery.
+
+Alert rules (`src/analysis/alerts.ts`):
+
+| Alert | When |
+|---|---|
+| New finding | Any `critical` or `high` finding in this audit that the previous audit did not have |
+| Traffic drop | Non-branded clicks down by at least `ALERT_TRAFFIC_DROP_PCT` (default 25) **and** at least `ALERT_MIN_CLICKS_LOST` (default 50) clicks |
+
+Output is `{ command, ranAt, dryRun, results, alerts, skipped, errors, webhook, exitCode, discovery }`. If `ALERT_WEBHOOK_URL` is set and there are alerts, a short text summary is POSTed to it as `{ "text": "..." }` (Slack-style incoming webhook; 10 second timeout; no redirects; query strings are stripped from URLs; the webhook URL is never printed). It must be `https` unless `ALLOW_PRIVATE_URLS=true`. Nothing is sent when there are no alerts.
+
+**Exit codes**, so a wrapper can tell the cases apart:
+
+| Code | Meaning |
+|---|---|
+| 0 | Ran; no alerts |
+| 1 | Error: bad usage or an unknown command, unknown `--client`, every client failed, discovery failed with no clients left to run, or alerts could not be delivered to the webhook |
+| 2 | Ran; one or more alerts |
+
+If discovery fails but `clients.yaml` has entries, those clients still run: the failure is listed in `errors` (and `discovery.error`) but the exit code stays 0 or 2. Only `audit` and `check-traffic` guarantee this 0/1/2 contract; the other subcommands use 2 for usage errors.
+
+Scheduled jobs usually run in `service_account` mode (no browser sign-in; discovery sees only the properties shared with the service account). Use absolute paths, since cron has a minimal environment. Build first with `npm run build`.
+
+cron (weekdays at 06:00 for traffic, Mondays at 05:00 for audits). Cron's PATH is minimal, so write the full path to `node`; the `/usr/local/bin/node` below is a placeholder, so replace it with the output of `which node` at install time. stdout (JSON) and stderr (diagnostics) go to separate files so the `.json` log stays valid JSON:
+
+```cron
+0 6 * * 1-5  cd /path/to/crawlmark-mcp && /usr/local/bin/node --disable-warning=ExperimentalWarning dist/cli.js check-traffic --all >> /var/log/crawlmark-traffic.json 2>> /var/log/crawlmark-traffic.err
+0 5 * * 1    cd /path/to/crawlmark-mcp && /usr/local/bin/node --disable-warning=ExperimentalWarning dist/cli.js audit --all >> /var/log/crawlmark-audit.json 2>> /var/log/crawlmark-audit.err
+```
+
+(Appended runs make a stream of JSON objects, not one array; use `jq -s` to read it, or write to a dated file per run.)
+
+macOS launchd (`~/Library/LaunchAgents/com.example.crawlmark-traffic.plist`, then `launchctl load` it). Use the full path to `node`; it is `/opt/homebrew/bin/node` on Apple Silicon with Homebrew and `/usr/local/bin/node` on Intel (check with `which node`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.example.crawlmark-traffic</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>--disable-warning=ExperimentalWarning</string>
+    <string>/path/to/crawlmark-mcp/dist/cli.js</string>
+    <string>check-traffic</string>
+    <string>--all</string>
+  </array>
+  <key>WorkingDirectory</key><string>/path/to/crawlmark-mcp</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>/tmp/crawlmark-traffic.out.json</string>
+  <key>StandardErrorPath</key><string>/tmp/crawlmark-traffic.err.log</string>
+</dict>
+</plist>
+```
+
+GitHub Actions (`.github/workflows/crawlmark.yml`). Keep the service-account JSON key (`GOOGLE_SERVICE_ACCOUNT_JSON`) and the webhook URL in repository secrets. The runner has no `config/clients.yaml` (it is gitignored), so either store its content in a secret and write it out in the job, as below, or commit a non-secret copy somewhere and point `CLIENTS_FILE` at it. `DATA_DIR` holds the saved audits and the spend ledger, so the `audit` job restores and saves it with `actions/cache` (a new key per run, restoring the latest earlier one), otherwise there is nothing to diff against:
+
+```yaml
+name: crawlmark
+on:
+  schedule: [{ cron: "0 6 * * 1-5" }]
+  workflow_dispatch:
+jobs:
+  traffic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run build
+      - run: |
+          mkdir -p secrets
+          echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > secrets/google-service-account.json
+          node --disable-warning=ExperimentalWarning dist/cli.js check-traffic --all
+        env:
+          GOOGLE_AUTH_MODE: service_account
+          GOOGLE_APPLICATION_CREDENTIALS: ./secrets/google-service-account.json
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/cache@v4
+        with:
+          path: data
+          key: crawlmark-data-${{ github.run_id }}
+          restore-keys: crawlmark-data-
+      - run: npm ci && npm run build
+      - run: |
+          mkdir -p secrets config
+          echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > secrets/google-service-account.json
+          echo "$CLIENTS_YAML" > config/clients.yaml
+          node --disable-warning=ExperimentalWarning dist/cli.js audit --all
+        env:
+          GOOGLE_AUTH_MODE: service_account
+          GOOGLE_APPLICATION_CREDENTIALS: ./secrets/google-service-account.json
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          CLIENTS_YAML: ${{ secrets.CLIENTS_YAML }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+```
+
+Give the `traffic` job the same `CLIENTS_YAML` step. (The `schedule` above runs both jobs daily; for weekly audits use a second workflow with its own `cron`.) A job that exits 2 skips the cache save, so use `if: always()` on a separate `actions/cache/save` step if you want the snapshot kept when alerts fire. Exit code 2 (alerts) fails the job, which is a handy second notification. Add `|| [ $? -eq 2 ]` to the command if you only want the webhook.
 
 ### DataForSEO
 
@@ -381,7 +498,8 @@ Estimates use the expected-CTR-by-position curve in `src/analysis/ctr-curve.ts`,
 ```
 src/
   index.ts              server entry (stdio)
-  cli.ts                crawlmark-cli: auth, clients list | add | remove | set, competitors, keywords, brand
+  cli.ts                crawlmark-cli: auth, clients, competitors, keywords, brand, audit, check-traffic
+  scheduled.ts          scheduled audits and traffic checks: per-client loop, skipping, alerts, webhook, exit code
   config.ts             env loading and validation (paths resolved from project root), client defaults
   clients.ts            resolveClient()/loadRegistry(): discovery, clients.yaml sync (atomic, serialised), add/remove,
                         competitor/keyword edits, set_client_profile
@@ -395,6 +513,7 @@ src/
     timeout.ts          withTimeout (with cleanup), onAbort, TIMEOUTS (browser 90s, network 30s, audit 10 min)
     egress-proxy.ts     in-process forward proxy for headless Chrome: resolves and checks every target, pins the connection
     audits.ts           save/list/get saved audits, sortable audit IDs
+    webhook.ts          alert webhook POST (https, timeout, no secrets in errors)
     cache.ts            TTL cache wrapper
     budget.ts           per-client / global spend caps
     dates.ts            month ranges and comparisons

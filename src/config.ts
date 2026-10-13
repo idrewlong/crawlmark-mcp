@@ -33,6 +33,10 @@ const EnvSchema = z.object({
   // Extra suggest_competitors denylist rules: a file (one per line; optional) and/or a comma-separated list.
   COMPETITOR_DENYLIST_FILE: z.string().default("./config/competitor-denylist.txt"),
   COMPETITOR_DENYLIST: z.string().optional(),
+  // Scheduled-run alerts (crawlmark-cli check-traffic / audit).
+  ALERT_TRAFFIC_DROP_PCT: z.coerce.number().min(0).max(100).default(25),
+  ALERT_MIN_CLICKS_LOST: z.coerce.number().int().min(0).default(50),
+  ALERT_WEBHOOK_URL: z.string().url().optional(),
 });
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
