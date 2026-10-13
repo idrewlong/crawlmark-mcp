@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getClient, loadClients } from "../config.js";
+import { loadRegistry, resolveClient } from "../clients.js";
+import { missingPieces } from "../lib/clients.js";
+import { canonicalSpendNames } from "../lib/spend.js";
 import { spendSummary } from "../lib/budget.js";
 import { purgeExpired } from "../lib/cache.js";
 import { onPagePagesWithIssue, onPageSummary } from "../providers/dataforseo.js";
@@ -8,29 +10,46 @@ import { runAudit } from "../reports/audit.js";
 import { monthlyReport } from "../reports/monthly.js";
 import { handler, READ_ONLY } from "./util.js";
 
-const clientArg = z.string().describe("Client slug from clients.yaml, e.g. 'acme-plumbing'. Use list_clients to see options.");
+const clientArg = z
+  .string()
+  .describe("Client domain, e.g. 'example.com' (URL and www. forms also work), or a clients.yaml slug. Use list_clients to see options.");
 
 export function registerReportTools(server: McpServer) {
   server.registerTool(
     "list_clients",
     {
       title: "List clients",
-      description: "List configured clients with their domain, connected data sources and monthly data budget.",
-      inputSchema: {},
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      description:
+        "List clients from clients.yaml. When Google is set up, Search Console sites and GA4 properties the account can " +
+        "access are discovered first and any new domains are added to clients.yaml (existing entries are never changed). " +
+        "Shows each client's domain, name, sources, properties, alternates and missing pieces, plus discovery status. " +
+        "Discovery is cached for a day; pass refresh to re-list. Clients without Google still work for DataForSEO, Lighthouse and axe.",
+      inputSchema: {
+        refresh: z.boolean().optional().describe("Bypass the one-day discovery cache and list properties from Google again."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    handler(async () =>
-      [...loadClients().values()].map((c) => ({
-        slug: c.slug,
-        name: c.name,
-        domain: c.domain,
-        gsc: Boolean(c.gscProperty),
-        ga4: Boolean(c.ga4PropertyId),
-        trackedKeywords: c.trackedKeywords.length,
-        keyPages: c.keyPages.length,
-        monthlyBudgetUsd: c.monthlyBudgetUsd,
-      })),
-    ),
+    handler(async ({ refresh }) => {
+      const registry = await loadRegistry({ refresh: refresh ?? false });
+      return {
+        clients: registry.clients.map((c) => ({
+          domain: c.domain,
+          name: c.name,
+          sources: c.sources,
+          gscProperty: c.gscProperty ?? null,
+          ga4PropertyId: c.ga4PropertyId ?? null,
+          ...(c.aliases.length ? { aliases: c.aliases } : {}),
+          ...(c.alternates.gsc.length || c.alternates.ga4.length ? { alternates: c.alternates } : {}),
+          missing: missingPieces(c),
+          trackedKeywords: c.trackedKeywords.length,
+          keyPages: c.keyPages.length,
+          monthlyBudgetUsd: c.monthlyBudgetUsd,
+        })),
+        ignored: registry.ignored,
+        clientsFile: registry.clientsFile,
+        discovery: { ...registry.discovery, fromCache: registry.fromCache },
+      };
+    }),
   );
 
   server.registerTool(
@@ -49,7 +68,7 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(({ client, month, liveRanks }) => monthlyReport(getClient(client), { month, liveRanks })),
+    handler(async ({ client, month, liveRanks }) => monthlyReport(await resolveClient(client), { month, liveRanks })),
   );
 
   server.registerTool(
@@ -72,7 +91,7 @@ export function registerReportTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(({ client, ...opts }) => runAudit(getClient(client), opts)),
+    handler(async ({ client, ...opts }) => runAudit(await resolveClient(client), opts)),
   );
 
   server.registerTool(
@@ -109,11 +128,23 @@ export function registerReportTools(server: McpServer) {
     "spend_summary",
     {
       title: "Data spend this month",
-      description: "Paid API spend this calendar month, by client and provider, against the global cap.",
+      description:
+        "Paid API spend this calendar month, by client and provider, against the global cap. " +
+        "Spend recorded under a clients.yaml slug is counted under that client's domain.",
       inputSchema: {},
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    handler(async () => spendSummary()),
+    handler(async () => {
+      // Merge rows recorded under a clients.yaml slug into that client. If the
+      // client list can't be loaded, show the raw ledger rather than failing.
+      let canonical = new Map<string, string>();
+      try {
+        canonical = canonicalSpendNames((await loadRegistry()).clients);
+      } catch (err) {
+        console.error(`crawlmark: spend_summary could not load clients: ${(err as Error).message}`);
+      }
+      return spendSummary(canonical);
+    }),
   );
 
   server.registerTool(

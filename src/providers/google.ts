@@ -1,9 +1,16 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { Auth, google } from "googleapis";
 import { env } from "../config.js";
 import {
+  authIdentityKey,
   DATA_SCOPES,
+  authModeNote,
+  GOOGLE_NOT_CONFIGURED_MESSAGE,
+  GoogleNotConfiguredError,
   noTokenMessage,
+  resolveAuthMode,
+  type ResolvedAuthMode,
   selectGoogleAuthConfig,
   serviceAccountKeyMissingMessage,
   type GoogleAuthStatus,
@@ -33,9 +40,29 @@ const oauthClient = createOAuthClientLoader({
   onSaveError: (err) => console.error(`crawlmark: could not save refreshed Google token: ${err.message}`),
 });
 
+/** The auth mode in effect: explicit GOOGLE_AUTH_MODE, else auto-detected from the credentials present. */
+export function googleAuthMode(): { mode: ResolvedAuthMode; auto: boolean } {
+  return resolveAuthMode(env);
+}
+
+/** Heads-up when auto-detection ignored a configured OAuth client (see authModeNote). */
+export function googleAuthModeNote(): string | undefined {
+  return authModeNote(env);
+}
+
+/** True when some Google auth is configured (it may still be broken, e.g. a missing key file). */
+export function googleConfigured(): boolean {
+  return googleAuthMode().mode !== "none";
+}
+
+/** Throw the "Google isn't set up" error before a Google call (and before any per-client property check). */
+export function assertGoogleConfigured(): void {
+  if (!googleConfigured()) throw new GoogleNotConfiguredError();
+}
+
 /**
- * Auth for GSC and GA4, chosen by GOOGLE_AUTH_MODE: the signed-in user's
- * OAuth2Client (auto-refreshing) or the service-account GoogleAuth.
+ * Auth for GSC and GA4, chosen by GOOGLE_AUTH_MODE (or auto-detected): the
+ * signed-in user's OAuth2Client (auto-refreshing) or the service-account GoogleAuth.
  */
 export function googleAuth(): Auth.OAuth2Client | Auth.GoogleAuth {
   const cfg = selectGoogleAuthConfig(env);
@@ -47,9 +74,11 @@ export function googleAuth(): Auth.OAuth2Client | Auth.GoogleAuth {
  * `auth status` and a later health-check prompt.
  */
 export function googleAuthStatus(): GoogleAuthStatus {
-  if (env.GOOGLE_AUTH_MODE === "service_account") {
+  const { mode, auto } = googleAuthMode();
+  if (mode === "none") return { mode: "none", auto: true, configured: false, problem: GOOGLE_NOT_CONFIGURED_MESSAGE };
+  if (mode === "service_account") {
     const keyFile = env.GOOGLE_APPLICATION_CREDENTIALS;
-    const base = { mode: "service_account" as const, keyFile };
+    const base = { mode: "service_account" as const, auto, keyFile };
     try {
       const cfg = selectGoogleAuthConfig(env);
       if (cfg.mode !== "service_account") throw new Error("unreachable");
@@ -67,7 +96,7 @@ export function googleAuthStatus(): GoogleAuthStatus {
   }
 
   const tokenFile = env.GOOGLE_TOKEN_FILE;
-  const base = { mode: "oauth" as const, tokenFile };
+  const base = { mode: "oauth" as const, auto, tokenFile };
   try {
     selectGoogleAuthConfig(env);
   } catch (err) {
@@ -86,4 +115,22 @@ export function googleAuthStatus(): GoogleAuthStatus {
   } catch (err) {
     return { ...base, configured: true, signedIn: false, problem: (err as Error).message };
   }
+}
+
+/**
+ * Cache-key identity for the active Google auth (mode plus account). Reads
+ * local files only. See authIdentityKey for the no-email fallback.
+ */
+export function googleAuthIdentity(): string {
+  const status = googleAuthStatus();
+  let hash: string | undefined;
+  if (status.mode === "oauth" && !status.email) {
+    try {
+      const token = readTokenFile(env.GOOGLE_TOKEN_FILE);
+      if (token) hash = createHash("sha256").update(token.refresh_token).digest("hex").slice(0, 16);
+    } catch {
+      /* unreadable token: googleAuth() reports it; the key falls back to "none" */
+    }
+  }
+  return authIdentityKey(status, hash);
 }

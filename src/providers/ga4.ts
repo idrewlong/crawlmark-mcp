@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import type { Client } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
-import { googleAuth } from "./google.js";
+import { assertGoogleConfigured, googleAuth, googleAuthIdentity } from "./google.js";
 
 export interface Ga4ReportOptions extends DateRange {
   metrics: string[];
@@ -15,14 +15,20 @@ export interface Ga4ReportOptions extends DateRange {
 export type Ga4Row = Record<string, string | number>;
 
 function requireProperty(client: Client): string {
-  if (!client.ga4PropertyId) throw new Error(`${client.slug} has no ga4PropertyId in clients.yaml`);
+  assertGoogleConfigured();
+  if (!client.ga4PropertyId) {
+    throw new Error(
+      `No GA4 property found for ${client.domain}. Give the Google account access to its GA4 property ` +
+        "(then call list_clients with refresh: true), or set ga4PropertyId for it in clients.yaml.",
+    );
+  }
   return `properties/${client.ga4PropertyId}`;
 }
 
 /** GA4 Data API runReport, flattened into plain row objects. */
 export async function ga4Report(client: Client, opts: Ga4ReportOptions): Promise<Ga4Row[]> {
   const property = requireProperty(client);
-  const { value } = await cached(cacheKey("ga4", property, opts), TTL.day, async () => {
+  const { value } = await cached(cacheKey("ga4", googleAuthIdentity(), property, opts), TTL.day, async () => {
     const data = google.analyticsdata({ version: "v1beta", auth: googleAuth() });
     const res = await data.properties.runReport({
       property,

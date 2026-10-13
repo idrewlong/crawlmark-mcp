@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import type { Client } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
-import { googleAuth } from "./google.js";
+import { assertGoogleConfigured, googleAuth, googleAuthIdentity } from "./google.js";
 
 export type GscDimension = "query" | "page" | "country" | "device" | "date";
 
@@ -24,7 +24,13 @@ export interface GscQueryOptions extends DateRange {
 }
 
 function requireProperty(client: Client): string {
-  if (!client.gscProperty) throw new Error(`${client.slug} has no gscProperty in clients.yaml`);
+  assertGoogleConfigured();
+  if (!client.gscProperty) {
+    throw new Error(
+      `No Search Console property found for ${client.domain}. Give the Google account access to the site in Search Console ` +
+        "(then call list_clients with refresh: true), or set gscProperty for it in clients.yaml.",
+    );
+  }
   return client.gscProperty;
 }
 
@@ -36,7 +42,7 @@ export async function gscQuery(client: Client, opts: GscQueryOptions): Promise<G
     opts.queryContains && { dimension: "query", operator: "contains", expression: opts.queryContains },
   ].filter(Boolean) as { dimension: string; operator: string; expression: string }[];
 
-  const key = cacheKey("gsc", siteUrl, opts);
+  const key = cacheKey("gsc", googleAuthIdentity(), siteUrl, opts);
   const { value } = await cached(key, TTL.day, async () => {
     const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
     const res = await sc.searchanalytics.query({
@@ -69,7 +75,7 @@ export async function gscTotals(client: Client, range: DateRange) {
 /** URL Inspection: index status, canonical, mobile usability for one URL. */
 export async function gscInspectUrl(client: Client, url: string) {
   const siteUrl = requireProperty(client);
-  const { value } = await cached(cacheKey("gsc-inspect", siteUrl, url), TTL.day, async () => {
+  const { value } = await cached(cacheKey("gsc-inspect", googleAuthIdentity(), siteUrl, url), TTL.day, async () => {
     const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
     const res = await sc.urlInspection.index.inspect({
       requestBody: { inspectionUrl: url, siteUrl },

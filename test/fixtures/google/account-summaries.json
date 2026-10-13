@@ -1,0 +1,22 @@
+{
+  "accountSummaries": [
+    {
+      "name": "accountSummaries/1000001",
+      "account": "accounts/1000001",
+      "displayName": "Example Agency",
+      "propertySummaries": [
+        { "property": "properties/300000002", "displayName": "Example Co (old)", "propertyType": "PROPERTY_TYPE_ORDINARY", "parent": "accounts/1000001" },
+        { "property": "properties/99999999", "displayName": "Example Co", "propertyType": "PROPERTY_TYPE_ORDINARY", "parent": "accounts/1000001" }
+      ]
+    },
+    {
+      "name": "accountSummaries/1000002",
+      "account": "accounts/1000002",
+      "displayName": "Second Account",
+      "propertySummaries": [
+        { "property": "properties/200000001", "displayName": "Example Net", "propertyType": "PROPERTY_TYPE_ORDINARY", "parent": "accounts/1000002" },
+        { "property": "properties/400000001", "displayName": "Example App", "propertyType": "PROPERTY_TYPE_ORDINARY", "parent": "accounts/1000002" }
+      ]
+    }
+  ]
+}

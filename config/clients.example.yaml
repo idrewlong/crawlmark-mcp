@@ -1,27 +1,35 @@
-# Copy to clients.yaml (gitignored). One entry per client.
-# The slug is what you pass to tools: run_audit({ client: "acme-plumbing" })
+# Reference for config/clients.yaml (CLIENTS_FILE). You don't need to copy this file.
+#
+# clients.yaml is crawlmark's client list. When Google is set up, domains found in
+# Search Console and GA4 are added to it automatically. crawlmark never changes or
+# removes what you write there: it only appends new domains and fills a missing
+# gscProperty or ga4PropertyId. You can add clients by hand too, with or without
+# Google (`crawlmark-cli clients add example.com`).
+#
+# Each entry is keyed by a name you pass as `client` (crawlmark uses the domain).
+# Only `domain` is required. Tools also accept the domain in any URL or www. form.
 
 clients:
-  acme-plumbing:
-    name: Acme Plumbing
-    domain: acmeplumbing.com
-    # GSC: "sc-domain:acmeplumbing.com" for domain properties,
-    # or "https://www.acmeplumbing.com/" for URL-prefix properties.
-    gscProperty: sc-domain:acmeplumbing.com
-    ga4PropertyId: "123456789"
-    # DataForSEO location/language. 2840 = United States.
-    locationCode: 2840
-    languageCode: en
-    competitors:
-      - rivalplumbing.com
-      - quickfixplumbers.com
-    trackedKeywords:
-      - plumber near me
-      - emergency plumber biloxi
-      - water heater repair
-    # Pages Lighthouse + axe check in an audit (defaults to the homepage).
-    keyPages:
-      - https://acmeplumbing.com/
-      - https://acmeplumbing.com/services/
-      - https://acmeplumbing.com/contact/
-    monthlyBudgetUsd: 5
+  # A discovered client with your additions. Unset fields use the defaults shown.
+  example.com:
+    domain: example.com
+    name: Example Co # default: the GA4 property name, else the domain
+    gscProperty: sc-domain:example.com # or a URL-prefix property, e.g. https://www.example.com/
+    ga4PropertyId: "123456789" # Admin > Property details
+    locationCode: 2840 # DataForSEO market; default DEFAULT_LOCATION_CODE (2840 = United States)
+    languageCode: en # default DEFAULT_LANGUAGE_CODE
+    competitors: [competitor.example] # default: none
+    trackedKeywords: [example keyword] # default: none
+    keyPages: # pages run_audit checks; default: the homepage
+      - https://example.com/
+      - https://example.com/contact/
+    monthlyBudgetUsd: 5 # paid-data cap; default DEFAULT_CLIENT_MONTHLY_BUDGET_USD
+
+  # A manual client with no Google access: DataForSEO, Lighthouse and axe still work.
+  example.org:
+    domain: example.org
+
+  # Hidden: never listed, and discovery won't add it back.
+  example.net:
+    domain: example.net
+    ignore: true

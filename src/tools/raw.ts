@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getClient } from "../config.js";
+import { resolveClient } from "../clients.js";
 import { lastCompleteMonth, monthRange } from "../lib/dates.js";
 import { runAxe } from "../providers/axe.js";
 import { backlinksSummary, competitorDomains, rankedKeywords, searchVolume, serp } from "../providers/dataforseo.js";
@@ -14,7 +14,9 @@ import { handler, READ_ONLY } from "./util.js";
  * blog?"). The report tools in reports.ts cover the routine workflows.
  */
 
-const clientArg = z.string().describe("Client slug from clients.yaml.");
+const clientArg = z
+  .string()
+  .describe("Client domain (e.g. 'example.com'; URL and www. forms also work) or a clients.yaml slug. See list_clients.");
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 function rangeOrDefault(startDate?: string, endDate?: string) {
@@ -43,8 +45,8 @@ export function registerRawTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(({ client, startDate, endDate, ...rest }) =>
-      gscQuery(getClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
+    handler(async ({ client, startDate, endDate, ...rest }) =>
+      gscQuery(await resolveClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
     ),
   );
 
@@ -56,7 +58,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, url: z.string().url() },
       annotations: READ_ONLY,
     },
-    handler(({ client, url }) => gscInspectUrl(getClient(client), url)),
+    handler(async ({ client, url }) => gscInspectUrl(await resolveClient(client), url)),
   );
 
   server.registerTool(
@@ -77,8 +79,8 @@ export function registerRawTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(({ client, startDate, endDate, ...rest }) =>
-      ga4Report(getClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
+    handler(async ({ client, startDate, endDate, ...rest }) =>
+      ga4Report(await resolveClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
     ),
   );
 
@@ -92,7 +94,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, keywords: z.array(z.string()).min(1).max(1000) },
       annotations: READ_ONLY,
     },
-    handler(({ client, keywords }) => searchVolume(getClient(client), keywords)),
+    handler(async ({ client, keywords }) => searchVolume(await resolveClient(client), keywords)),
   );
 
   server.registerTool(
@@ -103,7 +105,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, keyword: z.string(), depth: z.number().int().min(10).max(100).optional() },
       annotations: READ_ONLY,
     },
-    handler(({ client, keyword, depth }) => serp(getClient(client), keyword, depth)),
+    handler(async ({ client, keyword, depth }) => serp(await resolveClient(client), keyword, depth)),
   );
 
   server.registerTool(
@@ -118,7 +120,7 @@ export function registerRawTools(server: McpServer) {
       },
       annotations: READ_ONLY,
     },
-    handler(({ client, target, limit }) => rankedKeywords(getClient(client), target, limit)),
+    handler(async ({ client, target, limit }) => rankedKeywords(await resolveClient(client), target, limit)),
   );
 
   server.registerTool(
@@ -129,7 +131,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, limit: z.number().int().min(1).max(100).optional() },
       annotations: READ_ONLY,
     },
-    handler(({ client, limit }) => competitorDomains(getClient(client), limit)),
+    handler(async ({ client, limit }) => competitorDomains(await resolveClient(client), limit)),
   );
 
   server.registerTool(
@@ -140,7 +142,7 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, target: z.string().optional() },
       annotations: READ_ONLY,
     },
-    handler(({ client, target }) => backlinksSummary(getClient(client), target)),
+    handler(async ({ client, target }) => backlinksSummary(await resolveClient(client), target)),
   );
 
   // ---------------------------------------------------- browser checks (free)

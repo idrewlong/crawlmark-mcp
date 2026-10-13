@@ -1,0 +1,10 @@
+{
+  "dataStreams": [
+    {
+      "name": "properties/200000001/dataStreams/333",
+      "type": "WEB_DATA_STREAM",
+      "displayName": "Example Net",
+      "webStreamData": { "measurementId": "G-EXAMPLE3", "defaultUri": "https://example.net" }
+    }
+  ]
+}

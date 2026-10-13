@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import type { ClientDefaults } from "./lib/clients.js";
 import { stripEmptyValues } from "./lib/env.js";
 import { GOOGLE_AUTH_MODES } from "./lib/google-auth.js";
 import { projectRoot, resolveFromRoot } from "./lib/paths.js";
@@ -14,7 +14,8 @@ const envFile = resolve(PROJECT_ROOT, ".env");
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const EnvSchema = z.object({
-  GOOGLE_AUTH_MODE: z.enum(GOOGLE_AUTH_MODES).default("oauth"),
+  // Unset: auto-detect (service account if GOOGLE_APPLICATION_CREDENTIALS is set, else OAuth if its client is set, else no Google).
+  GOOGLE_AUTH_MODE: z.enum(GOOGLE_AUTH_MODES).optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
@@ -25,6 +26,10 @@ const EnvSchema = z.object({
   CLIENTS_FILE: z.string().default("./config/clients.yaml"),
   DATA_DIR: z.string().default("./data"),
   GLOBAL_MONTHLY_BUDGET_USD: z.coerce.number().positive().default(50),
+  // Defaults for discovered clients (and clients.yaml entries that leave these out).
+  DEFAULT_LOCATION_CODE: z.coerce.number().int().positive().default(2840),
+  DEFAULT_LANGUAGE_CODE: z.string().min(1).default("en"),
+  DEFAULT_CLIENT_MONTHLY_BUDGET_USD: z.coerce.number().positive().default(5),
 });
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
@@ -42,49 +47,11 @@ export const env = {
     : undefined,
 };
 
-const ClientSchema = z.object({
-  name: z.string(),
-  domain: z.string(),
-  gscProperty: z.string().optional(),
-  ga4PropertyId: z.string().optional(),
-  locationCode: z.number().int().default(2840),
-  languageCode: z.string().default("en"),
-  competitors: z.array(z.string()).default([]),
-  trackedKeywords: z.array(z.string()).default([]),
-  keyPages: z.array(z.string().url()).default([]),
-  monthlyBudgetUsd: z.number().positive().default(5),
-});
+export type { Client } from "./lib/clients.js";
 
-export type Client = z.infer<typeof ClientSchema> & { slug: string };
-
-const ClientsFileSchema = z.object({
-  clients: z.record(z.string(), ClientSchema),
-});
-
-let cache: Map<string, Client> | undefined;
-
-export function loadClients(): Map<string, Client> {
-  if (cache) return cache;
-  const path = resolve(env.CLIENTS_FILE);
-  if (!existsSync(path)) {
-    throw new Error(
-      `Clients file not found at ${path}. Copy config/clients.example.yaml to config/clients.yaml.`,
-    );
-  }
-  const parsed = ClientsFileSchema.parse(parseYaml(readFileSync(path, "utf8")));
-  cache = new Map(
-    Object.entries(parsed.clients).map(([slug, c]) => [slug, { ...c, slug }]),
-  );
-  return cache;
-}
-
-export function getClient(slug: string): Client {
-  const client = loadClients().get(slug);
-  if (!client) {
-    const known = [...loadClients().keys()].join(", ") || "(none)";
-    throw new Error(`Unknown client "${slug}". Known clients: ${known}`);
-  }
-  // Default the audit to the homepage when no key pages are configured.
-  if (client.keyPages.length === 0) client.keyPages = [`https://${client.domain}/`];
-  return client;
-}
+/** Market and budget for clients that don't set their own. */
+export const clientDefaults: ClientDefaults = {
+  locationCode: env.DEFAULT_LOCATION_CODE,
+  languageCode: env.DEFAULT_LANGUAGE_CODE,
+  monthlyBudgetUsd: env.DEFAULT_CLIENT_MONTHLY_BUDGET_USD,
+};

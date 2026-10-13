@@ -13,7 +13,7 @@ This document is a build spec for extending the `crawlmark-mcp` scaffold. Work t
   - Tool handlers are wrapped in `handler()` from `src/tools/util.ts` so errors become tool errors.
   - stdout is the MCP channel. Log to stderr only.
 - **Put analysis logic in pure functions** (no I/O) so it can be unit tested with fixtures. Providers fetch; analysis functions compute.
-- **No brand names** in code, config, prompts or docs. Use generic examples (`acme-plumbing`).
+- **No brand names** in code, config, prompts or docs. Use generic examples (`example.com`, `exampleplumbing.com`).
 - **Update `README.md`** (tool table, config fields, layout) as part of each phase.
 - **Ask before** adding a dependency not listed in this plan, or changing an existing tool's input or output shape in a breaking way.
 
@@ -36,7 +36,7 @@ This document is a build spec for extending the `crawlmark-mcp` scaffold. Work t
 
 Support two ways to authenticate to Google, chosen by `GOOGLE_AUTH_MODE`:
 
-- **`oauth`** (new default): a person signs in once with their Google account through an OAuth client the team creates in Google Cloud. The server then sees every Search Console, GA4 and Tag Manager property that person already has access to. Nobody has to add a service account email to each client property.
+- **`oauth`**: a person signs in once with their Google account through an OAuth client the team creates in Google Cloud. The server then sees every Search Console, GA4 and Tag Manager property that person already has access to. Nobody has to add a service account email to each client property.
 - **`service_account`**: the current behavior. Keep it for unattended jobs (Phase 6c) and for properties shared only with the service account.
 
 ### Setup to document in the README
@@ -63,7 +63,38 @@ Support two ways to authenticate to Google, chosen by `GOOGLE_AUTH_MODE`:
 5. **Clear errors.** If OAuth mode has no token, tools return an error telling the user to run `crawlmark-cli auth login`. If a refresh fails with `invalid_grant`, the error says the sign-in expired or was revoked and to log in again (and notes that Testing-mode apps expire sign-ins after 7 days).
 6. **Health check.** The `client-health-check` prompt (Phase 5) reports which auth mode is active and which email it's using.
 
-**Done when** OAuth login works end to end on a real account (Workspace/Internal, or personal/External-Testing if no Workspace account is available), the GSC and GA4 tools work in both modes, and switching modes needs only an `.env` change.
+**Done when** the code is built and unit tested for both modes, the GSC and GA4 tools work live in `service_account` mode, and switching modes needs only an `.env` change.
+
+**Status:** done as above. Live OAuth verification (a real login, OAuth GSC and GA4 calls, mode switching, logout and re-login) is deferred to [Phase 7](#phase-7-oauth-end-to-end-verification), the last phase, once there's a way to test it. Until then `GOOGLE_AUTH_MODE` auto-detects (Phase 0c) and the README recommends the service account.
+
+## Phase 0c: Client discovery, a persisted client list, and optional Google
+
+Nobody should have to write a client list, and nobody should need Google to use the rest of crawlmark. `config/clients.yaml` is the client list: discovery fills it, users add to it, and crawlmark never changes what a user wrote. This is an approved breaking change to how clients resolve and to `list_clients` output.
+
+1. **Discovery** (`src/providers/discovery.ts`). Through `googleAuth()`, so both auth modes work:
+   - Search Console `sites.list` gives `siteEntry[]` (`siteUrl`, `permissionLevel`).
+   - GA4 Admin API v1beta: `accountSummaries.list` gives the properties, then `properties.dataStreams.list` per property gives each web stream's `defaultUri`. Stream lookups run with limited concurrency.
+   - Each list is wrapped in `cached()` for a day, keyed by the auth identity, and per-property stream lookups are cached separately so one failure doesn't discard the rest. Concurrent calls share one in-flight run.
+   - Needs the **Google Analytics Admin API** enabled in Cloud. The existing read-only scopes are enough.
+2. **Pure join** (`src/lib/clients.ts`, unit tested with fixture payloads in `test/fixtures/google/`):
+   - Normalise hosts: lowercase, punycode, drop the scheme, path, port and a leading `www.`; `sc-domain:x.com` and `https://www.x.com/` both give `x.com`.
+   - Join GSC and GA4 on the host. Prefer a `sc-domain:` property, then root-path URL-prefix properties, then `https`, then the shorter URL; skip unverified sites.
+   - Several GA4 properties on one host: use the lowest ID; the others become `alternates`. A GA4 property with no web stream is skipped with a note.
+3. **Persistence.** After a successful discovery, any newly discovered domain is appended to `CLIENTS_FILE` (created if missing), keyed by domain, with its GA4 `name`, `gscProperty` and `ga4PropertyId`. Rules:
+   - Never change or remove anything a user wrote. Only append new domains, and fill a missing `gscProperty` or `ga4PropertyId` on an existing entry. Entries for domains no longer discovered are kept, and `list_clients` notes properties the account can no longer see or that differ from what discovery would pick.
+   - No "discovered" marker: since discovery never overwrites a set value, it doesn't need to know who wrote it. The cost is that a value discovery wrote is never updated automatically; the notes above flag drift.
+   - Edits use the `yaml` Document API, so comments, order and values survive (indentation is normalised, long strings aren't folded). Writes are atomic (temp file next to the real target, then rename; symlinks followed and permissions kept), re-read the file first, and are serialised in-process; coalesced discovery runs write once. An empty-string property counts as missing.
+4. **Manual entries and `ignore`.** A user can add a client with only `domain:`. It works for DataForSEO, Lighthouse and axe with no Google. `crawlmark-cli clients add <domain> [--name ...]` and `clients remove <domain> [--ignore]` edit the file the same way. `ignore: true` hides a domain and stops discovery re-adding it.
+5. **Identity.** A client's key is its normalised domain. Tools accept the domain, any URL or `www.` form of it, or the entry's yaml key (an alias). `resolveClient()` in `src/clients.ts` is async.
+6. **Defaults** for fields an entry leaves out: name from the GA4 property (else the domain), `DEFAULT_LOCATION_CODE` (2840) and `DEFAULT_LANGUAGE_CODE` (`en`), the homepage as the only key page, no competitors or tracked keywords, and `DEFAULT_CLIENT_MONTHLY_BUDGET_USD` (5).
+7. **Google is optional.** `GOOGLE_AUTH_MODE` auto-detects when unset: `service_account` if `GOOGLE_APPLICATION_CREDENTIALS` is set, else `oauth` if both OAuth client vars are set, else no Google. Explicit values win. With no Google:
+   - discovery is skipped quietly (one `discovery.info` line, no per-call warnings, CLI exit 0);
+   - Search Console and GA4 tools return "Google isn't set up; see README > Google";
+   - DataForSEO, Lighthouse and axe work on `clients.yaml` clients, and reports keep their non-Google sections.
+   If Google is configured but failing, the `clients.yaml` entries are still served and `list_clients` reports why. If the Admin API is disabled, Search Console clients are still listed, with a warning to enable the "Google Analytics Admin API".
+8. **Tools and CLI.** `list_clients` returns domain, name, sources, properties, alternates and missing pieces, plus what this run added to or filled in `clients.yaml`, ignored domains and discovery status, and takes `refresh` to bypass the cache. `crawlmark-cli clients list` prints the same as a table.
+
+**Done when** typecheck, tests and build pass; tests cover the normaliser, the join edge cases, merging, resolution by domain, URL, `www.` and alias, the fallbacks, the sync rules (append only, fill only, comments kept, idempotent, ignore) and auth auto-detection; a live run with the service account writes the discovered domains to a fresh `clients.yaml` and a second run leaves it unchanged; and with Google switched off, `clients list` exits 0 and a hand-added client works with a DataForSEO sandbox tool.
 
 ## Phase 1: Audit snapshots and diffs
 
@@ -129,7 +160,7 @@ CREATE TABLE IF NOT EXISTS audits (
 CREATE INDEX IF NOT EXISTS audits_client ON audits (client, ran_at DESC);
 ```
 
-`runAudit` saves every run and returns `auditId` in its result. The `checked` list matters because a finding is only "resolved" if that check actually ran the second time.
+`runAudit` saves every run and returns `auditId` in its result. The `client` column holds the client's canonical key (its normalised domain, `client.slug`), so lookups by alias or URL resolve to the same rows. The `checked` list matters because a finding is only "resolved" if that check actually ran the second time.
 
 ### 1.3 Diff
 
@@ -196,8 +227,8 @@ Add an `opportunities` section to `monthly_report` with the top 5 from `striking
 
 ## Phase 3: Branded vs non-branded split
 
-1. **Config.** Add `brandTerms: string[]` to the client schema in `src/config.ts`. If it's empty, default to the domain stem (`acmeplumbing.com` gives `["acmeplumbing", "acme plumbing"]`; split camel case or hyphens where possible). Document it in `config/clients.example.yaml`.
-2. **Helper.** Create `src/lib/brand.ts` with `isBranded(query: string, client: Client): boolean`. Make it case-insensitive and ignore spaces and punctuation, so "acme-plumbing" and "acmeplumbing" both match "acme plumbing."
+1. **Config.** Add optional `brandTerms: string[]` to the clients.yaml schema and the `Client` type in `src/lib/clients.ts`. Discovered entries won't have it, so the default matters: if it's empty, use the domain stem (`exampleplumbing.com` gives `["exampleplumbing", "example plumbing"]`; split camel case or hyphens where possible), plus the GA4 property name when it differs. Document it in `config/clients.example.yaml`.
+2. **Helper.** Create `src/lib/brand.ts` with `isBranded(query: string, client: Client): boolean`. Make it case-insensitive and ignore spaces and punctuation, so "example-plumbing" and "exampleplumbing" both match "example plumbing."
 3. **Monthly report.** `monthly_report` adds `search.branded` and `search.nonBranded` totals (clicks, impressions, CTR, average position weighted by impressions) for the current and previous month, built from query-dimension rows. Add a note in the output that query-level totals exclude anonymized queries, so they won't add up to the site totals.
 4. **Movers.** Query movers and tracked keywords mark each row with `branded: boolean`. Opportunity tools exclude branded rows by default.
 
@@ -232,7 +263,7 @@ Register prompts with `server.registerPrompt` in a new `src/prompts/index.ts`. K
 | `monthly-report-writeup` | client, month? | Call `monthly_report`, then write a client-facing report: a 3-sentence summary, what went up and why, what went down and why, issues fixed since last audit (if available), top 3 opportunities, and next month's priorities. Plain language, no jargon without a one-line explanation, numbers rounded sensibly, and percent changes always with the absolute numbers. |
 | `audit-findings`         | client         | Call `run_audit` (or use the latest stored audit if it's under 7 days old), then `compare_audits`. Write findings grouped by severity, each with the affected URLs, why it matters and a specific fix. End with a prioritized fix list. Note that automated accessibility checks don't replace a manual review.                                                         |
 | `opportunity-review`     | client         | Call the Phase 2 tools and write a prioritized content and on-page action list with estimated click upside.                                                                                                                                                                                                                                                             |
-| `client-health-check`    | client         | Verify each configured source works (GSC, GA4, DataForSEO balance, Chrome) with the cheapest possible call, and report what's misconfigured. Useful when onboarding a new client.                                                                                                                                                                                       |
+| `client-health-check`    | client         | Call `list_clients` and report the client's sources, missing pieces and any discovery warnings, then verify each source works (GSC, GA4, DataForSEO balance, Chrome) with the cheapest possible call, and report what's misconfigured. Useful when onboarding a new client.                                                                                              |
 
 Every prompt says to prefer free tools and to state clearly when a section was unavailable instead of guessing.
 
@@ -257,7 +288,7 @@ Tool `site_hygiene({ client })`, a new section in `run_audit`, and findings with
 
 ### 6b. Tag Manager container audit
 
-- **Config and auth.** Add optional `gtmAccountId` and `gtmContainerId` to the client schema. Add the `https://www.googleapis.com/auth/tagmanager.readonly` scope to `src/providers/google.ts` for both auth modes. In OAuth mode, the signed-in user needs Read access to the container; in service-account mode, document adding the service account to each container with Read access.
+- **Config and auth.** Add optional `gtmAccountId` and `gtmContainerId` to the overrides schema. Prefer discovering containers too: list the account's containers with the Tag Manager API and match each container's domain list through the Phase 0c normaliser, keeping yaml as the override. Add the `https://www.googleapis.com/auth/tagmanager.readonly` scope to `src/providers/google.ts` for both auth modes. In OAuth mode, the signed-in user needs Read access to the container; in service-account mode, document adding the service account to each container with Read access.
 - **Tool.** `gtm_audit({ client })` reads the live published version through the Tag Manager API v2 and flags:
   - paused tags
   - tags with no firing trigger
@@ -273,7 +304,7 @@ Tool `site_hygiene({ client })`, a new section in `run_audit`, and findings with
 Keep the MCP server itself stateless. Scheduling lives in a separate CLI entry point.
 
 - **CLI.** Add `src/cli.ts` with a `bin` entry, `crawlmark-cli`:
-  - `audit --client <slug>` or `audit --all` runs `runAudit`, saves the snapshot and diffs it against the previous one.
+  - `audit --client <domain or slug>` or `audit --all` runs `runAudit`, saves the snapshot and diffs it against the previous one. `--all` means every client in `clients.yaml` (discovery runs first, so new domains are included); skip and report clients whose discovery is incomplete instead of failing the run. Scheduled jobs typically use `service_account` mode, so discovery sees only properties shared with the service account.
   - `check-traffic --all` compares the last 7 days of Search Console clicks with the previous 7.
 - **Alert rules.** Alert on any new `critical` or `high` finding, or a non-branded click drop of ≥ `ALERT_TRAFFIC_DROP_PCT` (default 25%) with at least 50 clicks lost.
 - **Output.** Write JSON to stdout. If `ALERT_WEBHOOK_URL` is set, POST a short text summary to it in an incoming-webhook-compatible format: `{ "text": "..." }`.
@@ -285,14 +316,26 @@ Keep the MCP server itself stateless. Scheduling lives in a separate CLI entry p
   - Allow only `http:` and `https:`.
   - Resolve the hostname and refuse loopback, private (10/8, 172.16/12, 192.168/16), link-local (169.254/16, which includes cloud metadata endpoints), CGNAT, and IPv6 equivalents.
   - Add `ALLOW_PRIVATE_URLS=true` to bypass this for local development.
-  - Add `RESTRICT_TO_CLIENT_DOMAINS=true` to only allow URLs on configured client domains.
+  - Add `RESTRICT_TO_CLIENT_DOMAINS=true` to only allow URLs on client domains in `clients.yaml` (including their subdomains).
 - **Timeouts.** Add a `withTimeout(promise, ms, label)` helper and apply it per tool: browser tools 90s, network calls 30s, `run_audit` overall 10 minutes. The timeout must also close the browser.
 - **Usage log.** Write one row per tool call to a `tool_calls` table (tool name, client, duration, ok/error). Add a `usage_summary` tool.
+
+## Phase 7: OAuth end-to-end verification
+
+Deferred from Phase 0b until there's a way to test it. The OAuth code is built and unit tested; this phase proves it against Google.
+
+1. **Login.** On a real account (Workspace/Internal, or personal/External-Testing if no Workspace account is available), run `crawlmark-cli auth login`. Confirm the browser flow completes, the token file is written with mode `0600`, and the printed email and scopes are right.
+2. **Data in OAuth mode.** With `GOOGLE_AUTH_MODE=oauth` (or auto-detected with no service-account key set), `auth status` shows `Token check: OK`, `list_clients` discovers the account's properties, and `gsc_query` and `ga4_report` return real data for a discovered client.
+3. **Switching modes.** Switch between `oauth` and `service_account` with only an `.env` change. Each mode sees its own identity's properties; cached data from one identity is never served to the other.
+4. **Logout and re-login.** `auth logout` revokes and deletes the token; tools then return the "run `crawlmark-cli auth login`" error; a fresh login works again. For External-Testing apps, confirm the `invalid_grant` message after the 7-day expiry (or after revoking access at myaccount.google.com).
+5. **Docs.** Remove the "OAuth not yet verified" notes from the README and `.env.example`.
+
+**Done when** all of the above works on a real account and the README's Status section lists OAuth as tested.
 
 ## Final checklist
 
 - [ ] All phases typecheck and tests pass.
 - [ ] README updated: tools table, config fields, new environment variables, layout.
 - [ ] `config/clients.example.yaml` documents every new field with a comment.
-- [ ] `.env.example` lists every new environment variable, including `GOOGLE_AUTH_MODE`, `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
+- [ ] `.env.example` lists every new environment variable, including `GOOGLE_AUTH_MODE`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `DEFAULT_LOCATION_CODE`, `DEFAULT_LANGUAGE_CODE` and `DEFAULT_CLIENT_MONTHLY_BUDGET_USD`.
 - [ ] No brand names anywhere: `grep -ri` for any company names before the final commit.

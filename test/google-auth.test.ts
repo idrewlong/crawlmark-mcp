@@ -6,6 +6,12 @@ import { join } from "node:path";
 import { Auth } from "googleapis";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  authModeNote,
+  describeAuthMode,
+  GOOGLE_NOT_CONFIGURED_MESSAGE,
+  GoogleNotConfiguredError,
+  resolveAuthMode,
+  authIdentityKey,
   authUrlOptions,
   CALLBACK_PATH,
   describeAuthStatus,
@@ -373,13 +379,81 @@ describe("CrawlmarkOAuth2Client", () => {
 describe("describeAuthStatus", () => {
   it("summarises the active identity or the problem", () => {
     expect(
-      describeAuthStatus({ mode: "oauth", configured: true, signedIn: true, email: "a@example.com", tokenFile: "/t" }),
+      describeAuthStatus({ mode: "oauth", auto: false, configured: true, signedIn: true, email: "a@example.com", tokenFile: "/t" }),
     ).toBe("Google auth: OAuth, signed in as a@example.com");
-    expect(describeAuthStatus({ mode: "service_account", configured: true, email: "sa@p.iam.gserviceaccount.com" })).toBe(
+    expect(describeAuthStatus({ mode: "service_account", auto: false, configured: true, email: "sa@p.iam.gserviceaccount.com" })).toBe(
       "Google auth: service account sa@p.iam.gserviceaccount.com",
     );
-    expect(describeAuthStatus({ mode: "oauth", configured: false, signedIn: false, tokenFile: "/t", problem: "nope" })).toBe(
+    expect(describeAuthStatus({ mode: "oauth", auto: false, configured: false, signedIn: false, tokenFile: "/t", problem: "nope" })).toBe(
       "Google auth (oauth): nope",
     );
+  });
+});
+
+describe("authIdentityKey", () => {
+  it("keys by mode and account, never by an empty string", () => {
+    expect(authIdentityKey({ mode: "service_account", auto: false, configured: true, email: "sa@proj.iam.gserviceaccount.com" })).toBe(
+      "service_account:sa@proj.iam.gserviceaccount.com",
+    );
+    expect(authIdentityKey({ mode: "oauth", auto: false, configured: true, signedIn: true, email: "a@example.com", tokenFile: "/t" })).toBe(
+      "oauth:a@example.com",
+    );
+    const noEmail = { mode: "oauth" as const, auto: false, configured: true, signedIn: true, tokenFile: "/t" };
+    expect(authIdentityKey(noEmail, "abc123")).toBe("oauth:token:abc123");
+    expect(authIdentityKey(noEmail, "def456")).not.toBe(authIdentityKey(noEmail, "abc123"));
+    expect(authIdentityKey(noEmail)).toBe("oauth:token:none");
+  });
+});
+
+describe("resolveAuthMode (auto-detect)", () => {
+  const sa = { GOOGLE_APPLICATION_CREDENTIALS: "/k.json" };
+  const oauth = { GOOGLE_OAUTH_CLIENT_ID: "id", GOOGLE_OAUTH_CLIENT_SECRET: "s" };
+
+  it("uses an explicit GOOGLE_AUTH_MODE whatever else is set", () => {
+    expect(resolveAuthMode({ GOOGLE_AUTH_MODE: "oauth", ...sa })).toEqual({ mode: "oauth", auto: false });
+    expect(resolveAuthMode({ GOOGLE_AUTH_MODE: "service_account", ...oauth })).toEqual({ mode: "service_account", auto: false });
+    expect(resolveAuthMode({ GOOGLE_AUTH_MODE: "service_account" })).toEqual({ mode: "service_account", auto: false });
+  });
+
+  it("prefers a service-account key, then a complete OAuth client, then none", () => {
+    expect(resolveAuthMode({ ...sa, ...oauth })).toEqual({ mode: "service_account", auto: true });
+    expect(resolveAuthMode(oauth)).toEqual({ mode: "oauth", auto: true });
+    expect(resolveAuthMode({ GOOGLE_OAUTH_CLIENT_ID: "id" })).toEqual({ mode: "none", auto: true });
+    expect(resolveAuthMode({})).toEqual({ mode: "none", auto: true });
+  });
+
+  it("selectGoogleAuthConfig follows auto-detection and reports 'not set up' for none", () => {
+    expect(selectGoogleAuthConfig(sa)).toEqual({ mode: "service_account", keyFile: "/k.json" });
+    expect(selectGoogleAuthConfig(oauth)).toEqual({ mode: "oauth", clientId: "id", clientSecret: "s" });
+    expect(() => selectGoogleAuthConfig({})).toThrow(GoogleNotConfiguredError);
+    expect(() => selectGoogleAuthConfig({})).toThrow(/Google isn't set up.*README > Google/);
+    // Explicit oauth with nothing configured keeps the specific setup message.
+    expect(() => selectGoogleAuthConfig({ GOOGLE_AUTH_MODE: "oauth" })).toThrow(/GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET/);
+  });
+
+  it("describes the mode for auth status", () => {
+    expect(describeAuthMode({ mode: "service_account", auto: true })).toBe("auto → service_account");
+    expect(describeAuthMode({ mode: "oauth", auto: true })).toBe("auto → oauth");
+    expect(describeAuthMode({ mode: "none", auto: true })).toBe("auto → not configured");
+    expect(describeAuthMode({ mode: "oauth", auto: false })).toBe("oauth");
+  });
+
+  it("handles the not-configured status", () => {
+    const none = { mode: "none" as const, auto: true as const, configured: false as const, problem: GOOGLE_NOT_CONFIGURED_MESSAGE };
+    expect(describeAuthStatus(none)).toBe(GOOGLE_NOT_CONFIGURED_MESSAGE);
+    expect(authIdentityKey(none)).toBe("none");
+  });
+});
+
+describe("authModeNote", () => {
+  const both = { GOOGLE_APPLICATION_CREDENTIALS: "/k.json", GOOGLE_OAUTH_CLIENT_ID: "id", GOOGLE_OAUTH_CLIENT_SECRET: "s" };
+  it("warns when auto-detection ignores a full OAuth client in favour of the service account", () => {
+    expect(resolveAuthMode(both)).toEqual({ mode: "service_account", auto: true });
+    expect(authModeNote(both)).toMatch(/OAUTH_CLIENT_SECRET are set but ignored.*possibly from your shell.*Set GOOGLE_AUTH_MODE/);
+  });
+  it("is silent when the mode is explicit or nothing is shadowed", () => {
+    expect(authModeNote({ ...both, GOOGLE_AUTH_MODE: "service_account" })).toBeUndefined();
+    expect(authModeNote({ GOOGLE_APPLICATION_CREDENTIALS: "/k.json", GOOGLE_OAUTH_CLIENT_ID: "id" })).toBeUndefined();
+    expect(authModeNote({ GOOGLE_OAUTH_CLIENT_ID: "id", GOOGLE_OAUTH_CLIENT_SECRET: "s" })).toBeUndefined();
   });
 });

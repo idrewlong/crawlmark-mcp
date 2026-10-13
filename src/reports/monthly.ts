@@ -1,5 +1,6 @@
 import type { Client } from "../config.js";
 import { spentThisMonth } from "../lib/budget.js";
+import { spendKeys } from "../lib/spend.js";
 import { lastCompleteMonth, monthRange, pctChange, previousMonth, sameMonthLastYear } from "../lib/dates.js";
 import { serp } from "../providers/dataforseo.js";
 import { ga4OrganicSummary, ga4TopLandingPages } from "../providers/ga4.js";
@@ -111,6 +112,6 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
     pageMovers: pagesCur.ok && pagesPrev.ok ? movers(pagesCur.data, pagesPrev.data) : null,
     topLandingPages: landing,
     trackedKeywords: tracked,
-    dataSpendThisMonthUsd: Number(spentThisMonth(client.slug).toFixed(4)),
+    dataSpendThisMonthUsd: Number(spentThisMonth(spendKeys(client)).toFixed(4)),
   };
 }

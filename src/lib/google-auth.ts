@@ -27,7 +27,8 @@ export const CALLBACK_PATH = "/oauth2callback";
 // ---------------------------------------------------------------- mode selection
 
 export interface GoogleAuthEnv {
-  GOOGLE_AUTH_MODE: GoogleAuthMode;
+  /** Unset means auto-detect (see resolveAuthMode). */
+  GOOGLE_AUTH_MODE?: GoogleAuthMode | undefined;
   GOOGLE_OAUTH_CLIENT_ID?: string | undefined;
   GOOGLE_OAUTH_CLIENT_SECRET?: string | undefined;
   /** Already resolved to an absolute path. */
@@ -38,9 +39,52 @@ export type GoogleAuthConfig =
   | { mode: "oauth"; clientId: string; clientSecret: string }
   | { mode: "service_account"; keyFile: string };
 
+/** "none": no Google credentials configured at all. Google tools are then unavailable; everything else works. */
+export type ResolvedAuthMode = GoogleAuthMode | "none";
+
+/**
+ * The auth mode in effect. An explicit GOOGLE_AUTH_MODE wins. Unset, it
+ * auto-detects: a service-account key path, else a complete OAuth client
+ * (ID and secret), else none.
+ */
+export function resolveAuthMode(e: GoogleAuthEnv): { mode: ResolvedAuthMode; auto: boolean } {
+  if (e.GOOGLE_AUTH_MODE) return { mode: e.GOOGLE_AUTH_MODE, auto: false };
+  if (e.GOOGLE_APPLICATION_CREDENTIALS) return { mode: "service_account", auto: true };
+  if (e.GOOGLE_OAUTH_CLIENT_ID && e.GOOGLE_OAUTH_CLIENT_SECRET) return { mode: "oauth", auto: true };
+  return { mode: "none", auto: true };
+}
+
+/**
+ * A one-line heads-up when auto-detection picked the service account although
+ * a full OAuth client is configured too, or undefined. The key path often
+ * comes from the shell rather than .env, which makes this easy to miss.
+ */
+export function authModeNote(e: GoogleAuthEnv): string | undefined {
+  if (e.GOOGLE_AUTH_MODE || !e.GOOGLE_APPLICATION_CREDENTIALS) return undefined;
+  if (!e.GOOGLE_OAUTH_CLIENT_ID || !e.GOOGLE_OAUTH_CLIENT_SECRET) return undefined;
+  return (
+    "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are set but ignored, because GOOGLE_APPLICATION_CREDENTIALS " +
+    "is set (possibly from your shell), so the service account is used. Set GOOGLE_AUTH_MODE to choose."
+  );
+}
+
+export const GOOGLE_NOT_CONFIGURED_MESSAGE =
+  "Google isn't set up (no service-account key or OAuth client configured), so Search Console and GA4 are unavailable. " +
+  "See README > Google. DataForSEO, Lighthouse and accessibility tools still work.";
+
+/** Thrown by Google calls when no Google auth is configured. Expected, not a fault. */
+export class GoogleNotConfiguredError extends Error {
+  constructor() {
+    super(GOOGLE_NOT_CONFIGURED_MESSAGE);
+    this.name = "GoogleNotConfiguredError";
+  }
+}
+
 /** Pick the auth config for the active mode, or throw a message that says exactly what's missing. */
 export function selectGoogleAuthConfig(e: GoogleAuthEnv): GoogleAuthConfig {
-  if (e.GOOGLE_AUTH_MODE === "service_account") {
+  const { mode } = resolveAuthMode(e);
+  if (mode === "none") throw new GoogleNotConfiguredError();
+  if (mode === "service_account") {
     if (!e.GOOGLE_APPLICATION_CREDENTIALS) {
       throw new Error(
         "GOOGLE_AUTH_MODE=service_account but GOOGLE_APPLICATION_CREDENTIALS is not set. " +
@@ -267,7 +311,16 @@ export function loginExchangeErrorMessage(err: unknown): string {
 
 export type GoogleAuthStatus =
   | {
+      mode: "none";
+      /** Always true: "none" only comes from auto-detection. */
+      auto: true;
+      configured: false;
+      problem: string;
+    }
+  | {
       mode: "oauth";
+      /** True when the mode was auto-detected rather than set in GOOGLE_AUTH_MODE. */
+      auto: boolean;
       configured: boolean;
       signedIn: boolean;
       email?: string;
@@ -277,14 +330,34 @@ export type GoogleAuthStatus =
     }
   | {
       mode: "service_account";
+      auto: boolean;
       configured: boolean;
       email?: string;
       keyFile?: string;
       problem?: string;
     };
 
+/**
+ * Stable key for the active Google identity, for cache keys: data one identity
+ * fetched must not be served to another. Uses the account email when known;
+ * an OAuth token with no recorded email falls back to a hash of its refresh
+ * token (never an empty string, which would collide across accounts).
+ */
+export function authIdentityKey(s: GoogleAuthStatus, refreshTokenHash?: string): string {
+  if (s.mode === "none") return "none";
+  if (s.mode === "service_account") return `service_account:${s.email ?? s.keyFile ?? "unknown"}`;
+  if (s.email) return `oauth:${s.email}`;
+  return `oauth:token:${refreshTokenHash ?? "none"}`;
+}
+
+/** "auto → service_account", or just the mode when set explicitly. For `auth status`. */
+export function describeAuthMode(s: { mode: ResolvedAuthMode; auto: boolean }): string {
+  return s.auto ? `auto → ${s.mode === "none" ? "not configured" : s.mode}` : s.mode;
+}
+
 /** One-line summary of the active Google identity, e.g. for a health check. */
 export function describeAuthStatus(s: GoogleAuthStatus): string {
+  if (s.mode === "none") return s.problem;
   if (s.problem) return `Google auth (${s.mode}): ${s.problem}`;
   if (s.mode === "oauth") return `Google auth: OAuth, signed in as ${s.email ?? "an unknown account"}`;
   return `Google auth: service account ${s.email ?? "(email unknown)"}`;

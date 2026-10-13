@@ -1,0 +1,10 @@
+{
+  "dataStreams": [
+    {
+      "name": "properties/400000001/dataStreams/444",
+      "type": "ANDROID_APP_DATA_STREAM",
+      "displayName": "Example App Android",
+      "androidAppStreamData": { "firebaseAppId": "1:000:android:000", "packageName": "com.example.app" }
+    }
+  ]
+}
