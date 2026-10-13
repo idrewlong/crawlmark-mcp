@@ -1,4 +1,6 @@
 import type { Client } from "../config.js";
+import { monthlyAuditSection } from "../analysis/diff.js";
+import { latestAudit, latestAuditBefore } from "../lib/audits.js";
 import { spentThisMonth } from "../lib/budget.js";
 import { spendKeys } from "../lib/spend.js";
 import { lastCompleteMonth, monthRange, pctChange, previousMonth, sameMonthLastYear } from "../lib/dates.js";
@@ -82,6 +84,14 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
     ),
   );
 
+  // Latest saved audit, diffed against the most recent one from before the report month.
+  const audit = await section(async () => {
+    return monthlyAuditSection(
+      latestAudit(client.slug),
+      latestAuditBefore(client.slug, Date.parse(`${cur.startDate}T00:00:00Z`)),
+    );
+  });
+
   const gc = dataOf(gscCur);
   const gp = dataOf(gscPrev);
   const gy = dataOf(gscYoy);
@@ -112,6 +122,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
     pageMovers: pagesCur.ok && pagesPrev.ok ? movers(pagesCur.data, pagesPrev.data) : null,
     topLandingPages: landing,
     trackedKeywords: tracked,
+    audit: audit.ok ? audit.data : { error: audit.error },
     dataSpendThisMonthUsd: Number(spentThisMonth(spendKeys(client)).toFixed(4)),
   };
 }

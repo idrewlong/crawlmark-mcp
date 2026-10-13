@@ -20,8 +20,11 @@ On top of the raw sources it adds a client list in `config/clients.yaml` that fi
 | Tool | Does |
 |---|---|
 | `list_clients` | Every client: domain, name, sources, GSC property, GA4 property, alternates, what's missing, what was just added to `clients.yaml`, and discovery status. `refresh: true` re-lists from Google |
-| `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions |
-| `run_audit` | Lighthouse + axe + GSC index status + on-page check per key page, sitemap health; optional full crawl and backlinks |
+| `monthly_report` | GSC + GA4 month vs previous month and last year, top/moving queries and pages, landing pages, tracked keyword positions, and an `audit` section (the latest saved audit plus its diff against the most recent audit from before the month; `null` unless there is one from before the month and a newer one; a back-dated `month` still diffs against the latest audit) |
+| `run_audit` | Lighthouse + axe + GSC index status + on-page check per key page, sitemap health; optional full crawl and backlinks. Every run is saved and returns an `auditId`. Runs are fresh by default (the response cache is skipped, so the on-page check is a paid call per page); `fresh: false` reuses results up to a day old, and `compare_audits` warns when the later audit was not fresh |
+| `list_audits` | A client's saved audits, newest first: ID, run time, page count, average scores, finding count |
+| `get_audit` | One saved audit's full result and normalised findings, by ID |
+| `compare_audits` | Diffs two saved audits (default: latest vs the one before): `new`, `resolved`, `persistent` and `unverified` findings plus Lighthouse score changes. A finding is `resolved` only if its check ran in the later audit; otherwise it is `unverified` |
 | `crawl_status` | Progress and issue counts for a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check (e.g. `no_description`) |
 | `spend_summary` | Paid API spend this month by client |
@@ -301,7 +304,8 @@ src/
                         competitor/keyword edits, set_client_profile
   competitors.ts        suggest_competitors: gathers overlap + seed SERPs, loads the denylist
   lib/
-    store.ts            SQLite (cache + spend ledger)
+    store.ts            SQLite (cache, spend ledger, saved audits)
+    audits.ts           save/list/get saved audits, sortable audit IDs
     cache.ts            TTL cache wrapper
     budget.ts           per-client / global spend caps
     dates.ts            month ranges and comparisons
@@ -324,6 +328,8 @@ src/
     dataforseo-shape.ts pure mappers: raw DataForSEO results -> typed compact objects
   analysis/
     competitor-suggestions.ts  seed picking, merge, filter and score for suggest_competitors (pure)
+    findings.ts         normalised findings from an audit result, stable IDs, severity tables, checked pairs (pure)
+    diff.ts             diffAudits: new / resolved / persistent / unverified, score changes (pure)
   prompts/
     index.ts            MCP prompt registrations
     templates/          prompt text (markdown), copied to dist/ at build

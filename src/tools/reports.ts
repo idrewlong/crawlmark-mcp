@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { loadRegistry, resolveClient } from "../clients.js";
+import { diffAudits, pickComparison } from "../analysis/diff.js";
+import { getAudit, latestAudit, latestAuditBefore, listAudits } from "../lib/audits.js";
 import { missingPieces } from "../lib/clients.js";
 import { canonicalSpendNames } from "../lib/spend.js";
 import { spendSummary } from "../lib/budget.js";
@@ -61,7 +63,7 @@ export function registerReportTools(server: McpServer) {
       title: "Monthly SEO report",
       description:
         "Build the data for a client's monthly SEO report: GSC clicks/impressions/CTR/position vs previous month and last year, " +
-        "GA4 organic sessions and key events, top and moving queries and pages, top organic landing pages, and tracked keyword positions. " +
+        "GA4 organic sessions and key events, top and moving queries and pages, top organic landing pages, and tracked keyword positions, plus an `audit` section: the latest saved audit and its diff against the most recent audit from before the month (`null` unless there is one from before the month and a newer one; a back-dated month still diffs against the latest audit). " +
         "Free by default (Google APIs only); set liveRanks for a paid live SERP check per tracked keyword. " +
         "Returns structured JSON for you to write up; each section reports its own error if a source is unavailable.",
       inputSchema: {
@@ -91,10 +93,83 @@ export function registerReportTools(server: McpServer) {
         fullCrawl: z.boolean().optional().describe("Start a full-site DataForSEO crawl (paid)."),
         maxCrawlPages: z.number().int().min(1).max(5000).optional().describe("Crawl page cap. Default 100."),
         backlinks: z.boolean().optional().describe("Include a DataForSEO backlinks summary (paid)."),
+        fresh: z
+          .boolean()
+          .optional()
+          .describe("Default true: every check runs live, so the audit is a true snapshot (the on-page check is a paid call per page). false reuses cached results up to a day old."),
       },
       annotations: READ_ONLY,
     },
     handler(async ({ client, ...opts }) => runAudit(await resolveClient(client), opts)),
+  );
+
+  server.registerTool(
+    "list_audits",
+    {
+      title: "List saved audits",
+      description:
+        "Saved run_audit snapshots for a client, newest first: audit ID, run time, page count, average scores and finding count. " +
+        "Use the IDs with get_audit and compare_audits. Free and local.",
+      inputSchema: {
+        client: clientArg,
+        limit: z.number().int().min(1).max(200).optional().describe("Default 20."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler(async ({ client, limit }) => {
+      const c = await resolveClient(client);
+      return {
+        client: c.slug,
+        audits: listAudits(c.slug, limit ?? 20).map((a) => ({
+          auditId: a.id,
+          ranAt: new Date(a.ranAt).toISOString(),
+          pages: (a.settings as { pages?: number }).pages ?? null,
+          avgScores: (a.summary as { avgScores?: unknown }).avgScores ?? null,
+          findings: a.findingCount,
+        })),
+      };
+    }),
+  );
+
+  server.registerTool(
+    "get_audit",
+    {
+      title: "Get a saved audit",
+      description: "The full stored result of one audit, plus its normalised findings, by audit ID from run_audit or list_audits. Free and local.",
+      inputSchema: { auditId: z.string().min(1) },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler(async ({ auditId }) => {
+      const a = getAudit(auditId);
+      if (!a) throw new Error(`No audit with ID "${auditId}". Use list_audits to see saved audits.`);
+      return { auditId: a.id, client: a.client, ranAt: new Date(a.ranAt).toISOString(), findings: a.findings, result: a.result };
+    }),
+  );
+
+  server.registerTool(
+    "compare_audits",
+    {
+      title: "Compare two audits",
+      description:
+        "Diff two saved audits of a client: new, resolved, persistent and unverified findings plus Lighthouse score changes. " +
+        "A finding counts as resolved only if its check ran successfully in the later audit; otherwise it is unverified. " +
+        "Defaults to the latest audit versus the one before it. Free and local.",
+      inputSchema: {
+        client: clientArg,
+        baseAuditId: z.string().optional().describe("The earlier audit. Default: the one before the target."),
+        targetAuditId: z.string().optional().describe("The later audit. Default: the latest."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler(async ({ client, baseAuditId, targetAuditId }) => {
+      const c = await resolveClient(client);
+      const { base, target } = pickComparison(c.slug, { baseAuditId, targetAuditId }, {
+        get: getAudit,
+        latest: () => latestAudit(c.slug),
+        before: (ranAt) => latestAuditBefore(c.slug, ranAt),
+      });
+      return diffAudits(base, target);
+    }),
   );
 
   server.registerTool(

@@ -268,13 +268,14 @@ export async function onPagePagesWithIssue(taskId: string, check: string, limit 
 }
 
 /** Instant on-page check for a single URL, no crawl needed. */
-export async function instantPage(client: Client, url: string) {
+export async function instantPage(client: Client, url: string, opts: { refresh?: boolean } = {}) {
   const { result, costUsd, fromCache } = await paid<RawInstantPages>(
     client,
     "instantPage",
     "/on_page/instant_pages",
     [{ url, enable_javascript: true }],
     TTL.day,
+    opts,
   );
   return { page: mapInstantPage(result[0]), costUsd, fromCache };
 }

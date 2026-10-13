@@ -73,7 +73,7 @@ export async function gscTotals(client: Client, range: DateRange) {
 }
 
 /** URL Inspection: index status, canonical, mobile usability for one URL. */
-export async function gscInspectUrl(client: Client, url: string) {
+export async function gscInspectUrl(client: Client, url: string, opts: { refresh?: boolean } = {}) {
   const siteUrl = requireProperty(client);
   const { value } = await cached(cacheKey("gsc-inspect", googleAuthIdentity(), siteUrl, url), TTL.day, async () => {
     const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
@@ -92,7 +92,7 @@ export async function gscInspectUrl(client: Client, url: string) {
       mobileVerdict: r?.mobileUsabilityResult?.verdict,
       richResults: r?.richResultsResult?.detectedItems?.map((i) => i.richResultType),
     };
-  });
+  }, opts);
   return value;
 }
 

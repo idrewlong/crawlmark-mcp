@@ -21,7 +21,11 @@ export interface LighthouseResult {
 const score = (v: number | null | undefined) => Math.round((v ?? 0) * 100);
 
 /** Run Lighthouse locally in headless Chrome. Lab data only, free. */
-export async function runLighthouse(url: string, formFactor: FormFactor = "mobile"): Promise<LighthouseResult> {
+export async function runLighthouse(
+  url: string,
+  formFactor: FormFactor = "mobile",
+  opts: { refresh?: boolean } = {},
+): Promise<LighthouseResult> {
   const { value } = await cached(cacheKey("lighthouse", url, formFactor), TTL.day, async () => {
     const chrome = await chromeLauncher.launch({ chromePath: await chromePath(), chromeFlags: CHROME_FLAGS });
     try {
@@ -73,7 +77,7 @@ export async function runLighthouse(url: string, formFactor: FormFactor = "mobil
     } finally {
       await chrome.kill();
     }
-  });
+  }, opts);
 
   if (env.PSI_API_KEY) value.field = await fetchFieldData(url, formFactor);
   return value;

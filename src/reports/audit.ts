@@ -3,6 +3,8 @@ import { runAxe, type AxeResult, type WcagLevel } from "../providers/axe.js";
 import { backlinksSummary, instantPage, onPageStartCrawl } from "../providers/dataforseo.js";
 import { gscInspectUrl, gscSitemaps } from "../providers/gsc.js";
 import { runLighthouse, type FormFactor, type LighthouseResult } from "../providers/lighthouse.js";
+import { checkedPairs, extractFindings } from "../analysis/findings.js";
+import { newAuditId, saveAudit } from "../lib/audits.js";
 import { section, type Section } from "./section.js";
 
 export interface AuditOptions {
@@ -13,6 +15,8 @@ export interface AuditOptions {
   /** Kick off a full-site DataForSEO crawl (paid, async). Returns a taskId to poll with crawl_status. */
   fullCrawl?: boolean;
   maxCrawlPages?: number;
+  /** Skip the response cache so the audit is a real snapshot. Default true; false reuses results up to a day old. */
+  fresh?: boolean;
   /** Include a DataForSEO backlinks summary (paid). */
   backlinks?: boolean;
 }
@@ -25,10 +29,33 @@ interface PageAudit {
   onPage: Section<unknown>;
 }
 
+export type AuditResult = Awaited<ReturnType<typeof collectAudit>>;
+
+/** Run every check and save the snapshot. The result carries `auditId` for list/get/compare_audits. */
 export async function runAudit(client: Client, opts: AuditOptions = {}) {
+  const result = await collectAudit(client, opts);
+  const findings = extractFindings(result);
+  const ranAt = Date.parse(result.ranAt);
+  const auditId = newAuditId(ranAt);
+  saveAudit({
+    id: auditId,
+    client: client.slug,
+    ranAt,
+    settings: result.settings,
+    summary: result.summary,
+    findings,
+    checked: checkedPairs(result),
+    result,
+  });
+  return { auditId, findingCount: findings.length, ...result };
+}
+
+async function collectAudit(client: Client, opts: AuditOptions) {
   const urls = opts.urls?.length ? opts.urls : client.keyPages;
   const formFactor = opts.formFactor ?? "mobile";
   const wcagLevel = opts.wcagLevel ?? "AA";
+  const fresh = opts.fresh ?? true;
+  const cacheOpts = { refresh: fresh };
 
   // Site-level checks run in parallel; they're all network calls.
   const [sitemaps, crawl, links] = await Promise.all([
@@ -41,11 +68,11 @@ export async function runAudit(client: Client, opts: AuditOptions = {}) {
   // fight over CPU and skew Lighthouse timings.
   const pages: PageAudit[] = [];
   for (const url of urls) {
-    const lighthouse = await section(() => runLighthouse(url, formFactor));
-    const accessibility = await section(() => runAxe(url, wcagLevel));
+    const lighthouse = await section(() => runLighthouse(url, formFactor, cacheOpts));
+    const accessibility = await section(() => runAxe(url, wcagLevel, cacheOpts));
     const [indexing, onPage] = await Promise.all([
-      section(() => gscInspectUrl(client, url)),
-      section(async () => (await instantPage(client, url)).page),
+      section(() => gscInspectUrl(client, url, cacheOpts)),
+      section(async () => (await instantPage(client, url, cacheOpts)).page),
     ]);
     pages.push({ url, lighthouse, accessibility, indexing, onPage });
   }
@@ -53,7 +80,7 @@ export async function runAudit(client: Client, opts: AuditOptions = {}) {
   return {
     client: { slug: client.slug, name: client.name, domain: client.domain },
     ranAt: new Date().toISOString(),
-    settings: { formFactor, wcagLevel, pages: urls.length },
+    settings: { formFactor, wcagLevel, pages: urls.length, fresh },
     summary: summarize(pages),
     site: { sitemaps, crawl, backlinks: links },
     pages,

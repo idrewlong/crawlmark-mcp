@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { env } from "../config.js";
 
 /**
- * One SQLite file holds the response cache and the spend ledger.
+ * One SQLite file holds the response cache, the spend ledger and saved audits.
  * node:sqlite ships with Node 22.13+, so there is no native module to build.
  */
 mkdirSync(resolve(env.DATA_DIR), { recursive: true });
@@ -26,4 +26,15 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS spend_month ON spend (month, client);
+  CREATE TABLE IF NOT EXISTS audits (
+    id       TEXT PRIMARY KEY,
+    client   TEXT NOT NULL,
+    ran_at   INTEGER NOT NULL,
+    settings TEXT NOT NULL,
+    summary  TEXT NOT NULL,
+    findings TEXT NOT NULL,
+    checked  TEXT NOT NULL,
+    result   TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS audits_client ON audits (client, ran_at DESC);
 `);

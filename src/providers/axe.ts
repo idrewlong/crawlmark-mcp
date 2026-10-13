@@ -34,7 +34,7 @@ export interface AxeResult {
 const IMPACT_ORDER = ["critical", "serious", "moderate", "minor"];
 
 /** Automated WCAG check with axe-core. Catches roughly a third of issues; manual review still needed. */
-export async function runAxe(url: string, level: WcagLevel = "AA"): Promise<AxeResult> {
+export async function runAxe(url: string, level: WcagLevel = "AA", opts: { refresh?: boolean } = {}): Promise<AxeResult> {
   const { value } = await cached(cacheKey("axe", url, level), TTL.day, async () => {
     const browser = await puppeteer.launch({ executablePath: await chromePath(), args: CHROME_FLAGS });
     try {
@@ -64,6 +64,6 @@ export async function runAxe(url: string, level: WcagLevel = "AA"): Promise<AxeR
     } finally {
       await browser.close();
     }
-  });
+  }, opts);
   return value;
 }

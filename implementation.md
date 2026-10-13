@@ -162,6 +162,8 @@ Map each source to findings:
 
 The finding ID must be deterministic so the same issue gets the same ID across runs.
 
+Deviation: axe IDs do not include the selector (axe gives one entry per rule per page and node order is unstable); the first selector and node count are kept as evidence.
+
 ### 1.2 Storage
 
 Add an `audits` table in `src/lib/store.ts`:
