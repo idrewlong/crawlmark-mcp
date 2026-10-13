@@ -133,6 +133,14 @@ describe("gatherSeeds", () => {
     expect(m.rankedKeywords).not.toHaveBeenCalled();
   });
 
+  it("puts explicit seeds first and keeps only GSC queries related to them", async () => {
+    m.googleConfigured.mockReturnValue(true);
+    m.gscQuery.mockResolvedValue(gscRows(["website design springfield", "modular homes springfield"]));
+    const client = { ...(await resolveClient("example.com")), gscProperty: "sc-domain:example.com" };
+    const seeds = await gatherSeeds(client, "modular home installation", spend(), [], ["prefab builder"]);
+    expect(seeds.map((s) => [s.keyword, s.from])).toEqual([["prefab builder", "explicit"], ["modular home installation", "niche"], ["modular homes springfield", "gsc"]]);
+  });
+
   it("skips GSC without Google or a property, and uses ranked keywords only when there are no seeds", async () => {
     m.rankedKeywords.mockResolvedValue(paid({ target: null, totalCount: 1, items: [{ keyword: "boiler service" }] }));
     const s = spend();

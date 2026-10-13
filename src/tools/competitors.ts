@@ -148,19 +148,20 @@ export function registerCompetitorTools(server: McpServer) {
       title: "Suggest competitors",
       description:
         "Suggest likely competitors for a client from two sources: DataForSEO organic keyword overlap, and live Google results " +
-        "for up to 5 seed keywords (the niche, tracked keywords, then top non-branded Search Console queries) in the client's area " +
-        "(or its market when no area is set). Excludes the client's own site, current competitors, ignored domains and big platforms " +
-        "(social, directories, marketplaces, encyclopedias, .gov/.edu). Returns ranked candidates with evidence, costUsd and fromCache. " +
+        "for up to 5 seed keywords (seeds you pass, the niche, tracked keywords, then top non-branded Search Console queries that relate to them) in the client's area " +
+        "(or its market when no area is set). Pass `seeds`: 3-5 non-branded service keywords (from the niche and homepage, confirmed with the user), since the client's own ranked keywords are mostly branded. Excludes the client's own site, current competitors, ignored domains and big platforms " +
+        "(social, directories, business-data sites, marketplaces, encyclopedias, .gov/.edu) and brand lookalikes (domains starting with the client's brand initialism or name). Returns ranked candidates with evidence, costUsd and fromCache. " +
         "Paid (DataForSEO; cached). Read-only: this never saves anything. Show the candidates and their evidence to the user, ask which " +
         'to add, and only after they confirm call add_competitors with those domains and source: "suggested".',
       inputSchema: {
         client: clientArg,
         area: z.string().max(200).optional().describe('DataForSEO location_name for this search only, e.g. "Austin,Texas,United States". Defaults to the client\'s area.'),
         niche: z.string().max(200).optional().describe("What the client does, for this search only. Defaults to the client's niche."),
+        seeds: z.array(z.string().min(1).max(100)).max(5).optional().describe("3-5 non-branded service keywords to search first (e.g. 'modular home installation'). Never the client's brand name. For this search only."),
         limit: z.number().int().min(1).max(50).optional().describe("Candidates to return (default 10)."),
       },
       annotations: READ_ONLY,
     },
-    handler(({ client, area, niche, limit }) => suggestCompetitors(client, { area, niche, limit })),
+    handler(({ client, area, niche, seeds, limit }) => suggestCompetitors(client, { area, niche, seeds, limit })),
   );
 }

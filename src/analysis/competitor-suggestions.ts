@@ -10,7 +10,7 @@ import { isDenied, type Denylist } from "../lib/competitor-denylist.js";
 
 // ---------------------------------------------------------------- seeds
 
-export type SeedSource = "niche" | "tracked" | "gsc" | "ranked";
+export type SeedSource = "explicit" | "niche" | "tracked" | "gsc" | "ranked";
 
 export interface Seed {
   keyword: string;
@@ -19,7 +19,7 @@ export interface Seed {
 
 export const DEFAULT_SEED_CAP = 5;
 
-const squash = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "");
+const squash = (s: string) => s.toLowerCase().normalize("NFKD").replace(/\p{M}+/gu, "").replace(/[^a-z0-9]/g, "");
 
 /**
  * The distinctive part of a domain: the last label before the public suffix,
@@ -37,7 +37,7 @@ const GENERIC_SUFFIXES = new Set(["inc", "llc", "co", "company", "corp", "corpor
 
 /** Lowercase, punctuation to spaces, spaced-out initials collapsed ("j c building" gives ["jc", "building"]), generic company suffixes dropped. */
 function brandTokens(text: string): string[] {
-  const raw = text.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  const raw = text.toLowerCase().normalize("NFKD").replace(/\p{M}+/gu, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
   const merged: string[] = [];
   let run = "";
   for (const t of raw) {
@@ -72,12 +72,61 @@ export function looksBranded(query: string, client: { domain: string; name: stri
   if (despaced.length >= 4 && (stem.includes(despaced) || name.includes(despaced))) return true;
   const squashed = squash(query);
   if ([stem, squash(client.name)].some((t) => t.length >= 4 && squashed.includes(t))) return true;
+  const brand = brandToken(client);
+  if (brand && q.includes(brand)) return true;
   if (nameTokens.length === 0) return false;
   const k = Math.min(2, nameTokens.length, q.length);
   return q.slice(0, k).every((t, i) => t === nameTokens[i]) && q.slice(0, k).join("").length >= 2;
 }
 
+const BRAND_STOPLIST = new Set([
+  "the", "a", "an", "and", "best", "top", "pro", "pros", "home", "homes", "my", "our", "your", "new", "all", "first", "one",
+  "general", "american", "national", "local", "premier", "quality", "express", "united", "city", "great", "good", "better",
+]);
+
+/**
+ * The client's distinctive brand token: the first name token (after generic
+ * suffixes and leading stop words), when it is a 2-letter initialism or the
+ * domain stem starts with it. Null when there is none or it
+ * is a common word.
+ */
+export function brandToken(client: { domain: string; name: string }): string | null {
+  const stem = squash(domainStem(client.domain));
+  const tokens = brandTokens(client.name);
+  const first = tokens.find((t) => !BRAND_STOPLIST.has(t));
+  if (!first || first.length < 2 || BRAND_STOPLIST.has(first)) return null;
+  // A 2-letter initialism is distinctive on its own; longer tokens must also start the domain stem, so a common word like "sun" isn't taken for a brand.
+  if (first.length === 2 || stem.startsWith(first)) return first;
+  return null;
+}
+
+/**
+ * True when the domain's stem starts with the brand token, or ends with it when
+ * at least 3 other characters precede it (`<words><token>`), for tokens of 4
+ * characters or fewer; or contains it (longer tokens).
+ */
+export function isBrandLookalike(domain: string, token: string | null): boolean {
+  if (!token) return false;
+  const stem = squash(domainStem(domain));
+  if (token.length > 4) return stem.includes(token);
+  return stem.startsWith(token) || (stem.endsWith(token) && stem.length - token.length >= 3);
+}
+
+const SEED_STOPWORDS = new Set(["the", "and", "for", "near", "me", "in", "of", "to", "a", "an", "with", "best", "top", "ca", "cost", "how", "what", "much"]);
+
+const contentTokens = (text: string, brand: Set<string>): string[] =>
+  text
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .map((t) => (t.length > 3 && t.endsWith("s") ? t.slice(0, -1) : t))
+    .filter((t) => t.length >= 3 && !SEED_STOPWORDS.has(t) && !brand.has(t));
+
 export interface SeedInputs {
+  /** Non-branded service keywords supplied by the caller; used first. */
+  seeds?: string[] | undefined;
   niche?: string | undefined;
   tracked?: string[];
   /** Search Console queries, highest impressions first. */
@@ -87,21 +136,30 @@ export interface SeedInputs {
 }
 
 /**
- * Seeds in priority order: the niche, tracked keywords, then Search Console
+ * Seeds in priority order: explicit seeds, the niche, tracked keywords, then Search Console
  * queries and ranked keywords (both with branded queries removed). Lower-cased,
- * de-duplicated and capped. Niche and tracked keywords are taken as given:
- * the user chose them.
+ * de-duplicated and capped. Explicit, niche and tracked keywords are taken as
+ * given. When explicit seeds or a niche exist, a Search Console or ranked query
+ * is used only if it shares a meaningful (non-stop-word, non-brand) token with them.
  */
 export function pickSeeds(inputs: SeedInputs, client: { domain: string; name: string }, cap = DEFAULT_SEED_CAP): Seed[] {
   const out: Seed[] = [];
   const seen = new Set<string>();
+  const explicit = (inputs.seeds ?? []).map((k) => k.trim()).filter(Boolean);
+  const given = [...explicit, ...(inputs.niche?.trim() ? [inputs.niche.trim()] : [])];
+  const brand = new Set([...brandTokens(client.name), squash(domainStem(client.domain))]);
+  const topic = new Set(given.flatMap((g) => contentTokens(g, brand)));
   const push = (raw: string, from: SeedSource) => {
     const keyword = raw.replace(/\s+/g, " ").trim().toLowerCase();
     if (!keyword || seen.has(keyword) || out.length >= cap) return;
-    if ((from === "gsc" || from === "ranked") && looksBranded(keyword, client)) return;
+    if (from === "gsc" || from === "ranked") {
+      if (looksBranded(keyword, client)) return;
+      if (given.length > 0 && !contentTokens(keyword, brand).some((t) => topic.has(t))) return;
+    }
     seen.add(keyword);
     out.push({ keyword, from });
   };
+  for (const k of explicit) push(k, "explicit");
   if (inputs.niche) push(inputs.niche, "niche");
   for (const k of inputs.tracked ?? []) push(k, "tracked");
   for (const k of inputs.gsc ?? []) push(k, "gsc");
@@ -156,6 +214,8 @@ export interface Candidate {
 export interface ScoredCandidate extends Candidate {
   /** 0-100; see SCORE_METHOD. */
   score: number;
+  /** True (only ever set to true) for an overlap-only candidate when a local area is in effect and local SERPs were searched: say "overlap only" when presenting it. */
+  weakEvidence?: true;
 }
 
 const TRACKING_PARAM = /^(utm_.*|srsltid|gclid|fbclid|msclkid|dclid|gbraid|wbraid)$/i;
@@ -239,7 +299,7 @@ export function mergeCandidates(overlap: OverlapRow[], serps: SeedSerp[]): Candi
 
 // ---------------------------------------------------------------- filter
 
-export type ExclusionReason = "own-domain" | "already-competitor" | "ignored" | "denylist";
+export type ExclusionReason = "own-domain" | "already-competitor" | "ignored" | "denylist" | "brand-lookalike";
 
 export interface Exclusions {
   ownDomain: string;
@@ -248,6 +308,8 @@ export interface Exclusions {
   /** Domains marked ignore: true in clients.yaml. */
   ignored: string[];
   denylist: Denylist;
+  /** The client's brand token (see brandToken); candidates whose domain starts with or contains it are dropped. */
+  brandToken?: string | null;
 }
 
 export interface FilterResult {
@@ -255,7 +317,7 @@ export interface FilterResult {
   excluded: { domain: string; reason: ExclusionReason }[];
 }
 
-/** Drop the client's own site, current competitors and ignored domains (each with subdomains), and denylisted platforms. */
+/** Drop the client's own site, current competitors and ignored domains (each with subdomains), denylisted platforms, and brand lookalikes (other companies named like the client). */
 export function filterCandidates(candidates: Candidate[], x: Exclusions): FilterResult {
   const out: FilterResult = { kept: [], excluded: [] };
   for (const c of candidates) {
@@ -267,7 +329,9 @@ export function filterCandidates(candidates: Candidate[], x: Exclusions): Filter
           ? "ignored"
           : isDenied(c.domain, x.denylist)
             ? "denylist"
-            : undefined;
+            : isBrandLookalike(c.domain, x.brandToken ?? null)
+              ? "brand-lookalike"
+              : undefined;
     if (reason) out.excluded.push({ domain: c.domain, reason });
     else out.kept.push(c);
   }
@@ -282,7 +346,10 @@ export const SCORE_METHOD =
   "overlap = this domain's intersecting keywords ÷ the most intersecting keywords of any candidate (0 if not in the overlap list). " +
   "serp = sum over seed SERPs it appeared in of (21 − position) ÷ 20 (position 1 = 1.0, 20 = 0.05, below 20 = 0), divided by the number of seeds searched. " +
   "Weights are 0.5 each when both sources contributed (a remaining candidate has intersecting keywords, and at least one seed was searched), " +
+  "0.3 overlap and 0.7 serp when both contributed and a local area is set and the SERPs returned remaining candidates, " +
   "otherwise 1.0 for the one that did. " +
+  "When a local area is in effect and seeds were searched, candidates with local SERP evidence are listed before overlap-only ones " +
+  "(which carry weakEvidence: true and keep their score), then by score. " +
   "Ties break on SERP appearances, then intersecting keywords, then domain name.";
 
 /** Weight of one SERP appearance: position 1 → 1.0, 20 → 0.05, worse than 20 → 0. */
@@ -293,6 +360,8 @@ export function positionWeight(position: number): number {
 export interface ScoreContext {
   /** Seed SERPs that were actually fetched. */
   seedsSearched: number;
+  /** A local area is in effect: local SERP evidence outweighs overlap (0.7 / 0.3) when both exist. */
+  localArea?: boolean;
 }
 
 /** Deterministic score and order; see SCORE_METHOD. */
@@ -302,18 +371,21 @@ export function rankCandidates(candidates: Candidate[], ctx: ScoreContext): Scor
   // a call that succeeded with no rows (or only filtered-out rows) contributes nothing.
   const maxIntersections = Math.max(0, ...candidates.map((c) => c.evidence.intersectingKeywords ?? 0));
   const overlapRan = maxIntersections > 0;
-  const wOverlap = overlapRan ? (serpRan ? 0.5 : 1) : 0;
-  const wSerp = serpRan ? (overlapRan ? 0.5 : 1) : 0;
+  const serpSplit = ctx.localArea && candidates.some((c) => c.evidence.serpAppearances > 0) ? 0.7 : 0.5;
+  const wOverlap = overlapRan ? (serpRan ? 1 - serpSplit : 1) : 0;
+  const wSerp = serpRan ? (overlapRan ? serpSplit : 1) : 0;
 
   return candidates
-    .map((c) => {
+    .map((c): ScoredCandidate => {
       const overlap = maxIntersections > 0 ? (c.evidence.intersectingKeywords ?? 0) / maxIntersections : 0;
       const serp = serpRan ? c.evidence.seeds.reduce((sum, s) => sum + positionWeight(s.position), 0) / ctx.seedsSearched : 0;
       const score = Math.round(100 * (wOverlap * overlap + wSerp * serp) * 10) / 10;
-      return { ...c, score };
+      const weak = ctx.localArea && serpRan && c.evidence.serpAppearances === 0;
+      return weak ? { ...c, score, weakEvidence: true as const } : { ...c, score };
     })
     .sort(
       (a, b) =>
+        Number(a.weakEvidence === true) - Number(b.weakEvidence === true) ||
         b.score - a.score ||
         b.evidence.serpAppearances - a.evidence.serpAppearances ||
         (b.evidence.intersectingKeywords ?? 0) - (a.evidence.intersectingKeywords ?? 0) ||

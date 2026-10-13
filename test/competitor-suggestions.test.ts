@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   domainStem,
   filterCandidates,
+  brandToken,
   cleanSampleUrl,
+  isBrandLookalike,
   looksBranded,
   mergeCandidates,
   pickSeeds,
@@ -51,7 +53,7 @@ describe("seeds", () => {
       {
         niche: "Emergency Plumber",
         tracked: ["drain repair", "emergency plumber"],
-        gsc: ["example plumbing", "water heater install", "leak detection", "pipe repair", "sewer line"],
+        gsc: ["example plumbing", "water heater plumber", "leak detection", "pipe repair plumber", "sewer line plumber", "weather report"],
         ranked: ["never used"],
       },
       client,
@@ -59,9 +61,9 @@ describe("seeds", () => {
     expect(seeds).toEqual([
       { keyword: "emergency plumber", from: "niche" },
       { keyword: "drain repair", from: "tracked" },
-      { keyword: "water heater install", from: "gsc" },
-      { keyword: "leak detection", from: "gsc" },
-      { keyword: "pipe repair", from: "gsc" },
+      { keyword: "water heater plumber", from: "gsc" }, // unrelated "leak detection" is skipped: no shared word with the niche
+      { keyword: "pipe repair plumber", from: "gsc" },
+      { keyword: "sewer line plumber", from: "gsc" },
     ]);
   });
 
@@ -219,5 +221,154 @@ describe("cleanSampleUrl", () => {
   it("is applied to merged sample URLs", () => {
     const [c] = mergeCandidates([], [{ seed: "s", hits: [{ domain: "rival.example", position: 1, url: "https://rival.example/?srsltid=z" }] }]);
     expect(c!.evidence.sampleUrl).toBe("https://rival.example/");
+  });
+});
+
+describe("brand lookalikes and AI seeds", () => {
+  const ab = { domain: "abbuildingsystems.com", name: "AB Building Systems" };
+
+  it("derives the brand token, ignoring common words", () => {
+    expect(brandToken(ab)).toBe("ab");
+    expect(brandToken({ domain: "westfieldhomes.com", name: "Westfield Homes" })).toBe("westfield");
+    expect(brandToken({ domain: "thebesthomes.com", name: "The Best Homes" })).toBeNull();
+    expect(brandToken({ domain: "bestplumbing.com", name: "Best Plumbing Co" })).toBeNull();
+    expect(brandToken({ domain: "zedhomes.com", name: "Zed Homes" })).toBe("zed");
+    expect(brandToken({ domain: "x.com", name: "Zed" })).toBeNull(); // 3+ letters must start the domain stem
+  });
+
+  it("matches stems by prefix for short tokens and containment for long ones", () => {
+    expect(isBrandLookalike("abbuildingcompany.com", "ab")).toBe(true);
+    expect(isBrandLookalike("cabinets.example.com", "ab")).toBe(false);
+    expect(isBrandLookalike("rival-ab.com", "ab")).toBe(true); // ends with the token, 5 characters before it
+    expect(isBrandLookalike("buildingwithab.com", "ab")).toBe(true);
+    expect(isBrandLookalike("buildab.com", "ab")).toBe(true);
+    expect(isBrandLookalike("xyab.com", "ab")).toBe(false); // fewer than 3 characters before the token
+    expect(isBrandLookalike("grab.com", "ab")).toBe(false);
+    expect(isBrandLookalike("scrabble.com", "ab")).toBe(false);
+    expect(isBrandLookalike("cabinets.com", "ab")).toBe(false);
+    expect(isBrandLookalike("thewestfieldgroup.com", "westfield")).toBe(true);
+    expect(isBrandLookalike("anything.com", null)).toBe(false);
+  });
+
+  it("filters lookalikes with their own reason", () => {
+    const merged = mergeCandidates(
+      [
+        { domain: "abbuildgroup.com", intersectingKeywords: 9, avgPosition: 3, estimatedTraffic: 1 },
+        { domain: "rival.example", intersectingKeywords: 5, avgPosition: 3, estimatedTraffic: 1 },
+      ],
+      [],
+    );
+    const x = { ownDomain: "own.example", competitors: [], ignored: [], denylist: buildDenylist([]).denylist };
+    const r = filterCandidates(merged, { ...x, brandToken: "ab" });
+    expect(r.kept.map((c) => c.domain)).toEqual(["rival.example"]);
+    expect(r.excluded).toEqual([{ domain: "abbuildgroup.com", reason: "brand-lookalike" }]);
+    expect(filterCandidates(merged, x).kept).toHaveLength(2);
+  });
+
+  it("counts a standalone brand initialism as branded", () => {
+    expect(looksBranded("ab construction", ab)).toBe(true);
+    expect(looksBranded("modular home installation", ab)).toBe(false);
+    expect(looksBranded("abc roofing", ab)).toBe(false);
+  });
+
+  it("orders explicit seeds, niche, tracked, then GSC, and gates GSC on relevance", () => {
+    const seeds = pickSeeds(
+      {
+        seeds: ["Prefab Home Builder", "modular home contractor"],
+        niche: "modular home installation",
+        tracked: ["adu builder"],
+        gsc: ["construction website design springfield", "other building systems", "modular homes springfield", "home installation cost"],
+      },
+      ab,
+    );
+    expect(seeds.map((s) => [s.keyword, s.from])).toEqual([
+      ["prefab home builder", "explicit"],
+      ["modular home contractor", "explicit"],
+      ["modular home installation", "niche"],
+      ["adu builder", "tracked"],
+      ["modular homes springfield", "gsc"],
+    ]);
+  });
+
+  it("caps explicit seeds at 5 and uses GSC unfiltered when no seeds or niche exist", () => {
+    expect(pickSeeds({ seeds: ["a1", "b2", "c3", "d4", "e5", "f6"] }, ab).map((s) => s.keyword)).toEqual(["a1", "b2", "c3", "d4", "e5"]);
+    expect(pickSeeds({ gsc: ["unrelated thing"] }, ab)).toEqual([{ keyword: "unrelated thing", from: "gsc" }]);
+  });
+});
+
+describe("local weighting", () => {
+  const overlap = [{ domain: "a.example", intersectingKeywords: 10, avgPosition: 1, estimatedTraffic: 1 }];
+  const serps: SeedSerp[] = [{ seed: "s", hits: [{ domain: "a.example", position: 1, url: null }] }];
+  const merged = () => mergeCandidates(overlap, serps);
+
+  it("keeps 0.5/0.5 without an area and uses 0.3/0.7 with one", () => {
+    const b = { domain: "b.example", intersectingKeywords: null, avgPosition: null, estimatedTraffic: null };
+    const two = (local: boolean) =>
+      rankCandidates(mergeCandidates([...overlap, { ...b, domain: "c.example", intersectingKeywords: 5 }], [{ seed: "s", hits: [{ domain: "b.example", position: 1, url: null }] }]), {
+        seedsSearched: 1,
+        localArea: local,
+      });
+    expect(two(false).find((c) => c.domain === "b.example")!.score).toBe(50);
+    expect(two(true).find((c) => c.domain === "b.example")!.score).toBe(70);
+    expect(two(true).find((c) => c.domain === "c.example")!.score).toBe(15);
+  });
+
+  it("falls back to 0.5/0.5 when the SERPs returned no kept candidates, and to full weight for a single source", () => {
+    const overlapOnlyHit = mergeCandidates(overlap, []);
+    expect(rankCandidates(overlapOnlyHit, { seedsSearched: 1, localArea: true })[0]!.score).toBe(50);
+    expect(rankCandidates(overlapOnlyHit, { seedsSearched: 0, localArea: true })[0]!.score).toBe(100);
+    expect(rankCandidates(merged(), { seedsSearched: 1, localArea: true })[0]!.score).toBe(100);
+  });
+});
+
+describe("local evidence ranks first", () => {
+  const overlap = [
+    { domain: "noise.example", intersectingKeywords: 100, avgPosition: 1, estimatedTraffic: 1 },
+    { domain: "dealer.example", intersectingKeywords: 10, avgPosition: 1, estimatedTraffic: 1 },
+  ];
+  const serps: SeedSerp[] = [{ seed: "s", hits: [{ domain: "dealer.example", position: 5, url: null }] }];
+
+  it("puts SERP candidates ahead of higher-scoring overlap-only ones and flags the latter", () => {
+    const r = rankCandidates(mergeCandidates(overlap, serps), { seedsSearched: 1, localArea: true });
+    expect(r.map((c) => c.domain)).toEqual(["dealer.example", "noise.example"]);
+    expect(r[1]).toMatchObject({ weakEvidence: true });
+    expect(r[1]!.score).toBeGreaterThan(r[0]!.score - 100); // scores are unchanged, only the order moves
+    expect(r[0]!.weakEvidence).toBeUndefined();
+  });
+
+  it("keeps score order and no flag without a local area or without searched seeds", () => {
+    const merged = mergeCandidates(overlap, serps);
+    const noArea = rankCandidates(merged, { seedsSearched: 1 });
+    expect(noArea.map((c) => c.domain)).toEqual(["noise.example", "dealer.example"].sort((a, b) => noArea.find((c) => c.domain === b)!.score - noArea.find((c) => c.domain === a)!.score));
+    expect(noArea.some((c) => c.weakEvidence)).toBe(false);
+    const noSeeds = rankCandidates(mergeCandidates(overlap, []), { seedsSearched: 0, localArea: true });
+    expect(noSeeds.map((c) => c.domain)).toEqual(["noise.example", "dealer.example"]);
+    expect(noSeeds.some((c) => c.weakEvidence)).toBe(false);
+  });
+});
+
+describe("brand token edge cases", () => {
+  it("strips accents instead of splitting on them", () => {
+    const c = { domain: "mueller-bau.example", name: "Müller Bau" };
+    expect(brandToken(c)).toBeNull(); // "muller" is not the stem's prefix ("mueller"): no token beats a wrong one
+    const d = { domain: "mullerbau.example", name: "Müller Bau" };
+    expect(brandToken(d)).toBe("muller");
+    expect(isBrandLookalike("mullerbuild.example", "muller")).toBe(true);
+    expect(isBrandLookalike("muscle.example", brandToken(d))).toBe(false);
+    expect(looksBranded("müller bau reviews", d)).toBe(true);
+  });
+
+  it("requires a 3+ letter token to start the domain stem", () => {
+    const sun = { domain: "sunpros.example", name: "Sun Pros" };
+    expect(brandToken(sun)).toBe("sun");
+    expect(isBrandLookalike("sunprosolar.example", brandToken(sun))).toBe(true);
+    expect(brandToken({ domain: "bestroofs.example", name: "Sun Pros" })).toBeNull();
+    expect(isBrandLookalike("sunroomco.example", brandToken({ domain: "roofing.example", name: "Sun Roofing" }))).toBe(false);
+  });
+
+  it("ignores blank seeds when gating", () => {
+    const c = { domain: "ab.example", name: "AB Building" };
+    expect(pickSeeds({ seeds: [" ", ""], gsc: ["modular homes"] }, c)).toEqual([{ keyword: "modular homes", from: "gsc" }]);
+    expect(pickSeeds({ seeds: ["  prefab homes "], gsc: ["prefab pricing"] }, c).map((x) => x.keyword)).toEqual(["prefab homes", "prefab pricing"]);
   });
 });

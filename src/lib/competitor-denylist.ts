@@ -39,6 +39,10 @@ export const BUILTIN_DENYLIST: readonly string[] = [
   // Contractor search, review and home-improvement lead marketplaces
   "networx.com", "buildzoom.com", "improvenet.com", "fixr.com", "modernize.com", "homeguide.com", "servicemagic.com",
   "contractors.com", "contractortalk.com", "homewyse.com", "remodelingexpense.com", "bestcompany.com",
+  // Business-data and company directories
+  "zoominfo.com", "thebluebook.com", "dnb.com", "dandb.com", "bizapedia.com", "opencorporates.com", "buzzfile.com",
+  "crunchbase.com", "corporationwiki.com", "owler.com", "rocketreach.co", "cbinsights.com", "leadiq.com", "datanyze.com",
+  "bizprofile.net", "mapquest.com",
   "thervo.com", "yellowbook.com", "homebuilderdigest.com", "rated.network",
   // Real estate and travel aggregators
   "zillow.com", "realtor.com", "trulia.com", "redfin.com", "apartments.com", "rightmove.co.uk", "zoopla.co.uk",
@@ -48,7 +52,7 @@ export const BUILTIN_DENYLIST: readonly string[] = [
   "costco.com", "ikea.com", "wayfair.com", "alibaba.com", "aliexpress.com", "temu.com", "craigslist.org",
   "gumtree.com", "kijiji.ca", "argos.co.uk", "screwfix.com", "bunnings.com.au",
   // Encyclopedias, dictionaries and Q&A references
-  "wikipedia.org", "wikimedia.org", "wikihow.com", "britannica.com", "fandom.com", "dictionary.com",
+  "wikipedia.org", "wikimedia.org", "imdb.com", "rottentomatoes.com", "wikihow.com", "britannica.com", "fandom.com", "dictionary.com",
   "merriam-webster.com", "cambridge.org", "investopedia.com",
   // Site builders' shared hosts (pages there belong to many unrelated owners)
   "sites.google.com", "blogspot.com", "wordpress.com", "github.io",

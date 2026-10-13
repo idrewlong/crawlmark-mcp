@@ -10,6 +10,7 @@ import {
   DEFAULT_SEED_CAP,
   filterCandidates,
   mergeCandidates,
+  brandToken,
   pickSeeds,
   rankCandidates,
   SCORE_METHOD,
@@ -51,6 +52,8 @@ export interface SuggestOptions {
   area?: string | undefined;
   /** Overrides the client's niche for this call (not saved). */
   niche?: string | undefined;
+  /** Non-branded service keywords from the caller (up to 5); searched first. */
+  seeds?: string[] | undefined;
   limit?: number | undefined;
 }
 
@@ -66,9 +69,9 @@ const track = <T extends { costUsd: number; fromCache: boolean }>(spend: Spend, 
   return r;
 };
 
-/** Seeds: niche, tracked keywords, then free GSC queries; paid ranked keywords only if there are none. */
-export async function gatherSeeds(client: Client, niche: string | undefined, spend: Spend, notes: string[]): Promise<Seed[]> {
-  const inputs = { niche, tracked: client.trackedKeywords, gsc: [] as string[], ranked: [] as string[] };
+/** Seeds: explicit seeds, niche, tracked keywords, then free GSC queries; paid ranked keywords only if there are none. */
+export async function gatherSeeds(client: Client, niche: string | undefined, spend: Spend, notes: string[], explicit: string[] = []): Promise<Seed[]> {
+  const inputs = { seeds: explicit, niche, tracked: client.trackedKeywords, gsc: [] as string[], ranked: [] as string[] };
   let seeds = pickSeeds(inputs, client);
   if (seeds.length < DEFAULT_SEED_CAP && googleConfigured() && client.gscProperty) {
     try {
@@ -115,7 +118,7 @@ export async function suggestCompetitors(idOrDomain: string, opts: SuggestOption
   }
 
   // (b) Local SERP presence.
-  const seeds = await gatherSeeds(client, niche, spend, notes);
+  const seeds = await gatherSeeds(client, niche, spend, notes, opts.seeds);
   const failedSeeds: { keyword: string; error: string }[] = [];
   const serps = (
     await mapLimit(seeds, 2, async (seed): Promise<SeedSerp | undefined> => {
@@ -147,8 +150,9 @@ export async function suggestCompetitors(idOrDomain: string, opts: SuggestOption
     competitors: client.competitors,
     ignored: loadOverrides().filter((o) => o.ignore).map((o) => o.domain),
     denylist,
+    brandToken: brandToken(client),
   });
-  const ranked: ScoredCandidate[] = rankCandidates(kept, { seedsSearched: serps.length });
+  const ranked: ScoredCandidate[] = rankCandidates(kept, { seedsSearched: serps.length, localArea: Boolean(area) });
   const excludedCounts = excluded.reduce<Partial<Record<ExclusionReason, number>>>((acc, e) => {
     acc[e.reason] = (acc[e.reason] ?? 0) + 1;
     return acc;
