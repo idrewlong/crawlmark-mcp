@@ -10,6 +10,7 @@ import * as clack from "@clack/prompts";
 import { PromptAbortedError, type Choice, type Prompter } from "./prompter.js";
 import type { Outcome, Ui } from "./ui.js";
 import { stripControl } from "../lib/terminal-text.js";
+import { printBanner } from "./banner.js";
 
 /** The clack prompt functions the prompter uses (injected in tests). */
 export interface ClackPromptFns {
@@ -87,7 +88,7 @@ export const CANCELLED_MESSAGE = "Setup cancelled. Anything already saved stays 
  *   and exits with code 0 on Ctrl-C, or reports SIGINT through onCancel; either
  *   way the default prints the cancel message once and makes the exit code 130.
  */
-export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt?: () => void } = {}): Ui {
+export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt?: () => void; banner?: boolean } = {}): Ui {
   const output = opts.output ?? process.stdout;
   let interrupted = false;
   const onInterrupt =
@@ -109,6 +110,7 @@ export function clackUi(opts: { output?: Writable; fns?: ClackUiFns; onInterrupt
   return {
     fancy: true,
     intro(info) {
+      if (opts.banner ?? opts.output === undefined) printBanner(output);
       fns.intro(`${styleText(["bold", "cyan"], "crawlmark")} ${c(info.version)}  ${dim(info.command === "init" ? "SEO audits for Claude, Cursor and Codex" : "setup")}`, common);
       fns.log.info(`Config home: ${c(info.home)}`, common);
       if (info.dryRun) fns.log.warn("Dry run: nothing will be written or registered. Free read-only checks still run.", common);
