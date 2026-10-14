@@ -145,6 +145,8 @@ export async function unitsCall<T>(o: {
     },
     { refresh: o.refresh ?? false },
   );
+  // The entry now exists. A purgeExpired during the request (its orphan prune) may have dropped the row tracked above.
+  if (!fromCache) trackCacheKey(o.provider, o.client.slug, key);
   return { value: value.value, units: fromCache ? 0 : value.units, fromCache };
 }
 

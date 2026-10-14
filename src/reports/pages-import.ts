@@ -58,14 +58,18 @@ function propertyHost(property: string): string | null {
   }
 }
 
-/** Whether a host named by the export belongs to the client's property (www. and subdomains either way). */
+/**
+ * Whether a host named by the export belongs to the client's property. A URL-prefix property covers exactly one host
+ * (www. either way): an export for blog.example.com is not for `https://example.com/`. A domain property
+ * (`sc-domain:`) covers its subdomains too.
+ */
 export function hostMatches(host: string, property: string): boolean {
   const p = propertyHost(property);
   if (!p) return false;
   const strip = (h: string) => h.replace(/^www\./, "");
   const a = strip(host.toLowerCase());
   const b = strip(p);
-  return a === b || a.endsWith(`.${b}`) || (property.startsWith("sc-domain:") ? false : b.endsWith(`.${a}`));
+  return property.startsWith("sc-domain:") ? a === b || a.endsWith(`.${b}`) : a === b;
 }
 
 const XLSX_PART = /^xl\/(workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|worksheets\/[^/]+\.xml)$/i;

@@ -258,6 +258,19 @@ describe("a failing sitemap leaves sitemap-dependent hreflang findings unverifie
     expect(d.unverified.map((f) => f.rule)).toContain("hreflang-conflict");
   });
 
+  it("reports the old conflict as unverified, not resolved, when the sitemap hreflang cap is hit next time", async () => {
+    sitemapDown = false;
+    const client = { slug: "127.0.0.1", domain: "127.0.0.1", keyPages: [`${base}/`] } as unknown as Client;
+    const run1 = await siteHygiene(client, { origin: base, gscSitemapPaths: [] });
+    expect(run1.flags.map((f) => f.rule)).toContain("hreflang-conflict");
+    const run2 = await siteHygiene(client, { origin: base, gscSitemapPaths: [], sitemapHreflangLimit: 0 });
+    expect(run2.flags.map((f) => f.rule)).not.toContain("hreflang-conflict");
+    expect(run2.checked).not.toContain(`site:hreflang ${base}`);
+    const d = diffAudits(stored("a", 1, run1), stored("b", 2, run2));
+    expect(d.resolved.map((f) => f.rule)).not.toContain("hreflang-conflict");
+    expect(d.unverified.map((f) => f.rule)).toContain("hreflang-conflict");
+  });
+
   it("still records hreflang as checked when a listed sitemap no longer exists (404)", async () => {
     sitemapDown = false;
     staleListed = true;

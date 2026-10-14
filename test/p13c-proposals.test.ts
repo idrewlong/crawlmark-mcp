@@ -404,4 +404,50 @@ describe("a client template that hides the global one (SEC-1b)", () => {
     expect(asked[0]).toContain('It hides the global "board" template for this client.');
     expect(existsSync(clientFile)).toBe(true);
   });
+
+  // L-1: the global file exists but is invalid, so it loads as no templates; its raw ids still count.
+  const INVALID_GLOBAL = "version: 1\ntemplates:\n  board:\n    title: Board\n    sections:\n      - { id: search, type: not_a_section_type }\n";
+  const SAFE = { title: "Plain", sections: [{ id: "search", type: "search_overview" }] };
+
+  it("still sees a global template id when the global file is invalid, and refuses without a dialog", async () => {
+    const home = newHome();
+    mkdirSync(join(home, "config"), { recursive: true });
+    writeFileSync(globalFile(home), INVALID_GLOBAL);
+    const d = deps(home);
+    const p = await propose("create_report_template", { client: "example.com", file: "client", id: "board", template: SAFE }, d);
+    expect(p.valid).toBe(true);
+    expect((p as unknown as { shadowsGlobal: boolean; globalFileInvalid: boolean })).toMatchObject({ shadowsGlobal: true, globalFileInvalid: false });
+    await expect(templateWriteCall("create_report_template", { client: "example.com", file: "client", id: "board", template: SAFE, confirmToken: p.confirmToken }, d)).rejects.toThrow(/hides the global "board" template/);
+    // A different id is not hidden, and needs no dialog.
+    const other = await propose("create_report_template", { client: "example.com", file: "client", id: "other", template: SAFE }, d);
+    expect((other as unknown as { shadowsGlobal: boolean }).shadowsGlobal).toBe(false);
+    await templateWriteCall("create_report_template", { client: "example.com", file: "client", id: "other", template: SAFE, confirmToken: other.confirmToken }, d);
+    expect(existsSync(join(home, "config", "report-templates", "example.com.yaml"))).toBe(true);
+  });
+
+  it("treats an unreadable global file as a dialog reason for client-file saves only", async () => {
+    const home = newHome();
+    mkdirSync(join(home, "config"), { recursive: true });
+    const broken = "version: 1\ntemplates: [unclosed\n  board: {\n";
+    writeFileSync(globalFile(home), broken);
+    const d = deps(home);
+    const p = await propose("create_report_template", { client: "example.com", file: "client", id: "board", template: SAFE }, d);
+    expect(p).toMatchObject({ shadowsGlobal: false, globalFileInvalid: true });
+    expect(p.message).toMatch(/global template file is invalid/);
+    await expect(templateWriteCall("create_report_template", { client: "example.com", file: "client", id: "board", template: SAFE, confirmToken: p.confirmToken }, d)).rejects.toThrow(/global template file is invalid/);
+    expect(existsSync(join(home, "config", "report-templates", "example.com.yaml"))).toBe(false);
+    expect(readFileSync(globalFile(home), "utf8")).toBe(broken);
+
+    // With a dialog, the user is told.
+    const asked: string[] = [];
+    const withDialog = deps(home, { elicit: async (m) => (asked.push(m), true) });
+    const p2 = await propose("create_report_template", { client: "example.com", file: "client", id: "board", template: SAFE }, withDialog);
+    await templateWriteCall("create_report_template", { client: "example.com", file: "client", id: "board", template: SAFE, confirmToken: p2.confirmToken }, withDialog);
+    expect(asked[0]).toContain("The global template file is invalid");
+
+    // Saving to the global file itself is unaffected by this check (it is invalid YAML there, a different error).
+    const g = await propose("create_report_template", { client: "example.com", file: "global", id: "board", template: SAFE }, deps(home));
+    expect(g.valid).toBe(false);
+    expect(g).not.toHaveProperty("globalFileInvalid");
+  });
 });

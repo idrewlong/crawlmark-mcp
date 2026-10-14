@@ -117,6 +117,19 @@ export async function withUsdReservation<T>(client: Client, usd: number, fn: () 
   }
 }
 
+/**
+ * Like withUsdReservation for a single paid call: reserved for as long as `fn` runs so parallel calls can't each pass
+ * the check, unless an enclosing operation already reserved its whole estimate (then the call is only checked, so it
+ * isn't counted twice against other callers).
+ */
+export function withCallReservation<T>(client: Client, usd: number, fn: () => Promise<T>): Promise<T> {
+  if ((currentReservation.getStore()?.size ?? 0) > 0) {
+    assertBudget(client, usd);
+    return fn();
+  }
+  return withUsdReservation(client, usd, fn);
+}
+
 // ------------------------------------------------------------------ AI visibility sub-cap (Phase 12 C5)
 
 /** Ledger rows of AI-visibility calls: DataForSEO AI Optimization endpoints (timeouts included). */

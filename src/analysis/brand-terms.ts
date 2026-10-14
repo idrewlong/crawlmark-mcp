@@ -133,7 +133,7 @@ export const METHOD =
   "An exact-match domain such as austinplumbing.example has no distinctive part, so 'austin plumber' is never a strong match there. " +
   "Niche, area and discovery-search words also match their plurals and word endings (plumber/plumbing). Phrases under 4 letters are skipped. " +
   "Signals: (a) name similarity to the domain stem, client name or GA4 name: the better of whole-string edit-distance similarity and similarity to the start of the name, " +
-  "scaled down when the phrase covers under 70% of the name, and capped at 0.7 when the phrase is only the end of the name ('building systems' in 'AB Building Systems'); fires at >= 0.6, strong >= 0.75, very strong >= 0.85. " +
+  "scaled down when the phrase covers under 70% of the name, and capped at 0.7 when the phrase is only the end of the name ('building systems' in 'Acme Building Systems'); fires at >= 0.6, strong >= 0.75, very strong >= 0.85. " +
   "(b) navigational (Search Console only): the phrase's queries, excluding 'near me'/'best'-style ones, average position <= 2 and CTR >= 1.5x the expected CTR for that position, over 3+ clicks. " +
   "(c) concentration: 2+ distinct queries carrying >= 5% of the site's clicks (else impressions; DataForSEO: estimated traffic, else volume), or 4+ queries carrying >= 1%, at an average position <= 10. " +
   "Score = 100 x (0.5 similarity + 0.3 navigational + 0.2 concentration) for Search Console, 100 x (0.7 similarity + 0.3 concentration) for DataForSEO. " +
@@ -201,7 +201,7 @@ function commonPrefix(a: string, b: string): number {
  */
 export function nameSimilarity(phrase: string, name: string): number {
   if (phrase.length < MIN_TERM_CHARS || name.length < MIN_TERM_CHARS) return 0;
-  // Only the end of the name ("buildingsystems" in "abbuildingsystems"): it drops the distinctive start, so weak at most.
+  // Only the end of the name ("buildingsystems" in "acmebuildingsystems"): it drops the distinctive start, so weak at most.
   if (name.includes(phrase) && !name.startsWith(phrase)) return Math.min(SIM_ONLY_END, Math.round(ratio(phrase, name) * 100) / 100);
   let best = ratio(phrase, name);
   if (phrase.length >= 5 && commonPrefix(phrase, name) >= 3) {

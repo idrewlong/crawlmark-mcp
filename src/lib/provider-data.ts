@@ -68,26 +68,19 @@ export function purgeProviderData(provider: DataProvider, client?: string | null
     const source = SITE_AUDIT_SOURCE[provider];
     if (source) issueSnapshotsEdited = stripSourceFromIssueSnapshots(source as IssueSource, { client: c });
     const keys = (c ? db.prepare("SELECT key FROM provider_cache_keys WHERE provider = ? AND client = ?").all(provider, c) : db.prepare("SELECT key FROM provider_cache_keys WHERE provider = ?").all(provider)) as { key: string }[];
-    for (const k of keys) cacheEntries += Number(db.prepare("DELETE FROM cache WHERE key = ?").run(k.key).changes);
-    if (c) db.prepare("DELETE FROM provider_cache_keys WHERE provider = ? AND client = ?").run(provider, c);
-    else {
-      db.prepare("DELETE FROM provider_cache_keys WHERE provider = ?").run(provider);
-      db.prepare("DELETE FROM provider_data_marks WHERE provider = ?").run(provider);
+    // A cache entry two clients share is deleted when either is purged (the storage rule is "purge", not "keep for the other client"):
+    // the other client's next call fetches it again and tracks it afresh.
+    for (const k of keys) {
+      cacheEntries += Number(db.prepare("DELETE FROM cache WHERE key = ?").run(k.key).changes);
+      db.prepare("DELETE FROM provider_cache_keys WHERE key = ? AND provider = ?").run(k.key, provider);
     }
+    if (!c) db.prepare("DELETE FROM provider_data_marks WHERE provider = ?").run(provider);
     db.exec("COMMIT");
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;
   }
   return { provider, client: c, snapshots, issueSnapshotsEdited, cacheEntries };
-}
-
-/** True when this provider has anything stored (snapshots, tracked cache entries). */
-export function hasProviderData(provider: DataProvider): boolean {
-  return (
-    db.prepare("SELECT 1 FROM seo_snapshots WHERE provider = ? LIMIT 1").get(provider) !== undefined ||
-    db.prepare("SELECT 1 FROM provider_cache_keys WHERE provider = ? LIMIT 1").get(provider) !== undefined
-  );
 }
 
 /**

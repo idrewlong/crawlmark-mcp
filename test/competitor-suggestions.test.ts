@@ -39,7 +39,7 @@ describe("seeds", () => {
   });
 
   it("catches initialism and suffix variants of the brand", () => {
-    const c = { domain: "abbuildingsystems.com", name: "AB Building Systems" };
+    const c = { domain: "abbuildingsystems.example", name: "AB Building Systems" };
     for (const q of ["a b building", "ab building", "ab building solutions", "ab building inc", "AB Building, LLC", "ab building systems reviews", "ab"]) {
       expect(isBranded(q, c), q).toBe(true);
     }
@@ -225,35 +225,35 @@ describe("cleanSampleUrl", () => {
 });
 
 describe("brand lookalikes and AI seeds", () => {
-  const ab = { domain: "abbuildingsystems.com", name: "AB Building Systems" };
+  const ab = { domain: "abbuildingsystems.example", name: "AB Building Systems" };
 
   it("derives the brand token, ignoring common words", () => {
     expect(brandToken(ab)).toBe("ab");
-    expect(brandToken({ domain: "westfieldhomes.com", name: "Westfield Homes" })).toBe("westfield");
-    expect(brandToken({ domain: "thebesthomes.com", name: "The Best Homes" })).toBeNull();
-    expect(brandToken({ domain: "bestplumbing.com", name: "Best Plumbing Co" })).toBeNull();
-    expect(brandToken({ domain: "zedhomes.com", name: "Zed Homes" })).toBe("zed");
+    expect(brandToken({ domain: "westfieldhomes.example", name: "Westfield Homes" })).toBe("westfield");
+    expect(brandToken({ domain: "thebesthomes.example", name: "The Best Homes" })).toBeNull();
+    expect(brandToken({ domain: "bestplumbing.example", name: "Best Plumbing Co" })).toBeNull();
+    expect(brandToken({ domain: "zedhomes.example", name: "Zed Homes" })).toBe("zed");
     expect(brandToken({ domain: "x.com", name: "Zed" })).toBeNull(); // 3+ letters must start the domain stem
   });
 
   it("matches stems by prefix for short tokens and containment for long ones", () => {
-    expect(isBrandLookalike("abbuildingcompany.com", "ab")).toBe(true);
+    expect(isBrandLookalike("abbuildingcompany.example", "ab")).toBe(true);
     expect(isBrandLookalike("cabinets.example.com", "ab")).toBe(false);
-    expect(isBrandLookalike("rival-ab.com", "ab")).toBe(true); // ends with the token, 5 characters before it
-    expect(isBrandLookalike("buildingwithab.com", "ab")).toBe(true);
-    expect(isBrandLookalike("buildab.com", "ab")).toBe(true);
-    expect(isBrandLookalike("xyab.com", "ab")).toBe(false); // fewer than 3 characters before the token
+    expect(isBrandLookalike("rival-ab.example", "ab")).toBe(true); // ends with the token, 5 characters before it
+    expect(isBrandLookalike("buildingwithab.example", "ab")).toBe(true);
+    expect(isBrandLookalike("buildab.example", "ab")).toBe(true);
+    expect(isBrandLookalike("xyab.example", "ab")).toBe(false); // fewer than 3 characters before the token
     expect(isBrandLookalike("grab.com", "ab")).toBe(false);
     expect(isBrandLookalike("scrabble.com", "ab")).toBe(false);
     expect(isBrandLookalike("cabinets.com", "ab")).toBe(false);
-    expect(isBrandLookalike("thewestfieldgroup.com", "westfield")).toBe(true);
+    expect(isBrandLookalike("thewestfieldgroup.example", "westfield")).toBe(true);
     expect(isBrandLookalike("anything.com", null)).toBe(false);
   });
 
   it("filters lookalikes with their own reason", () => {
     const merged = mergeCandidates(
       [
-        { domain: "abbuildgroup.com", intersectingKeywords: 9, avgPosition: 3, estimatedTraffic: 1 },
+        { domain: "abbuildgroup.example", intersectingKeywords: 9, avgPosition: 3, estimatedTraffic: 1 },
         { domain: "rival.example", intersectingKeywords: 5, avgPosition: 3, estimatedTraffic: 1 },
       ],
       [],
@@ -261,7 +261,7 @@ describe("brand lookalikes and AI seeds", () => {
     const x = { ownDomain: "own.example", competitors: [], ignored: [], denylist: buildDenylist([]).denylist };
     const r = filterCandidates(merged, { ...x, brandToken: "ab" });
     expect(r.kept.map((c) => c.domain)).toEqual(["rival.example"]);
-    expect(r.excluded).toEqual([{ domain: "abbuildgroup.com", reason: "brand-lookalike" }]);
+    expect(r.excluded).toEqual([{ domain: "abbuildgroup.example", reason: "brand-lookalike" }]);
     expect(filterCandidates(merged, x).kept).toHaveLength(2);
   });
 

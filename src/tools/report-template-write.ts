@@ -73,10 +73,11 @@ function planFor(tool: TemplateTool, args: TemplateWriteArgs, deps: TemplateWrit
  * (a crawled page, say) could otherwise hide a builtin, overwrite a template, add paid sections, or put its
  * own text into every client report. Simple additive templates without a text section need no dialog.
  */
-export function dialogReasons(plan: Pick<TemplateWritePlan, "id" | "shadowsBuiltin" | "shadowsGlobal" | "replaces" | "paidSections" | "template">): string[] {
+export function dialogReasons(plan: Pick<TemplateWritePlan, "id" | "shadowsBuiltin" | "shadowsGlobal" | "globalFileInvalid" | "replaces" | "paidSections" | "template">): string[] {
   const reasons: string[] = [];
   if (plan.shadowsBuiltin) reasons.push(`it hides the builtin "${plan.id}" template`);
   if (plan.shadowsGlobal) reasons.push(`it hides the global "${plan.id}" template for this client`);
+  if (plan.globalFileInvalid) reasons.push(`the global template file is invalid, so crawlmark can't tell whether it hides a global "${plan.id}" template for this client`);
   if (plan.replaces) reasons.push(`it changes the existing template "${plan.id}"`);
   if (plan.paidSections.length) reasons.push(`it has paid sections (${plan.paidSections.map((s) => s.id).join(", ")})`);
   const texts = plan.template.sections.filter((s) => s.type === "text").map((s) => s.id);
@@ -93,6 +94,7 @@ export function confirmMessage(plan: TemplateWritePlan): string {
   if (plan.shadowsBuiltin) parts.push(`It hides the builtin "${plan.id}" template${plan.file === "client" ? " for this client" : ""}.`);
   else if (plan.replaces) parts.push("It replaces the template with this id in that file.");
   if (plan.shadowsGlobal) parts.push(`It hides the global "${plan.id}" template for this client.`);
+  if (plan.globalFileInvalid) parts.push(`The global template file is invalid, so it can't be checked whether this hides a global "${plan.id}" template.`);
   const paid = paidLine(plan).trim();
   if (paid) parts.push(paid);
   parts.push(`Sections: ${plan.template.sections.map((s) => `${s.id} (${s.type})`).join(", ")}.`);
@@ -163,6 +165,7 @@ export async function templateWriteCall(tool: TemplateTool, args: TemplateWriteA
       paidSections,
       shadowsBuiltin: plan.shadowsBuiltin,
       shadowsGlobal: plan.shadowsGlobal,
+      globalFileInvalid: plan.globalFileInvalid,
       confirmToken: token,
       expiresAt,
       message:
@@ -172,6 +175,7 @@ export async function templateWriteCall(tool: TemplateTool, args: TemplateWriteA
           : "") +
         (plan.shadowsBuiltin ? ` It hides the builtin "${plan.id}" template${file === "client" ? " for this client" : ""}.` : "") +
         (plan.shadowsGlobal ? ` It hides the global "${plan.id}" template for this client.` : "") +
+        (plan.globalFileInvalid ? ` The global template file is invalid, so it can't be checked whether this hides a global "${plan.id}" template; fix the global file too.` : "") +
         (!deps.elicit && dialogReasons(plan).length ? ` Saving it from here will be refused because ${dialogReasons(plan).join("; ")} and this app can't ask the user directly: tell the user to run \`crawlmark-cli report templates new\` in a terminal instead (or use an app with confirmation dialogs).` : "") +
         ` To save, call ${tool} again with exactly the same arguments plus confirmToken (valid 15 minutes, once).`,
     };

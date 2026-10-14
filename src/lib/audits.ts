@@ -30,10 +30,27 @@ const fromRow = (r: Row): StoredAudit => ({
   result: JSON.parse(r.result),
 });
 
+/** Saved audits are kept 400 days (like stored inspections), but the newest two per client always stay, so compare_audits has a pair. */
+export const AUDIT_RETENTION_DAYS = 400;
+const KEEP_NEWEST_AUDITS = 2;
+
 export function saveAudit(a: StoredAudit): void {
   db.prepare(
     "INSERT INTO audits (id, client, ran_at, settings, summary, findings, checked, result) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   ).run(a.id, a.client, a.ranAt, JSON.stringify(a.settings), JSON.stringify(a.summary), JSON.stringify(a.findings), JSON.stringify(a.checked), JSON.stringify(a.result));
+  pruneAudits(a.client, a.ranAt);
+}
+
+/** Delete this client's audits older than 400 days before `now`, except its newest two. Returns the number deleted. */
+export function pruneAudits(client: string, now: number): number {
+  const cutoff = now - AUDIT_RETENTION_DAYS * 86_400_000;
+  return Number(
+    db
+      .prepare(
+        "DELETE FROM audits WHERE client = ? AND ran_at < ? AND id NOT IN (SELECT id FROM audits WHERE client = ? ORDER BY ran_at DESC, id DESC LIMIT ?)",
+      )
+      .run(client, cutoff, client, KEEP_NEWEST_AUDITS).changes,
+  );
 }
 
 export function getAudit(id: string): StoredAudit | undefined {

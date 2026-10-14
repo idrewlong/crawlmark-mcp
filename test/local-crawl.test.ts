@@ -283,6 +283,19 @@ describe("crawlSite over an in-memory site", () => {
     expect(byUrl(run.pages, "/hop")).toMatchObject({ skipped: "off-site-redirect" });
   });
 
+  it("an explicit start-URL port is the one deliberate exception; links to any other port stay refused (SEC-2)", async () => {
+    const D = "https://example.com:8443";
+    const { deps, requests } = fakeSite({
+      [`${D}/`]: page("Dev", "d", ["/next", "https://example.com:6379/", "https://example.com:443/default", "http://example.com:80/plain"]),
+      [`${D}/next`]: page("Next", "n", []),
+    });
+    const run = await crawlSite("example.com", S({ startUrls: [`${D}/`] }), deps);
+    const urls = requests.map((r) => r.url);
+    expect(urls).toContain(`${D}/next`);
+    expect(urls.filter((u) => u.includes(":6379"))).toEqual([]);
+    expect(run.pages.some((p) => p.url === `${D}/next`)).toBe(true);
+  });
+
   it("strips control characters from page text", async () => {
     const { deps } = fakeSite({ [`${E}/`]: page("Bad\u202Etitle\u0007", "d", []) });
     const run = await crawlSite("example.com", S(), deps);

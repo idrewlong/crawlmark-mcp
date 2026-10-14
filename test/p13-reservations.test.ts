@@ -75,6 +75,28 @@ describe("withUnitsReservation (D16)", () => {
   });
 });
 
+describe("runTemplate reserves the live ranks of a tracked_keywords section with the run", () => {
+  const live = "      - { id: kw, type: tracked_keywords, liveRanks: true, paid: true }\n";
+  it("one reservation of keywords x the SERP estimate around the run; the per-keyword calls are not reserved again", async () => {
+    const reserved: number[] = [];
+    const serp = vi.fn(async () => ({ clientRank: 4, clientUrl: "https://example.com/" }));
+    const deps = fakeDeps({ serp, withUsdReservation: async (_c, usd, fn) => (reserved.push(usd), fn()) });
+    const r = await runTemplate(fixtureClient, { homeDir: homeWith(live), template: "paid", today, allowPaid: true, store: false }, deps);
+    expect(reserved).toEqual([Number((fixtureClient.trackedKeywords.length * 0.002).toFixed(4))]);
+    expect(serp).toHaveBeenCalledTimes(fixtureClient.trackedKeywords.length);
+    expect(r.sections.find((s) => s.id === "kw")?.status).toBe("ok");
+  });
+
+  it("when the estimate doesn't fit the run is refused before any section or SERP request", async () => {
+    const serp = vi.fn();
+    const gscQuery = vi.fn(async () => []);
+    const deps = fakeDeps({ serp, gscQuery, withUsdReservation: async () => { throw new BudgetExceededError("Budget cap hit for example.com"); } });
+    await expect(runTemplate(fixtureClient, { homeDir: homeWith(live), template: "paid", today, allowPaid: true, store: false }, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(serp).not.toHaveBeenCalled();
+    expect(gscQuery).not.toHaveBeenCalled();
+  });
+});
+
 const gapEstimate = (o: Partial<EstimateResult> & { provider: EstimateResult["provider"]; usd?: number; units?: number }): EstimateResult => ({
   estimateOnly: true,
   provider: o.provider,

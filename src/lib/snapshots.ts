@@ -108,12 +108,12 @@ function rowsBetween(k: SnapshotKey, from: string, to: string): StoredSnapshot[]
  * The snapshot nearest `day` within ±toleranceDays (D3), for the same provider and market only. On a tie in
  * distance a `live` capture beats `provider_history` (`prefer`), then the later capture wins.
  */
-export function nearestSnapshot(q: SnapshotKey & { day: string; toleranceDays: number; prefer?: SnapshotSource }, now = Date.now()): StoredSnapshot | undefined {
+export function nearestSnapshot(q: SnapshotKey & { day: string; toleranceDays: number; prefer?: SnapshotSource; /** Consider only this source. */ only?: SnapshotSource }, now = Date.now()): StoredSnapshot | undefined {
   if (!isDay(q.day)) throw new Error(`day must be YYYY-MM-DD (got ${q.day})`);
   pruneSnapshots(now);
   const prefer = q.prefer ?? "live";
   const target = dayMs(q.day);
-  const rows = rowsBetween(q, shiftDay(q.day, -q.toleranceDays), shiftDay(q.day, q.toleranceDays));
+  const rows = rowsBetween(q, shiftDay(q.day, -q.toleranceDays), shiftDay(q.day, q.toleranceDays)).filter((r) => !q.only || r.source === q.only);
   rows.sort((a, b) => Math.abs(dayMs(a.day) - target) - Math.abs(dayMs(b.day) - target) || Number(b.source === prefer) - Number(a.source === prefer) || b.capturedAt - a.capturedAt);
   return rows[0];
 }

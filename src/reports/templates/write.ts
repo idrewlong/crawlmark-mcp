@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep, isAbsolute } from "node:path";
 import { Document, isMap, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq, type Node } from "yaml";
 import { writeFileAtomic } from "../../lib/atomic-file.js";
@@ -79,6 +79,8 @@ export interface TemplateWritePlan {
   shadowsBuiltin: boolean;
   /** A client-file template whose id is also a template in the global file: it hides that one for this client (SEC-1b). */
   shadowsGlobal: boolean;
+  /** A client-file save while the global file exists but is invalid and its template ids couldn't be read: whether this id hides a global template is unknown. */
+  globalFileInvalid: boolean;
   template: TemplateSpec;
   paidSections: { id: string; type: string }[];
   warnings: ValidationIssue[];
@@ -206,7 +208,9 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
   const inFile = existing !== undefined;
   const isBuiltin = Object.hasOwn(BUILTIN_TEMPLATES, req.id);
   // A client template with the same id fully replaces the global one for that client (load.ts), so say so.
-  const shadowsGlobal = req.file === "client" && Object.hasOwn(readTemplateFile(globalTemplatesFile(req.homeDir), req.homeDir, req.today).value?.templates ?? {}, req.id);
+  const globalIds = req.file === "client" ? globalTemplateIds(req.homeDir, req.today) : { ids: [] as string[] };
+  const shadowsGlobal = globalIds.ids.includes(req.id);
+  const globalFileInvalid = req.file === "client" && globalIds.unreadable === true;
   const where = req.file === "client" ? `${clientSlug}'s template file` : "the global template file";
 
   if (req.mode === "create") {
@@ -272,15 +276,43 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
     replaces: inFile,
     shadowsBuiltin: isBuiltin,
     shadowsGlobal,
+    globalFileInvalid,
     template,
     paidSections: template.sections.filter((s) => isPaidSection(s) || s.paid === true).map((s) => ({ id: s.id, type: s.type })),
     warnings: [
       ...result.warnings,
       ...(isBuiltin ? [{ path: `templates.${req.id}`, message: `hides the builtin "${req.id}" template${req.file === "client" ? " for this client" : ""}` }] : []),
       ...(shadowsGlobal ? [{ path: `templates.${req.id}`, message: `hides the global "${req.id}" template for this client` }] : []),
+      ...(globalFileInvalid ? [{ path: `templates.${req.id}`, message: `the global template file is invalid, so it can't be checked whether this hides a global "${req.id}" template; fix the global file (report templates validate)` }] : []),
       ...(reformatted ? [{ path: "", message: "this file's layout couldn't be edited line by line, so it is rewritten in a standard layout (comments kept); check the diff" }] : []),
     ],
   };
+}
+
+/**
+ * The template ids in the global file. A valid file gives its templates; an invalid one (which loads as no templates
+ * at all) is read raw so a client template can still be seen to hide one of its ids once the file is fixed (L-1).
+ * `unreadable` when the file exists, is invalid and its `templates` keys can't be read either.
+ */
+function globalTemplateIds(homeDir: string, today: Date | undefined): { ids: string[]; unreadable?: boolean } {
+  const path = globalTemplatesFile(homeDir);
+  const read = readTemplateFile(path, homeDir, today);
+  if (read.value) return { ids: Object.keys(read.value.templates ?? {}) };
+  if (!read.status.exists) return { ids: [] };
+  try {
+    if (statSync(path).size > MAX_TEMPLATE_BYTES) return { ids: [], unreadable: true };
+    const doc = parseDocument(readFileSync(path, "utf8"), { uniqueKeys: true });
+    // A duplicate key still parses to a map; any other YAML error may have dropped content, so it isn't trusted.
+    if (doc.errors.some((e) => e.code !== "DUPLICATE_KEY")) return { ids: [], unreadable: true };
+    const root = doc.toJS() as unknown;
+    if (root === null || typeof root !== "object" || Array.isArray(root)) return { ids: [], unreadable: true };
+    const templates = (root as { templates?: unknown }).templates;
+    if (templates === undefined || templates === null) return { ids: [] };
+    if (typeof templates !== "object" || Array.isArray(templates)) return { ids: [], unreadable: true };
+    return { ids: Object.keys(templates) };
+  } catch {
+    return { ids: [], unreadable: true };
+  }
 }
 
 const basenameOf = (p: string) => p.split(/[\\/]/).pop()!;

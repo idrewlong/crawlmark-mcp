@@ -9,6 +9,7 @@ import { assertSafeUrlResolved, pinnedLookup, UrlRefusedError } from "../lib/url
 import { compareRender, type RenderFlag } from "../analysis/render.js";
 import { extractIsolated } from "../analysis/extract-isolated.js";
 import type { SeoExtract } from "../analysis/render-extract.js";
+import { assertAllowedByPolicy, clientDomainPolicy } from "../user-url.js";
 import { assertNotProxyBlocked, guardPage, withBrowser } from "./browser.js";
 
 export const GOOGLEBOT_UA =
@@ -250,6 +251,7 @@ export async function fetchRaw(url: string, opts: FetchRawOptions = {}): Promise
 /** The DOM after JavaScript has run, from headless Chrome behind the egress proxy. */
 export async function fetchRendered(url: string, opts: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<RenderedFetch> {
   await assertSafeUrlResolved(url);
+  const policy = await clientDomainPolicy();
   const { value } = await cached(cacheKey("render-dom", url), TTL.day, () =>
     withBrowser(`Rendered fetch of ${url}`, opts.signal, async (browser) => {
       const page = await browser.newPage();
@@ -258,12 +260,16 @@ export async function fetchRendered(url: string, opts: { refresh?: boolean; sign
       await page.setUserAgent({ userAgent: GOOGLEBOT_UA });
       const res = await page.goto(url, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT_MS });
       assertNotProxyBlocked(res, url);
+      // RESTRICT_TO_CLIENT_DOMAINS: every redirect hop and the page the browser ended on stay on the client's domains.
+      for (const hop of res?.request().redirectChain() ?? []) assertAllowedByPolicy(policy, hop.url());
+      assertAllowedByPolicy(policy, page.url());
       const html = await page.content();
       // Measured in Node: page JS cannot spoof it, and the DOM may have grown since any in-page check.
       if (html.length > MAX_BODY_BYTES) throw new Error(`Rendered DOM is ${html.length} characters, over the ${MAX_BODY_BYTES} cap`);
       return { status: res?.status() ?? null, finalUrl: page.url(), html } satisfies RenderedFetch;
     }),
   { refresh: opts.refresh });
+  assertAllowedByPolicy(policy, value.finalUrl); // also for an answer cached before the restriction was on
   return value;
 }
 
@@ -290,7 +296,8 @@ export async function checkRender(url: string, opts: { refresh?: boolean; signal
   renderedP.catch(() => undefined); // observed here; awaited below on the success path
   let raw: RawFetch;
   try {
-    raw = await fetchRaw(url, opts);
+    const policy = await clientDomainPolicy();
+    raw = await fetchRaw(url, { ...opts, ...(policy ? { allowUrl: policy } : {}) });
     if (raw.status >= 400) throw new Error(`Raw fetch of ${url} returned HTTP ${raw.status}; nothing to compare`);
     if (!isHtml(raw.contentType)) throw new Error(`Raw response for ${url} is ${raw.contentType}, not HTML; nothing to compare`);
   } catch (err) {

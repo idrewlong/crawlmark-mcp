@@ -306,6 +306,10 @@ describe("import (store) and the merged view", () => {
     expect(hostMatches("example.com", "https://www.example.com/")).toBe(true);
     expect(hostMatches("www.example.org", "https://www.example.com/")).toBe(false);
     expect(hostMatches("blog.example.com", "sc-domain:example.com")).toBe(true);
+    // A URL-prefix property covers one host: neither a subdomain nor the parent domain matches.
+    expect(hostMatches("blog.example.com", "https://example.com/")).toBe(false);
+    expect(hostMatches("example.com", "https://blog.example.com/")).toBe(false);
+    expect(hostMatches("www.example.com", "https://example.com/")).toBe(true);
     await expect(importPagesExport(c, file("www.example.org-Coverage-2026-10-14.zip", summaryZip()), { now: NOW })).rejects.toThrow(/for www.example.org, not example.com/);
     await expect(importPagesExport(c, file("Coverage-Drilldown-2026-10-14.zip", drillZip(["https://example.net/a,2026-09-01", "https://example.net/b,2026-09-01"])), { now: NOW })).rejects.toThrow(/None of the 2 URLs in this export are in https:\/\/www.example.com\//);
     await expect(importPagesExport({ ...c, gscProperty: undefined } as unknown as Client, file("x.csv", CRITICAL), { now: NOW })).rejects.toThrow(/No Search Console property/);

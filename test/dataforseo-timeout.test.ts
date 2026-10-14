@@ -42,7 +42,7 @@ describe("DataForSEO calls that time out", () => {
     const { onPageStartCrawl } = await import("../src/providers/dataforseo.js");
     await expect(onPageStartCrawl(client, 400)).rejects.toThrow(/a crawl may have started anyway/);
     const rows = await ledger();
-    expect(rows).toContainEqual({ endpoint: "/on_page/task_post (timeout, estimated)", cost_usd: 0.05 });
+    expect(rows).toContainEqual({ endpoint: "/on_page/task_post (timeout, estimated)", cost_usd: 0.18 });
   });
 
   it("record nothing for other failures", async () => {

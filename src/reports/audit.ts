@@ -1,6 +1,8 @@
 import type { Client } from "../config.js";
 import { runAxe, type AxeResult, type WcagLevel } from "../providers/axe.js";
-import { backlinksSummary, instantPage, onPageStartCrawl } from "../providers/seo-data.js";
+import { BudgetExceededError, withUsdReservation } from "../lib/budget.js";
+import { ESTIMATE_USD } from "../providers/dataforseo.js";
+import { backlinksSummary, instantPage, onPageStartCrawl, requireDataForSeo, routeProvider } from "../providers/seo-data.js";
 import { gscInspectUrl, gscSitemaps } from "../providers/gsc.js";
 import { checkRender, type RenderCheck } from "../providers/render.js";
 import { runLighthouse, type FormFactor, type LighthouseResult } from "../providers/lighthouse.js";
@@ -61,6 +63,27 @@ interface SiteChecks {
   localCrawl?: Section<LocalCrawlAuditData>;
 }
 
+/** The USD the run's site-level paid checks would cost together (a DataForSEO crawl start and backlinks summary); 0 when neither is paid. */
+export async function paidSiteChecksUsd(client: Client, opts: Pick<AuditOptions, "fullCrawl" | "maxCrawlPages" | "backlinks">): Promise<number> {
+  let usd = 0;
+  if (opts.fullCrawl) {
+    try {
+      requireDataForSeo("siteCrawl", client);
+      usd += ESTIMATE_USD.onPageTask * ((opts.maxCrawlPages ?? 100) / 100);
+    } catch {
+      /* the crawl section reports why it is unavailable */
+    }
+  }
+  if (opts.backlinks) {
+    try {
+      if ((await routeProvider(client, "backlinksSummary")).provider === "dataforseo") usd += ESTIMATE_USD.backlinksSummary;
+    } catch {
+      /* the backlinks section reports why it is unavailable */
+    }
+  }
+  return Number(usd.toFixed(6));
+}
+
 /** Run every check and save the snapshot. The result carries `auditId` for list/get/compare_audits. */
 export async function runAudit(client: Client, opts: AuditOptions = {}) {
   const result = await collectAudit(client, opts);
@@ -89,14 +112,27 @@ async function collectAudit(client: Client, opts: AuditOptions) {
   const signal = opts.signal;
   const cacheOpts = { refresh: fresh, signal };
 
-  // Site-level checks run in parallel; they're all network calls.
-  const [sitemaps, crawl, links, crux, tagManager] = await Promise.all([
-    section(() => gscSitemaps(client)),
-    opts.fullCrawl ? section(() => onPageStartCrawl(client, opts.maxCrawlPages ?? 100)) : Promise.resolve(null),
-    opts.backlinks ? section(() => backlinksSummary(client)) : Promise.resolve(null),
-    opts.cruxHistory ? section(() => cruxHistory({ origin: clientOrigin(client) }, { refresh: fresh })) : Promise.resolve(undefined),
-    opts.includeTagManager ? section(() => runGtmAudit(client, { refresh: fresh })) : Promise.resolve(undefined),
-  ]);
+  // Site-level checks run in parallel; they're all network calls. The two paid ones (the full crawl and a DataForSEO
+  // backlinks summary) are reserved together first, so concurrent runs can't each pass a cap their sum would break.
+  const siteChecks = () =>
+    Promise.all([
+      section(() => gscSitemaps(client)),
+      opts.fullCrawl ? section(() => onPageStartCrawl(client, opts.maxCrawlPages ?? 100)) : Promise.resolve(null),
+      opts.backlinks ? section(() => backlinksSummary(client)) : Promise.resolve(null),
+      opts.cruxHistory ? section(() => cruxHistory({ origin: clientOrigin(client) }, { refresh: fresh })) : Promise.resolve(undefined),
+      opts.includeTagManager ? section(() => runGtmAudit(client, { refresh: fresh })) : Promise.resolve(undefined),
+    ]);
+  const estimateUsd = await paidSiteChecksUsd(client, opts);
+  let reserved = false;
+  const [sitemaps, crawl, links, crux, tagManager] =
+    estimateUsd > 0
+      ? await withUsdReservation(client, estimateUsd, () => ((reserved = true), siteChecks())).catch((err: unknown) => {
+          // Not enough budget for both: nothing was reserved or requested. Each paid check then checks its own cap
+          // (and reserves it), so what fits runs and the rest is reported as that section's error.
+          if (reserved || !(err instanceof BudgetExceededError)) throw err;
+          return siteChecks();
+        })
+      : await siteChecks();
 
   // The local crawl (network only) runs alongside the browser checks; hygiene waits for it so its orphan check can use it.
   const localCrawl = opts.localCrawl

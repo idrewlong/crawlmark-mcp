@@ -356,6 +356,15 @@ describe("SEC-5 and SEC-6", () => {
     expect(plan.after).toContain("    title: Short\n");
   });
 
+  it("titles refuse stacked enclosing marks too (L-2); CJK, Thai, Burmese and ordinary accents pass", () => {
+    const ch = (...c: number[]) => String.fromCharCode(...c);
+    const errs = (title: string) => validateTemplateText(`version: 1\ntemplates:\n  t: ${JSON.stringify({ title, sections: [{ id: "a", type: "search_overview" }] })}\n`, { today }).errors.map((e) => e.path);
+    // Four enclosing circles (Me), and a mix of Mn + Me + Mn. Spacing marks (Mc) are not counted: Burmese stacks several.
+    for (const bad of [`A${ch(0x20dd, 0x20dd, 0x20dd, 0x20dd)}B`, `A${ch(0x0301, 0x20dd, 0x0302)}`]) expect(errs(bad), JSON.stringify(bad)).toContain("templates.t.title");
+    // Two marks in a row, CJK, a dakuten, Thai, Devanagari and Burmese (ကျော်, ကြွေး) are ordinary text.
+    for (const ok of [`A${ch(0x20dd, 0x20dd)}B`, "\u6708\u6B21\u30EC\u30DD\u30FC\u30C8", "\u30AB\u3099", "\u0E01\u0E34\u0E48", "\u092A\u0930\u093F\u0923\u093E\u092E", "\u1000\u103B\u1031\u102C\u103A", "\u1000\u103C\u103D\u1031\u1038", `A${ch(0x0903, 0x0903, 0x0903)}`]) expect(errs(ok), JSON.stringify(ok)).toEqual([]);
+  });
+
   it("titles refuse stacked combining marks and blank fillers; ordinary accents pass", () => {
     const ch = (...c: number[]) => String.fromCharCode(...c);
     const yamlOf = (t: object) => `version: 1\ntemplates:\n  t: ${JSON.stringify(t)}\n`;

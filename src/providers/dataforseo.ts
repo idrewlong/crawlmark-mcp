@@ -1,6 +1,6 @@
 import { env, type Client } from "../config.js";
 import { TIMEOUTS } from "../lib/timeout.js";
-import { assertAiBudget, assertBudget, recordSpend, withUsdReservation } from "../lib/budget.js";
+import { assertAiBudget, assertBudget, recordSpend, withCallReservation, withUsdReservation } from "../lib/budget.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import { mergeGaps, mergeIdeas } from "../analysis/keyword-gap.js";
 import type {
@@ -94,7 +94,8 @@ export const ESTIMATE_USD = {
   backlinksHistory: 0.025,
   /** Phase 13 B: Labs historical_rank_overview/live, 13 months (sample cost $0.106, research D2): a ceiling. */
   rankHistory: 0.11,
-  onPageTask: 0.0125, // ~$0.000125 per page × 100 pages
+  /** $0.00045 per page with load_resources (base $0.00015 + $0.0003, DataForSEO pricing 2026-10) × 100 pages. */
+  onPageTask: 0.045,
   onPageRead: 0,
   instantPage: 0.0025,
   /** Phase 12 C4: Business Data my_business_info/live; the docs' example task cost (research D4). */
@@ -198,18 +199,20 @@ async function paid<T>(
   path: string,
   body: unknown,
   ttl: number,
-  opts: { refresh?: boolean } = {},
+  opts: { refresh?: boolean; /** The call's own estimate when it isn't the flat ESTIMATE_USD (Labs: by limit). */ estimateUsd?: number } = {},
 ): Promise<{ result: T[]; costUsd: number; fromCache: boolean }> {
   const key = cacheKey("dfs", env.DATAFORSEO_BASE_URL, path, body);
+  const estimate = opts.estimateUsd ?? ESTIMATE_USD[name];
   const { value, fromCache } = await cached(
     key,
     ttl,
-    async () => {
-      assertBudget(client, ESTIMATE_USD[name]);
-      const task = await billedRequest<T>(client.slug, path, body, ESTIMATE_USD[name], "DataForSEO may still have billed it.");
-      recordSpend(client.slug, "dataforseo", path, task.cost ?? 0);
-      return { result: task.result ?? [], costUsd: task.cost ?? 0 };
-    },
+    // SEC-1: checked and reserved until the request ends, so parallel misses can't each pass the cap.
+    () =>
+      withCallReservation(client, estimate, async () => {
+        const task = await billedRequest<T>(client.slug, path, body, estimate, "DataForSEO may still have billed it.");
+        recordSpend(client.slug, "dataforseo", path, task.cost ?? 0);
+        return { result: task.result ?? [], costUsd: task.cost ?? 0 };
+      }),
     opts,
   );
   return { ...value, costUsd: fromCache ? 0 : value.costUsd, fromCache };
@@ -298,6 +301,7 @@ export async function rankedKeywords(client: Client, target = client.domain, lim
     "/dataforseo_labs/google/ranked_keywords/live",
     [{ target, limit, item_types: ["organic"], ...geo(client), order_by: ["keyword_data.keyword_info.search_volume,desc"] }],
     TTL.week,
+    { estimateUsd: labsTaskUsd(limit) },
   );
   return { ...mapRankedKeywords(result[0]), costUsd, fromCache };
 }
@@ -309,6 +313,7 @@ export async function competitorDomains(client: Client, limit = 20) {
     "/dataforseo_labs/google/competitors_domain/live",
     [{ target: client.domain, limit, item_types: ["organic"], ...geo(client) }],
     TTL.month,
+    { estimateUsd: labsTaskUsd(limit) },
   );
   return { ...mapCompetitors(result[0]), costUsd, fromCache };
 }
@@ -722,18 +727,20 @@ export async function llmTargetMetrics(client: Client, body: Record<string, unkn
 /** Start an async site crawl. Poll with onPageSummary(taskId). */
 export async function onPageStartCrawl(client: Client, maxPages = 100) {
   const estimate = ESTIMATE_USD.onPageTask * (maxPages / 100);
-  assertBudget(client, estimate);
-  const task = await billedRequest<unknown>(client.slug, "/on_page/task_post", [
-    {
-      target: client.domain,
-      max_crawl_pages: maxPages,
-      load_resources: true,
-      enable_javascript: false,
-      check_spell: false,
-    },
-  ], estimate, "a crawl may have started anyway; check the DataForSEO dashboard before starting another.");
-  recordSpend(client.slug, "dataforseo", "/on_page/task_post", task.cost ?? 0);
-  return { taskId: task.id, costUsd: task.cost ?? 0 };
+  // SEC-1: reserved for the request, so parallel starts can't each pass the cap.
+  return withCallReservation(client, estimate, async () => {
+    const task = await billedRequest<unknown>(client.slug, "/on_page/task_post", [
+      {
+        target: client.domain,
+        max_crawl_pages: maxPages,
+        load_resources: true,
+        enable_javascript: false,
+        check_spell: false,
+      },
+    ], estimate, "a crawl may have started anyway; check the DataForSEO dashboard before starting another.");
+    recordSpend(client.slug, "dataforseo", "/on_page/task_post", task.cost ?? 0);
+    return { taskId: task.id, costUsd: task.cost ?? 0 };
+  });
 }
 
 interface OnPageSummary {

@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { env } from "../config.js";
@@ -9,7 +9,18 @@ import { env } from "../config.js";
  */
 // 0700: a new data/ holds the OAuth token and cached client data. An existing directory keeps its mode.
 mkdirSync(resolve(env.DATA_DIR), { recursive: true, mode: 0o700 });
-export const db = new DatabaseSync(join(resolve(env.DATA_DIR), "crawlmark.db"));
+const dbPath = join(resolve(env.DATA_DIR), "crawlmark.db");
+export const db = new DatabaseSync(dbPath);
+
+// BUG-1: a cron crawlmark-cli next to one or more MCP servers shares this file. Wait for a lock instead of failing
+// at once with "database is locked" (a paid call that was billed would otherwise lose its ledger row and cache entry).
+db.exec("PRAGMA busy_timeout = 5000");
+// WAL: readers don't block the writer and the writer doesn't block readers. Best effort (a network filesystem may refuse).
+try {
+  db.exec("PRAGMA journal_mode = WAL");
+} catch {
+  /* keep the default rollback journal */
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS cache (
@@ -60,7 +71,13 @@ db.exec(`
 export function migrateSpendUnits(database: DatabaseSync): boolean {
   const cols = database.prepare("PRAGMA table_info(spend)").all() as { name: string }[];
   if (cols.some((c) => c.name === "units")) return false;
-  database.exec("ALTER TABLE spend ADD COLUMN units INTEGER NOT NULL DEFAULT 0");
+  try {
+    database.exec("ALTER TABLE spend ADD COLUMN units INTEGER NOT NULL DEFAULT 0");
+  } catch (err) {
+    // Another process starting at the same moment may have added it first.
+    if (!/duplicate column/i.test((err as Error).message)) throw err;
+    return false;
+  }
   return true;
 }
 
@@ -235,9 +252,10 @@ export function migrateProviderData(database: DatabaseSync): boolean {
   const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'provider_cache_keys'").get() !== undefined;
   database.exec(`
     CREATE TABLE IF NOT EXISTS provider_cache_keys (
-      key      TEXT PRIMARY KEY,
+      key      TEXT NOT NULL,
       provider TEXT NOT NULL,
-      client   TEXT NOT NULL
+      client   TEXT NOT NULL,
+      PRIMARY KEY (key, client)
     );
     CREATE INDEX IF NOT EXISTS provider_cache_keys_provider ON provider_cache_keys (provider, client);
     CREATE TABLE IF NOT EXISTS provider_data_marks (
@@ -247,6 +265,27 @@ export function migrateProviderData(database: DatabaseSync): boolean {
       updated_at INTEGER NOT NULL
     );
   `);
+  // Fix round: a cache key can be shared by two clients (unit providers' keys don't name the client), so the tracking
+  // key is (key, client). A table created with `key` alone as its primary key is rebuilt once, keeping its rows.
+  const shape = () => (database.prepare("PRAGMA table_info(provider_cache_keys)").all() as { name: string; pk: number }[]).find((c) => c.name === "client")?.pk ?? 0;
+  if (shape() === 0) {
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      if (shape() === 0) {
+        database.exec(`
+          CREATE TABLE provider_cache_keys_new (key TEXT NOT NULL, provider TEXT NOT NULL, client TEXT NOT NULL, PRIMARY KEY (key, client));
+          INSERT OR IGNORE INTO provider_cache_keys_new (key, provider, client) SELECT key, provider, client FROM provider_cache_keys;
+          DROP TABLE provider_cache_keys;
+          ALTER TABLE provider_cache_keys_new RENAME TO provider_cache_keys;
+          CREATE INDEX IF NOT EXISTS provider_cache_keys_provider ON provider_cache_keys (provider, client);
+        `);
+      }
+      database.exec("COMMIT");
+    } catch (err) {
+      database.exec("ROLLBACK");
+      throw err;
+    }
+  }
   return !existed;
 }
 
@@ -324,3 +363,26 @@ export function migratePagesExports(database: DatabaseSync): boolean {
 }
 
 migratePagesExports(db);
+
+/**
+ * SEC-3: the database holds cached client data and the spend ledger, so it (and SQLite's -wal and -shm files, when
+ * they exist) is readable by the owner only; a database created by an older build was 0644. The data directory is
+ * narrowed to 0700 when this user owns it. Best effort: a filesystem without modes just keeps what it has.
+ */
+export function secureDataFiles(): void {
+  try {
+    const dir = resolve(env.DATA_DIR);
+    if (typeof process.getuid === "function" && statSync(dir).uid === process.getuid()) chmodSync(dir, 0o700);
+  } catch {
+    /* keep the directory's mode */
+  }
+  for (const suffix of ["", "-wal", "-shm"]) {
+    try {
+      chmodSync(dbPath + suffix, 0o600);
+    } catch {
+      /* the file doesn't exist (yet), or modes aren't supported here */
+    }
+  }
+}
+
+secureDataFiles();

@@ -41,7 +41,10 @@ export async function cached<T>(
 
 export function purgeExpired(): number {
   const now = Math.floor(Date.now() / 1000);
-  return Number(db.prepare("DELETE FROM cache WHERE expires_at <= ?").run(now).changes);
+  const removed = Number(db.prepare("DELETE FROM cache WHERE expires_at <= ?").run(now).changes);
+  // Tracking rows (provider_cache_keys) whose cache row is gone have nothing left to purge.
+  db.prepare("DELETE FROM provider_cache_keys WHERE key NOT IN (SELECT key FROM cache)").run();
+  return removed;
 }
 
 /** Read a fresh cache entry without computing anything. */

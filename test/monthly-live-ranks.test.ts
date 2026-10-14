@@ -16,12 +16,17 @@ vi.mock("../src/providers/ga4.js", async () => {
 });
 vi.mock("../src/providers/dataforseo.js", () => ({
   serp: vi.fn(async (_c: unknown, kw: string) => ({ keyword: kw, clientRank: kw.length % 7, clientUrl: "https://example.com/", costUsd: 0.002, fromCache: false })),
+  ESTIMATE_USD: { serp: 0.002 },
 }));
 vi.mock("../src/lib/audits.js", async () => {
   const d = await import("./fixtures/reports/data.js");
   return { latestAudit: vi.fn(() => d.AUDIT_LATEST), latestAuditBefore: vi.fn(() => d.AUDIT_BEFORE) };
 });
-vi.mock("../src/lib/budget.js", () => ({ spentThisMonth: vi.fn(() => 0.12345) }));
+vi.mock("../src/lib/budget.js", () => ({
+  spentThisMonth: vi.fn(() => 0.12345),
+  BudgetExceededError: class extends Error {},
+  withUsdReservation: vi.fn(async (_c: unknown, _usd: number, fn: () => Promise<unknown>) => fn()),
+}));
 
 const { monthlyReport } = await import("../src/reports/monthly.js");
 const { readRanks } = await import("../src/lib/rank-history.js");

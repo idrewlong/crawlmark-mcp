@@ -47,7 +47,7 @@ const lineText = (max: number) =>
         .max(max)
         .refine((s) => stripControl(s) === s, NO_CONTROL)
         // SEC-6: stacked combining marks ("Zalgo") and blank filler characters that look like nothing.
-        .refine((s) => !/\p{Mn}{3,}/u.test(s), "must not stack three or more combining marks")
+        .refine((s) => !/[\p{Mn}\p{Me}]{3,}/u.test(s), "must not stack three or more combining marks")
         .refine((s) => !BLANK_FILLER_RE.test(s), "must not contain blank filler characters (Hangul fillers, braille blank)"),
     );
 /** Characters that render as blank space but aren't whitespace. */

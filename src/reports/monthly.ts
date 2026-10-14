@@ -2,10 +2,11 @@ import type { Client } from "../config.js";
 import { compareSplit, markBranded, QUERY_TOTALS_NOTE, splitBranded } from "../analysis/branded.js";
 import { monthlyAuditSection } from "../analysis/diff.js";
 import { latestAudit, latestAuditBefore } from "../lib/audits.js";
-import { spentThisMonth } from "../lib/budget.js";
+import { BudgetExceededError, spentThisMonth, withUsdReservation } from "../lib/budget.js";
 import { spendKeys } from "../lib/spend.js";
 import { lastCompleteMonth, monthRange, pctChange, previousMonth, sameMonthLastYear } from "../lib/dates.js";
 import { ProviderUnavailableError } from "../lib/provider-ids.js";
+import { ESTIMATE_USD } from "../providers/dataforseo.js";
 import { requireDataForSeo, serp } from "../providers/seo-data.js";
 import { ga4OrganicSummary, ga4TopLandingPages } from "../providers/ga4.js";
 import { gscQuery, gscTotals, type GscRow } from "../providers/gsc.js";
@@ -178,8 +179,26 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
     recordLiveRank(c, kw, r);
     return r;
   };
-  const trackedRows = await section(async () => trackedKeywordRows(client, qCur, liveRanks?.available ? liveSerp : undefined));
-  const tracked = liveRanks ? { ...trackedRows, liveRanks } : trackedRows;
+  // The whole run's estimate is checked and reserved once, before the first SERP request (SEC-1), so concurrent
+  // runs or a run near the cap can't each pass a per-call check. When it doesn't fit, no request is made: the
+  // rows keep their Search Console values and `liveRanks` says why. Actual spend is still recorded per call.
+  let liveRefusal: string | undefined;
+  const trackedRows = await section(async () => {
+    if (!liveRanks?.available) return trackedKeywordRows(client, qCur);
+    const estimateUsd = Number((client.trackedKeywords.length * ESTIMATE_USD.serp).toFixed(4));
+    let started = false;
+    try {
+      return await withUsdReservation(client, estimateUsd, () => {
+        started = true;
+        return trackedKeywordRows(client, qCur, liveSerp);
+      });
+    } catch (err) {
+      if (started || !(err instanceof BudgetExceededError)) throw err;
+      liveRefusal = `Live ranks skipped, no paid request was made: ${client.trackedKeywords.length} live SERP check(s) need about $${estimateUsd.toFixed(4)} in total. ${err.message}`;
+      return trackedKeywordRows(client, qCur);
+    }
+  });
+  const tracked = liveRanks ? { ...trackedRows, liveRanks: liveRefusal ? { available: false as const, reason: liveRefusal } : liveRanks } : trackedRows;
 
   // Latest saved audit, diffed against the most recent one from before the report month.
   const audit = await section(async () => {

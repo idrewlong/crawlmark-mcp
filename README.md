@@ -466,7 +466,7 @@ Paid results carry `provider` (whose data it is) and `units` (Ahrefs or Semrush 
 | `usage_summary` | Calls, errors and durations per tool |
 | `purge_cache` | Drops expired cache entries and old usage rows |
 
-`crawlmark-cli data purge --provider <ahrefs|semrush|dataforseo> [--client example.com]` deletes what crawlmark stored from one provider (trend figures, its Site Audit items in saved technical-issue lists, and cached responses).
+`crawlmark-cli data purge --provider <ahrefs|semrush|dataforseo> [--client example.com]` deletes what crawlmark stored from one provider (trend figures, its Site Audit items in saved technical-issue lists, and cached responses). `--client` also accepts the domain of a client you already removed from `clients.yaml`; the result says it purged a removed client's data.
 
 Prompts
 -------
@@ -603,7 +603,7 @@ The config home holds `.env`, `config/clients.yaml`, `config/report-templates.ya
 | `ALERT_RANK_DROP` | `5` | Places a live rank must fall to alert (`check-ranks --live`) |
 | `GSC_INSPECTION_DAILY_BUDGET` | `1000` | URL Inspection requests per Search Console property per Pacific-time day (Google allows 2,000; max 2000) |
 | `GSC_INSPECTION_PER_MINUTE` | `60` | URL Inspection requests per minute (Google allows 600; max 600) |
-| `SNAPSHOT_REUSE_DAYS` | `7` | A stored provider snapshot this recent is reused instead of a new paid call (used by the paid report sections coming next) |
+| `SNAPSHOT_REUSE_DAYS` | `7` | A stored provider snapshot this recent is reused instead of a new paid call (the backlinks, organic visibility and competitor report sections, `seo-snapshot` and the matching tools) |
 | `ALERT_WEBHOOK_URL` | | Incoming webhook for alerts |
 | `CRAWLMARK_NO_UPDATE_CHECK` | | `1` turns off the daily "Update available" check in `init`, `setup`, `--help` and `--version` (`NO_UPDATE_NOTIFIER=1` works too) |
 

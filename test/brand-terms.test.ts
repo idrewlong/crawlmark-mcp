@@ -126,9 +126,9 @@ describe("inferBrandTerms: lookalikes and trade phrases", () => {
   });
 
   it("treats the trade-word end of a name as weak, never high", () => {
-    expect(nameSimilarity("buildingsystems", "abbuildingsystems")).toBeLessThanOrEqual(0.7);
+    expect(nameSimilarity("buildingsystems", "acmebuildingsystems")).toBeLessThanOrEqual(0.7);
     const rows = [gsc("building systems", 30, 60, 1.2), gsc("building systems company", 20, 40, 1.0), gsc("modular building systems", 10, 30, 1.5)];
-    const c = terms(rows, { domain: "abbuildingsystems.example", name: "AB Building Systems" }).candidates.find((x) => x.term === "building systems");
+    const c = terms(rows, { domain: "acmebuildingsystems.example", name: "Acme Building Systems" }).candidates.find((x) => x.term === "building systems");
     expect(c?.confidence ?? "low").not.toBe("high");
   });
 });

@@ -453,11 +453,14 @@ export function planRun(client: Pick<Client, "slug">, opts: RunOptions): RunPlan
 
 export { ulid } from "../../lib/ulid.js";
 import { ulid } from "../../lib/ulid.js";
+import { trackCacheKey } from "../../lib/provider-data.js";
 
 const storeKey = (reportId: string) => cacheKey("report-run", reportId);
 
 export function storeReport(report: TemplateReport): void {
   putCache(storeKey(report.reportId), TTL.day, report);
+  // A run can carry Ahrefs-derived figures for a day; the Ahrefs and client purges delete it too (storage rule).
+  if (report.spend.units.ahrefs > 0 || JSON.stringify([report.sections, report.highlights, report.notes]).toLowerCase().includes("ahrefs")) trackCacheKey("ahrefs", report.client.slug, storeKey(report.reportId));
 }
 
 /** A stored report, or an error telling the caller to run the template again. */

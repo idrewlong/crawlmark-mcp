@@ -6,7 +6,7 @@ Reference for what the audit and opportunity tools check. The [README](../README
 
 Every `run_audit` is saved and returns an `auditId`. Runs are fresh by default (the response cache is skipped, so the on-page check is a paid call per page); `fresh: false` reuses results up to a day old, and `compare_audits` warns when the later audit was not fresh.
 
-`compare_audits` diffs two saved audits (default: latest vs the one before) into `new`, `resolved`, `persistent` and `unverified` findings plus Lighthouse score changes. A finding is `resolved` only if its check ran in the later audit; otherwise it is `unverified`.
+`compare_audits` diffs two saved audits (default: latest vs the one before) into `new`, `resolved`, `persistent` and `unverified` findings plus Lighthouse score changes. A finding is `resolved` only if its check ran in the later audit; otherwise it is `unverified`. Saved audits are kept for 400 days; the newest two per client are always kept, so there is always a pair to compare.
 
 `monthly_report` includes the latest saved audit plus its diff against the most recent audit from before the month (`null` unless both exist).
 

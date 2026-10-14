@@ -122,12 +122,12 @@ export function toolWindow(now: number, trendMonths: number): SectionWindow {
 
 /**
  * A stored point for `day` (D3): a live capture within `tol` days, else the provider's monthly history point for
- * that month (DataForSEO and Ahrefs date them the 1st, Semrush mid-month; each describes its own month).
+ * that month (DataForSEO and Ahrefs date them the 1st, Semrush mid-month; each describes its own month). A history
+ * point of a neighbouring month is never a stand-in, even inside the tolerance (a point dated Sept 1 must not answer
+ * for Aug 31: the report labels the figures by the month it asked for).
  */
-function findPoint(key: SnapshotKey, day: string, tol: number, now: number): StoredSnapshot | undefined {
-  const near = nearestSnapshot({ ...key, day, toleranceDays: tol }, now);
-  if (near?.source === "live") return near;
-  return historyForMonth(key, day, now) ?? near;
+export function findPoint(key: SnapshotKey, day: string, tol: number, now: number): StoredSnapshot | undefined {
+  return nearestSnapshot({ ...key, day, toleranceDays: tol, only: "live" }, now) ?? historyForMonth(key, day, now);
 }
 
 const originOf = (s: StoredSnapshot): SnapshotOrigin => (s.source === "live" ? "reused" : "provider_history");

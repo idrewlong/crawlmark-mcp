@@ -612,6 +612,10 @@ async function main(argv: string[]): Promise<number> {
     await updateNoticeAfterHelp(values.json);
     return 0;
   }
+  // Phase 13 B: commands that read or write stored provider data first check whether the Ahrefs key was removed and
+  // delete expired cache rows. Before the dispatch, so the commands that return early (report, audit, check-ranks)
+  // reconcile too: a cron-only install must not keep a removed provider's data. help and setup are untouched.
+  if (["report", "seo-snapshot", "data", "audit", "check-ranks", "clients"].includes(group ?? "")) (await import("./lib/provider-data.js")).reconcileOnce();
   if (group === "audit" || group === "check-traffic" || group === "check-ranks") return scheduledCommand(group, command ? [command, ...args] : args, values);
   if (group === "crawl") {
     return crawlCommand(command ? [command, ...args] : args, values, { out, warn, usage: scheduledUsage }, {
@@ -720,8 +724,6 @@ async function main(argv: string[]): Promise<number> {
       await closeEgressProxy();
     }
   }
-  // Phase 13 B: commands that read or write stored provider data first check whether the Ahrefs key was removed.
-  if (["report", "seo-snapshot", "data", "audit", "check-ranks", "clients"].includes(group ?? "")) (await import("./lib/provider-data.js")).reconcileOnce();
   if (group === "seo-snapshot") {
     return seoSnapshotCommand(command ? [command, ...args] : args, values, { out, warn, usage: scheduledUsage }, {
       loadClients: async ({ client, all }) => {

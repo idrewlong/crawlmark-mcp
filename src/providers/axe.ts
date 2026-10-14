@@ -1,6 +1,7 @@
 import { AxePuppeteer } from "@axe-core/puppeteer";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import { assertSafeUrlResolved } from "../lib/url-guard.js";
+import { assertAllowedByPolicy, clientDomainPolicy } from "../user-url.js";
 import { assertNotProxyBlocked, guardPage, withBrowser } from "./browser.js";
 
 export type WcagLevel = "A" | "AA" | "AAA";
@@ -40,13 +41,18 @@ export async function runAxe(
   opts: { refresh?: boolean; signal?: AbortSignal } = {},
 ): Promise<AxeResult> {
   await assertSafeUrlResolved(url);
-  const { value } = await cached(cacheKey("axe", url, level), TTL.day, () =>
+  const policy = await clientDomainPolicy();
+  const key = cacheKey("axe", url, level);
+  const compute = () =>
     withBrowser(`Accessibility check of ${url}`, opts.signal, async (browser) => {
       const page = await browser.newPage();
       await guardPage(page);
       await page.setViewport({ width: 1366, height: 900 });
       const nav = await page.goto(url, { waitUntil: "networkidle2", timeout: 60_000 });
       assertNotProxyBlocked(nav, url);
+      // RESTRICT_TO_CLIENT_DOMAINS: no redirect hop, and not the page the browser ended on, may leave the client's domains.
+      for (const hop of nav?.request().redirectChain() ?? []) assertAllowedByPolicy(policy, hop.url());
+      assertAllowedByPolicy(policy, page.url());
       const res = await new AxePuppeteer(page).withTags(TAGS[level]).analyze();
 
       const violations: AxeViolation[] = res.violations
@@ -66,8 +72,13 @@ export async function runAxe(
         const k = (v.impact ?? "minor") as keyof typeof counts;
         counts[k] += v.nodes;
       }
-      return { url, level, violations, counts, incomplete: res.incomplete.length, passes: res.passes.length };
-    }),
-  { refresh: opts.refresh });
-  return value;
+      return { url, level, violations, counts, incomplete: res.incomplete.length, passes: res.passes.length, finalUrl: page.url() };
+    });
+  let { value } = await cached(key, TTL.day, compute, { refresh: opts.refresh });
+  // An entry cached before the final URL was stored, under a restriction, can't be vouched for: check it again.
+  if (policy && value.finalUrl === undefined) ({ value } = await cached(key, TTL.day, compute, { refresh: true }));
+  // Also for an answer cached before the restriction was on.
+  assertAllowedByPolicy(policy, value.finalUrl ?? url);
+  const { finalUrl: _finalUrl, ...result } = value;
+  return result;
 }

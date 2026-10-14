@@ -89,7 +89,7 @@ export function registerReportTools(server: McpServer) {
         "Build the data for a client's monthly SEO report. `vsPreviousMonth` and `vsLastYear` include a `previous` object, and `change` is null when the earlier period has no impressions. Covers: GSC clicks/impressions/CTR/position vs previous month and last year, " +
         "GA4 organic sessions and key events, top and moving queries and pages (each query row carries `branded: boolean`), a branded vs non-branded split of clicks, impressions, CTR and impression-weighted position for the month and the previous one (query-level, so anonymized queries are excluded), top organic landing pages, and tracked keyword positions, plus an `audit` section: the latest saved audit and its diff against the most recent audit from before the month (`null` unless there is one from before the month and a newer one; a back-dated month still diffs against the latest audit). " +
         "Also includes an `opportunities` section: the top 5 non-branded striking-distance queries, low-CTR top results and cannibalized queries for the month. " +
-        "Free by default (Google APIs only); set liveRanks for a paid live SERP check per tracked keyword. " +
+        "Free by default (Google APIs only); set liveRanks for a paid live SERP check per tracked keyword (the whole run's estimate is checked against the budget first; when it does not fit, no check is made and `trackedKeywords.liveRanks` says why). " +
         "Returns structured JSON for you to write up; each section reports its own error if a source is unavailable.",
       inputSchema: {
         client: clientArg,

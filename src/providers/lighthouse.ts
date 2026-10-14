@@ -4,6 +4,7 @@ import { env } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import { assertSafeUrlResolved } from "../lib/url-guard.js";
+import { assertAllowedByPolicy, clientDomainPolicy } from "../user-url.js";
 import { lighthouseLaunchOptions, withChrome } from "./browser.js";
 
 export type FormFactor = "mobile" | "desktop";
@@ -32,7 +33,9 @@ export async function runLighthouse(
   opts: { refresh?: boolean; signal?: AbortSignal } = {},
 ): Promise<LighthouseResult> {
   await assertSafeUrlResolved(url);
-  const { value } = await cached(cacheKey("lighthouse", url, formFactor), TTL.day, async () => {
+  const policy = await clientDomainPolicy();
+  const key = cacheKey("lighthouse", url, formFactor);
+  const compute = async () => {
     const launchOpts = await lighthouseLaunchOptions();
     return withChrome(`Lighthouse on ${url}`, opts.signal, () => chromeLauncher.launch(launchOpts), (c) => c.kill(), async (chrome) => {
       const runner = await lighthouse(
@@ -49,6 +52,8 @@ export async function runLighthouse(
       );
       if (!runner) throw new Error(`Lighthouse returned no result for ${url}`);
       const { lhr } = runner;
+      // RESTRICT_TO_CLIENT_DOMAINS: a page that redirected off the client's domains isn't reported on.
+      assertAllowedByPolicy(policy, lhr.finalDisplayedUrl ?? lhr.finalUrl ?? url);
       const num = (id: string) => Math.round(lhr.audits[id]?.numericValue ?? 0);
 
       const opportunities = Object.values(lhr.audits)
@@ -61,7 +66,8 @@ export async function runLighthouse(
         .sort((a, b) => (b.savingsMs ?? 0) - (a.savingsMs ?? 0))
         .slice(0, 8);
 
-      const result: LighthouseResult = {
+      const result: LighthouseResult & { finalUrl?: string } = {
+        finalUrl: lhr.finalDisplayedUrl ?? lhr.finalUrl ?? url,
         url,
         formFactor,
         scores: {
@@ -81,7 +87,14 @@ export async function runLighthouse(
       };
       return result;
     });
-  }, { refresh: opts.refresh });
+  };
+  const first = await cached(key, TTL.day, compute, { refresh: opts.refresh });
+  let cachedValue = first.value;
+  // An entry cached before the final URL was stored, under a restriction, can't be vouched for: run it again.
+  if (policy && cachedValue.finalUrl === undefined) cachedValue = (await cached(key, TTL.day, compute, { refresh: true })).value;
+  // Also for an answer cached before the restriction was on.
+  assertAllowedByPolicy(policy, cachedValue.finalUrl ?? url);
+  const { finalUrl: _finalUrl, ...value } = cachedValue;
 
   if (env.PSI_API_KEY) value.field = await fetchFieldData(url, formFactor);
   return value;
