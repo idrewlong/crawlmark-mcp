@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { registerPrompts, renderTemplate } from "../src/prompts/index.js";
+import { registerAiVisibilityTools } from "../src/tools/ai-visibility.js";
 import { registerBrandTools } from "../src/tools/brand.js";
 import { registerCompetitorTools } from "../src/tools/competitors.js";
 import { registerOpportunityTools } from "../src/tools/opportunities.js";
@@ -26,6 +27,7 @@ async function connect() {
   registerRawTools(server);
   registerGtmTools(server);
   registerSetupTools(server);
+  registerAiVisibilityTools(server);
   registerPrompts(server);
   const client = new Client({ name: "test-client", version: "0.0.0" });
   const [a, b] = InMemoryTransport.createLinkedPair();

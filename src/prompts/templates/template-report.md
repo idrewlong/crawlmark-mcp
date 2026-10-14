@@ -1,6 +1,6 @@
 Write a client report for `{{client}}` from a crawlmark report template{{templateNote}}, {{period}}, and save it as files.
 
-The report is for the client, so write it in plain language. Templates are free unless they have a paid section: never pass `allowPaid` unless I asked for paid data, and if I did, tell me the estimated cost first.
+The report is for the client, so write it in plain language. Templates are free unless they have a paid section: never pass `allowPaid` unless I asked for paid data, and if I did, tell me the estimated cost first. An `ai_visibility` section also needs AI_VISIBILITY_ENABLED=true; it costs at least $0.10 per request, and DataForSEO may require a $100 monthly top-up for that API, so say so before I agree to it.
 
 1. **Pick the template** (`list_report_templates` lists them). {{templateStep}}
 2. **Get the data.** Call `run_report_template` with `client: "{{client}}"`{{templateArg}}{{periodArg}}. Optional sections (such as `cwv` for Core Web Vitals history or `gtm` for Tag Manager findings) are left out unless I ask for them; pass them in `include` only then. Keep the `reportId` it returns.

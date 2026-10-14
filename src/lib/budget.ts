@@ -48,6 +48,8 @@ export function spentThisMonth(client?: string | string[]): number {
 interface UsdReservation {
   keys: string[];
   usd: number;
+  /** Phase 12 C5: the part of `usd` that is AI visibility, which also counts against AI_VISIBILITY_MONTHLY_BUDGET_USD. */
+  aiUsd?: number;
 }
 
 /**
@@ -102,15 +104,62 @@ export function assertBudget(client: Client, estimateUsd: number): void {
  * Check `usd` against the caps and reserve it (synchronously, before any await) for as long as `fn` runs,
  * so a multi-request operation's whole estimate counts against concurrent calls. Released in finally.
  */
-export async function withUsdReservation<T>(client: Client, usd: number, fn: () => Promise<T>): Promise<T> {
+export async function withUsdReservation<T>(client: Client, usd: number, fn: () => Promise<T>, opts: { aiUsd?: number } = {}): Promise<T> {
+  // Phase 12 C5: an operation with an AI-visibility share is also checked, and reserved, against the AI sub-cap.
+  if (opts.aiUsd) assertAiBudget(opts.aiUsd);
   assertBudget(client, usd);
-  const r: UsdReservation = { keys: spendKeys(client), usd };
+  const r: UsdReservation = { keys: spendKeys(client), usd, ...(opts.aiUsd ? { aiUsd: opts.aiUsd } : {}) };
   usdInFlight.add(r);
   try {
     return await currentReservation.run(new Set([...(currentReservation.getStore() ?? []), r]), fn);
   } finally {
     usdInFlight.delete(r);
   }
+}
+
+// ------------------------------------------------------------------ AI visibility sub-cap (Phase 12 C5)
+
+/** Ledger rows of AI-visibility calls: DataForSEO AI Optimization endpoints (timeouts included). */
+export const AI_ENDPOINT_PREFIX = "/ai_optimization/";
+const aiSpendStmt = db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS total FROM spend WHERE month = ? AND provider = 'dataforseo' AND endpoint LIKE ?");
+
+/** AI-visibility spend this month, every client together. */
+export function aiVisibilitySpentThisMonth(): number {
+  return Number((aiSpendStmt.get(currentMonth(), `${AI_ENDPOINT_PREFIX}%`) as { total: number }).total);
+}
+
+/** AI-visibility USD reserved by other calls in progress (never the caller's own). */
+function pendingAiUsd(): number {
+  const own = currentReservation.getStore();
+  let n = 0;
+  for (const r of usdInFlight) if (r.aiUsd && !own?.has(r)) n += r.aiUsd;
+  return n;
+}
+
+/** What's left of AI_VISIBILITY_MONTHLY_BUDGET_USD this month (reservations in progress included); never below 0. */
+export function remainingAiUsd(): { capUsd: number; spentUsd: number; remainingUsd: number } {
+  const spent = aiVisibilitySpentThisMonth();
+  return { capUsd: env.AI_VISIBILITY_MONTHLY_BUDGET_USD, spentUsd: Number(spent.toFixed(4)), remainingUsd: Number(Math.max(0, env.AI_VISIBILITY_MONTHLY_BUDGET_USD - spent - pendingAiUsd()).toFixed(4)) };
+}
+
+/** Throws before an AI-visibility request that would push this month's AI spend past its own sub-cap. */
+export function assertAiBudget(estimateUsd: number): void {
+  const spent = aiVisibilitySpentThisMonth();
+  const pending = pendingAiUsd();
+  if (spent + pending + estimateUsd > env.AI_VISIBILITY_MONTHLY_BUDGET_USD) {
+    throw new BudgetExceededError(
+      `AI visibility cap hit: $${spent.toFixed(4)} of $${env.AI_VISIBILITY_MONTHLY_BUDGET_USD} this month${reservedNote(pending)}, and this call needs about $${estimateUsd.toFixed(4)}. ` +
+        "Raise AI_VISIBILITY_MONTHLY_BUDGET_USD to continue (each LLM Mentions request costs at least $0.10).",
+    );
+  }
+}
+
+/**
+ * Like withUsdReservation, for an AI-visibility call: checks the AI sub-cap and the client and global caps, then
+ * reserves the estimate against all three until `fn` ends.
+ */
+export function withAiUsdReservation<T>(client: Client, usd: number, fn: () => Promise<T>): Promise<T> {
+  return withUsdReservation(client, usd, fn, { aiUsd: usd });
 }
 
 /** Units used this month for one provider, by one ledger name, several (spendKeys), or everyone when omitted. */

@@ -41,11 +41,13 @@ export type Capability =
   // Phase 12 C4: local SEO from DataForSEO Business Data and Maps (no Ahrefs or Semrush equivalent).
   | "localProfile"
   | "localPack"
-  | "localReviews";
+  | "localReviews"
+  // Phase 12 C5: AI-search visibility from DataForSEO LLM Mentions (also gated by AI_VISIBILITY_ENABLED).
+  | "aiVisibility";
 
 /** The capabilities that route to the client's provider (Phase 12 B adds keyword ideas and keyword gap). */
 export const ROUTED_CAPABILITIES = ["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap"] as const satisfies readonly Capability[];
-const DFS_ONLY = ["serpLive", "onPageInstant", "siteCrawl", "localProfile", "localPack", "localReviews"] as const satisfies readonly Capability[];
+const DFS_ONLY = ["serpLive", "onPageInstant", "siteCrawl", "localProfile", "localPack", "localReviews", "aiVisibility"] as const satisfies readonly Capability[];
 
 export const CAPABILITIES: Readonly<Record<ProviderId, ReadonlySet<Capability>>> = {
   dataforseo: new Set<Capability>([...ROUTED_CAPABILITIES, ...DFS_ONLY]),
@@ -181,6 +183,7 @@ const ONLY_LABEL: Record<(typeof DFS_ONLY)[number], string> = {
   localProfile: "Google Business Profile lookups",
   localPack: "Map pack positions",
   localReviews: "Google reviews",
+  aiVisibility: "AI-search visibility checks",
 };
 
 const KEY_VAR: Record<ProviderId, string> = { dataforseo: "DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD", ahrefs: "AHREFS_API_KEY", semrush: "SEMRUSH_API_KEY" };

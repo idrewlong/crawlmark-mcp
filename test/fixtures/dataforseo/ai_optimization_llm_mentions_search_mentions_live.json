@@ -1,0 +1,145 @@
+{
+  "version": "0.1.20260707",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "4.2 sec.",
+  "cost": 0.103,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131234-1535-0612-0000-4d5a8a4c3a04",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "4.1 sec.",
+      "cost": 0.103,
+      "result_count": 1,
+      "path": [
+        "v3",
+        "ai_optimization",
+        "llm_mentions",
+        "search_mentions",
+        "live"
+      ],
+      "data": {
+        "api": "ai_optimization",
+        "function": "search_mentions",
+        "target": [
+          {
+            "domain": "example.com",
+            "search_scope": "sources",
+            "include_subdomains": true
+          }
+        ],
+        "platform": "google",
+        "location_code": 2840,
+        "language_code": "en",
+        "order_by": [
+          "ai_search_volume,desc"
+        ],
+        "limit": 20
+      },
+      "result": [
+        {
+          "total_count": 3,
+          "current_offset": 0,
+          "search_after_token": "tok_example",
+          "items_count": 3,
+          "items": [
+            {
+              "platform": "google",
+              "model_name": "google_ai_overview",
+              "location_code": 2840,
+              "language_code": "en",
+              "question": "how much does an emergency plumber cost \u202e\u0007",
+              "answer": "An **emergency plumber** usually costs $150 to $500.\n\nSee [Example Plumbing](https://www.example.com/pricing) for details.<script>alert(1)</script>",
+              "sources": [
+                {
+                  "snippet": "Prices vary",
+                  "source_name": "Competitor A",
+                  "thumbnail": null,
+                  "markdown": "x",
+                  "position": 1,
+                  "title": "Prices",
+                  "domain": "competitor-a.example",
+                  "url": "https://competitor-a.example/prices",
+                  "publication_date": null
+                },
+                {
+                  "snippet": "Our pricing",
+                  "source_name": "Example Plumbing",
+                  "thumbnail": null,
+                  "markdown": "y",
+                  "position": 2,
+                  "title": "Pricing",
+                  "domain": "www.example.com",
+                  "url": "https://www.example.com/pricing",
+                  "publication_date": "2026-05-01"
+                }
+              ],
+              "search_results": [
+                {
+                  "description": "d",
+                  "breadcrumb": "b",
+                  "position": 1,
+                  "title": "t",
+                  "domain": "directory.example",
+                  "url": "https://directory.example/",
+                  "publication_date": null
+                }
+              ],
+              "ai_search_volume": 2400,
+              "monthly_searches": [
+                {
+                  "year": 2026,
+                  "month": 9,
+                  "search_volume": 2400
+                }
+              ],
+              "first_response_at": "2026-08-01 10:00:00 +00:00",
+              "last_response_at": "2026-10-01 10:00:00 +00:00",
+              "brand_entities": [
+                {
+                  "position": 1,
+                  "title": "Competitor A",
+                  "category": "Plumber"
+                }
+              ],
+              "fan_out_queries": [
+                "emergency plumber price"
+              ]
+            },
+            {
+              "platform": "google",
+              "model_name": "google_ai_overview",
+              "question": "water heater repair or replace",
+              "answer": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "sources": [
+                {
+                  "position": 4,
+                  "domain": "blog.example.com",
+                  "url": "https://blog.example.com/water-heaters"
+                }
+              ],
+              "ai_search_volume": 880
+            },
+            {
+              "platform": "google",
+              "model_name": "google_ai_overview",
+              "question": "best plumber",
+              "answer": null,
+              "sources": [
+                {
+                  "position": 1,
+                  "domain": "notexample.com",
+                  "url": "https://notexample.com/"
+                }
+              ],
+              "ai_search_volume": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

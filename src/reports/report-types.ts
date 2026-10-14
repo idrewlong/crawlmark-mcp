@@ -281,6 +281,17 @@ export interface LocalProfileData {
   notes: string[];
 }
 
+/** Phase 12 C5: AI-search visibility (ai_visibility section, paid, opt-in). Questions and URLs are stripControl'd. */
+export interface AiVisibilityData {
+  mode: "mentions" | "metrics";
+  platform: string;
+  domain: string;
+  /** mentions: answers citing the domain, by AI search volume. */
+  mentions?: { total: number | null; items: { question: string | null; aiSearchVolume: number | null; citedUrl: string | null; position: number | null }[] };
+  /** metrics: aggregate mention counts. */
+  metrics?: { total: { mentions: number | null; aiSearchVolume: number | null }; platform: { key: string; mentions: number | null; aiSearchVolume: number | null }[]; sourcesDomain: { key: string; mentions: number | null; aiSearchVolume: number | null }[] };
+}
+
 export interface TextData {
   text: string;
 }

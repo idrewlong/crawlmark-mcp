@@ -32,7 +32,7 @@ export const ENV_FILE = resolve(HOME.dir, ".env");
 // loadEnvFile never overrides variables already set (shell or client config win).
 // A blank Phase 9 bundle field ("" or a leftover placeholder) must not hide the .env value (D11).
 // Phase 12: the same for the Claude Desktop bundle's optional CrUX and Bing key fields.
-dropUnsetKeys(process.env, [...PHASE9_ENV_KEYS, "CRUX_API_KEY", "BING_WEBMASTER_API_KEY"]);
+dropUnsetKeys(process.env, [...PHASE9_ENV_KEYS, "CRUX_API_KEY", "BING_WEBMASTER_API_KEY", "AI_VISIBILITY_ENABLED", "AI_VISIBILITY_MONTHLY_BUDGET_USD"]);
 const keysBefore = new Set(Object.keys(process.env));
 if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 /** Variables that came from ENV_FILE (not the shell). The setup wizard drops them when it starts a child, so the child re-reads the edited file. */
@@ -84,6 +84,10 @@ const EnvSchema = z.object({
   DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS: z.coerce.number().int().positive().default(5_000),
   // Phase 12 C2: directories log_analysis may read (comma-separated absolute paths); <home>/logs is always allowed.
   LOG_DIRS: z.string().optional(),
+  // Phase 12 C5: AI-search visibility (ai_visibility, DataForSEO LLM Mentions). Off unless exactly "true" (any case).
+  AI_VISIBILITY_ENABLED: z.string().optional(),
+  // Its own monthly USD sub-cap across all clients, on top of the client and global caps.
+  AI_VISIBILITY_MONTHLY_BUDGET_USD: z.coerce.number().positive().default(2),
 });
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
@@ -133,6 +137,8 @@ export const env = {
   CRUX_BASE_URL: urlOverride("CRUX_BASE_URL", CRUX_DEFAULT_BASE_URL),
   BING_BASE_URL: urlOverride("BING_BASE_URL", BING_DEFAULT_BASE_URL),
   CRAWLER_IPRANGES_BASE_URL: urlOverride("CRAWLER_IPRANGES_BASE_URL", CRAWLER_IPRANGES_DEFAULT_BASE_URL),
+  /** Phase 12 C5: true only when AI_VISIBILITY_ENABLED is "true" (any case, trimmed); anything else, including unset, is off. */
+  AI_VISIBILITY_ON: (parsedEnv.AI_VISIBILITY_ENABLED ?? "").trim().toLowerCase() === "true",
 };
 
 export type { Client } from "./lib/clients.js";

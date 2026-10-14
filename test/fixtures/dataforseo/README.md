@@ -46,3 +46,12 @@ Written by hand from the documented responses (docs.dataforseo.com, see `docs/re
 | `business_data_google_reviews_task_post.json` | `/business_data/google/reviews/task_post` (priority 2, depth 20) |
 | `business_data_google_reviews_task_get.json` | `/business_data/google/reviews/task_get/<id>` (ready) |
 | `business_data_google_reviews_task_get_pending.json` | `/business_data/google/reviews/task_get/<id>` (40602 Task In Queue) |
+
+## Phase 12 C5: LLM Mentions (hand-built, not recordings)
+
+Written by hand from the documented responses (docs.dataforseo.com, see `docs/research/2026-10-13-phase-12-apis.md` D9-D11 and D17); no request was made. Domains and text are placeholders. Hand-added edge cases: a question with a bidi override and a bell character, an answer with markdown, a link and a `<script>` tag (kept as text, escaped by the renderers), a 900-character answer (excerpt capped at 500), a citation on a subdomain (`blog.example.com`), a look-alike domain (`notexample.com`, not a match), other sources, search results, brand entities and fan-out queries (all dropped), and a `sources_domain` key with a bidi override. Replace them with scrubbed recordings when the C5 live check runs.
+
+| File | Endpoint |
+|---|---|
+| `ai_optimization_llm_mentions_search_mentions_live.json` | `/ai_optimization/llm_mentions/search_mentions/live` |
+| `ai_optimization_llm_mentions_target_metrics_live.json` | `/ai_optimization/llm_mentions/target_metrics/live` |

@@ -1,10 +1,16 @@
 import { env, type Client } from "../config.js";
 import { TIMEOUTS } from "../lib/timeout.js";
-import { assertBudget, recordSpend, withUsdReservation } from "../lib/budget.js";
+import { assertAiBudget, assertBudget, recordSpend, withUsdReservation } from "../lib/budget.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import { mergeGaps, mergeIdeas } from "../analysis/keyword-gap.js";
 import type { KeywordGapRequest, KeywordGapRouted, KeywordIdeasRequest, KeywordIdeasRouted, PaidPlan } from "./seo-data.js";
 import {
+  mapLlmMentions,
+  mapLlmTargetMetrics,
+  type LlmMention,
+  type LlmTargetMetrics,
+  type RawLlmMentions,
+  type RawLlmTargetMetrics,
   mapBusinessInfo,
   mapMapsSerp,
   mapReviews,
@@ -34,6 +40,8 @@ import {
 } from "./dataforseo-shape.js";
 
 export type {
+  LlmMention,
+  LlmTargetMetrics,
   LocalBusiness,
   LocalReview,
   LocalReviews,
@@ -101,12 +109,12 @@ function authHeader(): string {
  * One DataForSEO request. A task status >= 40000 is an error, except the codes in `pendingCodes`
  * (40601 Task Handed, 40602 Task In Queue, for task_get on a task that isn't ready), which come back as the task.
  */
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal, pendingCodes: readonly number[] = []): Promise<DfsTask<T>> {
+async function request<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal, pendingCodes: readonly number[] = [], timeoutMs: number = TIMEOUTS.networkMs): Promise<DfsTask<T>> {
   const res = await fetch(`${env.DATAFORSEO_BASE_URL}${path}`, {
     method,
     headers: { Authorization: authHeader(), "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUTS.networkMs)]) : AbortSignal.timeout(TIMEOUTS.networkMs),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`DataForSEO ${path} HTTP ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as DfsResponse<T>;
@@ -130,13 +138,13 @@ function isTimeoutOrAbort(err: unknown): boolean {
  * billed, so the pre-flight estimate is written to the ledger (endpoint
  * "<path> (timeout, estimated)") to keep the budget cap honest, then the error is rethrown.
  */
-async function billedRequest<T>(clientSlug: string, path: string, body: unknown, estimateUsd: number, what: string): Promise<DfsTask<T>> {
+async function billedRequest<T>(clientSlug: string, path: string, body: unknown, estimateUsd: number, what: string, timeoutMs: number = TIMEOUTS.networkMs): Promise<DfsTask<T>> {
   try {
-    return await request<T>("POST", path, body);
+    return await request<T>("POST", path, body, undefined, [], timeoutMs);
   } catch (err) {
     if (!isTimeoutOrAbort(err)) throw err;
     recordSpend(clientSlug, "dataforseo", `${path} (timeout, estimated)`, estimateUsd);
-    throw new Error(`DataForSEO ${path} timed out after ${TIMEOUTS.networkMs / 1000}s; ${what} The estimated cost ($${estimateUsd}) was recorded against the budget.`);
+    throw new Error(`DataForSEO ${path} timed out after ${timeoutMs / 1000}s; ${what} The estimated cost ($${estimateUsd}) was recorded against the budget.`);
   }
 }
 
@@ -411,8 +419,6 @@ export const TASK_NOT_READY = [40601, 40602] as const;
 /** Where local searches run: the client's area (a DataForSEO location_name), else its location code. */
 export const localGeo = (c: Client) => (c.area ? { location_name: c.area, language_code: c.languageCode } : geo(c));
 
-/** The cache key a `paid` call uses, so a pre-flight estimate can tell which requests would be free. */
-export const dfsCacheKey = (path: string, body: unknown) => cacheKey("dfs", env.DATAFORSEO_BASE_URL, path, body);
 
 /**
  * Cache key for the local endpoints (SEC-1). Their cache holds the *mapped* value only, never the raw payload
@@ -473,6 +479,60 @@ export async function reviewsTaskGet(clientSlug: string, taskId: string): Promis
   if ((task.cost ?? 0) > 0) recordSpend(clientSlug, "dataforseo", `${LOCAL_PATHS.reviewsGet} (read)`, task.cost);
   if ((TASK_NOT_READY as readonly number[]).includes(task.status_code)) return { ready: false };
   return { ready: true, reviews: mapReviews(task.result?.[0]) };
+}
+
+// ------------------------------------------------ AI Optimization: LLM Mentions (Phase 12 C5)
+
+/** LLM Mentions paths (research D9, D10, D17). search_mentions/live replaces the legacy search/live (which still works). */
+export const AI_PATHS = {
+  searchMentions: "/ai_optimization/llm_mentions/search_mentions/live",
+  targetMetrics: "/ai_optimization/llm_mentions/target_metrics/live",
+} as const;
+/** LLM Mentions price (research D11): $0.10 per task plus $0.001 per row returned. */
+export const AI_USD = { task: 0.1, row: 0.001 } as const;
+/** One LLM Mentions task asking for up to `rows` rows (a ceiling; fewer rows cost less). */
+export const aiTaskUsd = (rows: number) => usd6(AI_USD.task + rows * AI_USD.row);
+/** LLM Mentions Live calls can take up to 120 s (research D10). */
+const AI_TIMEOUT_MS = 130_000;
+
+/**
+ * Cache key for LLM Mentions (SEC-5). The cache holds only the mapped value (what mapLlmMentions /
+ * mapLlmTargetMetrics keep), never the raw payload with full answers, other sources, brands and fan-out queries;
+ * the "dfs-ai" namespace keeps any older raw rows from being read as mapped ones.
+ */
+export const aiCacheKey = (path: string, body: unknown) => cacheKey("dfs-ai", env.DATAFORSEO_BASE_URL, path, body);
+
+/**
+ * One AI-visibility request, cached a week under its body, mapped inside the cached function. On a miss the AI
+ * sub-cap and the client and global caps are checked (the caller has reserved the estimate), and the actual cost
+ * is recorded under the /ai_optimization/ path, which is what the sub-cap sums.
+ */
+async function paidAi<R, V>(client: Client, path: string, body: unknown, estimateUsd: number, map: (raw: R | undefined) => V, opts: { refresh?: boolean } = {}) {
+  const { value, fromCache } = await cached(
+    aiCacheKey(path, body),
+    TTL.week,
+    async () => {
+      assertAiBudget(estimateUsd);
+      assertBudget(client, estimateUsd);
+      const task = await billedRequest<R>(client.slug, path, body, estimateUsd, "DataForSEO may still have billed it.", AI_TIMEOUT_MS);
+      recordSpend(client.slug, "dataforseo", path, task.cost ?? 0);
+      return { mapped: map(task.result?.[0]), costUsd: task.cost ?? 0 };
+    },
+    { refresh: opts.refresh ?? false },
+  );
+  return { mapped: value.mapped, costUsd: fromCache ? 0 : value.costUsd, fromCache };
+}
+
+/** AI answers that cite `clientDomain` (llm_mentions/search_mentions/live). */
+export async function llmSearchMentions(client: Client, body: Record<string, unknown>, rows: number, clientDomain: string, opts: { refresh?: boolean } = {}): Promise<{ items: LlmMention[]; total: number | null; costUsd: number; fromCache: boolean }> {
+  const r = await paidAi<RawLlmMentions, ReturnType<typeof mapLlmMentions>>(client, AI_PATHS.searchMentions, [body], aiTaskUsd(rows), (raw) => mapLlmMentions(raw, clientDomain), opts);
+  return { ...r.mapped, costUsd: r.costUsd, fromCache: r.fromCache };
+}
+
+/** Aggregate mention counts for a domain (llm_mentions/target_metrics/live). */
+export async function llmTargetMetrics(client: Client, body: Record<string, unknown>, estimateUsd: number, opts: { refresh?: boolean } = {}): Promise<{ metrics: LlmTargetMetrics; costUsd: number; fromCache: boolean }> {
+  const r = await paidAi<RawLlmTargetMetrics, LlmTargetMetrics>(client, AI_PATHS.targetMetrics, [body], estimateUsd, mapLlmTargetMetrics, opts);
+  return { metrics: r.mapped, costUsd: r.costUsd, fromCache: r.fromCache };
 }
 
 // ------------------------------------------------------------------ on-page

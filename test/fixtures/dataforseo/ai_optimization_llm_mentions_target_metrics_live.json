@@ -1,0 +1,97 @@
+{
+  "version": "0.1.20260707",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "3.0 sec.",
+  "cost": 0.101,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131234-1535-0612-0000-5e5a8a4c3a05",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "2.9 sec.",
+      "cost": 0.101,
+      "result_count": 1,
+      "path": [
+        "v3",
+        "ai_optimization",
+        "llm_mentions",
+        "target_metrics",
+        "live"
+      ],
+      "data": {
+        "api": "ai_optimization",
+        "function": "target_metrics",
+        "target": [
+          {
+            "domain": "example.com",
+            "search_scope": "sources",
+            "include_subdomains": true
+          }
+        ],
+        "platform": "google",
+        "location_code": 2840,
+        "language_code": "en",
+        "internal_list_limit": 10
+      },
+      "result": [
+        {
+          "total_count": 0,
+          "offset": 0,
+          "items_count": 0,
+          "aggregated_metrics": {
+            "location": [
+              {
+                "key": 2840,
+                "mentions": 42,
+                "ai_search_volume": 18800
+              }
+            ],
+            "language": [
+              {
+                "key": "en",
+                "mentions": 42,
+                "ai_search_volume": 18800
+              }
+            ],
+            "platform": [
+              {
+                "key": "google",
+                "mentions": 42,
+                "ai_search_volume": 18800
+              }
+            ],
+            "sources_domain": [
+              {
+                "key": "competitor-a.example",
+                "mentions": 30,
+                "ai_search_volume": 12000
+              },
+              {
+                "key": "\u202edirectory.example",
+                "mentions": 12,
+                "ai_search_volume": 4000
+              }
+            ],
+            "search_results_domain": [],
+            "brand_entities_title": [
+              {
+                "key": "Competitor A",
+                "mentions": 5,
+                "ai_search_volume": 100
+              }
+            ],
+            "brand_entities_category": [],
+            "total": {
+              "mentions": 42,
+              "ai_search_volume": 18800
+            }
+          },
+          "items": []
+        }
+      ]
+    }
+  ]
+}

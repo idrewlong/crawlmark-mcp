@@ -161,6 +161,12 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - crawlmark finds the listing and you confirm it before it's saved; reviews never include reviewer names. Estimate first, checked against your monthly caps.
 - New tools: `local_profile`, `local_pack`, `local_reviews` (Coming). New option: `crawlmark-cli clients set example.com --place-id <id>` and `gbpPlaceId` in `set_client_profile` (Coming). New report section `local_profile` (paid, Coming).
 
+**AI-search visibility** (Coming, Phase 12 Stage C5, paid and off by default)
+
+- Which questions in Google AI Overviews (and ChatGPT in the US) cite your client's site, with the cited page and how often people ask, or the total mentions, from your own DataForSEO account. _"Which AI Overview answers cite example.com, and for what questions?"_
+- Off until you set `AI_VISIBILITY_ENABLED=true`, with its own $2 monthly cap on top of your other caps and an estimate first. At least $0.10 per request, and DataForSEO may require a $100 monthly top-up for this API, so check your account.
+- New tool: `ai_visibility` (Coming). New report section `ai_visibility` (paid, Coming). New settings `AI_VISIBILITY_ENABLED`, `AI_VISIBILITY_MONTHLY_BUDGET_USD` and a `setup_status` row (Coming).
+
 **Audits: AI search readiness** (Shipped)
 
 - Which AI crawlers robots.txt lets in, split into AI search crawlers (blocking them hides the site in ChatGPT search, Claude and Perplexity answers) and training-only crawlers (blocking them is a fair choice). _"Can ChatGPT search and Perplexity see example.com, and which AI crawlers does it block?"_

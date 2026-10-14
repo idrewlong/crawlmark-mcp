@@ -15,7 +15,7 @@ import { displayProviderValue, invalidProviderMessage, PROVIDER_LABELS, type Def
 
 export type IntegrationState = "configured" | "working" | "missing" | "error";
 
-export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "bing", "chrome", "clients"] as const;
+export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "bing", "aivisibility", "chrome", "clients"] as const;
 export type IntegrationId = (typeof INTEGRATIONS)[number];
 
 export interface IntegrationStatus {
@@ -115,6 +115,8 @@ export interface StatusProviders {
   crux?(): Promise<{ source: "CRUX_API_KEY" | "PSI_API_KEY" | null; check: { ok: true } | { ok: false; problem: string } | null }>;
   /** Phase 12 C3: whether BING_WEBMASTER_API_KEY is set and a free live check of it (GetUserSites); absent means no row data. */
   bing?(): Promise<{ keySet: boolean; check: { ok: true; sites: number; verified: number } | { ok: false; kind?: "refused" | "network" | "throttled" | "other"; problem: string } | null }>;
+  /** Phase 12 C5: the AI_VISIBILITY_ENABLED switch (raw value too, to flag a typo) and this month's AI spend against its sub-cap; no network. */
+  aiVisibility?(): { enabled: boolean; raw: string | null; dataForSeo: boolean; capUsd: number; spentUsd: number };
   chrome(): Promise<{ ok: true; version: string } | { ok: false; error: string }>;
   clients(): { count: number; ignored: number; file: string; exists: boolean };
 }
@@ -130,6 +132,7 @@ export const LINKS = {
   enablePageSpeed: "https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com",
   enableCrux: "https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com",
   bingWebmaster: "https://www.bing.com/webmasters",
+  aiVisibilityDocs: "https://github.com/idrewlong/crawlmark-mcp#ai-search-visibility-optional-paid",
   credentials: "https://console.cloud.google.com/apis/credentials",
   searchConsoleUsers: "https://search.google.com/search-console/users",
   ga4Access: "https://analytics.google.com/analytics/web/#/admin",
@@ -519,6 +522,24 @@ export async function collectSetupStatus(
       out.push({ id: "bing", label, state: "configured", detail: `BING_WEBMASTER_API_KEY is set, but Bing returned an error while checking it: ${b.check.problem}`.slice(0, 400), next: null, data: { keySet: true, checkFailed: "other" } });
     } else {
       out.push({ id: "bing", label, state: "configured", detail: `BING_WEBMASTER_API_KEY is set but Bing refused it: ${b.check.problem}`.slice(0, 400), next: step("bing"), data: { keySet: true } });
+    }
+  }
+
+  if (want("aivisibility")) {
+    // Phase 12 C5: always in --json; human output shows it only when it's on (or the switch has a value that isn't true/false).
+    const a = p.aiVisibility?.() ?? { enabled: false, raw: null, dataForSeo: false, capUsd: 2, spentUsd: 0 };
+    const label = "AI-search visibility";
+    const cost = `Paid: DataForSEO LLM Mentions, at least $0.10 per request, capped at $${a.capUsd} a month (AI_VISIBILITY_MONTHLY_BUDGET_USD). DataForSEO has required a $100 monthly top-up for LLM Mentions access; its 2026-07-07 update says that was removed, so check your account.`;
+    const data = { enabled: a.enabled, capUsd: a.capUsd, spentUsd: a.spentUsd };
+    const raw = a.raw?.trim().toLowerCase() ?? "";
+    if (!a.enabled && raw !== "" && raw !== "false") {
+      out.push({ id: "aivisibility", label, state: "error", detail: `AI_VISIBILITY_ENABLED is set but isn't "true", so ai_visibility stays off. Set it to true to turn it on, or false. ${cost}`.slice(0, 500), next: LINKS.aiVisibilityDocs, data });
+    } else if (!a.enabled) {
+      out.push({ id: "aivisibility", label, state: "missing", detail: `Optional and off. Set AI_VISIBILITY_ENABLED=true to turn on ai_visibility. ${cost}`.slice(0, 500), next: LINKS.aiVisibilityDocs, data });
+    } else if (!a.dataForSeo) {
+      out.push({ id: "aivisibility", label, state: "error", detail: "AI_VISIBILITY_ENABLED is true but DataForSEO isn't set up, so ai_visibility can't run.", next: step("dataforseo"), data });
+    } else {
+      out.push({ id: "aivisibility", label, state: "configured", detail: `On: $${a.spentUsd.toFixed(2)} of $${a.capUsd} spent this month. ${cost}`.slice(0, 500), next: null, data });
     }
   }
 

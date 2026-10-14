@@ -24,6 +24,7 @@ import { aiReadinessFrom } from "../ai-readiness.js";
 import type { SiteHygiene } from "../../analysis/hygiene.js";
 import type {
   AiReadinessData,
+  AiVisibilityData,
   AuditChangesData,
   BingOverviewData,
   BrandedSplitData,
@@ -69,8 +70,8 @@ export interface RunDeps {
   spentThisMonth(keys: string[]): number;
   unitsThisMonth(keys: string[], provider: "ahrefs" | "semrush"): number;
   assertBudget(client: Client, estimateUsd: number): void;
-  /** Check and reserve the run's whole paid USD estimate while the sections run (SEC-1). */
-  withUsdReservation<T>(client: Client, usd: number, fn: () => Promise<T>): Promise<T>;
+  /** Check and reserve the run's whole paid USD estimate while the sections run (SEC-1); `aiUsd` is its AI-visibility share (C5). */
+  withUsdReservation<T>(client: Client, usd: number, fn: () => Promise<T>, opts?: { aiUsd?: number }): Promise<T>;
   serp(client: Client, keyword: string): Promise<{ clientRank: number | null; clientUrl: string | null }>;
   runGtmAudit(client: Client): Promise<Omit<TagManagerData, "limit">>;
   cruxHistory(client: Client, opts: { formFactor: "PHONE" | "DESKTOP" | "TABLET" | "ALL"; weeks: number; url?: string | undefined }): Promise<CruxHistoryResult>;
@@ -88,6 +89,20 @@ export interface RunDeps {
   localProfile(client: Client, opts: { packKeywords: number }): Promise<LocalProfileData>;
   /** Phase 12 C4: that section's whole USD estimate (0 when it can't run); no request. */
   localProfileEstimateUsd(client: Client, opts: { packKeywords: number }): number;
+  /** Phase 12 C5: whether AI_VISIBILITY_ENABLED=true (else the ai_visibility section is unavailable, with no request). */
+  aiVisibilityEnabled(): boolean;
+  /** Phase 12 C5: the ai_visibility section's estimate against its sub-cap and the client and global caps; no request. */
+  aiVisibilityEstimate(client: Client, req: AiSectionRequest): { usd: number; wouldExceed: boolean; message: string };
+  /** Phase 12 C5: what's left of AI_VISIBILITY_MONTHLY_BUDGET_USD this month (reservations in progress included). */
+  remainingAiUsd(): number;
+  /** Phase 12 C5: AI-search visibility (paid). */
+  aiVisibility(client: Client, req: AiSectionRequest): Promise<AiVisibilityData>;
+}
+
+export interface AiSectionRequest {
+  mode: "mentions" | "metrics";
+  platform: "google" | "chat_gpt";
+  limit: number;
 }
 
 /** The real sources. Modules load on first use, so planning a run (or a dry run) never loads Google clients. */
@@ -108,6 +123,8 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
   const crawls = await import("../../lib/crawls.js");
   const bing = await import("../../providers/bing.js");
   const local = await import("../../local-seo.js");
+  const ai = await import("../../ai-visibility.js");
+  const config = await import("../../config.js");
   return {
     googleConfigured: google.googleConfigured,
     gscQuery: gsc.gscQuery,
@@ -137,6 +154,13 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     bingOverview: (c, req) => bing.bingOverview(c, req),
     localProfile: (c, o) => local.localProfileSection(c, o),
     localProfileEstimateUsd: (c, o) => local.localSectionEstimateUsd(c, o),
+    aiVisibilityEnabled: () => config.env.AI_VISIBILITY_ON,
+    aiVisibilityEstimate: (c, r) => {
+      const e = ai.aiVisibilityEstimate(c, r);
+      return { usd: e.estimate.usd, wouldExceed: e.wouldExceed, message: e.message };
+    },
+    aiVisibility: (c, r) => ai.aiVisibilitySection(c, r),
+    remainingAiUsd: () => budget.remainingAiUsd().remainingUsd,
   };
 }
 
@@ -217,6 +241,8 @@ function primary(period: ResolvedPeriod): { which: Comparison; range: DateRange 
   return undefined;
 }
 
+const aiReq = (s: Extract<SectionSpec, { type: "ai_visibility" }>): AiSectionRequest => ({ mode: s.mode ?? "mentions", platform: s.platform ?? "google", limit: s.limit ?? 10 });
+
 const errorText = (err: unknown) => stripControl(err instanceof Error ? err.message : String(err)).slice(0, 1000);
 
 /** Run a template for one client. */
@@ -254,6 +280,31 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   }
   // Local profile sections (Phase 12 C4): the profile lookup plus a maps SERP per keyword.
   if (allowPaid) for (const s of plan.sections) if (s.type === "local_profile") paidUsd += deps.localProfileEstimateUsd(client, { packKeywords: s.packKeywords ?? 3 });
+  // AI visibility sections (Phase 12 C5): only when switched on; their own sub-cap is checked here too, before any paid request.
+  let aiUsd = 0;
+  if (allowPaid && deps.aiVisibilityEnabled()) {
+    for (const s of plan.sections) {
+      if (s.type !== "ai_visibility") continue;
+      let e: { usd: number; wouldExceed: boolean; message: string };
+      try {
+        e = deps.aiVisibilityEstimate(client, aiReq(s));
+      } catch {
+        // The estimate threw before any request (no DataForSEO, or chat_gpt for a non-US client). The section's own
+        // call throws the same error when it runs, and the section shows it as unavailable or failed; nothing is spent.
+        continue;
+      }
+      if (e.wouldExceed) throw new BudgetExceededError(e.message);
+      aiUsd += e.usd;
+    }
+    // Every AI section together against the AI sub-cap (R-1/SEC-4), before any paid request.
+    const aiLeft = deps.remainingAiUsd();
+    if (aiUsd > aiLeft) {
+      throw new BudgetExceededError(
+        `The ai_visibility sections together need about $${aiUsd.toFixed(4)} but the AI visibility cap (AI_VISIBILITY_MONTHLY_BUDGET_USD) has $${aiLeft.toFixed(4)} left this month. Remove a section, lower its limit, or raise the cap.`,
+      );
+    }
+    paidUsd += aiUsd;
+  }
   const reservedUsd = Number(paidUsd.toFixed(4));
   const spentBefore = { usd: deps.spentThisMonth(keys), ahrefs: deps.unitsThisMonth(keys, "ahrefs"), semrush: deps.unitsThisMonth(keys, "semrush") };
 
@@ -432,6 +483,10 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
         throw err;
       }
     },
+    ai_visibility: async (s: Extract<SectionSpec, { type: "ai_visibility" }>): Promise<AiVisibilityData> => {
+      if (!deps.aiVisibilityEnabled()) throw new SectionUnavailableError("AI-search visibility is off (set AI_VISIBILITY_ENABLED=true to include it; it is paid)");
+      return deps.aiVisibility(client, aiReq(s));
+    },
     ai_readiness: async (): Promise<AiReadinessData> => {
       const audit = deps.latestAudit(client.slug);
       if (!audit) throw new SectionUnavailableError(`no saved audit for ${client.domain} yet (run run_audit or crawlmark-cli audit)`);
@@ -477,7 +532,10 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
 
   // The paid sections' whole USD estimate is checked once and reserved while they run (SEC-1).
   const runAll = () => Promise.all(plan.sections.map(runOne));
-  const sections = reservedUsd > 0 ? await deps.withUsdReservation(client, reservedUsd, runAll) : await runAll();
+  // The AI share is reserved against the AI sub-cap too, so a concurrent ai_visibility call sees it.
+  const aiReserved = Number(aiUsd.toFixed(4));
+  const sections =
+    reservedUsd <= 0 ? await runAll() : aiReserved > 0 ? await deps.withUsdReservation(client, reservedUsd, runAll, { aiUsd: aiReserved }) : await deps.withUsdReservation(client, reservedUsd, runAll);
   if (sections.some((s) => s.status === "ok" && ["top_queries", "query_movers", "branded_split"].includes(s.type))) {
     const qc = await queries(cur).catch(() => []);
     if (qc.length >= QUERY_ROW_LIMIT) note(`Search Console returned its ${QUERY_ROW_LIMIT}-row limit of queries, so the long tail is missing from the query tables.`);

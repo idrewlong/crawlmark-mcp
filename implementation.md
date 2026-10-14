@@ -454,6 +454,19 @@ Things to confirm: Ahrefs `related-terms` / `matching-terms` answer with a `keyw
 
 Things to confirm: the actual `cost` of each against the estimate (the my_business_info price page returned 404 during research); the priority-queue reviews price and that results arrive within 75 s; the review item fields (`review_text`, `timestamp`, `rating`, `owner_answer`) match the fixtures; and that `place_id:<id>` lookups return the same listing at the same price (the my_business_info docs list `place_id:` / `cid:` as identifiers with no surcharge; the 5x price is documented only for search operators on Reviews, so the estimate assumes 1x). Replace the hand-built fixtures in `test/fixtures/dataforseo/` with scrubbed recordings.
 
+**Stage C5 status:** built on branch `phase-12c5` (from `phase-12c4`; merges after it): AI-search visibility from DataForSEO LLM Mentions. Off unless `AI_VISIBILITY_ENABLED=true` (exactly "true", any case); otherwise `ai_visibility` and the `ai_visibility` report section are unavailable with the enable instructions and make no request. DataForSEO-only capability `aiVisibility` (requireDataForSeo). `ai_visibility` (`mentions`: `search_mentions/live` with the client's domain as a source, by AI search volume; `metrics`: `target_metrics/live`; `platform` `google` or `chat_gpt`, the latter refused before any request for a non-US or non-English client); estimate $0.10 + rows × $0.001; its own monthly sub-cap `AI_VISIBILITY_MONTHLY_BUDGET_USD` (default $2, global; the sum of ledger rows under `/ai_optimization/`) checked with the client and global caps before the request, with in-flight reservations (`withAiUsdReservation`); cached a week; answers stripControl'd and capped. The $100 top-up warning is in the tool description, the estimate, every result, the `template-report` prompt, the `aivisibility` setup_status row (always in `--json`, human output only when switched on or mistyped), README, `docs/reports.md` and `.env.example`. Bundle fields `ai_visibility_enabled` (default off) and `ai_visibility_monthly_budget_usd`. The paid `ai_visibility` report section needs `paid: true`, `allowPaid`/`--paid` and the switch. Pending: review, merge after C4, and the live check below.
+
+**Stage C5 live check (pending; needs the user's approval for at most $0.30 of DataForSEO live spend and confirmation that their account has LLM Mentions access; answers research Not-confirmed 6).** With `DATAFORSEO_LIVE=true` and `AI_VISIBILITY_ENABLED=true`, on the user's own site (shown as `example.com`), each preceded by its `estimateOnly: true` call:
+
+| Step | Call | Estimated cost |
+|---|---|---|
+| 0 | Check the DataForSEO dashboard: is LLM Mentions enabled without a $100 top-up? (free) | $0 |
+| 1 | `ai_visibility { client: "example.com", mode: "metrics" }` | up to $0.11 (example task: $0.101) |
+| 2 | `ai_visibility { client: "example.com", mode: "mentions", limit: 5 }` | $0.105 |
+| Total | | at most about $0.215 (under the $0.30 approval and the $2 sub-cap) |
+
+Things to confirm: `search_mentions/live` answers (if it 404s, switch to the legacy `search/live`, decided then, not at runtime); the item and `aggregated_metrics` fields match the fixtures; the actual costs against the estimates; and the minimum-commitment status for the account. Replace the hand-built fixtures with scrubbed recordings.
+
 ## Final checklist
 
 - [ ] All phases typecheck and tests pass.

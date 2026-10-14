@@ -9,6 +9,7 @@ import { checkAhrefsKey } from "../providers/ahrefs.js";
 import { checkSemrushKey } from "../providers/semrush.js";
 import { checkCruxKey, cruxKey } from "../providers/crux.js";
 import { bingKey, checkBingKey } from "../providers/bing.js";
+import { remainingAiUsd } from "../lib/budget.js";
 import { shellQuote } from "../lib/claude-config.js";
 import { sourceCheckoutMarker, USER_HOME_DIRNAME, type HomeSource } from "../lib/home.js";
 import { withBrowser } from "../providers/browser.js";
@@ -165,6 +166,10 @@ export const realStatusProviders: StatusProviders = {
   bing: async () => {
     const key = bingKey();
     return { keySet: Boolean(key), check: key ? await checkBingKey(key) : null };
+  },
+  aiVisibility: () => {
+    const ai = remainingAiUsd();
+    return { enabled: env.AI_VISIBILITY_ON, raw: env.AI_VISIBILITY_ENABLED ?? null, dataForSeo: Boolean(env.DATAFORSEO_LOGIN && env.DATAFORSEO_PASSWORD), capUsd: ai.capUsd, spentUsd: ai.spentUsd };
   },
   chrome: async () => {
     try {

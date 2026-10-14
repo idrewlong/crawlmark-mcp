@@ -5,6 +5,7 @@
  */
 import type {
   AiReadinessData,
+  AiVisibilityData,
   AuditChangesData,
   BingOverviewData,
   BrandedSplitData,
@@ -439,6 +440,26 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     }
     for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
     blocks.push({ kind: "note", text: [t("From Google Maps and the Google Business Profile, via DataForSEO, when this report was generated. Map position 1 is the top of the map pack; lower is better.")] });
+    return blocks;
+  },
+  // Phase 12 C5: AI-search visibility. Questions are AI-platform text (stripControl'd); cited URLs and domains render as code.
+  ai_visibility: (data: AiVisibilityData) => {
+    const where = data.platform === "chat_gpt" ? "ChatGPT answers (United States, English)" : "Google AI Overviews";
+    const blocks: Block[] = [];
+    if (data.mentions) {
+      blocks.push({ kind: "paragraph", text: [t(`Questions in ${where} whose answer cites `), c(data.domain), t(`${data.mentions.total !== null ? ` (${fmtInt(data.mentions.total)} in DataForSEO's dataset; the ones with the most AI search volume first)` : ""}.`)] });
+      blocks.push(
+        data.mentions.items.length
+          ? { kind: "table", header: ["Question", "AI search volume", "Cited page", "Source position"], rows: data.mentions.items.map((i) => [i.question ? d(i.question) : cell("n/a"), cell(fmtInt(i.aiSearchVolume)), i.citedUrl ? [c(i.citedUrl)] : cell("n/a"), cell(i.position === null ? "n/a" : String(i.position))]), numeric: [false, true, false, true] }
+          : { kind: "paragraph", text: [t(`No ${where} in DataForSEO's dataset cite this site yet.`)] },
+      );
+    }
+    if (data.metrics) {
+      const m = data.metrics;
+      blocks.push({ kind: "paragraph", text: [t(`Mentions of `), c(data.domain), t(` as a source in ${data.platform === "chat_gpt" ? "ChatGPT" : "Google AI Overview"} answers: ${fmtInt(m.total.mentions)}, for questions with ${fmtInt(m.total.aiSearchVolume)} AI searches a month.`)] });
+      if (m.sourcesDomain.length) blocks.push({ kind: "table", header: ["Also cited", "Mentions", "AI search volume"], rows: m.sourcesDomain.map((r) => [[c(r.key)], cell(fmtInt(r.mentions)), cell(fmtInt(r.aiSearchVolume))]), numeric: [false, true, true] });
+    }
+    blocks.push({ kind: "note", text: [t("From DataForSEO's LLM Mentions dataset when this report was generated (paid). AI answers change often; AI search volume is DataForSEO's estimate.")] });
     return blocks;
   },
   keyword_gap: (data: KeywordGapData) => {

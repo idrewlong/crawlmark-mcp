@@ -269,6 +269,19 @@ Core Web Vitals history (`crux_history`, the `cwv` report section and `run_audit
 
 crawlmark only reads with this key. It calls a fixed list of read methods and never submits URLs, sitemaps or IndexNow pings, or changes anything in your Bing account. Bing requires the key in the request URL, so crawlmark never logs, caches or shows that URL. Each client is matched to the verified Bing site with the same domain; to use a different one on the same domain or a subdomain, set `bingSite` (`crawlmark-cli clients set example.com --bing-site https://www.example.com/`); a site on another host is refused. If the key is ever exposed, delete it and generate a new one on the same page.
 
+### AI-search visibility (optional, paid)
+
+> **Beta.** AI-search visibility is built to DataForSEO's official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps are fully tested. If anything looks wrong, please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
+
+`ai_visibility` and the `ai_visibility` report section show which questions in Google AI Overviews (or ChatGPT, United States English only) cite a client's site, from DataForSEO's LLM Mentions API. It is **off by default** and **paid**:
+
+- **Cost:** $0.10 per request plus $0.001 per row returned (about $0.12 for 20 answers). There is no request under $0.10.
+- **Possible $100 monthly minimum:** DataForSEO launched LLM Mentions with a $100 monthly top-up required for access. Its 2026-07-07 update says that minimum was removed and it's pay as you go, but older help pages still mention it. Check your DataForSEO account before turning this on.
+- **Its own cap:** `AI_VISIBILITY_MONTHLY_BUDGET_USD` (default $2) limits what it may spend each month across all clients, on top of each client's `monthlyBudgetUsd` and `GLOBAL_MONTHLY_BUDGET_USD`. Every call checks all three before its request, and `estimateOnly: true` shows the cost first without a request.
+- **Try it free:** DataForSEO's sandbox (the default until you set `DATAFORSEO_LIVE=true`) serves LLM Mentions with sample data at no charge.
+
+To turn it on, add `AI_VISIBILITY_ENABLED=true` to the `.env` in your config home (or switch on "AI-search visibility" in the Claude Desktop extension settings) and restart the server. `setup_status` shows its state, this month's AI spend and the cap. It never runs from a default report or a scheduled job: a report template section needs `paid: true`, the run needs `allowPaid: true` (or `--paid`), and the switch must be on.
+
 Configure your MCP client
 -------------------------
 
@@ -388,6 +401,12 @@ Live ranks from `serp_check`, `monthly_report` with `liveRanks` and report templ
 | `local_reviews` | **Paid** ($0.0015 per 10 reviews). The rating, the star distribution of the reviews fetched and the latest 10 to 100 reviews (rating, date, text, whether the owner replied). Never reviewer names, profiles or photos. Needs the confirmed `gbpPlaceId`. Reviews are a queued DataForSEO task: if it isn't done within 75 seconds you get a `taskId` to read it with later, at no extra cost |
 
 All three take `estimateOnly: true` (the estimate and what's left of the caps, with no request), check the whole call against the client's and the global monthly caps before the first request, and use DataForSEO whatever the client's data provider (there's no Ahrefs or Semrush equivalent). They don't use the Google Business Profile API, which needs Google's approval. See [docs/clients.md](docs/clients.md#google-business-profile).
+
+### AI-search visibility (paid, off by default)
+
+| Tool | Description |
+|---|---|
+| `ai_visibility` | **Paid** (at least $0.10 per request) and **off unless `AI_VISIBILITY_ENABLED=true`** ([AI-search visibility](#ai-search-visibility-optional-paid)). `mode: "mentions"`: questions in Google AI Overviews (or ChatGPT, US English only) whose answer cites the client, with the cited URL, its position among the sources, AI search volume and an answer excerpt. `mode: "metrics"`: mention counts and AI search volume by platform, location and language, and the domains cited alongside. Its own monthly cap; `estimateOnly: true` first |
 
 ### Competitors, keywords and brand terms
 

@@ -75,6 +75,13 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
       throw new LocalNotConfirmedError("no confirmed Google Business Profile for example.com (find it with local_profile and save it with set_client_profile gbpPlaceId)");
     },
     localProfileEstimateUsd: () => 0,
+    // Phase 12 C5: AI visibility is off unless a test turns it on.
+    aiVisibilityEnabled: () => false,
+    aiVisibilityEstimate: () => ({ usd: 0, wouldExceed: false, message: "" }),
+    remainingAiUsd: () => 2,
+    aiVisibility: async () => {
+      throw new Error("aiVisibility isn't part of this test");
+    },
     ...over,
   };
 }

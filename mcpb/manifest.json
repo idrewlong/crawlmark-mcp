@@ -43,6 +43,8 @@
         "PSI_API_KEY": "${user_config.psi_api_key}",
         "CRUX_API_KEY": "${user_config.crux_api_key}",
         "BING_WEBMASTER_API_KEY": "${user_config.bing_webmaster_api_key}",
+        "AI_VISIBILITY_ENABLED": "${user_config.ai_visibility_enabled}",
+        "AI_VISIBILITY_MONTHLY_BUDGET_USD": "${user_config.ai_visibility_monthly_budget_usd}",
         "CHROME_PATH": "${user_config.chrome_path}"
       }
     }
@@ -239,6 +241,10 @@
     {
       "name": "local_reviews",
       "description": "A client's Google reviews: rating distribution and the latest reviews (rating, date, text, owner replied), never reviewer names. Needs a confirmed place ID. Paid ($0.0015 per 10 reviews), estimate first."
+    },
+    {
+      "name": "ai_visibility",
+      "description": "Where a client is cited in Google AI Overviews or ChatGPT answers (DataForSEO LLM Mentions). Off unless AI_VISIBILITY_ENABLED=true. Paid: at least $0.10 per request, its own $2 monthly cap; DataForSEO may require a $100 monthly top-up."
     },
     {
       "name": "ga4_report",
@@ -483,6 +489,20 @@
       "title": "Chrome UX Report (CrUX) API key",
       "description": "Optional. Adds real-user Core Web Vitals history (crux_history). A Google Cloud API key with the Chrome UX Report API enabled; leave empty to use the PageSpeed Insights key when its project has that API enabled.",
       "sensitive": true,
+      "required": false
+    },
+    "ai_visibility_enabled": {
+      "type": "boolean",
+      "title": "AI-search visibility (paid, off by default)",
+      "description": "Turns on ai_visibility (DataForSEO LLM Mentions): at least $0.10 per request, capped by the monthly AI visibility budget below. DataForSEO has required a $100 monthly top-up for LLM Mentions access; check your DataForSEO account first.",
+      "default": false,
+      "required": false
+    },
+    "ai_visibility_monthly_budget_usd": {
+      "type": "number",
+      "title": "AI-search visibility monthly cap (USD)",
+      "description": "Optional. The most ai_visibility may spend per calendar month across all clients, on top of the client and global caps. Default 2.",
+      "min": 0.1,
       "required": false
     },
     "bing_webmaster_api_key": {

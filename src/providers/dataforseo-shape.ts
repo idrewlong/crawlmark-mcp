@@ -628,3 +628,93 @@ export function mapReviews(raw: RawReviews | undefined): LocalReviews {
   }
   return { rating: ratingValue(raw?.rating), votes: num(raw?.rating?.votes_count) ?? num(raw?.reviews_count), distribution: dist, reviews };
 }
+
+// ------------------------------------------------ AI Optimization: LLM Mentions (Phase 12 C5)
+
+/** One AI answer that cites the client: the question, where, its AI search volume, the cited URL and an excerpt. */
+export interface LlmMention {
+  /** The question asked (stripControl'd, at most 300 characters). */
+  question: string | null;
+  /** google (AI Overviews) or chat_gpt. */
+  platform: string | null;
+  aiSearchVolume: number | null;
+  /** The first source on the client's domain, and its position among the answer's sources. */
+  citedUrl: string | null;
+  position: number | null;
+  /** The start of the answer (markdown as returned, stripControl'd, whitespace collapsed, at most 500 characters). */
+  answerExcerpt: string | null;
+}
+export interface RawLlmMentions {
+  total_count?: number | null;
+  items?: {
+    platform?: string | null;
+    question?: string | null;
+    answer?: string | null;
+    ai_search_volume?: number | null;
+    sources?: { domain?: string | null; url?: string | null; position?: number | null }[] | null;
+  }[] | null;
+}
+
+/** search_mentions items, keeping only the answer's own text and the client's citation (no other sources, brands or fan-out queries). */
+export function mapLlmMentions(raw: RawLlmMentions | undefined, clientDomain: string): { items: LlmMention[]; total: number | null } {
+  const own = clientDomain.toLowerCase().replace(/^www\./, "");
+  const onDomain = (d: unknown) => {
+    const h = hostOf(d);
+    return h !== null && (h === own || h.endsWith(`.${own}`));
+  };
+  const items = (raw?.items ?? []).map((i): LlmMention => {
+    const src = (i.sources ?? []).find((s) => onDomain(s.domain) || onDomain(s.url));
+    return {
+      question: cleanText(i.question, 300),
+      platform: cleanText(i.platform, 40),
+      aiSearchVolume: num(i.ai_search_volume),
+      citedUrl: src ? cleanText(src.url, 2000) : null,
+      position: src ? num(src.position) : null,
+      answerExcerpt: cleanText(i.answer, 500),
+    };
+  });
+  return { items, total: num(raw?.total_count) };
+}
+
+export interface LlmMetricRow {
+  /** The group's key: a platform, location code, language or cited domain (stripControl'd). */
+  key: string;
+  mentions: number | null;
+  aiSearchVolume: number | null;
+}
+/** target_metrics' aggregated_metrics (documented shape, research D17); only the groups below are kept. */
+export interface LlmTargetMetrics {
+  total: { mentions: number | null; aiSearchVolume: number | null };
+  platform: LlmMetricRow[];
+  location: LlmMetricRow[];
+  language: LlmMetricRow[];
+  /** Domains the answers cite as sources alongside the client (at most 10). */
+  sourcesDomain: LlmMetricRow[];
+}
+type RawMetricRow = { key?: string | number | null; mentions?: number | null; ai_search_volume?: number | null };
+export interface RawLlmTargetMetrics {
+  aggregated_metrics?: {
+    total?: { mentions?: number | null; ai_search_volume?: number | null } | null;
+    platform?: RawMetricRow[] | null;
+    location?: RawMetricRow[] | null;
+    language?: RawMetricRow[] | null;
+    sources_domain?: RawMetricRow[] | null;
+  } | null;
+}
+
+const metricRows = (rows: RawMetricRow[] | null | undefined, max = 10): LlmMetricRow[] =>
+  (rows ?? [])
+    .map((r) => ({ key: typeof r.key === "number" && Number.isFinite(r.key) ? String(r.key) : (cleanText(r.key, 200) ?? ""), mentions: num(r.mentions), aiSearchVolume: num(r.ai_search_volume) }))
+    .filter((r) => r.key !== "")
+    .slice(0, max);
+
+export function mapLlmTargetMetrics(raw: RawLlmTargetMetrics | undefined): LlmTargetMetrics {
+  const a = raw?.aggregated_metrics;
+  return {
+    total: { mentions: num(a?.total?.mentions), aiSearchVolume: num(a?.total?.ai_search_volume) },
+    platform: metricRows(a?.platform),
+    location: metricRows(a?.location),
+    language: metricRows(a?.language),
+    sourcesDomain: metricRows(a?.sources_domain),
+  };
+}
