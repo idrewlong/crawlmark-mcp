@@ -130,6 +130,22 @@ function authHeader(): string {
   return "Basic " + Buffer.from(`${env.DATAFORSEO_LOGIN}:${env.DATAFORSEO_PASSWORD}`).toString("base64");
 }
 
+/** A task DataForSEO answered with an error status. It may still have been billed (`cost`), e.g. 40102 No Search Results. */
+export class DfsTaskError extends Error {
+  constructor(
+    path: string,
+    readonly code: number,
+    readonly statusMessage: string,
+    readonly cost: number,
+  ) {
+    super(`DataForSEO ${path} ${code}: ${statusMessage}`);
+    this.name = "DfsTaskError";
+  }
+}
+
+/** DataForSEO's "No Search Results" task status: nothing matched, and the call is still billed. */
+export const NO_SEARCH_RESULTS = 40102;
+
 /**
  * One DataForSEO request. A task status >= 40000 is an error, except the codes in `pendingCodes`
  * (40601 Task Handed, 40602 Task In Queue, for task_get on a task that isn't ready), which come back as the task.
@@ -147,7 +163,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown, 
   if (!task) throw new Error(`DataForSEO ${path}: empty response (${json.status_message})`);
   // 20000 = ok, 20100 = task created
   if (task.status_code >= 40000 && !pendingCodes.includes(task.status_code)) {
-    throw new Error(`DataForSEO ${path} ${task.status_code}: ${task.status_message}`);
+    throw new DfsTaskError(path, task.status_code, task.status_message, task.cost || json.cost || 0);
   }
   return task;
 }
@@ -167,6 +183,8 @@ async function billedRequest<T>(clientSlug: string, path: string, body: unknown,
   try {
     return await request<T>("POST", path, body, undefined, [], timeoutMs);
   } catch (err) {
+    // A task that came back with an error status can still be billed; record what DataForSEO charged.
+    if (err instanceof DfsTaskError && err.cost > 0) recordSpend(clientSlug, "dataforseo", `${path} (failed)`, err.cost);
     if (!isTimeoutOrAbort(err)) throw err;
     recordSpend(clientSlug, "dataforseo", `${path} (timeout, estimated)`, estimateUsd);
     throw new Error(`DataForSEO ${path} timed out after ${timeoutMs / 1000}s; ${what} The estimated cost ($${estimateUsd}) was recorded against the budget.`);
@@ -603,7 +621,18 @@ async function paidLocal<R, V>(client: Client, name: "myBusinessInfo" | "mapsSer
  * place-ID lookup costs the same as a name lookup.
  */
 export async function myBusinessInfo(client: Client, body: Record<string, unknown>, opts: { refresh?: boolean } = {}) {
-  const res = await paidLocal<RawBusinessInfo, ReturnType<typeof mapBusinessInfo>>(client, "myBusinessInfo", LOCAL_PATHS.businessInfo, [body], mapBusinessInfo, opts);
+  let res;
+  try {
+    res = await paidLocal<RawBusinessInfo, ReturnType<typeof mapBusinessInfo>>(client, "myBusinessInfo", LOCAL_PATHS.businessInfo, [body], mapBusinessInfo, opts);
+  } catch (err) {
+    if (err instanceof DfsTaskError && err.code === NO_SEARCH_RESULTS) {
+      const charged = err.cost > 0 ? ` DataForSEO still charged $${err.cost} for the lookup; it's recorded in the spend ledger.` : "";
+      throw new Error(
+        `Google has no Business Profile matching that search. The business may not have a listing, or its name on Google Maps differs: try the exact name shown on Maps with the city, or pass placeId.${charged}`,
+      );
+    }
+    throw err;
+  }
   return { businesses: res.mapped, costUsd: res.costUsd, fromCache: res.fromCache };
 }
 
