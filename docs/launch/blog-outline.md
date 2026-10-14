@@ -161,7 +161,7 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - crawlmark finds the listing and you confirm it before it's saved; reviews never include reviewer names. Estimate first, checked against your monthly caps.
 - New tools: `local_profile`, `local_pack`, `local_reviews` (Coming). New option: `crawlmark-cli clients set example.com --place-id <id>` and `gbpPlaceId` in `set_client_profile` (Coming). New report section `local_profile` (paid, Coming).
 
-**AI-search visibility** (Coming, Phase 12 Stage C5, paid and off by default)
+**AI-search visibility** (Shipped, paid and off by default)
 
 - Which questions in Google AI Overviews (and ChatGPT in the US) cite your client's site, with the cited page and how often people ask, or the total mentions, from your own DataForSEO account. _"Which AI Overview answers cite example.com, and for what questions?"_
 - Off until you set `AI_VISIBILITY_ENABLED=true`, with its own $2 monthly cap on top of your other caps and an estimate first. At least $0.10 per request, and DataForSEO may require a $100 monthly top-up for this API, so check your account.
