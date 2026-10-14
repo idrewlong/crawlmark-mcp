@@ -15,6 +15,8 @@ Notes for working on crawlmark itself. Users don't need any of this; see the [RE
 | `npm run inspect` | Opens the MCP Inspector against the source server |
 | `npm run build:mcpb` | Builds `build/crawlmark.mcpb` for Claude Desktop |
 
+CI (`.github/workflows/ci.yml`) runs `npm ci`, typecheck, build and the tests on Node 22 and 24 for every push to `main` and every pull request.
+
 `scripts/mcp-list.mjs` starts any install over stdio and prints its tools and prompts, which is a quick smoke test:
 
 ```bash
