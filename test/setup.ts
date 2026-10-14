@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Keep tests away from the repo's data/ and config/: a temp DATA_DIR (SQLite cache, audits) and CLIENTS_FILE.
@@ -11,6 +11,9 @@ process.env.CLIENTS_FILE ??= join(dir, "clients.yaml");
 // so a developer's shell can't point a test run at a real file: HOME (so os.homedir(), ~/.crawlmark,
 // ~/.claude.json, ~/.cursor and ~/.codex all resolve inside the temp dir), CODEX_HOME, every app-config
 // override, and both binary overrides at a path that doesn't exist (so no test runs the real claude or codex).
+// puppeteer finds its downloaded browsers under the home directory, so point it at the developer's real cache
+// first (read-only use); otherwise the fake HOME hides them and tests fall back to a system Chrome.
+process.env.PUPPETEER_CACHE_DIR ??= join(homedir(), ".cache", "puppeteer");
 const fakeHome = join(dir, "home");
 mkdirSync(fakeHome, { recursive: true });
 process.env.HOME = fakeHome;

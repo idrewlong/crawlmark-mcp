@@ -22,17 +22,50 @@ export interface ChromeChoiceInputs {
   chromePathEnv: string | undefined;
   /** puppeteer's own (downloaded) Chrome path. */
   puppeteerPath: string;
+  /** puppeteer's downloaded chrome-headless-shell path, when known. */
+  puppeteerShellPath?: string;
   candidates: string[];
   exists: (p: string) => boolean;
 }
 
+/** Which kind of binary is in use: the headless shell (no Dock icon on macOS), a full Chrome, or the CHROME_PATH override. */
+export type ChromeKind = "headless-shell" | "chrome" | "system-chrome" | "chrome-path";
+
+export interface ChromeChoice {
+  path: string;
+  kind: ChromeKind;
+  /** True when the binary is chrome-headless-shell, which only runs headless and takes puppeteer's `headless: "shell"`. */
+  isShell: boolean;
+}
+
+/** chrome-headless-shell binaries are named chrome-headless-shell (new) or headless_shell (older builds, distro packages). */
+export function looksLikeHeadlessShell(path: string): boolean {
+  return /(^|[\\/])(chrome-headless-shell|headless_shell)(\.exe)?$/i.test(path.trim());
+}
+
 /**
- * Which Chrome to run: CHROME_PATH, then the Chrome puppeteer downloaded (if the file is there),
- * then a system Chrome, else puppeteer's path (so the error names the missing download).
- * A bundle or an install with PUPPETEER_SKIP_DOWNLOAD relies on the system Chrome.
+ * Which Chrome to run: CHROME_PATH, then the headless shell puppeteer downloaded (no Dock icon on macOS,
+ * lighter), then the Chrome puppeteer downloaded, then a system Chrome, else puppeteer's Chrome path
+ * (so the error names the missing download). A bundle or an install with PUPPETEER_SKIP_DOWNLOAD relies on the system Chrome.
  */
+export function chooseChromeBinary(i: ChromeChoiceInputs): ChromeChoice {
+  if (!isUnsetValue(i.chromePathEnv)) {
+    const path = i.chromePathEnv!.trim();
+    return { path, kind: "chrome-path", isShell: looksLikeHeadlessShell(path) };
+  }
+  if (i.puppeteerShellPath && i.exists(i.puppeteerShellPath)) return { path: i.puppeteerShellPath, kind: "headless-shell", isShell: true };
+  if (i.exists(i.puppeteerPath)) return { path: i.puppeteerPath, kind: "chrome", isShell: false };
+  const system = i.candidates.find((c) => i.exists(c));
+  if (system) return { path: system, kind: "system-chrome", isShell: false };
+  return { path: i.puppeteerPath, kind: "chrome", isShell: false };
+}
+
+/** The path alone (see chooseChromeBinary). */
 export function chooseChrome(i: ChromeChoiceInputs): string {
-  if (!isUnsetValue(i.chromePathEnv)) return i.chromePathEnv!.trim();
-  if (i.exists(i.puppeteerPath)) return i.puppeteerPath;
-  return i.candidates.find((c) => i.exists(c)) ?? i.puppeteerPath;
+  return chooseChromeBinary(i).path;
+}
+
+/** Plain-language name of a ChromeKind for setup_status. */
+export function chromeKindLabel(kind: ChromeKind): string {
+  return { "headless-shell": "headless shell", chrome: "Chrome (puppeteer)", "system-chrome": "system Chrome", "chrome-path": "CHROME_PATH" }[kind];
 }

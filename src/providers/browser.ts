@@ -4,22 +4,31 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Options as ChromeLauncherOptions } from "chrome-launcher";
 import puppeteer, { type Browser, type HTTPResponse, type Page } from "puppeteer";
-import { chooseChrome, systemChromeCandidates } from "../lib/chrome.js";
+import { isUnsetValue } from "../lib/env.js";
+import { type ChromeChoice, chooseChromeBinary, systemChromeCandidates } from "../lib/chrome.js";
 import { BLOCKED_HEADER, egressProxy, proxyChromeFlags } from "../lib/egress-proxy.js";
 import { onAbort, TIMEOUTS, withTimeout } from "../lib/timeout.js";
 import { assertSafeUrl, UrlRefusedError } from "../lib/url-guard.js";
 
 /**
- * Chrome path shared by Lighthouse and axe. Uses CHROME_PATH if set, else the Chrome
- * puppeteer downloaded on install, else a system Chrome (the Claude Desktop bundle ships without one).
+ * Which browser binary Lighthouse, axe, rendering and PDF use: CHROME_PATH if set, else the
+ * chrome-headless-shell puppeteer downloaded (no Dock icon on macOS), else the Chrome puppeteer
+ * downloaded, else a system Chrome (the Claude Desktop bundle ships without one).
  */
-export async function chromePath(): Promise<string> {
-  return chooseChrome({
+export async function resolveChrome(): Promise<ChromeChoice> {
+  return chooseChromeBinary({
     chromePathEnv: process.env.CHROME_PATH,
     puppeteerPath: await puppeteer.executablePath(),
+    // With PUPPETEER_EXECUTABLE_PATH set, puppeteer's own path is that override, so don't offer (and label) the shell.
+    puppeteerShellPath: isUnsetValue(process.env.PUPPETEER_EXECUTABLE_PATH) ? await puppeteer.executablePath({ headless: "shell" }).catch(() => undefined) : undefined,
     candidates: systemChromeCandidates(process.platform, process.env, homedir()),
     exists: existsSync,
   });
+}
+
+/** Just the path of resolveChrome(). */
+export async function chromePath(): Promise<string> {
+  return (await resolveChrome()).path;
 }
 
 /** Chrome's sandbox stays on unless it cannot work (Linux as root, typical in containers) or CHROME_NO_SANDBOX is set. */
@@ -33,12 +42,25 @@ export function needsNoSandbox(
   return platform === "linux" && uid === 0;
 }
 
+/**
+ * Flags for every Chrome we start. No --headless here: puppeteer adds its own from the `headless`
+ * launch option (see puppeteerBinaryOptions), and chrome-launcher gets it from headlessFlag().
+ */
 export const CHROME_FLAGS = [
-  "--headless=new",
   "--disable-gpu",
   "--disable-dev-shm-usage",
   ...(needsNoSandbox() ? ["--no-sandbox"] : []),
 ];
+
+/** puppeteer launch options that match the binary: the shell needs `headless: "shell"`, full Chrome the new headless mode. */
+export function puppeteerBinaryOptions(choice: ChromeChoice): { executablePath: string; headless: boolean | "shell" } {
+  return { executablePath: choice.path, headless: choice.isShell ? "shell" : true };
+}
+
+/** chrome-launcher's headless flag: the shell is always headless (plain --headless is accepted), full Chrome uses the new mode. */
+export function headlessFlag(choice: ChromeChoice): string {
+  return choice.isShell ? "--headless" : "--headless=new";
+}
 
 /** CHROME_FLAGS plus the egress-proxy flags. Every Chrome we start (puppeteer and chrome-launcher) uses these. */
 export async function guardedChromeFlags(): Promise<string[]> {
@@ -47,15 +69,16 @@ export async function guardedChromeFlags(): Promise<string[]> {
 }
 
 /**
- * Chrome profile prefs for every browser we start. The command-line flag
- * --force-webrtc-ip-handling-policy is not honoured, so WebRTC's UDP (STUN/ICE), which
- * cannot go through the HTTP proxy, is switched off with this profile pref instead.
+ * Chrome profile prefs for every browser we start. WebRTC's UDP (STUN/ICE) cannot go through the HTTP proxy,
+ * so it is restricted twice: this profile pref and the --force-webrtc-ip-handling-policy flag (proxyChromeFlags).
+ * Both are required: full Chrome ignores --force-webrtc-ip-handling-policy and honours only the profile pref; chrome-headless-shell ignores the profile pref and honours only the flag. Removing either one reopens SEC-1 for one of the binaries.
  */
 export const CHROME_PREFS = { webrtc: { ip_handling_policy: "disable_non_proxied_udp" } } as const;
 
 /** chrome-launcher options for Lighthouse: proxy flags plus CHROME_PREFS (chrome-launcher writes them to its temp profile). */
 export async function lighthouseLaunchOptions(): Promise<ChromeLauncherOptions> {
-  return { chromePath: await chromePath(), chromeFlags: await guardedChromeFlags(), prefs: { ...CHROME_PREFS, webrtc: { ...CHROME_PREFS.webrtc } } };
+  const choice = await resolveChrome();
+  return { chromePath: choice.path, chromeFlags: [headlessFlag(choice), ...(await guardedChromeFlags())], prefs: { ...CHROME_PREFS, webrtc: { ...CHROME_PREFS.webrtc } } };
 }
 
 /** Close functions of every browser currently open, so shutdown can close them all. */
@@ -120,13 +143,13 @@ export async function withChrome<R, T>(
  */
 export async function launchGuardedBrowser(): Promise<{ browser: Browser; close: () => Promise<void> }> {
   const args = await guardedChromeFlags();
-  const executablePath = await chromePath();
+  const choice = await resolveChrome();
   const userDataDir = await mkdtemp(join(tmpdir(), "crawlmark-chrome-"));
   const removeProfile = () => rm(userDataDir, { recursive: true, force: true, maxRetries: 3 });
   try {
     await mkdir(join(userDataDir, "Default"));
     await writeFile(join(userDataDir, "Default", "Preferences"), JSON.stringify(CHROME_PREFS));
-    const browser = await puppeteer.launch({ executablePath, args, userDataDir });
+    const browser = await puppeteer.launch({ ...puppeteerBinaryOptions(choice), args, userDataDir });
     return {
       browser,
       close: async () => {

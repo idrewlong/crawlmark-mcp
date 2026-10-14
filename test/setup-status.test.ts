@@ -77,6 +77,13 @@ describe("setup_status", () => {
     expect(s.clients).toMatchObject({ state: "missing", next: `${CLI} clients add <domain>` });
   });
 
+  it("the Chrome row names the binary in data and leaves the plain detail alone for the headless shell", async () => {
+    const r = await collectSetupStatus(providers({ chrome: async () => ({ ok: true, version: "HeadlessChrome/1", binary: { kind: "headless-shell", label: "headless shell", path: "/c/chrome-headless-shell" } }) }));
+    const chrome = r.integrations.find((i) => i.id === "chrome")!;
+    expect(chrome.detail).toBe("Headless Chrome launches (HeadlessChrome/1).");
+    expect(chrome.data).toEqual({ version: "HeadlessChrome/1", binary: "headless-shell", binaryLabel: "headless shell", path: "/c/chrome-headless-shell" });
+  });
+
   it("home is working when settings come from the environment (e.g. a Desktop bundle) and there's no .env", async () => {
     const s = await byId(providers({ home: () => ({ info: { dir: "/u/.crawlmark", source: "user", reason: "installed" }, exists: false, envFile: "/u/.crawlmark/.env", envFileExists: false, configuredByEnv: true }) }), { only: ["home"] });
     expect(s.home).toMatchObject({ state: "working", next: null, data: { configuredByEnv: true } });

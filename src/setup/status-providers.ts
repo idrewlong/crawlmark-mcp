@@ -12,7 +12,8 @@ import { bingKey, checkBingKey } from "../providers/bing.js";
 import { remainingAiUsd } from "../lib/budget.js";
 import { shellQuote } from "../lib/claude-config.js";
 import { sourceCheckoutMarker, USER_HOME_DIRNAME, type HomeSource } from "../lib/home.js";
-import { withBrowser } from "../providers/browser.js";
+import { chromeKindLabel } from "../lib/chrome.js";
+import { resolveChrome, withBrowser } from "../providers/browser.js";
 import { dataForSeoStatus } from "../providers/dataforseo.js";
 import { listGa4Properties, listGscSites } from "../providers/discovery.js";
 import { checkGoogleAuthLive, googleAuthStatus } from "../providers/google.js";
@@ -173,7 +174,9 @@ export const realStatusProviders: StatusProviders = {
   },
   chrome: async () => {
     try {
-      return { ok: true, version: await withBrowser("setup_status Chrome check", undefined, (b) => b.version()) };
+      const choice = await resolveChrome();
+      const version = await withBrowser("setup_status Chrome check", undefined, (b) => b.version());
+      return { ok: true, version, binary: { kind: choice.kind, label: chromeKindLabel(choice.kind), path: choice.path } };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }

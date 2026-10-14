@@ -305,9 +305,9 @@ describe("fetchRendered request guard", () => {
 
   it("aborts redirects to a blocked address (default guard, private URLs not allowed)", async () => {
     const puppeteer = (await import("puppeteer")).default;
-    const { chromePath, CHROME_FLAGS, guardPage } = await import("../src/providers/browser.js");
+    const { resolveChrome, puppeteerBinaryOptions, CHROME_FLAGS, guardPage } = await import("../src/providers/browser.js");
     delete process.env.ALLOW_PRIVATE_URLS;
-    const browser = await puppeteer.launch({ executablePath: await chromePath(), args: CHROME_FLAGS });
+    const browser = await puppeteer.launch({ ...puppeteerBinaryOptions(await resolveChrome()), args: CHROME_FLAGS });
     try {
       const page = await browser.newPage();
       await guardPage(page);

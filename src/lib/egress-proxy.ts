@@ -321,7 +321,7 @@ export function proxyChromeFlags(port: number): string[] {
     // Chrome bypasses the proxy for localhost by default; this removes that exemption.
     "--proxy-bypass-list=<-loopback>",
     // QUIC and WebRTC use UDP, which an HTTP proxy cannot carry; keep both off the network.
-    // The WebRTC flag alone is not honoured; the CHROME_PREFS profile pref (browser.ts) is what enforces it.
+    // Both are required: full Chrome ignores --force-webrtc-ip-handling-policy and honours only the profile pref (CHROME_PREFS in browser.ts); chrome-headless-shell ignores the profile pref and honours only the flag. Removing either one reopens SEC-1 for one of the binaries.
     "--disable-quic",
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
   ];

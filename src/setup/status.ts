@@ -117,7 +117,8 @@ export interface StatusProviders {
   bing?(): Promise<{ keySet: boolean; check: { ok: true; sites: number; verified: number } | { ok: false; kind?: "refused" | "network" | "throttled" | "other"; problem: string } | null }>;
   /** Phase 12 C5: the AI_VISIBILITY_ENABLED switch (raw value too, to flag a typo) and this month's AI spend against its sub-cap; no network. */
   aiVisibility?(): { enabled: boolean; raw: string | null; dataForSeo: boolean; capUsd: number; spentUsd: number };
-  chrome(): Promise<{ ok: true; version: string } | { ok: false; error: string }>;
+  /** `binary` says which browser ran (headless shell, Chrome, system Chrome or CHROME_PATH); absent in stubs. */
+  chrome(): Promise<{ ok: true; version: string; binary?: { kind: string; label: string; path: string } } | { ok: false; error: string }>;
   clients(): { count: number; ignored: number; file: string; exists: boolean };
 }
 
@@ -546,7 +547,15 @@ export async function collectSetupStatus(
   if (chrome) {
     out.push(
       chrome.ok
-        ? { id: "chrome", label: "Chrome", state: "working", detail: `Headless Chrome launches (${chrome.version}).`, next: null, data: { version: chrome.version } }
+        ? {
+            id: "chrome",
+            label: "Chrome",
+            state: "working",
+            // The plain text stays as it was; the binary is in data. Only on macOS with a full Chrome, which shows a Dock icon per launch, the detail says how to avoid that.
+            detail: `Headless Chrome launches (${chrome.version}).${chrome.binary && (chrome.binary.kind === "chrome" || chrome.binary.kind === "system-chrome") && process.platform === "darwin" ? " It runs full Chrome, which flashes a Dock icon on macOS; `npx puppeteer browsers install chrome-headless-shell` avoids that." : ""}`,
+            next: null,
+            data: { version: chrome.version, ...(chrome.binary ? { binary: chrome.binary.kind, binaryLabel: chrome.binary.label, path: chrome.binary.path } : {}) },
+          }
         : { id: "chrome", label: "Chrome", state: "error", detail: `Headless Chrome didn't launch: ${chrome.error.slice(0, 300)}`, next: "npx puppeteer browsers install chrome" },
     );
   }

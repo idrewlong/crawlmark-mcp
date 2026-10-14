@@ -1,6 +1,8 @@
 import { createServer, request, type Server } from "node:http";
 import { connect, type AddressInfo } from "node:net";
 import type { LookupAddress } from "node:dns";
+import { existsSync } from "node:fs";
+import puppeteerForPaths from "puppeteer";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Browser } from "puppeteer";
 
@@ -18,6 +20,37 @@ import { BLOCKED_HEADER, proxyChromeFlags, startEgressProxy, type EgressProxy } 
 import { onAbort, TimeoutError, withTimeout } from "../src/lib/timeout.js";
 
 // test/setup.ts points DATA_DIR at a temp dir, so the usage-log tests write to a throwaway SQLite file.
+
+/**
+ * Chrome binaries the browser-launching tests run against, one describe each. Full Chrome and chrome-headless-shell
+ * enforce the WebRTC policy differently (see CHROME_PREFS), so both must be covered; a missing binary skips its variant.
+ */
+const chromeVariants: [name: string, path: string | undefined][] = await (async () => {
+  const full = await puppeteerForPaths.executablePath();
+  const shell = await puppeteerForPaths.executablePath({ headless: "shell" }).catch(() => "");
+  return [
+    ["full Chrome", existsSync(full) ? full : undefined],
+    ["headless shell", shell && existsSync(shell) ? shell : undefined],
+  ];
+})();
+
+/** describe() once per Chrome variant, with CHROME_PATH pointing at that binary for the block's duration. */
+function describeEachChrome(title: string, body: () => void): void {
+  for (const [name, path] of chromeVariants) {
+    (path ? describe : describe.skip)(`${title} [${name}]`, () => {
+      let saved: string | undefined;
+      beforeAll(() => {
+        saved = process.env.CHROME_PATH;
+        process.env.CHROME_PATH = path!;
+      });
+      afterAll(() => {
+        if (saved === undefined) delete process.env.CHROME_PATH;
+        else process.env.CHROME_PATH = saved;
+      });
+      body();
+    });
+  }
+}
 
 const v4 = (address: string): LookupAddress => ({ address, family: 4 });
 const v6 = (address: string): LookupAddress => ({ address, family: 6 });
@@ -240,7 +273,7 @@ describe("egress proxy", () => {
   });
 });
 
-describe("headless Chrome behind the egress proxy", () => {
+describeEachChrome("headless Chrome behind the egress proxy", () => {
   let blocked: Awaited<ReturnType<typeof countingServer>>;
   let allowed: Server;
   let allowedPort = 0;
@@ -284,7 +317,7 @@ describe("headless Chrome behind the egress proxy", () => {
   /** Load the allowed page in Chrome behind a proxy and let it try to reach the blocked server. */
   async function run(allowPrivate: boolean): Promise<unknown[]> {
     const puppeteer = (await import("puppeteer")).default;
-    const { chromePath, CHROME_FLAGS } = await import("../src/providers/browser.js");
+    const { resolveChrome, puppeteerBinaryOptions, CHROME_FLAGS } = await import("../src/providers/browser.js");
     // Both servers are on loopback, so the "allowed" host goes through a test-only allowlist hook.
     const proxy = await startEgressProxy({
       lookup: fakeDns({ "allowed.test": [v4("127.0.0.1")], "blocked.test": [v4("127.0.0.1")] }),
@@ -294,7 +327,7 @@ describe("headless Chrome behind the egress proxy", () => {
     let browser: Browser;
     try {
       // A launch that takes longer than 60 s fails (puppeteer kills that Chrome) instead of its 30 s default.
-      browser = await puppeteer.launch({ executablePath: await chromePath(), args: [...CHROME_FLAGS, ...proxyChromeFlags(proxy.port)], timeout: 60_000 });
+      browser = await puppeteer.launch({ ...puppeteerBinaryOptions(await resolveChrome()), args: [...CHROME_FLAGS, ...proxyChromeFlags(proxy.port)], timeout: 60_000 });
     } catch (err) {
       await proxy.close();
       throw err;
@@ -564,7 +597,7 @@ describe("egress proxy socket hygiene", () => {
   });
 });
 
-describe("WebRTC cannot send UDP around the proxy (SEC-1)", () => {
+describeEachChrome("WebRTC cannot send UDP around the proxy (SEC-1)", () => {
   /** A loopback "STUN server" that just counts datagrams. */
   async function stunListener() {
     const { createSocket } = await import("node:dgram");
@@ -586,11 +619,14 @@ describe("WebRTC cannot send UDP around the proxy (SEC-1)", () => {
     }, port);
   }
 
-  it("control: Chrome with only the flags does send STUN packets", async () => {
+  // Both are required: full Chrome ignores --force-webrtc-ip-handling-policy and honours only the profile pref; chrome-headless-shell
+  // ignores the profile pref and honours only the flag. Removing either one reopens SEC-1 for one of the binaries. The control drops
+  // the flag (and has no pref), so it only proves the listener sees packets when nothing restricts WebRTC.
+  it("control: with no WebRTC policy at all (no pref, no flag), Chrome does send STUN packets", async () => {
     const puppeteer = (await import("puppeteer")).default;
-    const { chromePath, CHROME_FLAGS } = await import("../src/providers/browser.js");
+    const { resolveChrome, puppeteerBinaryOptions, CHROME_FLAGS } = await import("../src/providers/browser.js");
     const stun = await stunListener();
-    const browser = await puppeteer.launch({ executablePath: await chromePath(), args: [...CHROME_FLAGS, ...proxyChromeFlags(1)] });
+    const browser = await puppeteer.launch({ ...puppeteerBinaryOptions(await resolveChrome()), args: [...CHROME_FLAGS, ...proxyChromeFlags(1)].filter((f) => !f.startsWith("--force-webrtc-ip-handling-policy")) });
     try {
       await tryStun(await browser.newPage(), stun.port);
       expect(stun.packets()).toBeGreaterThan(0);

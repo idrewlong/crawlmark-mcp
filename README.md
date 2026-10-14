@@ -63,6 +63,8 @@ Run `init` again once crawlmark is set up (a `.env` in its config home and at le
 
 Installing the package downloads a Chrome build for Lighthouse and axe (about 570 MB in `~/.cache/puppeteer`). To skip it, set `PUPPETEER_SKIP_DOWNLOAD=true` before installing and either install Google Chrome or point `CHROME_PATH` at a Chrome or Chromium binary.
 
+crawlmark prefers puppeteer's `chrome-headless-shell` (run `npx puppeteer browsers install chrome-headless-shell` if it's missing) for rendering, PDF export, axe and Lighthouse. On macOS the shell runs without a Dock icon, whereas full Google Chrome flashes one on every launch, even headless; there's no flag that avoids that. The order is `CHROME_PATH`, then the headless shell, then puppeteer's Chrome, then a system Chrome. `setup_status` shows which one is in use.
+
 ### Claude Desktop bundle (MCPB)
 
 Download `crawlmark.mcpb` from the release page and double-click it, or drag it onto Claude Desktop (**Settings > Extensions**). Claude Desktop shows a form. Every field is optional, so fill in only what you use:
@@ -561,7 +563,7 @@ The config home holds `.env`, `config/clients.yaml`, `config/report-templates.ya
 | `DEFAULT_CLIENT_MONTHLY_BUDGET_USD` | `5` | Per-client monthly cap |
 | `GLOBAL_MONTHLY_BUDGET_USD` | `50` | Monthly cap across all clients |
 | `COMPETITOR_DENYLIST_FILE`, `COMPETITOR_DENYLIST` | | Extra domains to leave out of competitor suggestions |
-| `CHROME_PATH` | | Chrome or Chromium binary for Lighthouse, axe and rendering |
+| `CHROME_PATH` | | Chrome, Chromium or chrome-headless-shell binary for Lighthouse, axe and rendering. Overrides the headless shell |
 | `CHROME_NO_SANDBOX` | | `true` only where Chrome's sandbox can't start |
 | `ALLOW_PRIVATE_URLS` | | `true` lets browser checks reach local and private addresses (local development) |
 | `RESTRICT_TO_CLIENT_DOMAINS` | | `true` only accepts URLs on your clients' domains |

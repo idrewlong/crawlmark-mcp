@@ -69,4 +69,4 @@ export const chromePdfPrinter: PdfPrinter = (html, opts) =>
   });
 
 /** The hint for a failed PDF (usually Chrome not installed), as setup_status gives it. */
-export const PDF_CHROME_HINT = "PDF needs Chrome: run `npx puppeteer browsers install chrome` or set CHROME_PATH (setup status shows the Chrome check).";
+export const PDF_CHROME_HINT = "PDF needs Chrome: run `npx puppeteer browsers install chrome-headless-shell` or set CHROME_PATH (setup status shows the Chrome check).";
