@@ -213,10 +213,11 @@ describe("log file access", () => {
     await expect(readLogLines(swap!, () => undefined, st())).rejects.toThrow(/couldn't be opened as a regular file/);
     rmSync(swap!.path);
 
-    // Another regular file swapped in: different inode.
+    // Another regular file swapped in: different inode. The old file is moved aside, not deleted,
+    // so Linux can't hand its freed inode number to the replacement.
     writeFileSync(join(ok, "b.log"), LOG);
     const [b] = (await resolveAllowedLogFiles(["b.log"], allowed)).files;
-    rmSync(b!.path);
+    renameSync(b!.path, join(ok, "b.old"));
     writeFileSync(b!.path, "replaced\n");
     await expect(readLogLines(b!, () => undefined, st())).rejects.toThrow(/replaced after it was checked/);
 
