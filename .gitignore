@@ -15,3 +15,6 @@ secrets/
 build/
 # Phase 12: report files (a source checkout's config home is the repo root)
 /reports/
+
+# Local Claude Code state (agent worktrees, settings)
+.claude/
