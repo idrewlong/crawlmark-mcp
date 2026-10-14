@@ -26,7 +26,10 @@ import {
   setStringList,
   setIgnore,
 } from "./lib/clients-file.js";
+import { stripControl } from "./lib/terminal-text.js";
+import { isGbpCandidate } from "./lib/gbp-candidates.js";
 import {
+  PLACE_ID_RE,
   assembleRegistry,
   findClient,
   gtmFromOutcome,
@@ -535,6 +538,8 @@ export interface ProfileUpdate {
   country?: string | undefined;
   /** Phase 12 C3: the Bing Webmaster Tools site URL (http or https); empty string clears it (back to matching by domain). */
   bingSite?: string | undefined;
+  /** Phase 12 C4: the confirmed Google Business Profile place ID (from local_profile, after the user confirms); empty string clears it. */
+  gbpPlaceId?: string | undefined;
 }
 
 export interface ProfileResult {
@@ -542,12 +547,17 @@ export interface ProfileResult {
   set: Record<string, string>;
   cleared: string[];
   /** dataProvider and country are included when the update set or cleared either of them. */
-  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null };
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null };
   clientsFile: string;
 }
 
 /** Set or clear a client's area, niche and name in clients.yaml. */
-export async function setClientProfile(idOrDomain: string, update: ProfileUpdate): Promise<ProfileResult> {
+export async function setClientProfile(
+  idOrDomain: string,
+  update: ProfileUpdate,
+  /** trustedPlaceId: the user typed gbpPlaceId themselves (CLI --place-id), so it isn't checked against local_profile's candidates. */
+  opts: { trustedPlaceId?: boolean } = {},
+): Promise<ProfileResult> {
   const fields: Record<string, string | undefined> = {};
   for (const key of ["area", "niche", "name"] as const) {
     const raw = update[key];
@@ -587,16 +597,26 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
     }
     fields.bingSite = v;
   }
+  if (update.gbpPlaceId !== undefined) {
+    const v = update.gbpPlaceId.trim();
+    if (v !== "" && !PLACE_ID_RE.test(v)) throw new Error(`"${stripControl(update.gbpPlaceId).slice(0, 100)}" is not a Google place ID (letters, digits, - and _, as local_profile returns it in matched.placeId).`);
+    fields.gbpPlaceId = v;
+  }
   let brandTerms: string[] | undefined;
   if (update.brandTerms !== undefined) {
     brandTerms = toBrandTerms(update.brandTerms);
     const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
     if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
   }
-  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country or bingSite.");
+  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite or gbpPlaceId.");
   const client = await resolveClient(idOrDomain);
   if (fields.bingSite && !bingSiteOnDomain(fields.bingSite, client.domain)) {
     throw new Error(`bingSite ${fields.bingSite.slice(0, 200)} isn't on ${client.domain}: it would show another site's Bing data in this client's reports. Use a Bing site on ${client.domain} or a subdomain of it.`);
+  }
+  if (fields.gbpPlaceId && !opts.trustedPlaceId && fields.gbpPlaceId !== client.gbpPlaceId && !isGbpCandidate(client.slug, fields.gbpPlaceId)) {
+    throw new Error(
+      `gbpPlaceId ${fields.gbpPlaceId} isn't a listing local_profile found for ${client.domain} in the last day. Run local_profile for this client first and confirm the match with the user, then save the place ID it returned.`,
+    );
   }
   await editClientsFile((text, path) => {
     const { text: base, entry } = entryFor(text, path, client);
@@ -620,6 +640,7 @@ export async function setClientProfile(idOrDomain: string, update: ProfileUpdate
       brandTerms: updated.brandTerms,
       ...(update.dataProvider !== undefined || update.country !== undefined ? { dataProvider: updated.dataProvider ?? null, country: updated.country } : {}),
       ...(update.bingSite !== undefined ? { bingSite: updated.bingSite ?? null } : {}),
+      ...(update.gbpPlaceId !== undefined ? { gbpPlaceId: updated.gbpPlaceId ?? null } : {}),
     },
     clientsFile: env.CLIENTS_FILE,
   };

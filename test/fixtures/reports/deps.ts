@@ -4,6 +4,7 @@ import type { Client } from "../../../src/config.js";
 import type { RunDeps } from "../../../src/reports/templates/run.js";
 import type { CruxHistoryResult } from "../../../src/reports/report-types.js";
 import { BingUnavailableError, NO_BING_KEY } from "../../../src/providers/bing.js";
+import { LocalNotConfirmedError } from "../../../src/local-seo.js";
 import * as d from "./data.js";
 
 export const client = d.CLIENT as unknown as Client;
@@ -69,6 +70,11 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
     bingOverview: async () => {
       throw new BingUnavailableError(NO_BING_KEY);
     },
+    // Phase 12 C4: no confirmed Google Business Profile unless a test supplies data.
+    localProfile: async () => {
+      throw new LocalNotConfirmedError("no confirmed Google Business Profile for example.com (find it with local_profile and save it with set_client_profile gbpPlaceId)");
+    },
+    localProfileEstimateUsd: () => 0,
     ...over,
   };
 }

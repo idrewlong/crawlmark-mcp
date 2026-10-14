@@ -35,6 +35,7 @@ Every field is in `config/clients.example.yaml`. The file is re-read on every ca
 | `dataProvider` | `SEO_DATA_PROVIDER` (blank means `dataforseo`) |
 | `country` | The country of a country-level `locationCode` (2840 gives `US`, 2826 gives `GB`); none for a city or region code |
 | `bingSite` | The verified Bing Webmaster Tools site whose host is the client's domain (https first, then the root path) |
+| `gbpPlaceId` | None: `local_profile` searches by the client's name until you confirm a listing |
 | `monthlyUnits.ahrefs`, `monthlyUnits.semrush` | `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS` (10,000) and `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` (5,000) |
 
 Arrays you set (`competitors`, `trackedKeywords`, `keyPages`) replace the defaults rather than append.
@@ -78,6 +79,23 @@ crawlmark-cli clients set example.com --bing-site none   # back to matching by d
 `bingSite` must be on the client's own domain or a subdomain of it (`https://www.example.com/` or `https://blog.example.com/` for `example.com`); a site on another host is refused, so one client's report can never show another site's Bing data. A `bingSite` that the key can't read, or that isn't verified yet, is an error naming `bingSite`. Bing sites are never written to clients.yaml automatically, and the Bing lookup never runs during client discovery, so a Bing problem can't affect `list_clients`.
 
 `list_clients` shows each client's resolved `dataProvider` (marked `(default)` when it comes from `SEO_DATA_PROVIDER`) and `country`.
+
+### Google Business Profile
+
+`local_profile`, `local_pack`, `local_reviews` and the `local_profile` report section read a client's Google Business Profile through DataForSEO (paid; not the Google Business Profile API). Set `area` first (`crawlmark-cli clients set example.com --area "Austin,Texas,United States"`) so searches run in the client's town; without it they use the client's whole `locationCode` market.
+
+1. Run `local_profile` for the client (with `estimateOnly: true` first: about $0.0054). It searches Google by the client's name (or the `query` you pass) and returns the best match plus up to 4 other listings, and says whether the listing's website is the client's domain.
+2. Check the match: title, address and website. crawlmark never saves it on its own.
+3. Only when it's the right business, save its place ID:
+
+```bash
+crawlmark-cli clients set example.com --place-id ChIJexamplePlaceId000001
+crawlmark-cli clients set example.com --place-id none   # forget it
+```
+
+or `set_client_profile` with `gbpPlaceId`. Through `set_client_profile` (Claude), the place ID must be one `local_profile` returned for that client in the last day; the CLI flag takes whatever you type. From then on `local_profile` looks the listing up by place ID, `local_pack` recognises the client's own listing by it (otherwise by website domain), and `local_reviews` and the report section run (both refuse without it, so they can never show another business's reviews).
+
+Reviews come back without reviewer names, profile links, photos or review IDs, and the owner's reply only as yes or no. Review and listing text is stripped of control and invisible characters and escaped in report files.
 
 ### When discovery doesn't run or fails
 

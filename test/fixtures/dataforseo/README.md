@@ -34,3 +34,15 @@ These three were written by hand from the documented response structure (docs.da
 | `dataforseo_labs_google_keyword_ideas_live.json` | `/dataforseo_labs/google/keyword_ideas/live` |
 | `dataforseo_labs_google_keyword_suggestions_live.json` | `/dataforseo_labs/google/keyword_suggestions/live` |
 | `dataforseo_labs_google_domain_intersection_live.json` | `/dataforseo_labs/google/domain_intersection/live` |
+
+## Phase 12 C4: local SEO (hand-built, not recordings)
+
+Written by hand from the documented responses (docs.dataforseo.com, see `docs/research/2026-10-13-phase-12-apis.md` D4-D7 and D14-D16); no request was made. Businesses, domains, phone numbers, reviewers and place IDs are placeholders (`example.com`, `competitor-a.example`, `ChIJexamplePlaceId000001`); the town is a generic one. Hand-added edge cases: a title with a bidi override and a bell character, a null additional category, a `people_also_search` competitor and a reviewer's name inside `place_topics` (both must be dropped), a second business on another domain (a candidate, not the match), a review text with an ANSI escape and a bidi override, reviewer names, profile URLs, photos and an owner reply that names the reviewer (all must be absent from output), a review with no text and one with an empty owner reply. Replace them with scrubbed recordings when the C4 live check runs.
+
+| File | Endpoint |
+|---|---|
+| `business_data_google_my_business_info_live.json` | `/business_data/google/my_business_info/live` |
+| `serp_google_maps_live_advanced.json` | `/serp/google/maps/live/advanced` |
+| `business_data_google_reviews_task_post.json` | `/business_data/google/reviews/task_post` (priority 2, depth 20) |
+| `business_data_google_reviews_task_get.json` | `/business_data/google/reviews/task_get/<id>` (ready) |
+| `business_data_google_reviews_task_get_pending.json` | `/business_data/google/reviews/task_get/<id>` (40602 Task In Queue) |

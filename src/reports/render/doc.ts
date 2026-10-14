@@ -117,6 +117,7 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
   if (ok("bing_overview")) extraSources.push([txt("Bing: Bing Webmaster Tools (free, read-only). Bing updates query and page stats weekly.")]);
   if (ok("ai_readiness")) extraSources.push([txt("AI readiness: robots.txt and llms.txt as read by the newest saved crawlmark audit (free).")]);
   if (ok("site_crawl")) extraSources.push([txt("Site crawl: crawlmark's own crawl of the site from this machine (free), the newest one saved.")]);
+  if (ok("local_profile")) extraSources.push([txt("Local search: Google Business Profile and Google Maps results via DataForSEO (paid).")]);
   if (ok("keyword_gap")) extraSources.push([txt("Keyword gap: the client's SEO data provider (paid), named in that section.")]);
   if (extraSources.length) sourcesAndNotes.push({ kind: "list", items: extraSources });
   const statuses = report.sections.filter((s) => s.status !== "ok");

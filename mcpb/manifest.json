@@ -229,6 +229,18 @@
       "description": "Bing Webmaster Tools for a client: clicks and impressions by day vs the previous period, top queries and pages, crawl stats and crawl issues. Read-only and free with your own Bing API key."
     },
     {
+      "name": "local_profile",
+      "description": "A client's Google Business Profile via DataForSEO Business Data: rating, reviews count, star distribution, categories, hours, claimed. Returns the match for you to confirm; never saves it. Paid (about $0.0054), estimate first."
+    },
+    {
+      "name": "local_pack",
+      "description": "Where a client ranks in Google Maps for its tracked keywords in its area, with the top 3 businesses. Paid (about $0.002 per keyword), estimate first, DataForSEO only."
+    },
+    {
+      "name": "local_reviews",
+      "description": "A client's Google reviews: rating distribution and the latest reviews (rating, date, text, owner replied), never reviewer names. Needs a confirmed place ID. Paid ($0.0015 per 10 reviews), estimate first."
+    },
+    {
       "name": "ga4_report",
       "description": "Run a GA4 Data API report for a client."
     },

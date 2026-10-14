@@ -1,0 +1,89 @@
+{
+  "version": "0.1.20231117",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.12 sec.",
+  "cost": 0,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131234-1535-0367-0000-3c5a8a4c3a03",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.10 sec.",
+      "cost": 0,
+      "result_count": 1,
+      "path": ["v3", "business_data", "google", "reviews", "task_get", "10131234-1535-0367-0000-3c5a8a4c3a03"],
+      "data": { "api": "business_data", "function": "reviews", "se": "google", "place_id": "ChIJexamplePlaceId000001", "depth": 20, "sort_by": "newest", "priority": 2 },
+      "result": [
+        {
+          "keyword": "Example Plumbing Co",
+          "type": "google_reviews",
+          "se_domain": "google.com",
+          "location_code": 1026201,
+          "language_code": "en",
+          "check_url": "https://www.google.com/search?q=Example+Plumbing",
+          "datetime": "2026-10-13 18:01:00 +00:00",
+          "title": "Example Plumbing Co",
+          "sub_title": "100 Example St, Austin, TX 78701",
+          "rating": { "rating_type": "Max5", "value": 4.7, "votes_count": 132, "rating_max": 5 },
+          "feature_id": "0x0:0x112210f4a6e0e015",
+          "place_id": "ChIJexamplePlaceId000001",
+          "cid": "1234567890123456789",
+          "reviews_count": 132,
+          "items_count": 3,
+          "items": [
+            {
+              "type": "google_reviews_search",
+              "rank_group": 1,
+              "rank_absolute": 1,
+              "position": "right",
+              "xpath": "/html[1]/body[1]",
+              "review_text": "Fast,   friendly \u001b[31mservice\u202e and a fair price.\nWould call again.",
+              "original_review_text": null,
+              "time_ago": "a week ago",
+              "timestamp": "2026-10-06 14:09:32 +00:00",
+              "rating": { "rating_type": "Max5", "value": 5, "votes_count": null, "rating_max": 5 },
+              "reviews_count": 12,
+              "photos_count": 3,
+              "local_guide": true,
+              "profile_name": "Jane Reviewer",
+              "profile_url": "https://www.google.com/maps/contrib/100000000000000000001",
+              "review_url": "https://www.google.com/maps/reviews/data=reviewer-jane",
+              "profile_image_url": "https://lh3.googleusercontent.example/jane",
+              "review_id": "ChdDSUhNMG9nS0VJQ0FnSUNEtest1",
+              "owner_answer": "Thanks Jane Reviewer, glad we could help!",
+              "original_owner_answer": null,
+              "owner_time_ago": "6 days ago",
+              "owner_timestamp": "2026-10-07 09:00:00 +00:00",
+              "review_highlights": null,
+              "images": [{ "type": "images_element", "alt": "Photo by Jane Reviewer", "url": "https://images.example.net/r1", "image_url": "https://images.example.net/r1.jpg" }]
+            },
+            {
+              "type": "google_reviews_search",
+              "rank_group": 2,
+              "rank_absolute": 2,
+              "review_text": null,
+              "timestamp": "2026-09-30 08:00:00 +00:00",
+              "rating": { "rating_type": "Max5", "value": 4, "votes_count": null, "rating_max": 5 },
+              "profile_name": "Sam Example",
+              "profile_url": "https://www.google.com/maps/contrib/100000000000000000002",
+              "owner_answer": null
+            },
+            {
+              "type": "google_reviews_search",
+              "rank_group": 3,
+              "rank_absolute": 3,
+              "review_text": "Late and expensive.",
+              "timestamp": "2026-09-01 08:00:00 +00:00",
+              "rating": { "rating_type": "Max5", "value": 1, "votes_count": null, "rating_max": 5 },
+              "profile_name": "Pat Placeholder",
+              "owner_answer": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

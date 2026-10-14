@@ -1,0 +1,22 @@
+{
+  "version": "0.1.20231117",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.05 sec.",
+  "cost": 0,
+  "tasks_count": 1,
+  "tasks_error": 1,
+  "tasks": [
+    {
+      "id": "10131234-1535-0367-0000-3c5a8a4c3a03",
+      "status_code": 40602,
+      "status_message": "Task In Queue.",
+      "time": "0.01 sec.",
+      "cost": 0,
+      "result_count": 0,
+      "path": ["v3", "business_data", "google", "reviews", "task_get", "10131234-1535-0367-0000-3c5a8a4c3a03"],
+      "data": { "api": "business_data", "function": "reviews", "se": "google" },
+      "result": null
+    }
+  ]
+}

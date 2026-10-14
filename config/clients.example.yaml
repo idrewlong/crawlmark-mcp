@@ -49,6 +49,7 @@ clients:
     dataProvider: ahrefs # dataforseo, ahrefs or semrush: whose paid keyword, ranking, competitor and backlink data; default SEO_DATA_PROVIDER
     country: US # ISO alpha-2 market for Ahrefs and Semrush; default: from a country-level locationCode
     bingSite: https://www.example.com/ # the Bing Webmaster Tools site bing_report reads; default: the verified site with this domain
+    gbpPlaceId: ChIJexamplePlaceId000001 # the confirmed Google Business Profile (from local_profile; save it only after checking the match)
     monthlyUnits: # Ahrefs/Semrush API unit caps; default DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS / _SEMRUSH_UNITS
       ahrefs: 20000
       semrush: 5000

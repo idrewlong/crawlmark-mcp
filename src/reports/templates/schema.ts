@@ -93,6 +93,8 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("site_crawl"), limit: limit(50) }),
   // Phase 12 C3: Bing Webmaster Tools for the report period (free with the user's own Bing key).
   z.strictObject({ ...common, type: z.literal("bing_overview"), limit: limit(25) }),
+  // Phase 12 C4: the confirmed Google Business Profile and map-pack positions (paid, DataForSEO).
+  z.strictObject({ ...common, type: z.literal("local_profile"), packKeywords: z.number().int().min(0).max(5).optional() }),
   // llms.txt and AI crawler access from the newest saved audit (free, local; never fetches).
   z.strictObject({ ...common, type: z.literal("ai_readiness") }),
   z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
@@ -125,6 +127,7 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   site_crawl: "Site crawl",
   bing_overview: "Bing search performance",
   ai_readiness: "AI readiness",
+  local_profile: "Local search (Google Business Profile)",
   text: "Note",
 };
 
@@ -132,7 +135,7 @@ export const SECTION_TITLES: Record<SectionType, string> = {
  * Section types that always cost money (Stage B: keyword_gap; Stage C adds local_profile and ai_visibility).
  * `tracked_keywords` is paid only with `liveRanks: true`.
  */
-export const PAID_SECTION_TYPES: ReadonlySet<string> = new Set<string>(["keyword_gap"]);
+export const PAID_SECTION_TYPES: ReadonlySet<string> = new Set<string>(["keyword_gap", "local_profile"]);
 
 /** True when a section spends money (and so needs `paid: true` in the template and allowPaid at run time). */
 export function isPaidSection(s: SectionSpec): boolean {

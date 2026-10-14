@@ -5,6 +5,13 @@ import { cached, cacheKey, TTL } from "../lib/cache.js";
 import { mergeGaps, mergeIdeas } from "../analysis/keyword-gap.js";
 import type { KeywordGapRequest, KeywordGapRouted, KeywordIdeasRequest, KeywordIdeasRouted, PaidPlan } from "./seo-data.js";
 import {
+  mapBusinessInfo,
+  mapMapsSerp,
+  mapReviews,
+  type LocalReviews,
+  type RawBusinessInfo,
+  type RawMapsSerp,
+  type RawReviews,
   mapDomainIntersection,
   mapLabsKeywordIdeas,
   type RawDomainIntersection,
@@ -27,6 +34,10 @@ import {
 } from "./dataforseo-shape.js";
 
 export type {
+  LocalBusiness,
+  LocalReview,
+  LocalReviews,
+  MapsResult,
   BacklinksSummary,
   Competitor,
   CompetitorsResult,
@@ -53,6 +64,10 @@ export const ESTIMATE_USD = {
   onPageTask: 0.0125, // ~$0.000125 per page × 100 pages
   onPageRead: 0,
   instantPage: 0.0025,
+  /** Phase 12 C4: Business Data my_business_info/live; the docs' example task cost (research D4). */
+  myBusinessInfo: 0.0054,
+  /** Phase 12 C4: SERP google/maps/live/advanced, one SERP of up to 100 results (research D7). */
+  mapsSerp: 0.002,
 } as const;
 
 interface DfsTask<T> {
@@ -82,7 +97,11 @@ function authHeader(): string {
   return "Basic " + Buffer.from(`${env.DATAFORSEO_LOGIN}:${env.DATAFORSEO_PASSWORD}`).toString("base64");
 }
 
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal): Promise<DfsTask<T>> {
+/**
+ * One DataForSEO request. A task status >= 40000 is an error, except the codes in `pendingCodes`
+ * (40601 Task Handed, 40602 Task In Queue, for task_get on a task that isn't ready), which come back as the task.
+ */
+async function request<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal, pendingCodes: readonly number[] = []): Promise<DfsTask<T>> {
   const res = await fetch(`${env.DATAFORSEO_BASE_URL}${path}`, {
     method,
     headers: { Authorization: authHeader(), "Content-Type": "application/json" },
@@ -94,7 +113,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown, 
   const task = json.tasks?.[0];
   if (!task) throw new Error(`DataForSEO ${path}: empty response (${json.status_message})`);
   // 20000 = ok, 20100 = task created
-  if (task.status_code >= 40000) {
+  if (task.status_code >= 40000 && !pendingCodes.includes(task.status_code)) {
     throw new Error(`DataForSEO ${path} ${task.status_code}: ${task.status_message}`);
   }
   return task;
@@ -373,6 +392,87 @@ export async function labsKeywordGap(client: Client, req: KeywordGapRequest, opt
   });
   const merged = mergeGaps(r.value, { metric: "dataforseo_kd", clientCheck: "provider", minVolume: req.minVolume });
   return { gaps: merged.gaps, perCompetitor: merged.perCompetitor, provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
+}
+
+// ------------------------------------------------ local SEO: Business Data and Maps (Phase 12 C4)
+
+export const LOCAL_PATHS = {
+  businessInfo: "/business_data/google/my_business_info/live",
+  mapsSerp: "/serp/google/maps/live/advanced",
+  reviewsPost: "/business_data/google/reviews/task_post",
+  reviewsGet: "/business_data/google/reviews/task_get",
+} as const;
+/** Google Reviews in the priority queue (results within about a minute): $0.0015 per 10 reviews, billed per started 10 (research D6). */
+export const REVIEWS_USD_PER_10 = 0.0015;
+export const reviewsTaskUsd = (depth: number) => usd6(Math.ceil(depth / 10) * REVIEWS_USD_PER_10);
+/** task_get statuses that mean "not ready yet" (DataForSEO errors appendix): 40601 Task Handed, 40602 Task In Queue. */
+export const TASK_NOT_READY = [40601, 40602] as const;
+
+/** Where local searches run: the client's area (a DataForSEO location_name), else its location code. */
+export const localGeo = (c: Client) => (c.area ? { location_name: c.area, language_code: c.languageCode } : geo(c));
+
+/** The cache key a `paid` call uses, so a pre-flight estimate can tell which requests would be free. */
+export const dfsCacheKey = (path: string, body: unknown) => cacheKey("dfs", env.DATAFORSEO_BASE_URL, path, body);
+
+/**
+ * Cache key for the local endpoints (SEC-1). Their cache holds the *mapped* value only, never the raw payload
+ * (which carries place_topics, people_also_search, attributes and review quotes in local_justifications);
+ * the "dfs-local" namespace keeps any older raw "dfs" rows from being read as mapped ones.
+ */
+export const localCacheKey = (path: string, body: unknown) => cacheKey("dfs-local", env.DATAFORSEO_BASE_URL, path, body);
+
+/** Like `paid`, but maps the result inside the cached function, so only the mapped value is stored. */
+async function paidLocal<R, V>(client: Client, name: "myBusinessInfo" | "mapsSerp", path: string, body: unknown, map: (raw: R | undefined) => V, opts: { refresh?: boolean } = {}) {
+  const { value, fromCache } = await cached(
+    localCacheKey(path, body),
+    TTL.day,
+    async () => {
+      assertBudget(client, ESTIMATE_USD[name]);
+      const task = await billedRequest<R>(client.slug, path, body, ESTIMATE_USD[name], "DataForSEO may still have billed it.");
+      recordSpend(client.slug, "dataforseo", path, task.cost ?? 0);
+      return { mapped: map(task.result?.[0]), costUsd: task.cost ?? 0 };
+    },
+    opts,
+  );
+  return { mapped: value.mapped, costUsd: fromCache ? 0 : value.costUsd, fromCache };
+}
+
+/**
+ * Google Business Profile lookup by name (`keyword`) or `place_id:<id>`. Paid (about $0.0054), cached a day.
+ * The docs (D4) list `place_id:` / `cid:` as identifiers the keyword field accepts, with no surcharge; the 5x price
+ * is documented only for search operators (`site:`, `inurl:`) on Reviews. The C4 live check must confirm a
+ * place-ID lookup costs the same as a name lookup.
+ */
+export async function myBusinessInfo(client: Client, body: Record<string, unknown>, opts: { refresh?: boolean } = {}) {
+  const res = await paidLocal<RawBusinessInfo, ReturnType<typeof mapBusinessInfo>>(client, "myBusinessInfo", LOCAL_PATHS.businessInfo, [body], mapBusinessInfo, opts);
+  return { businesses: res.mapped, costUsd: res.costUsd, fromCache: res.fromCache };
+}
+
+/** Google Maps results for one keyword. Paid (about $0.002 per SERP of up to 100), cached a day. */
+export async function mapsSerp(client: Client, body: Record<string, unknown>, opts: { refresh?: boolean } = {}) {
+  const res = await paidLocal<RawMapsSerp, ReturnType<typeof mapMapsSerp>>(client, "mapsSerp", LOCAL_PATHS.mapsSerp, [body], mapMapsSerp, opts);
+  return { results: res.mapped, costUsd: res.costUsd, fromCache: res.fromCache };
+}
+
+/**
+ * Post a Google Reviews task (task-based only; there is no Live endpoint). The caller checks and reserves the
+ * estimate first. The actual cost is recorded; a timeout records the estimate (the task may exist anyway).
+ */
+export async function reviewsTaskPost(client: Client, body: Record<string, unknown>, estimateUsd: number): Promise<{ taskId: string; costUsd: number }> {
+  assertBudget(client, estimateUsd);
+  const task = await billedRequest<unknown>(client.slug, LOCAL_PATHS.reviewsPost, [body], estimateUsd, "a reviews task may have been created and billed anyway.");
+  recordSpend(client.slug, "dataforseo", LOCAL_PATHS.reviewsPost, task.cost ?? 0);
+  if (!task.id) throw new Error("DataForSEO created no reviews task id.");
+  return { taskId: task.id, costUsd: task.cost ?? 0 };
+}
+
+/** Read a reviews task (free: only posting is billed). `ready: false` while DataForSEO is still working on it. */
+export async function reviewsTaskGet(clientSlug: string, taskId: string): Promise<{ ready: false } | { ready: true; reviews: LocalReviews }> {
+  const task = await request<RawReviews>("GET", `${LOCAL_PATHS.reviewsGet}/${encodeURIComponent(taskId)}`, undefined, undefined, TASK_NOT_READY);
+  // Reading should be free; anything DataForSEO did charge shows up in the ledger.
+  if ((task.cost ?? 0) > 0) recordSpend(clientSlug, "dataforseo", `${LOCAL_PATHS.reviewsGet} (read)`, task.cost);
+  if ((TASK_NOT_READY as readonly number[]).includes(task.status_code)) return { ready: false };
+  return { ready: true, reviews: mapReviews(task.result?.[0]) };
 }
 
 // ------------------------------------------------------------------ on-page

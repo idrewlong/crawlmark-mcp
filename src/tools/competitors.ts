@@ -131,7 +131,9 @@ export function registerCompetitorTools(server: McpServer) {
         "Set a client's area, niche, display name or brand terms in clients.yaml. brandTerms are names people search for the brand (e.g. [\"example plumbing\", \"ex plumbing\"]); they add to the built-in domain and name matching used to split branded from non-branded queries, and the list you pass replaces the stored one ([] clears it). area is a DataForSEO location_name (City,Region,Country, " +
         'e.g. "Austin,Texas,United States") used for local SERP searches; niche is a few words on what the client does ' +
         '(e.g. "emergency plumber"). dataProvider overrides the default SEO data provider for this client; it chooses whose paid data is used, not credentials. ' +
-        'country is the ISO two-letter market Ahrefs and Semrush use (e.g. "US", "GB"). bingSite pins the Bing Webmaster Tools site bing_report reads (e.g. "https://www.example.com/"; it must be on the client\'s domain or a subdomain); unset, the domain is matched against your Bing key\'s verified sites. Pass an empty string to clear a field. Free, local.',
+        'country is the ISO two-letter market Ahrefs and Semrush use (e.g. "US", "GB"). bingSite pins the Bing Webmaster Tools site bing_report reads (e.g. "https://www.example.com/"; it must be on the client\'s domain or a subdomain); unset, the domain is matched against your Bing key\'s verified sites. ' +
+        "gbpPlaceId saves the client's Google Business Profile place ID (matched.placeId from local_profile) for local_profile, local_pack and local_reviews: set it only after the user has confirmed that local_profile found their business (it must be a place ID local_profile returned for this client in the last day). " +
+        'Pass an empty string to clear a field. Free, local.',
       inputSchema: {
         client: clientArg,
         area: z.string().max(200).optional(),
@@ -152,11 +154,16 @@ export function registerCompetitorTools(server: McpServer) {
           .max(500)
           .optional()
           .describe('The Bing Webmaster Tools site URL for bing_report, as Bing lists it (e.g. "https://www.example.com/"); "" clears it (match by domain).'),
+        gbpPlaceId: z
+          .string()
+          .max(300)
+          .optional()
+          .describe('The Google place ID local_profile returned (matched.placeId), saved only after the user confirms it is their business; "" clears it.'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite }) =>
-      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite }),
+    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId }) =>
+      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId }),
     ),
   );
 

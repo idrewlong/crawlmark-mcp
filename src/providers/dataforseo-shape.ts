@@ -3,6 +3,7 @@
  * No I/O here so they can be tested against recorded payloads.
  * Every field is read defensively: DataForSEO omits or nulls fields freely.
  */
+import { stripControl } from "../lib/terminal-text.js";
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
@@ -410,4 +411,220 @@ export function mapDomainIntersection(raw: RawDomainIntersection | undefined): L
     });
   }
   return out;
+}
+
+// ------------------------------------------------ local SEO: Business Data and Maps (Phase 12 C4)
+
+/** Untrusted text from Google listings and reviews: control and format characters removed, whitespace collapsed, capped. */
+export const cleanText = (v: unknown, max = 300): string | null => {
+  if (typeof v !== "string") return null;
+  const s = stripControl(v).replace(/\s+/g, " ").trim();
+  return s ? s.slice(0, max) : null;
+};
+const ratingValue = (r: { value?: number | null; rating_max?: number | null } | null | undefined): number | null => {
+  const v = num(r?.value);
+  if (v === null) return null;
+  // Max5 is the norm; a rating on another scale is converted to 5 so values compare.
+  const max = num(r?.rating_max);
+  return max && max !== 5 ? round((v / max) * 5, 2) : v;
+};
+/** Bare host, lowercase, without www. */
+const hostOf = (v: unknown): string | null => {
+  const s = str(v);
+  if (!s) return null;
+  try {
+    return new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+};
+
+export type RatingDistribution = { "1": number; "2": number; "3": number; "4": number; "5": number };
+
+function distribution(raw: Record<string, unknown> | null | undefined): RatingDistribution | null {
+  if (!raw || typeof raw !== "object") return null;
+  const out = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 } as RatingDistribution;
+  let any = false;
+  for (const k of ["1", "2", "3", "4", "5"] as const) {
+    const n = num(raw[k]);
+    if (n !== null) {
+      out[k] = n;
+      any = true;
+    }
+  }
+  return any ? out : null;
+}
+
+const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const hhmm = (t: { hour?: number | null; minute?: number | null } | null | undefined) => {
+  const h = num(t?.hour);
+  const m = num(t?.minute);
+  return h === null ? null : `${String(h).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}`;
+};
+
+export interface BusinessHours {
+  day: (typeof WEEKDAYS)[number];
+  /** "09:00-17:00" ranges, comma-separated; "closed" when the day has none. */
+  hours: string;
+}
+
+/** A Google Business Profile as DataForSEO's my_business_info returns it, reduced to business facts (no reviewer or visitor data). */
+export interface LocalBusiness {
+  title: string | null;
+  address: string | null;
+  phone: string | null;
+  url: string | null;
+  /** Bare host of the listing's website (no www.). */
+  domain: string | null;
+  category: string | null;
+  additionalCategories: string[];
+  rating: number | null;
+  votes: number | null;
+  ratingDistribution: RatingDistribution | null;
+  isClaimed: boolean | null;
+  placeId: string | null;
+  cid: string | null;
+  totalPhotos: number | null;
+  workHours: BusinessHours[] | null;
+  /** opened, closed, temporarily_closed or closed_forever, as Google reported it when fetched. */
+  currentStatus: string | null;
+}
+
+type RawTime = { hour?: number | null; minute?: number | null } | null;
+export interface RawBusinessItem {
+  type?: string | null;
+  title?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  url?: string | null;
+  domain?: string | null;
+  category?: string | null;
+  additional_categories?: (string | null)[] | null;
+  rating?: { value?: number | null; votes_count?: number | null; rating_max?: number | null } | null;
+  rating_distribution?: Record<string, unknown> | null;
+  is_claimed?: boolean | null;
+  place_id?: string | null;
+  cid?: string | number | null;
+  total_photos?: number | null;
+  work_time?: { work_hours?: { timetable?: Record<string, { open?: RawTime; close?: RawTime }[] | null> | null; current_status?: string | null } | null } | null;
+}
+export interface RawBusinessInfo {
+  items?: RawBusinessItem[] | null;
+}
+
+const idText = (v: unknown): string | null => (typeof v === "number" && Number.isFinite(v) ? String(v) : cleanText(v, 200));
+
+function workHours(raw: RawBusinessItem["work_time"]): BusinessHours[] | null {
+  const tt = raw?.work_hours?.timetable;
+  if (!tt || typeof tt !== "object") return null;
+  return WEEKDAYS.map((day) => {
+    const ranges = (tt[day] ?? [])
+      .map((r) => {
+        const o = hhmm(r?.open);
+        const c = hhmm(r?.close);
+        return o && c ? `${o}-${c}` : null;
+      })
+      .filter((r): r is string => r !== null);
+    return { day, hours: ranges.length ? ranges.join(", ") : "closed" };
+  });
+}
+
+export function mapBusiness(i: RawBusinessItem): LocalBusiness {
+  return {
+    title: cleanText(i.title),
+    address: cleanText(i.address),
+    phone: cleanText(i.phone, 50),
+    url: cleanText(i.url, 2000),
+    domain: hostOf(i.domain) ?? hostOf(i.url),
+    category: cleanText(i.category, 120),
+    additionalCategories: (i.additional_categories ?? []).map((c) => cleanText(c, 120)).filter((c): c is string => c !== null).slice(0, 20),
+    rating: ratingValue(i.rating),
+    votes: num(i.rating?.votes_count),
+    ratingDistribution: distribution(i.rating_distribution),
+    isClaimed: typeof i.is_claimed === "boolean" ? i.is_claimed : null,
+    placeId: idText(i.place_id),
+    cid: idText(i.cid),
+    totalPhotos: num(i.total_photos),
+    workHours: workHours(i.work_time),
+    currentStatus: cleanText(i.work_time?.work_hours?.current_status, 40),
+  };
+}
+
+/** my_business_info items (google_business_info), in DataForSEO's order. Directory listings and "people also search" are dropped. */
+export function mapBusinessInfo(raw: RawBusinessInfo | undefined): LocalBusiness[] {
+  return (raw?.items ?? []).filter((i) => !i.type || i.type === "google_business_info").map(mapBusiness);
+}
+
+export interface MapsResult {
+  rank: number;
+  title: string | null;
+  domain: string | null;
+  rating: number | null;
+  votes: number | null;
+  placeId: string | null;
+  cid: string | null;
+}
+export interface RawMapsSerp {
+  keyword?: string | null;
+  items?: { type?: string | null; rank_group?: number | null; rank_absolute?: number | null; title?: string | null; domain?: string | null; url?: string | null; rating?: { value?: number | null; votes_count?: number | null; rating_max?: number | null } | null; place_id?: string | null; cid?: string | number | null }[] | null;
+}
+
+/** Google Maps results (maps_search) in rank order. */
+export function mapMapsSerp(raw: RawMapsSerp | undefined): MapsResult[] {
+  const out: MapsResult[] = [];
+  for (const i of raw?.items ?? []) {
+    if (i.type && i.type !== "maps_search") continue;
+    const rank = num(i.rank_group) ?? num(i.rank_absolute);
+    if (rank === null) continue;
+    out.push({ rank, title: cleanText(i.title), domain: hostOf(i.domain) ?? hostOf(i.url), rating: ratingValue(i.rating), votes: num(i.rating?.votes_count), placeId: idText(i.place_id), cid: idText(i.cid) });
+  }
+  return out.sort((a, b) => a.rank - b.rank);
+}
+
+/** One review, without the reviewer: no name, profile, photo, review id or URL, and the owner's reply only as yes/no. */
+export interface LocalReview {
+  rating: number | null;
+  /** YYYY-MM-DD (UTC), from the review's timestamp. */
+  date: string | null;
+  /** The review's text: third-party content (stripControl'd, whitespace collapsed, at most 500 characters); null when it has none. */
+  reviewText: string | null;
+  ownerReplied: boolean;
+}
+export interface LocalReviews {
+  /** The listing's overall rating and vote count as reported with the reviews. */
+  rating: number | null;
+  votes: number | null;
+  /** Star counts among the reviews fetched (not the whole listing; see local_profile for that). */
+  distribution: RatingDistribution;
+  reviews: LocalReview[];
+}
+export interface RawReviews {
+  rating?: { value?: number | null; votes_count?: number | null; rating_max?: number | null } | null;
+  reviews_count?: number | null;
+  items?: { type?: string | null; rating?: { value?: number | null; rating_max?: number | null } | null; timestamp?: string | null; review_text?: string | null; owner_answer?: string | null }[] | null;
+}
+
+/** "2019-11-15 12:57:46 +00:00" (DataForSEO's UTC timestamp) -> "2019-11-15". */
+export function reviewDate(v: unknown): string | null {
+  const s = str(v);
+  const m = s?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const d = `${m[1]}-${m[2]}-${m[3]}`;
+  const t = Date.parse(`${d}T00:00:00Z`);
+  return Number.isNaN(t) || !new Date(t).toISOString().startsWith(d) ? null : d;
+}
+
+export function mapReviews(raw: RawReviews | undefined): LocalReviews {
+  const dist = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 } as RatingDistribution;
+  const reviews: LocalReview[] = [];
+  for (const i of raw?.items ?? []) {
+    if (i.type && i.type !== "google_reviews_search") continue;
+    const rating = ratingValue(i.rating);
+    if (rating !== null) {
+      const k = String(Math.min(5, Math.max(1, Math.round(rating)))) as keyof RatingDistribution;
+      dist[k] += 1;
+    }
+    reviews.push({ rating, date: reviewDate(i.timestamp), reviewText: cleanText(i.review_text, 500), ownerReplied: Boolean(cleanText(i.owner_answer, 10)) });
+  }
+  return { rating: ratingValue(raw?.rating), votes: num(raw?.rating?.votes_count) ?? num(raw?.reviews_count), distribution: dist, reviews };
 }

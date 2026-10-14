@@ -13,6 +13,7 @@ import type {
   DataSpendData,
   KeywordGapData,
   LandingPagesData,
+  LocalProfileData,
   RankTrendData,
   RankTrendSummary,
   SiteCrawlData,
@@ -407,6 +408,37 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
       blocks.push({ kind: "note", text: [t("Blocking an AI search crawler keeps the site out of that product's answers; blocking a training-only crawler is a legitimate choice and has no effect on search. ChatGPT-User and Perplexity-User may not follow robots.txt.")] });
     }
     blocks.push({ kind: "note", text: [t("llms.txt is a proposed standard (llmstxt.org). Google says Google Search doesn't use it, so it's reported for information, not scored.")] });
+    return blocks;
+  },
+  // Phase 12 C4: the confirmed Google Business Profile and map-pack positions. Listing text is Google's (stripControl'd); the URL renders as code.
+  local_profile: (data: LocalProfileData) => {
+    const b = data.business;
+    const facts: Text[][] = [
+      [cell("Business"), b.title ? d(b.title) : cell("n/a")],
+      [cell("Category"), b.category ? d(b.category) : cell("n/a")],
+      [cell("Rating"), cell(b.rating === null ? "n/a" : `${b.rating.toFixed(1)} from ${fmtInt(b.votes)} reviews`)],
+      [cell("Profile claimed"), cell(b.isClaimed === null ? "n/a" : b.isClaimed ? "yes" : "no")],
+      [cell("Photos"), cell(fmtInt(b.totalPhotos))],
+      ...(b.url ? [[cell("Website"), [c(b.url)]]] : []),
+    ];
+    const dist = b.ratingDistribution;
+    const blocks: Block[] = [
+      { kind: "paragraph", text: [t("Google Business Profile, and Google Maps positions searched in "), ...d(data.location), t(".")] },
+      { kind: "table", header: ["", "Value"], rows: facts, numeric: [false, false] },
+    ];
+    if (dist) {
+      blocks.push({ kind: "table", header: ["Stars", "Reviews"], rows: (["5", "4", "3", "2", "1"] as const).map((k) => [cell(`${k} stars`), cell(fmtInt(dist[k]))]), numeric: [false, true] });
+    }
+    if (data.pack.length) {
+      blocks.push({
+        kind: "table",
+        header: ["Keyword", "Map position", "First place"],
+        rows: data.pack.map((p) => [d(p.keyword), cell(p.failed ? "couldn't be checked" : p.clientRank === null ? "not in the results" : String(p.clientRank)), p.leader?.title ? d(p.leader.title) : cell("n/a")]),
+        numeric: [false, true, false],
+      });
+    }
+    for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
+    blocks.push({ kind: "note", text: [t("From Google Maps and the Google Business Profile, via DataForSEO, when this report was generated. Map position 1 is the top of the map pack; lower is better.")] });
     return blocks;
   },
   keyword_gap: (data: KeywordGapData) => {

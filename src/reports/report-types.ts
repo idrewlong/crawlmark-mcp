@@ -260,6 +260,27 @@ export interface BingOverviewData {
   notes: string[];
 }
 
+/** Phase 12 C4: the client's confirmed Google Business Profile and its map-pack positions (local_profile section, paid). Text is stripControl'd. */
+export interface LocalProfileData {
+  business: {
+    title: string | null;
+    category: string | null;
+    address: string | null;
+    url: string | null;
+    rating: number | null;
+    votes: number | null;
+    ratingDistribution: { "1": number; "2": number; "3": number; "4": number; "5": number } | null;
+    isClaimed: boolean | null;
+    totalPhotos: number | null;
+    currentStatus: string | null;
+  };
+  /** The area searched (a DataForSEO location name), or the location code when no area is set. */
+  location: string;
+  /** Map-pack position per keyword (null: not within the results read), and the business in first place. */
+  pack: { keyword: string; clientRank: number | null; leader: { title: string | null; rating: number | null; votes: number | null } | null; failed?: boolean }[];
+  notes: string[];
+}
+
 export interface TextData {
   text: string;
 }

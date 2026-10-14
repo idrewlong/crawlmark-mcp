@@ -116,6 +116,7 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     '                [--name <name>] [--brand-terms "a,b"]',
     "                [--provider <dataforseo|ahrefs|semrush|none>]",
     "                [--country <XX|none>] [--bing-site <url|none>]",
+    "                [--place-id <id|none>]",
     "",
     "clients list",
     "  Show every client. When Google is set up, newly discovered Search Console",
@@ -146,6 +147,10 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  --bing-site <url>    The Bing Webmaster Tools site to read for bing_report,",
     "                       e.g. https://www.example.com/ (same domain or a",
     "                       subdomain); none matches by domain",
+    "  --place-id <id>      The client's Google Business Profile place ID, as",
+    "                       local_profile returns it (matched.placeId); save it",
+    "                       only once you've checked it's the right business;",
+    "                       none clears it",
   ],
   competitors: (p) => [
     `Usage: ${p} competitors list <client>`,

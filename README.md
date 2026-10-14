@@ -143,7 +143,7 @@ DataForSEO is optional and paid per call. It powers keyword volume, live SERPs, 
 
 By hand, set `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD`, and set `DATAFORSEO_BASE_URL=https://api.dataforseo.com/v3` (or `DATAFORSEO_LIVE=true`) for live data.
 
-Whatever your default provider, live SERPs (`serp_check`, live ranks in `monthly_report`, the SERP half of `suggest_competitors`), the per-page on-page check in `run_audit` and full crawls use DataForSEO.
+Whatever your default provider, live SERPs (`serp_check`, live ranks in `monthly_report`, the SERP half of `suggest_competitors`), the per-page on-page check in `run_audit`, full crawls and local SEO (`local_profile`, `local_pack`, `local_reviews`) use DataForSEO.
 
 ### Ahrefs
 
@@ -322,7 +322,7 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 |---|---|
 | `setup_status` | Each integration's state (`working`, `configured`, `missing` or `error`) and the exact next step, plus the default SEO data provider (`seoDataProvider`). Free |
 | `list_clients` | Every client with its Search Console and GA4 properties, Tag Manager container and what's missing. `refresh: true` re-lists from Google |
-| `set_client_profile` | Sets a client's area (for local searches), niche, display name, brand terms, data provider override and country |
+| `set_client_profile` | Sets a client's area (for local searches), niche, display name, brand terms, data provider override, country, Bing site and confirmed Google Business Profile place ID (`gbpPlaceId`) |
 
 ### Reports
 
@@ -376,6 +376,18 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `rank_history` | The saved positions per tracked keyword and source, with the latest, first, best and worst rank and the change over the range, 30 and 90 days (lower is better). Free, local |
 
 Live ranks from `serp_check`, `monthly_report` with `liveRanks` and report templates with `liveRanks` are saved too when the keyword is tracked. Only tracked keywords are stored.
+
+### Local SEO (paid, DataForSEO)
+
+> **Beta.** Local SEO is built to DataForSEO's official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps and reviewer-data stripping are fully tested. If anything looks wrong (an error you don't expect, a missing field, a cost that doesn't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
+
+| Tool | Description |
+|---|---|
+| `local_profile` | **Paid** (about $0.0054). The client's Google Business Profile from DataForSEO Business Data: name, address, website, categories, rating and review count, star distribution, claimed or not, photos and opening hours, plus other listings the lookup returned. Searches by the client's name in its `area`. It never saves anything: check the match, then save its place ID with `set_client_profile` `gbpPlaceId` (or `crawlmark-cli clients set example.com --place-id <id>`) |
+| `local_pack` | **Paid** (about $0.002 per keyword). The client's Google Maps position for its first 5 tracked keywords (or up to 10 you name) in its `area`, with the top 3 businesses |
+| `local_reviews` | **Paid** ($0.0015 per 10 reviews). The rating, the star distribution of the reviews fetched and the latest 10 to 100 reviews (rating, date, text, whether the owner replied). Never reviewer names, profiles or photos. Needs the confirmed `gbpPlaceId`. Reviews are a queued DataForSEO task: if it isn't done within 75 seconds you get a `taskId` to read it with later, at no extra cost |
+
+All three take `estimateOnly: true` (the estimate and what's left of the caps, with no request), check the whole call against the client's and the global monthly caps before the first request, and use DataForSEO whatever the client's data provider (there's no Ahrefs or Semrush equivalent). They don't use the Google Business Profile API, which needs Google's approval. See [docs/clients.md](docs/clients.md#google-business-profile).
 
 ### Competitors, keywords and brand terms
 
@@ -552,7 +564,7 @@ CLI
 | `auth login`, `auth status`, `auth logout` | Google OAuth sign-in, check and sign-out |
 | `clients list [--refresh]` | Discover and list clients |
 | `clients add <domain>...`, `clients remove <domain>... [--ignore]` | Add or remove clients by hand |
-| `clients set <client> [--area …] [--niche …] [--name …] [--brand-terms "a,b"] [--provider <id\|none>] [--country <XX\|none>] [--bing-site <url\|none>]` | Set a client's profile, data provider override, country and Bing site |
+| `clients set <client> [--area …] [--niche …] [--name …] [--brand-terms "a,b"] [--provider <id\|none>] [--country <XX\|none>] [--bing-site <url\|none>] [--place-id <id\|none>]` | Set a client's profile, data provider override, country, Bing site and Google Business Profile place ID |
 | `competitors list\|add\|remove <client> [domain...]` | Manage competitors |
 | `keywords list\|add\|remove <client> [keyword...]` | Manage tracked keywords (quote ones with spaces) |
 | `brand list\|add\|remove <client> [term...]` | Manage brand terms |

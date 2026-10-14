@@ -376,6 +376,9 @@ export function normalizeArea(input: string): string | undefined {
 
 // ---------------------------------------------------------------- clients.yaml overrides
 
+/** A Google place ID (e.g. ChIJexamplePlaceId000001): letters, digits, - and _ only. Phase 12 C4. */
+export const PLACE_ID_RE = /^[A-Za-z0-9_-]{10,300}$/;
+
 const OverrideSchema = z.object({
   domain: z.string().min(1),
   name: z.string().optional(),
@@ -416,6 +419,8 @@ const OverrideSchema = z.object({
     .max(500)
     .refine((v) => /^https?:\/\/[^\s/]+/i.test(v.trim()), { error: "must be an http(s) site URL, e.g. https://www.example.com/" })
     .optional(),
+  /** Phase 12 C4: the client's confirmed Google Business Profile place ID (local_profile finds it; saved only after the user confirms). */
+  gbpPlaceId: z.string().regex(PLACE_ID_RE, { error: "must be a Google place ID (letters, digits, - and _), e.g. ChIJexamplePlaceId000001" }).optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
   ignore: z.boolean().optional(),
 });
@@ -517,6 +522,8 @@ export interface Client {
   monthlyUnits: { ahrefs: number; semrush: number };
   /** Phase 12 C3: clients.yaml bingSite (the Bing Webmaster Tools site to read); unset means match by domain. */
   bingSite?: string;
+  /** Phase 12 C4: clients.yaml gbpPlaceId, the confirmed Google Business Profile; unset means none confirmed yet. */
+  gbpPlaceId?: string;
   /** clients.yaml slugs that also resolve to this client. */
   aliases: string[];
   sources: ClientSource[];
@@ -585,6 +592,7 @@ export function mergeClients(
       if (y?.niche?.trim()) client.niche = y.niche.trim();
       if (y?.dataProvider) client.dataProvider = y.dataProvider;
       if (y?.bingSite?.trim()) client.bingSite = y.bingSite.trim();
+      if (y?.gbpPlaceId) client.gbpPlaceId = y.gbpPlaceId;
       if (d?.ga4DisplayName && d.ga4DisplayName !== client.name) client.ga4Name = d.ga4DisplayName;
       return client;
     });

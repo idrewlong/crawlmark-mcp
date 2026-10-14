@@ -31,6 +31,7 @@ import type {
   CruxHistoryResult,
   DataSpendData,
   KeywordGapData,
+  LocalProfileData,
   RankTrendData,
   SiteCrawlData,
   LandingPagesData,
@@ -83,6 +84,10 @@ export interface RunDeps {
   latestLocalCrawl(client: string): StoredCrawl | undefined;
   /** Phase 12 C3: Bing Webmaster Tools for a period (free, read-only; BingUnavailableError without a key, BingSiteError without a verified site). */
   bingOverview(client: Client, req: { window: DateRange; compare?: { which: Comparison; range: DateRange } | undefined; limit: number }): Promise<BingOverviewData>;
+  /** Phase 12 C4: the confirmed Google Business Profile and map-pack positions (paid; LocalNotConfirmedError without a saved place ID). */
+  localProfile(client: Client, opts: { packKeywords: number }): Promise<LocalProfileData>;
+  /** Phase 12 C4: that section's whole USD estimate (0 when it can't run); no request. */
+  localProfileEstimateUsd(client: Client, opts: { packKeywords: number }): number;
 }
 
 /** The real sources. Modules load on first use, so planning a run (or a dry run) never loads Google clients. */
@@ -102,6 +107,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
   ]);
   const crawls = await import("../../lib/crawls.js");
   const bing = await import("../../providers/bing.js");
+  const local = await import("../../local-seo.js");
   return {
     googleConfigured: google.googleConfigured,
     gscQuery: gsc.gscQuery,
@@ -129,6 +135,8 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     gapCompetitors: seoData.gapCompetitors,
     latestLocalCrawl: (slug) => crawls.latestCrawl(slug),
     bingOverview: (c, req) => bing.bingOverview(c, req),
+    localProfile: (c, o) => local.localProfileSection(c, o),
+    localProfileEstimateUsd: (c, o) => local.localSectionEstimateUsd(c, o),
   };
 }
 
@@ -244,6 +252,8 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   if (unitEstimate && gapUnits > Math.min(unitEstimate.remaining.client, unitEstimate.remaining.global)) {
     throw new BudgetExceededError(`The keyword gap sections together need ${gapUnits.toLocaleString("en-US")} ${unitEstimate.provider} units but ${client.domain} has ${Math.min(unitEstimate.remaining.client, unitEstimate.remaining.global).toLocaleString("en-US")} left this month. Lower their limits, or raise the cap.`);
   }
+  // Local profile sections (Phase 12 C4): the profile lookup plus a maps SERP per keyword.
+  if (allowPaid) for (const s of plan.sections) if (s.type === "local_profile") paidUsd += deps.localProfileEstimateUsd(client, { packKeywords: s.packKeywords ?? 3 });
   const reservedUsd = Number(paidUsd.toFixed(4));
   const spentBefore = { usd: deps.spentThisMonth(keys), ahrefs: deps.unitsThisMonth(keys, "ahrefs"), semrush: deps.unitsThisMonth(keys, "semrush") };
 
@@ -411,6 +421,14 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       } catch (err) {
         // The error lists the key's other verified sites: fine for the operator, not for a client's report.
         if ((err as Error).name === "BingSiteError") throw new SectionUnavailableError(`no verified Bing Webmaster Tools site for ${client.domain} (set it with crawlmark-cli clients set ${client.domain} --bing-site <url>)`);
+        throw err;
+      }
+    },
+    local_profile: async (s: Extract<SectionSpec, { type: "local_profile" }>): Promise<LocalProfileData> => {
+      try {
+        return await deps.localProfile(client, { packKeywords: s.packKeywords ?? 3 });
+      } catch (err) {
+        if ((err as Error).name === "LocalNotConfirmedError") throw new SectionUnavailableError((err as Error).message);
         throw err;
       }
     },

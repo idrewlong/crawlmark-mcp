@@ -155,6 +155,12 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - Read-only: crawlmark never submits URLs, sitemaps or IndexNow pings to Bing.
 - New tool: `bing_report` (Shipped). New setup step: `crawlmark-cli setup --step bing` (Shipped). New option: `crawlmark-cli clients set example.com --bing-site <url>` and `bingSite` in `set_client_profile` (Shipped). New report section `bing_overview` (Shipped).
 
+**Local SEO** (Shipped)
+
+- A client's Google Business Profile (rating, reviews, categories, hours, claimed or not), where it ranks in the Google Maps pack for its keywords in its town, and a summary of its latest Google reviews, from your own DataForSEO account. _"How does example.com look on Google Maps for its main keywords, and what are recent reviews saying?"_
+- crawlmark finds the listing and you confirm it before it's saved; reviews never include reviewer names. Estimate first, checked against your monthly caps.
+- New tools: `local_profile`, `local_pack`, `local_reviews` (Coming). New option: `crawlmark-cli clients set example.com --place-id <id>` and `gbpPlaceId` in `set_client_profile` (Coming). New report section `local_profile` (paid, Coming).
+
 **Audits: AI search readiness** (Shipped)
 
 - Which AI crawlers robots.txt lets in, split into AI search crawlers (blocking them hides the site in ChatGPT search, Claude and Perplexity answers) and training-only crawlers (blocking them is a fair choice). _"Can ChatGPT search and Perplexity see example.com, and which AI crawlers does it block?"_

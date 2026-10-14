@@ -1,0 +1,129 @@
+{
+  "version": "0.1.20231117",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "3.2 sec.",
+  "cost": 0.002,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131234-1535-0139-0000-2b5a8a4c3a02",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "3.1 sec.",
+      "cost": 0.002,
+      "result_count": 1,
+      "path": [
+        "v3",
+        "serp",
+        "google",
+        "maps",
+        "live",
+        "advanced"
+      ],
+      "data": {
+        "api": "serp",
+        "function": "live",
+        "se": "google",
+        "se_type": "maps",
+        "keyword": "emergency plumber",
+        "location_name": "Austin,Texas,United States",
+        "language_code": "en",
+        "depth": 20
+      },
+      "result": [
+        {
+          "keyword": "emergency plumber",
+          "type": "maps",
+          "se_domain": "google.com",
+          "location_code": 1026201,
+          "language_code": "en",
+          "check_url": "https://www.google.com/maps/search/emergency+plumber",
+          "datetime": "2026-10-13 18:00:00 +00:00",
+          "item_types": [
+            "maps_search"
+          ],
+          "se_results_count": 0,
+          "items_count": 4,
+          "items": [
+            {
+              "type": "maps_search",
+              "rank_group": 1,
+              "rank_absolute": 1,
+              "domain": "competitor-a.example",
+              "title": "Competitor A Plumbing",
+              "url": "https://competitor-a.example/",
+              "rating": {
+                "rating_type": "Max5",
+                "value": 4.9,
+                "votes_count": 410,
+                "rating_max": 5
+              },
+              "place_id": "ChIJcompetitorAplace0001",
+              "cid": "111",
+              "address": "1 A St",
+              "category": "Plumber",
+              "is_claimed": true,
+              "phone": "+1 512-555-0111",
+              "local_justifications": [
+                {
+                  "type": "user_review",
+                  "text": "\"Jane Reviewer says the best plumber in town\""
+                }
+              ]
+            },
+            {
+              "type": "maps_search",
+              "rank_group": 2,
+              "rank_absolute": 2,
+              "domain": "competitor-b.example",
+              "title": "Competitor B \u0007Drains",
+              "url": "https://competitor-b.example/",
+              "rating": {
+                "rating_type": "Max5",
+                "value": 4.5,
+                "votes_count": 88,
+                "rating_max": 5
+              },
+              "place_id": "ChIJcompetitorBplace0001",
+              "cid": "222"
+            },
+            {
+              "type": "maps_search",
+              "rank_group": 3,
+              "rank_absolute": 3,
+              "domain": "north.example.org",
+              "title": "Example Plumbing North",
+              "url": "https://north.example.org/",
+              "rating": {
+                "rating_type": "Max5",
+                "value": 3.9,
+                "votes_count": 8,
+                "rating_max": 5
+              },
+              "place_id": "ChIJexamplePlaceId000002",
+              "cid": "2234567890123456789"
+            },
+            {
+              "type": "maps_search",
+              "rank_group": 4,
+              "rank_absolute": 4,
+              "domain": "www.example.com",
+              "title": "Example Plumbing Co",
+              "url": "https://www.example.com/",
+              "rating": {
+                "rating_type": "Max5",
+                "value": 4.7,
+                "votes_count": 132,
+                "rating_max": 5
+              },
+              "place_id": "ChIJexamplePlaceId000001",
+              "cid": "1234567890123456789"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
