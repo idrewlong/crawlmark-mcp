@@ -261,6 +261,8 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
   if (ok("local_profile")) about.push([txt("Local search: Google Business Profile and Google Maps results via DataForSEO (paid).")]);
   if (ok("ai_visibility")) about.push([txt("AI search visibility: DataForSEO LLM Mentions (paid).")]);
   if (ok("keyword_gap")) about.push([txt("Keyword gap: the client's SEO data provider (paid), named in that section.")]);
+  if (ok("technical_issues")) about.push([txt(`Technical SEO issues: ${whiteLabel ? "saved site audits and crawls" : "crawlmark's saved audits and crawls"}, a stored DataForSEO crawl and Google URL Inspection when available, merged into one list and compared with the previous report.`)]);
+  if (ok("indexing_issues")) about.push([txt("Google indexing: Search Console's URL Inspection of a sample of pages and its sitemap report (free, read-only).")]);
   for (const n of [...ctx.notes, ...report.notes]) about.push([txt(n)]);
   for (const s of report.sections) if (s.status === "error") about.push([txt(statusLine(s))]);
   if (notIncluded.length) about.push([txt(`Not included this time (no data for this period): ${notIncluded.join(", ")}.`)]);

@@ -562,8 +562,15 @@ interface OnPageSummary {
 }
 
 /** Crawl summary: progress, onpage score and counts per issue type. */
+/** DataForSEO task IDs are UUID-like; anything else is refused before it reaches a URL path (SEC-5). */
+export const TASK_ID_RE = /^[0-9a-z-]{8,64}$/i;
+export function checkTaskId(taskId: string): string {
+  if (!TASK_ID_RE.test(taskId)) throw new Error(`"${taskId.slice(0, 80)}" isn't a DataForSEO task ID (letters, digits and hyphens, 8 to 64 characters).`);
+  return encodeURIComponent(taskId);
+}
+
 export async function onPageSummary(taskId: string) {
-  const task = await request<OnPageSummary>("GET", `/on_page/summary/${taskId}`);
+  const task = await request<OnPageSummary>("GET", `/on_page/summary/${checkTaskId(taskId)}`);
   const r = task.result?.[0];
   const issues = Object.entries(r?.page_metrics?.checks ?? {})
     .filter(([, count]) => count > 0)
@@ -602,7 +609,7 @@ export interface CrawlUrls {
 export async function onPageCrawlUrls(clientSlug: string, taskId: string, opts: { signal?: AbortSignal } = {}): Promise<CrawlUrls> {
   let cost = 0;
   try {
-    const summaryTask = await request<OnPageSummary>("GET", `/on_page/summary/${taskId}`, undefined, opts.signal);
+    const summaryTask = await request<OnPageSummary>("GET", `/on_page/summary/${checkTaskId(taskId)}`, undefined, opts.signal);
     cost += summaryTask.cost ?? 0;
     const sum = summaryTask.result?.[0];
     if (sum?.crawl_progress !== "finished") throw new Error("The stored crawl has not finished");

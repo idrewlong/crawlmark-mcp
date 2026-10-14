@@ -25,6 +25,10 @@ import type {
   RankTrendData,
   RankTrendSummary,
   SiteCrawlData,
+  IndexingIssuesData,
+  IssueSource,
+  TechIssue,
+  TechnicalIssuesData,
   MoversData,
   OpportunityLists,
   OrganicTrafficData,
@@ -221,6 +225,38 @@ const CWV_SHORT: Record<CwvMetric, string> = { lcp: "LCP", inp: "INP", cls: "CLS
 /** Google's published good / poor thresholds (75th percentile). */
 const CWV_BANDS: Record<CwvMetric, { good: number; poor: number }> = { lcp: { good: 2500, poor: 4000 }, inp: { good: 200, poor: 500 }, cls: { good: 0.1, poor: 0.25 }, fcp: { good: 1800, poor: 3000 }, ttfb: { good: 800, poor: 1800 } };
 const RATING_TAG = { good: "good", "needs-improvement": "warn", poor: "bad" } as const;
+
+/** "9 Oct 2026" from an ISO date or time. */
+const fullDay = (iso: string) => {
+  const dt = new Date(iso);
+  return Number.isNaN(dt.getTime()) ? iso.slice(0, 10) : `${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`;
+};
+
+/** Phase 13: technical-issue source names in report files (no tool names, no product name). */
+export const ISSUE_SOURCE_NAMES: Record<IssueSource, string> = {
+  audit: "Audit",
+  local_crawl: "Site crawl",
+  site_hygiene: "Site checks",
+  dataforseo_crawl: "DataForSEO crawl",
+  gsc_inspection: "Google URL Inspection",
+  ahrefs_site_audit: "Ahrefs Site Audit",
+  semrush_site_audit: "Semrush Site Audit",
+};
+const SEVERITY_TITLE = { critical: "Critical", high: "High", medium: "Medium", low: "Low" } as const;
+const CHANGE_TAG: Record<TechIssue["change"], Text> = {
+  new: [{ t: "new", tag: "bad" }],
+  persistent: [{ t: "still open", tag: "neutral" }],
+  unverified: [{ t: "not re-checked", tag: "warn" }],
+  resolved: [{ t: "resolved", tag: "good" }],
+  first_run: [t("")],
+};
+const foundBy = (i: TechIssue): Text => cell([...new Set(i.sources.map((x) => ISSUE_SOURCE_NAMES[x.source]))].join(", "));
+const issueExample = (i: TechIssue, domain: string): Text => {
+  const u = i.url ?? i.sources.flatMap((x) => x.examples)[0];
+  return u ? pagePath(u, domain) : cell("several pages");
+};
+/** The most coverage states shown in the indexing share chart before the rest are grouped as "Other". */
+export const COVERAGE_PARTS = 6;
 
 export const SECTION_MAPPERS: Record<string, Mapper> = {
   search_overview: (data: SearchOverviewData, report, ctx) => {
@@ -701,6 +737,125 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
       blocks.push({ kind: "table", title: "Other sites cited in the same answers", header: ["Also cited", "Mentions", "AI search volume"], rows: data.metrics.sourcesDomain.map((r) => [[c(r.key)], cell(fmtInt(r.mentions)), cell(fmtInt(r.aiSearchVolume))]), numeric: [false, true, true] });
     }
     blocks.push({ kind: "note", text: [t("From DataForSEO's LLM Mentions dataset when this report was generated (paid). AI answers change often; AI search volume is DataForSEO's estimate.")] });
+    return blocks;
+  },
+  // Phase 13 A: one deduplicated list from every stored source, grouped by severity. Issue titles and URLs come from
+  // crawls and Google (stripControl'd; escaped as data by each renderer). Operator detail (snapshot IDs, why a source
+  // was unavailable) stays in the tool result.
+  technical_issues: (data: TechnicalIssuesData, _r, ctx) => {
+    if (!data.sources.length) return [];
+    const k = data.counts;
+    const ch = data.changes;
+    const tile = (label: string, n: number, bad: boolean): Kpi => ({ label, value: fmtInt(n), ...(bad && n > 0 ? { tone: "bad" as const } : {}) });
+    const tiles: Kpi[] = [tile("Critical", k.critical, true), tile("High", k.high, true), tile("Medium", k.medium, false), tile("Low", k.low, false)];
+    if (ch) tiles.push(tile("New", ch.new, true), { label: "Resolved", value: fmtInt(ch.resolved), ...(ch.resolved > 0 ? { tone: "good" as const } : {}) });
+    const blocks: Block[] = [{ kind: "kpiRow", items: tiles }];
+    if (!data.total) blocks.push({ kind: "paragraph", text: [t("No open technical issues in the sources below.")] });
+    for (const sev of ["critical", "high", "medium", "low"] as const) {
+      const rows = data.issues.filter((i) => i.severity === sev);
+      if (!rows.length) continue;
+      blocks.push({
+        kind: "table",
+        title: SEVERITY_TITLE[sev],
+        header: ["Issue", "Pages", "Example", "Found by", ...(ch ? ["Change"] : [])],
+        rows: rows.map((i) => [d(i.title), cell(fmtInt(i.affected)), issueExample(i, ctx.domain), foundBy(i), ...(ch ? [CHANGE_TAG[i.change]] : [])]),
+        numeric: [false, true, false, false, false],
+      });
+    }
+    if (data.total > data.issues.length) blocks.push({ kind: "note", text: [t(`Showing ${fmtInt(data.issues.length)} of ${fmtInt(data.total)} open issues, most severe first.`)] });
+    if (data.resolved.length) {
+      blocks.push({ kind: "table", title: "Resolved since the last report", header: ["Issue", "Example", "Found by"], rows: data.resolved.map((i) => [d(i.title), issueExample(i, ctx.domain), foundBy(i)]) });
+    }
+    if (data.noLongerChecked) ctx.note("Technical SEO issues: some issues from earlier reports are no longer checked by any current source, so they are left out (not counted as fixed).");
+    const from = data.sources.map((x) => `${ISSUE_SOURCE_NAMES[x.source]} (${fullDay(x.ranAt)}${x.stale ? ", older data" : ""})`).join(", ");
+    blocks.push({
+      kind: "note",
+      text: [t(`From ${from}. The same problem found by several sources is listed once; "Pages" is the largest count any one source reports.${ch ? " Issues not re-checked by their source are shown as not re-checked, never as fixed." : ""}`)],
+    });
+    return blocks;
+  },
+  // Phase 13 A: Google's verdict for a sample of URLs. Coverage states and URLs are Google's (stripControl'd; escaped
+  // as data). The property and today's inspection count are operator detail and never shown.
+  indexing_issues: (data: IndexingIssuesData, _r, ctx) => {
+    const n = data.sample.inspected;
+    if (!n) return [];
+    const notIndexed = n - data.indexed.count;
+    const blocks: Block[] = [
+      {
+        kind: "kpiRow",
+        items: [
+          { label: "URLs checked", value: fmtInt(n) },
+          { label: "Indexed", value: fmtInt(data.indexed.count), ...(data.indexed.share !== null ? { detail: `${data.indexed.share.toFixed(1)}% of checked` } : {}) },
+          { label: "Not indexed", value: fmtInt(notIndexed), ...(notIndexed > 0 ? { tone: "bad" as const } : {}) },
+          { label: "Canonical chosen differently", value: fmtInt(data.canonicalMismatches) },
+        ],
+      },
+    ];
+    if (data.byCoverage.length) {
+      const top = data.byCoverage.slice(0, COVERAGE_PARTS);
+      const rest = data.byCoverage.slice(COVERAGE_PARTS).reduce((a, x) => a + x.count, 0);
+      const parts = [...top.map((x) => x.state), ...(rest ? ["Other"] : [])];
+      const values = [...top.map((x) => x.count), ...(rest ? [rest] : [])];
+      blocks.push({
+        kind: "chart",
+        chart: {
+          type: "share",
+          title: "Google's verdict for checked URLs",
+          parts,
+          rows: [{ label: "Checked URLs", values }],
+          summary: `Of ${fmtInt(n)} URLs checked, Google reports ${data.indexed.count === 1 ? "1 indexed" : `${fmtInt(data.indexed.count)} indexed`}${data.indexed.share !== null ? ` (${data.indexed.share.toFixed(1)}%)` : ""} and ${fmtInt(notIndexed)} not indexed.`,
+          fallback: { kind: "table", title: "Google's verdict for checked URLs", header: ["Google says", "URLs"], rows: data.byCoverage.map((x) => [d(x.state), cell(fmtInt(x.count))]), numeric: [false, true] },
+        },
+      });
+    }
+    if (data.worst.length) {
+      blocks.push({
+        kind: "table",
+        title: "Pages to look at",
+        header: ["Page", "Google says", "In sitemap", "Last crawled"],
+        rows: data.worst.map((w) => [
+          pagePath(w.url, ctx.domain),
+          [...severity(w.severity), t(" "), ...d(w.coverage), ...(w.googleCanonical ? [t(" (Google's canonical: "), ...pagePath(w.googleCanonical, ctx.domain), t(")")] : [])],
+          cell(w.inSitemap ? "yes" : "no"),
+          cell(w.lastCrawl ? fullDay(w.lastCrawl) : "never"),
+        ]),
+      });
+    }
+    if (data.sitemaps.length) {
+      blocks.push({
+        kind: "table",
+        title: "Sitemaps",
+        header: ["Sitemap", "Errors", "Warnings", "URLs submitted"],
+        rows: data.sitemaps.map((m) => [[c(m.path)], toned(fmtInt(m.errors), m.errors > 0 ? "bad" : undefined), cell(fmtInt(m.warnings)), cell(m.submitted === null ? "n/a" : fmtInt(m.submitted))]),
+        numeric: [false, true, true, true],
+      });
+    }
+    const trend = data.trend.filter((x) => x.indexedShare !== null);
+    if (trend.length >= 2) {
+      blocks.push({
+        kind: "chart",
+        chart: {
+          type: "line",
+          title: "Share of checked URLs indexed, by month (%)",
+          x: trend.map((x) => `${x.month}-01`),
+          series: [{ name: "Indexed share", values: trend.map((x) => x.indexedShare), role: "current" }],
+          format: "count",
+          connectGaps: true,
+          summary: `The share of checked URLs Google had indexed went from ${trend[0]!.indexedShare!.toFixed(1)}% to ${trend.at(-1)!.indexedShare!.toFixed(1)}% over ${trend.length} months.`,
+          fallback: { kind: "table", title: "Share indexed by month", header: ["Month", "URLs checked", "Indexed"], rows: trend.map((x) => [cell(x.month), cell(fmtInt(x.inspected)), cell(`${x.indexedShare!.toFixed(1)}%`)]), numeric: [false, true, true] },
+        },
+      });
+    }
+    const s = data.sample;
+    blocks.push({
+      kind: "note",
+      text: [
+        t(
+          `Based on Google's URL Inspection of ${fmtInt(n)} pages (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's full Page indexing report. ` +
+            `${fmtInt(s.keyPages)} key page${s.keyPages === 1 ? "" : "s"} and ${fmtInt(s.sitemapUrls)} sitemap URL${s.sitemapUrls === 1 ? "" : "s"}${s.sitemapUrlsKnown ? ` (of about ${fmtInt(s.sitemapUrlsKnown)} submitted)` : ""} were checked${s.oldestDays !== null ? `; the oldest result is ${fmtInt(s.oldestDays)} day${s.oldestDays === 1 ? "" : "s"} old` : ""}.`,
+        ),
+      ],
+    });
     return blocks;
   },
   keyword_gap: (data: KeywordGapData) => {

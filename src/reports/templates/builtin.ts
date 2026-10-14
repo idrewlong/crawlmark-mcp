@@ -29,6 +29,9 @@ export const BUILTIN_MONTHLY: TemplateSpec = {
     { id: "gtm", type: "tag_manager", optional: true, limit: 20 },
     { id: "ranks", type: "rank_trend", optional: true, since: "180d" },
     { id: "ai", type: "ai_readiness", optional: true },
+    // Phase 13 A (free): one technical-issues list from stored results, and Google indexing of a sample of URLs.
+    { id: "issues", type: "technical_issues", optional: true },
+    { id: "indexing", type: "indexing_issues", optional: true },
   ],
 };
 
@@ -51,6 +54,7 @@ export const BUILTIN_QUARTERLY: TemplateSpec = {
     { id: "opportunities", type: "opportunities", limit: 5 },
     { id: "audit", type: "audit_changes" },
     { id: "cwv", type: "core_web_vitals_history", optional: true, formFactor: "PHONE", weeks: 25 },
+    { id: "issues", type: "technical_issues", optional: true },
   ],
 };
 
@@ -69,7 +73,7 @@ export const BUILTIN_EXECUTIVE: TemplateSpec = {
 
 export const BUILTIN_TECHNICAL: TemplateSpec = {
   title: "Technical SEO report",
-  description: "For web teams: the local site crawl, Core Web Vitals history, audit changes, AI readiness and (opt-in) Tag Manager.",
+  description: "For web teams: the local site crawl, Core Web Vitals history, audit changes, AI readiness and (opt-in) Tag Manager, technical issues and Google indexing.",
   period: { range: "last_month" },
   compare: ["previous_period"],
   sections: [
@@ -78,6 +82,8 @@ export const BUILTIN_TECHNICAL: TemplateSpec = {
     { id: "audit", type: "audit_changes", limit: 20 },
     { id: "ai", type: "ai_readiness" },
     { id: "gtm", type: "tag_manager", optional: true, limit: 20 },
+    { id: "issues", type: "technical_issues", optional: true, limit: 30 },
+    { id: "indexing", type: "indexing_issues", optional: true, maxInspections: 25 },
   ],
 };
 
@@ -151,6 +157,10 @@ templates:
       - { id: ranks, type: rank_trend, optional: true, since: 180d }
       # llms.txt and AI crawler access from the newest saved audit (free): --include ai.
       - { id: ai, type: ai_readiness, optional: true }
+      # One deduplicated technical-issues list from stored audits and crawls (free): --include issues.
+      - { id: issues, type: technical_issues, optional: true }
+      # Google indexing of a sample of URLs (free URL Inspection, within a daily budget): --include indexing.
+      - { id: indexing, type: indexing_issues, optional: true }
       # Paid example: competitor keyword gap (needs paid: true here and --paid / allowPaid at run time).
       # - { id: gap, type: keyword_gap, optional: true, paid: true, limit: 25 }
   quarterly:
@@ -172,4 +182,5 @@ templates:
       - { id: opportunities, type: opportunities, limit: 5 }
       - { id: audit, type: audit_changes }
       - { id: cwv, type: core_web_vitals_history, optional: true, formFactor: PHONE, weeks: 25 }
+      - { id: issues, type: technical_issues, optional: true }
 `;

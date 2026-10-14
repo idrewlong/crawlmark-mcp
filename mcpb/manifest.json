@@ -91,6 +91,18 @@
       "description": "Free local crawl of a client's own site: status codes, redirects, titles, descriptions, canonicals, H1s, internal and broken links, depth, noindex and orphan pages. Obeys robots.txt and Crawl-delay; saved for audits."
     },
     {
+      "name": "technical_issues",
+      "description": "One deduplicated, severity-grouped list of technical SEO problems from the stored audit, local crawl, site checks, a stored DataForSEO crawl and URL Inspection results, with changes since the last snapshot. Free, local; never starts a crawl."
+    },
+    {
+      "name": "index_coverage",
+      "description": "Google's indexing of a sample of the site's URLs from stored URL Inspection results: indexed share, coverage states, the worst URLs, sitemap errors and the monthly trend. Free, local."
+    },
+    {
+      "name": "inspect_index_coverage",
+      "description": "Inspect key pages, top Search Console pages and a rotating sample of sitemap URLs with Google's URL Inspection API (free, read-only) within a daily per-property budget, and store the results."
+    },
+    {
       "name": "local_crawl_pages",
       "description": "Pages from a saved local crawl with their issues, filtered by issue rule or status code. Free, local."
     },

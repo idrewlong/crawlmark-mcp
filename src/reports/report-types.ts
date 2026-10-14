@@ -392,3 +392,85 @@ export interface AiReadinessData {
         rows: { bot: string; vendor: string; purpose: "search" | "user" | "training"; honorsRobots: boolean; group: "named" | "*" | "none"; access: "allowed" | "partial" | "blocked"; homepage: "allowed" | "blocked"; blockedKeyPages: number }[];
       };
 }
+
+// ---------------------------------------------------------------- Phase 13 A (spec 13.6.2)
+
+export type IssueSeverity = "critical" | "high" | "medium" | "low";
+
+/** Where a technical issue was found. The Ahrefs and Semrush Site Audit sources arrive in Stage B. */
+export type IssueSource = "audit" | "local_crawl" | "site_hygiene" | "dataforseo_crawl" | "gsc_inspection" | "ahrefs_site_audit" | "semrush_site_audit";
+
+/** One source run a technical-issues snapshot read (D10). */
+export interface SourceRun {
+  source: IssueSource;
+  /** Audit ID, local crawl ID, DataForSEO task ID, inspection batch day, … */
+  runId: string;
+  ranAt: string;
+  /** Older than the section's maxAgeDays: still shown, with its date and a note. */
+  stale: boolean;
+  /** Audit: the finding sources that ran (lighthouse, axe, indexing, …). Local crawl: `site:crawl-complete` when it was exhaustive. */
+  checks?: string[];
+}
+
+export interface TechIssueSource {
+  source: IssueSource;
+  rule: string;
+  /** The source's own severity label (crawlmark severity, DataForSEO check severity, Ahrefs importance, …). */
+  nativeSeverity: string;
+  /** Pages the source reports (count-only sources), or null for a URL-level finding. */
+  count: number | null;
+  /** Up to 3 example URLs. */
+  examples: string[];
+}
+
+export interface TechIssue {
+  /** Canonical key (tech-issues catalogue) or "<source>:<rule>" when unmapped. */
+  key: string;
+  title: string;
+  category: string;
+  /** Merged severity (D9). */
+  severity: IssueSeverity;
+  /** Null for count-only items. */
+  url: string | null;
+  /** Pages affected: the largest count any one source reports (D8). */
+  affected: number;
+  sources: TechIssueSource[];
+  change: "new" | "persistent" | "resolved" | "unverified" | "first_run";
+}
+
+export interface TechnicalIssuesData {
+  sources: SourceRun[];
+  unavailable: { source: IssueSource; reason: string }[];
+  /** Open items only. */
+  counts: Record<IssueSeverity, number>;
+  /** Null on the first run (nothing to compare with). */
+  changes: { new: number; resolved: number; persistent: number; unverified: number } | null;
+  base: { snapshotId: string; capturedAt: string } | null;
+  /** Open, sorted severity → affected desc → key; at most `limit`. */
+  issues: TechIssue[];
+  /** At most 10. */
+  resolved: TechIssue[];
+  limit: number;
+  /** Open items in all (before `limit`). */
+  total: number;
+  /** Earlier not re-checked issues dropped because no source that reported them is read any more (or its data is too old). */
+  noLongerChecked?: number;
+}
+
+export interface IndexingIssuesData {
+  /** The Search Console property (operator detail; the files say "Google URL Inspection"). */
+  property: string;
+  sample: { inspected: number; inspectedThisRun: number; keyPages: number; sitemapUrls: number; sitemapUrlsKnown: number; oldestDays: number | null };
+  /** PASS among the latest inspection per URL. */
+  indexed: { count: number; share: number | null };
+  /** Coverage states (stripControl'd), most common first. */
+  byCoverage: { state: string; count: number; severity: IssueSeverity | null }[];
+  worst: { url: string; coverage: string; severity: IssueSeverity; inSitemap: boolean; keyPage: boolean; lastCrawl: string | null; googleCanonical: string | null; inspectedAt: string }[];
+  /** Google canonical differs from the page's own (among the latest inspections). */
+  canonicalMismatches: number;
+  sitemaps: { path: string; errors: number; warnings: number; submitted: number | null; lastDownloaded: string | null; isPending: boolean }[];
+  trend: { month: string; inspected: number; indexedShare: number | null }[];
+  /** Operator-only (tool result; never rendered). */
+  quota: { day: string; used: number; budget: number; exhausted: boolean };
+  notes: string[];
+}

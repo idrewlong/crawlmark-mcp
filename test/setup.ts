@@ -48,3 +48,5 @@ for (const k of ["CRUX_API_KEY", "PSI_API_KEY", "BING_WEBMASTER_API_KEY", "AI_VI
 process.env.CRUX_BASE_URL = "http://127.0.0.1:9";
 process.env.BING_BASE_URL = "http://127.0.0.1:9";
 process.env.CRAWLER_IPRANGES_BASE_URL = "http://127.0.0.1:9";
+// Phase 13: snapshot reuse and URL Inspection budget settings from a developer's shell never reach a test.
+for (const k of ["SNAPSHOT_REUSE_DAYS", "GSC_INSPECTION_DAILY_BUDGET", "GSC_INSPECTION_PER_MINUTE"]) delete process.env[k];

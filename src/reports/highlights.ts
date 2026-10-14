@@ -9,6 +9,8 @@ import type {
   BrandedSplitData,
   CruxHistoryResult,
   Highlight,
+  IndexingIssuesData,
+  TechnicalIssuesData,
   MoversData,
   OrganicTrafficData,
   SearchOverviewData,
@@ -22,6 +24,8 @@ export const MAX_HIGHLIGHTS = 8;
 export const MIN_CHANGE_PCT = 5;
 export const MIN_DELTA = 20;
 export const MIN_POSITION_MOVE = 3;
+/** Phase 13: an indexed-share change of at least this many percentage points is a highlight. */
+export const MIN_SHARE_POINTS = 5;
 
 const int = (n: number) => Math.round(n).toLocaleString("en-US");
 const pct = (n: number) => `${Math.abs(n).toFixed(1)}%`;
@@ -132,5 +136,41 @@ export function computeHighlights(report: Pick<TemplateReport, "sections" | "per
     }
   }
 
+  // (11) new critical or high technical issues (Phase 13). Issues not re-checked are never counted as resolved.
+  const tech = okData<TechnicalIssuesData>(sections, "technical_issues");
+  if (tech?.data.changes) {
+    const severe = tech.data.issues.filter((i) => i.change === "new" && (i.severity === "critical" || i.severity === "high")).length;
+    if (severe >= 1) {
+      const resolved = tech.data.changes.resolved;
+      out.push({
+        kind: "technical-issues-new",
+        sectionId: tech.id,
+        text: `${severe} new critical or high-severity technical issue${severe === 1 ? "" : "s"} since the last report (${resolved} resolved).`,
+        value: severe,
+      });
+    }
+  }
+
+  // (12) the share of checked URLs Google has indexed moved by at least 5 points between the last two months with data.
+  const ix = okData<IndexingIssuesData>(sections, "indexing_issues");
+  const pts = (ix?.data.trend ?? []).filter((p) => p.indexedShare !== null);
+  if (ix && pts.length >= 2) {
+    const a = pts.at(-2)!;
+    const b = pts.at(-1)!;
+    const diff = b.indexedShare! - a.indexedShare!;
+    if (Math.abs(diff) >= MIN_SHARE_POINTS) {
+      out.push({
+        kind: "indexed-share",
+        sectionId: ix.id,
+        text: `The share of checked URLs Google has indexed ${diff > 0 ? "rose" : "fell"} ${Math.abs(diff).toFixed(1)} points (from ${a.indexedShare!.toFixed(1)}% in ${monthName(a.month)} to ${b.indexedShare!.toFixed(1)}% in ${monthName(b.month)}).`,
+        value: Number(diff.toFixed(1)),
+      });
+    }
+  }
+
   return out.slice(0, MAX_HIGHLIGHTS);
 }
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/** "2026-09" → "September 2026". */
+const monthName = (ym: string) => `${MONTH_NAMES[Number(ym.slice(5, 7)) - 1] ?? ym} ${ym.slice(0, 4)}`;

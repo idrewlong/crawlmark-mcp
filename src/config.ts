@@ -88,6 +88,12 @@ const EnvSchema = z.object({
   AI_VISIBILITY_ENABLED: z.string().optional(),
   // Its own monthly USD sub-cap across all clients, on top of the client and global caps.
   AI_VISIBILITY_MONTHLY_BUDGET_USD: z.coerce.number().positive().default(2),
+  // Phase 13: a stored live provider snapshot this recent is reused instead of a new paid call (D2).
+  SNAPSHOT_REUSE_DAYS: z.coerce.number().int().min(0).max(31).default(7),
+  // Phase 13: URL Inspection per Search Console property per Pacific-time day (Google allows 2,000; the rest is left for other tools).
+  GSC_INSPECTION_DAILY_BUDGET: z.coerce.number().int().min(1).max(2000).default(1000),
+  // Phase 13: URL Inspection requests per minute (Google allows 600 per property).
+  GSC_INSPECTION_PER_MINUTE: z.coerce.number().int().min(1).max(600).default(60),
 });
 
 const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));

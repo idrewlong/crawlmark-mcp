@@ -117,7 +117,7 @@ async function collectAudit(client: Client, opts: AuditOptions) {
     const accessibility = await section(() => runAxe(url, wcagLevel, cacheOpts));
     const rendering = await section(() => checkRender(url, cacheOpts));
     const [indexing, onPage] = await Promise.all([
-      section(() => gscInspectUrl(client, url, cacheOpts)),
+      section(() => gscInspectUrl(client, url, { ...cacheOpts, origin: "audit" })),
       section(async () => (await instantPage(client, url, cacheOpts)).page),
     ]);
     pages.push({ url, lighthouse, accessibility, rendering, indexing, onPage });

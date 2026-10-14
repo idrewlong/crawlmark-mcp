@@ -1,0 +1,16 @@
+{
+  "inspectionResult": {
+    "inspectionResultLink": "https://search.google.com/search-console/inspect?resource_id=sc-domain:example.com&id=example2",
+    "indexStatusResult": {
+      "verdict": "NEUTRAL",
+      "coverageState": "Crawled - currently not indexed",
+      "robotsTxtState": "ALLOWED",
+      "indexingState": "INDEXING_ALLOWED",
+      "lastCrawlTime": "2026-09-21T11:00:00Z",
+      "pageFetchState": "SUCCESSFUL",
+      "googleCanonical": "https://example.com/plans",
+      "userCanonical": "https://example.com/pricing",
+      "crawledAs": "MOBILE"
+    }
+  }
+}

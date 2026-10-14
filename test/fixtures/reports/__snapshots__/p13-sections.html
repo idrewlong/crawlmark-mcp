@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Example Co - SEO report - September 2026</title>
+<style>
+:root { --primary: #1f5ea8; --primary-ink: #1f5ea8; --on-primary: #ffffff; --on-primary-soft: #d2dfee; --cover-rule: #5e8bc0; --accent: #5b9bd5;
+  --ink: #1f2933; --muted: #52606d; --faint: #616c78; --rule: #e4e7eb; --zebra: #f7f8fa; --surface: #f4f6f9;
+  --bar: #84a6cf; --tint: #eff4f9;
+  --good: #13723a; --good-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fdecea; --neutral: #52606d; --neutral-bg: #eef1f4; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-scheme: light; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+.page { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+.cover { background: var(--primary); color: var(--on-primary); border-radius: 12px; padding: 18px 24px 16px; border-bottom: 4px solid var(--accent); margin-bottom: 14px; }
+.cover-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; }
+.brand img { height: 34px; max-width: 160px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+.badge { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; border: 1px solid var(--on-primary-soft); color: var(--on-primary-soft); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--on-primary-soft); margin: 14px 0 2px; font-weight: 600; }
+h1 { font-size: 28px; line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+.domain { color: var(--on-primary-soft); margin: 3px 0 14px; font-size: 14px; }
+.cover-meta { display: flex; flex-wrap: wrap; gap: 6px 32px; margin: 0; border-top: 1px solid var(--cover-rule); padding-top: 10px; font-size: 12.5px; }
+.cover-meta dt { color: var(--on-primary-soft); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.cover-meta dd { margin: 0; font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 4px; }
+.kpi, .tile { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; break-inside: avoid; }
+.tile { background: var(--zebra); border-color: transparent; padding: 10px 12px; }
+.kpi-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.15; margin: 4px 0 6px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.tile .kpi-value { font-size: 20px; margin: 2px 0 4px; }
+.kpi-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.kpi-caption { font-size: 11px; color: var(--faint); margin: 0 0 14px; text-align: right; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px 1px 6px; font-variant-numeric: tabular-nums; }
+.chip svg { width: 8px; height: 8px; fill: currentColor; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+.chip.neutral { color: var(--neutral); background: var(--neutral-bg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tiles { display: grid; gap: 8px; margin: 4px 0 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tiles-1, .tiles-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tiles-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tiles-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.summary { background: #fff; border: 1px solid var(--rule); border-left: 4px solid var(--primary); border-radius: 10px; padding: 14px 18px 12px; margin: 0 0 14px; break-inside: avoid; }
+.summary h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 6px; color: var(--primary-ink); }
+.summary ul { margin: 0; padding-left: 18px; } .summary li { margin: 3px 0; } .summary p { margin: 4px 0; }
+.caption { font-size: 11px; color: var(--faint); margin: 8px 0 0; }
+.card { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 18px 8px; margin: 0 0 14px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.card h2 { font-size: 15px; margin: 0 0 10px; color: var(--primary-ink); display: flex; align-items: center; gap: 8px; break-after: avoid; }
+.card h2::before { content: ""; width: 4px; height: 15px; border-radius: 2px; background: var(--primary); flex: none; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 0 0 14px; } .pair > .card { margin: 0; }
+.cols { display: grid; gap: 16px; } .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.col > :first-child { margin-top: 0; }
+h3, .table-title { font-size: 12px; font-weight: 600; color: var(--ink); margin: 10px 0 4px; break-after: avoid; }
+p { margin: 6px 0; }
+.note { font-size: 11px; color: var(--muted); margin: 4px 0 8px; }
+figure.chart, .cols, .tiles { break-inside: avoid; }
+figure.chart { margin: 2px 0 10px; }
+figure.chart figcaption.stack { flex-direction: column; align-items: flex-start; gap: 2px; }
+figure.chart figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-weight: 400; color: var(--muted); font-size: 11px; }
+.key-item { white-space: nowrap; }
+.key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.key.dashed { border-top-style: dashed; }
+.key.box { width: 10px; height: 10px; border: 0; border-radius: 2px; }
+.chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-svg .tick { font-size: 10px; fill: #52606d; font-family: inherit; font-variant-numeric: tabular-nums; }
+.chart-svg .strong { font-weight: 600; fill: #1f2933; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1.5px solid #cbd2d9; vertical-align: bottom; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; overflow-wrap: break-word; }
+tbody tr:nth-child(even) td { background: var(--zebra); }
+tr, .tile, .kpi { break-inside: avoid; }
+thead { display: table-header-group; }
+.num { text-align: right; white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+.table-wrap:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+td.lead { min-width: 34%; }
+.barbox { display: inline-grid; grid-template-columns: 70px auto; align-items: center; gap: 8px; }
+.track { display: block; height: 7px; }
+.bar { display: block; height: 7px; background: var(--bar); border-radius: 0 3px 3px 0; }
+.v { min-width: 3.2em; }
+.good { color: var(--good); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+.kpi-value.good, .kpi-value.bad { font-weight: 700; }
+.tag { display: inline-block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 999px; padding: 0 7px; line-height: 16px; white-space: nowrap; }
+.tag-good { color: #13723a; background: #e3f4e8; }
+.tag-bad { color: #b42318; background: #fdecea; }
+.tag-warn { color: #8a5300; background: #fdf0d5; }
+.tag-neutral { color: #52606d; background: #eef1f4; }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; background: var(--zebra); border-radius: 3px; padding: 0 3px; }
+.commentary { background: var(--tint); border-left: 3px solid var(--primary); border-radius: 6px; padding: 8px 14px; margin: 10px 0 8px; break-inside: avoid; }
+.commentary .label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; color: var(--primary-ink); margin: 2px 0 4px; }
+.about { margin: 20px 0 0; padding: 14px 18px; background: #fff; border: 1px solid var(--rule); border-radius: 10px; font-size: 11px; color: var(--muted); }
+.about h2 { break-after: avoid; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink); margin: 0 0 6px; }
+.about ul { margin: 0; padding-left: 16px; } .about li { margin: 2px 0; }
+.colophon { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--faint); padding: 12px 2px 24px; }
+@media (max-width: 640px) {
+  .kpis, .tiles, .tiles-5, .tiles-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pair, .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 24px; }
+}
+/* PDF running header in the page's top margin (CSS page-margin box), left off the first page where the cover band is. */
+@page { @top-left { content: "Example Co \b7  Technical SEO report \b7  September 2026"; font: 8px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #616c78; vertical-align: bottom; padding-bottom: 3mm; } }
+@page :first { @top-left { content: none; } }
+@media print {
+  /* Print density: a dashboard export fills its pages. */
+  body { background: #fff; font-size: 10.5px; line-height: 1.4; }
+  .page { max-width: none; margin: 0; padding: 0; }
+  .cover { padding: 14px 20px 12px; } .kind { margin-top: 8px; } h1 { font-size: 24px; } .domain { margin-bottom: 10px; }
+  .kpis { gap: 10px; } .kpi { padding: 10px 12px; } .kpi-value { font-size: 22px; margin: 2px 0 4px; } .kpi-caption { margin-bottom: 10px; }
+  .summary { padding: 10px 16px 8px; margin-bottom: 10px; } .summary li { margin: 1px 0; }
+  .card { padding: 10px 14px 4px; margin-bottom: 10px; } .card h2 { font-size: 13.5px; margin-bottom: 6px; } .pair { gap: 10px; margin-bottom: 10px; }
+  table { font-size: 10.5px; margin-bottom: 6px; } th { padding: 4px 6px; font-size: 9px; } td { padding: 3px 6px; }
+  .tiles { gap: 6px; margin-bottom: 8px; } .tile { padding: 7px 10px; } .tile .kpi-value { font-size: 17px; }
+  h3, .table-title { margin: 6px 0 3px; } p { margin: 4px 0; } .note { margin: 3px 0 6px; } figure.chart { margin-bottom: 6px; } .cols { gap: 12px; }
+  .about { margin-top: 10px; padding: 10px 14px; }
+  .pair .track { display: none; } .pair .barbox { grid-template-columns: auto; } .pair td.lead { min-width: 0; } .pair th { letter-spacing: 0; } .pair .num { white-space: normal; }
+  /* Only atomic blocks stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
+  .card h2, h3, .table-title, figcaption { break-after: avoid; }
+  .summary { font-size: 10px; }
+  .lead-in { break-inside: avoid; } p.note { break-before: avoid; }
+  .table-wrap { overflow: visible; }
+  .cover { margin-bottom: 12px; }
+  .colophon { padding-bottom: 0; }
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+<header class="cover">
+<div class="cover-top"><div class="brand"></div><span class="badge">Data-only report</span></div>
+<p class="kind">Technical SEO report</p>
+<h1>Example Co</h1>
+<p class="domain">example.com</p>
+<dl class="cover-meta">
+<div><dt>Period</dt><dd>September 2026 · 1–30 Sep 2026</dd></div>
+<div><dt>Compared with</dt><dd>August 2026</dd></div>
+<div><dt>Generated</dt><dd>13 Oct 2026</dd></div>
+</dl>
+</header>
+<main>
+<section class="card" aria-label="Technical SEO issues"><div class="lead-in"><h2>Technical SEO issues</h2>
+<div class="tiles tiles-6"><div class="tile"><div class="kpi-label">Critical</div><div class="kpi-value bad">1</div></div><div class="tile"><div class="kpi-label">High</div><div class="kpi-value bad">2</div></div><div class="tile"><div class="kpi-label">Medium</div><div class="kpi-value">3</div></div><div class="tile"><div class="kpi-label">Low</div><div class="kpi-value">2</div></div><div class="tile"><div class="kpi-label">New</div><div class="kpi-value bad">2</div></div><div class="tile"><div class="kpi-label">Resolved</div><div class="kpi-value good">1</div></div></div></div>
+<h3 class="table-title">Critical</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Critical"><table>
+<thead><tr><th class="lead">Issue</th><th class="num">Pages</th><th>Example</th><th>Found by</th><th>Change</th></tr></thead>
+<tbody><tr><td class="lead">Buttons must have discernible text</td><td class="num">1</td><td>/contact</td><td>Audit</td><td><span class="tag tag-neutral">still open</span></td></tr></tbody>
+</table></div>
+<h3 class="table-title">High</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="High"><table>
+<thead><tr><th class="lead">Issue</th><th class="num">Pages</th><th>Example</th><th>Found by</th><th>Change</th></tr></thead>
+<tbody><tr><td class="lead">Broken internal link</td><td class="num">4</td><td>/services</td><td>Site crawl</td><td><span class="tag tag-bad">new</span></td></tr>
+<tr><td class="lead">Page is not indexed</td><td class="num">1</td><td>/old-offer</td><td>Audit</td><td><span class="tag tag-neutral">still open</span></td></tr></tbody>
+</table></div>
+<h3 class="table-title">Medium</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Medium"><table>
+<thead><tr><th class="lead">Issue</th><th class="num">Pages</th><th>Example</th><th>Found by</th><th>Change</th></tr></thead>
+<tbody><tr><td class="lead">Page has no title</td><td class="num">1</td><td>/thanks</td><td>Site crawl, Audit</td><td><span class="tag tag-bad">new</span></td></tr>
+<tr><td class="lead">Duplicate title tags</td><td class="num">6</td><td>/blog/page/2</td><td>DataForSEO crawl</td><td><span class="tag tag-neutral">still open</span></td></tr>
+<tr><td class="lead">Google chose a different canonical than the page declares</td><td class="num">1</td><td>/pricing</td><td>Audit</td><td><span class="tag tag-warn">not re-checked</span></td></tr></tbody>
+</table></div>
+<h3 class="table-title">Low</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Low"><table>
+<thead><tr><th class="lead">Issue</th><th class="num">Pages</th><th>Example</th><th>Found by</th><th>Change</th></tr></thead>
+<tbody><tr><td class="lead">Page in a sitemap with no internal links to it</td><td class="num">1</td><td>/landing/spring</td><td>Site checks</td><td><span class="tag tag-neutral">still open</span></td></tr>
+<tr><td class="lead">An AI search crawler is blocked</td><td class="num">1</td><td>/</td><td>Site checks</td><td><span class="tag tag-neutral">still open</span></td></tr></tbody>
+</table></div>
+<h3 class="table-title">Resolved since the last report</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Resolved since the last report"><table>
+<thead><tr><th class="lead">Issue</th><th>Example</th><th>Found by</th></tr></thead>
+<tbody><tr><td class="lead">Redirect chain</td><td>/old-blog</td><td>Site crawl</td></tr></tbody>
+</table></div>
+<p class="note">From Audit (9 Oct 2026), Site crawl (11 Oct 2026), Site checks (9 Oct 2026), DataForSEO crawl (20 Aug 2026, older data). The same problem found by several sources is listed once; &quot;Pages&quot; is the largest count any one source reports. Issues not re-checked by their source are shown as not re-checked, never as fixed.</p></section>
+<section class="card" aria-label="Google indexing"><div class="lead-in"><h2>Google indexing</h2>
+<div class="tiles tiles-4"><div class="tile"><div class="kpi-label">URLs checked</div><div class="kpi-value">40</div></div><div class="tile"><div class="kpi-label">Indexed</div><div class="kpi-value">31</div><div class="kpi-detail">77.5% of checked</div></div><div class="tile"><div class="kpi-label">Not indexed</div><div class="kpi-value bad">9</div></div><div class="tile"><div class="kpi-label">Canonical chosen differently</div><div class="kpi-value">2</div></div></div></div>
+<figure class="chart"><figcaption><span class="chart-title">Google&#39;s verdict for checked URLs</span><span class="legend"><span class="key-item"><span class="key box" style="background:#1f5ea8"></span>Submitted and indexed</span><span class="key-item"><span class="key box" style="background:#eb6834"></span>Crawled - currently not indexed</span><span class="key-item"><span class="key box" style="background:#1baf7a"></span>Discovered - currently not indexed</span><span class="key-item"><span class="key box" style="background:#6250d6"></span>Duplicate, Google chose different canonical than user</span><span class="key-item"><span class="key box" style="background:#9aa5b1"></span>Page with redirect</span></span></figcaption><svg class="chart-svg" viewBox="0 0 680 26" role="img" aria-label="Of 40 URLs checked, Google reports 31 indexed (77.5%) and 9 not indexed."><title>Of 40 URLs checked, Google reports 31 indexed (77.5%) and 9 not indexed.</title><text x="0" y="17" class="tick strong">Checked URLs</text><rect x="118" y="2" width="430.5" height="22" rx="3" fill="#1f5ea8"/><text x="126" y="17" class="tick" fill="#ffffff" style="fill:#ffffff">77.5%</text><rect x="550.5" y="2" width="53.8" height="22" rx="3" fill="#eb6834"/><text x="558.5" y="17" class="tick" fill="#111827" style="fill:#111827">10.0%</text><rect x="606.3" y="2" width="25.9" height="22" rx="3" fill="#1baf7a"/><rect x="634.2" y="2" width="25.9" height="22" rx="3" fill="#6250d6"/><rect x="662.1" y="2" width="14" height="22" rx="3" fill="#9aa5b1"/></svg></figure>
+<h3 class="table-title">Pages to look at</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Pages to look at"><table>
+<thead><tr><th class="lead">Page</th><th>Google says</th><th>In sitemap</th><th>Last crawled</th></tr></thead>
+<tbody><tr><td class="lead">/services/old</td><td><span class="tag tag-bad">high</span> Not found (404)</td><td>yes</td><td>2 Oct 2026</td></tr>
+<tr><td class="lead">/blog/spring-tips</td><td><span class="tag tag-warn">medium</span> Crawled - currently not indexed</td><td>yes</td><td>21 Sep 2026</td></tr>
+<tr><td class="lead">/pricing</td><td><span class="tag tag-warn">medium</span> Duplicate, Google chose different canonical than user (Google&#39;s canonical: /plans)</td><td>yes</td><td>5 Oct 2026</td></tr>
+<tr><td class="lead">/tag/news</td><td><span class="tag tag-warn">medium</span> Discovered - currently not indexed</td><td>no</td><td>never</td></tr></tbody>
+</table></div>
+<h3 class="table-title">Sitemaps</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Sitemaps"><table>
+<thead><tr><th class="lead">Sitemap</th><th class="num">Errors</th><th class="num">Warnings</th><th class="num">URLs submitted</th></tr></thead>
+<tbody><tr><td class="lead"><code>https://example.com/sitemap.xml</code></td><td class="num">0</td><td class="num">1</td><td class="num">118</td></tr>
+<tr><td class="lead"><code>https://example.com/news-sitemap.xml</code></td><td class="num"><span class="bad">2</span></td><td class="num">0</td><td class="num">12</td></tr></tbody>
+</table></div>
+<figure class="chart"><figcaption><span class="chart-title">Share of checked URLs indexed, by month (%)</span></figcaption><svg class="chart-svg" viewBox="0 0 680 135" role="img" aria-label="The share of checked URLs Google had indexed went from 72.2% to 77.5% over 4 months."><title>The share of checked URLs Google had indexed went from 72.2% to 77.5% over 4 months.</title><line x1="40" x2="668" y1="113" y2="113" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="116.5" text-anchor="end" class="tick">0</text><line x1="40" x2="668" y1="87.3" y2="87.3" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="90.8" text-anchor="end" class="tick">20</text><line x1="40" x2="668" y1="61.5" y2="61.5" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="65" text-anchor="end" class="tick">40</text><line x1="40" x2="668" y1="35.8" y2="35.8" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="39.3" text-anchor="end" class="tick">60</text><line x1="40" x2="668" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">80</text><text x="40" y="129" text-anchor="start" class="tick">1 Jul</text><text x="249.3" y="129" text-anchor="middle" class="tick">1 Aug</text><text x="458.7" y="129" text-anchor="middle" class="tick">1 Sep</text><text x="668" y="129" text-anchor="end" class="tick">1 Oct</text><path d="M40,113 L40,20 L249.3,15.2 L458.7,16.4 L668,13.2 L668,113 Z" fill="#1f5ea8" fill-opacity="0.12" stroke="none"/><path d="M40,20 L249.3,15.2 L458.7,16.4 L668,13.2" fill="none" stroke="#1f5ea8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="40" cy="20" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/><circle cx="249.3" cy="15.2" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/><circle cx="458.7" cy="16.4" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/><circle cx="668" cy="13.2" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/></svg></figure>
+<p class="note">Based on Google&#39;s URL Inspection of 40 pages (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console&#39;s full Page indexing report. 5 key pages and 30 sitemap URLs (of about 120 submitted) were checked; the oldest result is 6 days old.</p></section>
+</main>
+<footer class="about"><h2>About this report</h2><ul><li>Period: September 2026 (1–30 Sep 2026), compared with August 2026 (1–31 Aug 2026).</li><li>Data-only report. Built automatically from Search Console and Google Analytics. It has no written commentary.</li><li>Sources: Google Search Console (search), Google Analytics 4 (organic traffic), saved crawlmark audits, the Chrome UX Report and Google Tag Manager when those sections are included.</li><li>Technical SEO issues: crawlmark&#39;s saved audits and crawls, a stored DataForSEO crawl and Google URL Inspection when available, merged into one list and compared with the previous report.</li><li>Google indexing: Search Console&#39;s URL Inspection of a sample of pages and its sitemap report (free, read-only).</li></ul></footer>
+<div class="colophon"><span>crawlmark 0.1.0</span><span>Generated 13 Oct 2026</span></div>
+</div>
+</body>
+</html>

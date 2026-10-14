@@ -180,6 +180,8 @@ export async function collectSitemaps(o: {
           }
         }
         for (const loc of r.parsed.locs) {
+          // URLs on other hosts are never the client's pages (and never get fetched or inspected from here).
+          if (!onClientHost(loc)) continue;
           if (sitemapUrlSet.size >= SITEMAP_URL_LIMIT) {
             complete = false;
             break;

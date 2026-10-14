@@ -9,7 +9,7 @@ import { packageVersion } from "../lib/entry.js";
 import { exportReport } from "../reports/export.js";
 import { chromePdfPrinter } from "../reports/render/pdf.js";
 import { loadTemplates, templateFileWarnings } from "../reports/templates/load.js";
-import { FORMATS } from "../reports/templates/schema.js";
+import { FORMATS, FREE_ISSUE_SOURCES, ISSUE_SOURCES, PAID_ISSUE_SOURCES } from "../reports/templates/schema.js";
 import { canonicalSpendNames } from "../lib/spend.js";
 import { spendSummary } from "../lib/budget.js";
 import { purgeExpired } from "../lib/cache.js";
@@ -18,7 +18,7 @@ import { runAudit } from "../reports/audit.js";
 import { HYGIENE_BUDGET_MS, siteHygiene } from "../reports/site-hygiene.js";
 import { monthlyReport } from "../reports/monthly.js";
 import { getReportTemplate, listReportTemplates, validateReportTemplate } from "../reports/templates/service.js";
-import { getStoredReport, loadDefaultRunDeps, runTemplate } from "../reports/templates/run.js";
+import { estimateTemplate, getStoredReport, loadDefaultRunDeps, runTemplate } from "../reports/templates/run.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import { purgeOldToolCalls, summarizeUsage, toolCallsSince } from "../lib/usage.js";
 import { assertUserUrl } from "../user-url.js";
@@ -159,7 +159,7 @@ export function registerReportTools(server: McpServer) {
         "Build a client's report from a template (default: the `monthly` template, the same data as monthly_report). Returns `reportId`, the period (with comparisons), " +
         "each section's `status` (ok, error, unavailable, or skipped for a paid section without allowPaid) and `data`, computed `highlights` (facts only), `notes` and this run's paid `spend` (for you; report files never show it). " +
         "Read each section's status before writing about it. The data is kept for 24 hours: pass `reportId` to export_report so the files show exactly these numbers. " +
-        "Free unless the template has a paid section and you set allowPaid (state the cost first). Optional sections (e.g. cwv, gtm) run only when listed in `include`.",
+        "Free unless the template has a paid section and you set allowPaid: call it with estimateOnly: true first (no request, nothing spent), state the cost and what is left, and pass allowPaid only after the user agrees. Optional sections (e.g. cwv, gtm, issues, indexing) run only when listed in `include`.",
       inputSchema: {
         client: clientArg,
         template: z.string().min(1).max(40).optional().describe("Template id (list_report_templates). Default: the template file's default, else monthly."),
@@ -169,10 +169,18 @@ export function registerReportTools(server: McpServer) {
         endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         include: z.array(z.string().min(1).max(40)).max(40).optional().describe("Optional section ids to include, e.g. [\"cwv\", \"gtm\"]."),
         allowPaid: z.boolean().optional().describe("Run paid sections (only when the user asked; state the estimate first)."),
+        estimateOnly: z
+          .boolean()
+          .optional()
+          .describe("Price the run's paid sections and return { estimateOnly, sections, total, remaining, wouldExceed, message } without fetching anything or spending. Use it before allowPaid."),
       },
       annotations: READ_ONLY,
     },
-    handler("run_report_template", async ({ client, ...opts }) => runTemplate(await resolveClient(client), { ...opts, homeDir: HOME.dir }, await loadDefaultRunDeps())),
+    handler("run_report_template", async ({ client, estimateOnly, ...opts }) => {
+      const c = await resolveClient(client);
+      if (estimateOnly) return estimateTemplate(c, { ...opts, homeDir: HOME.dir }, await loadDefaultRunDeps());
+      return runTemplate(c, { ...opts, homeDir: HOME.dir }, await loadDefaultRunDeps());
+    }),
   );
 
   server.registerTool(
@@ -195,6 +203,7 @@ export function registerReportTools(server: McpServer) {
         endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         include: z.array(z.string().min(1).max(40)).max(40).optional(),
         allowPaid: z.boolean().optional(),
+        estimateOnly: z.boolean().optional().describe("Price the paid sections without running anything or writing files (as run_report_template's estimateOnly). Not with reportId."),
         formats: z.array(z.enum(FORMATS)).max(4).optional().describe("Default: the saved default (the template file's defaults.formats), PDF unless changed. Pass exactly the formats the user chose."),
         narrative: z
           .object({
@@ -210,8 +219,12 @@ export function registerReportTools(server: McpServer) {
     },
     handler(
       "export_report",
-      async ({ client, reportId, formats, narrative, inline, ...runArgs }, { signal }) => {
+      async ({ client, reportId, formats, narrative, inline, estimateOnly, ...runArgs }, { signal }) => {
         const c = await resolveClient(client);
+        if (estimateOnly) {
+          if (reportId) throw new Error("estimateOnly prices a new run: pass the template and period arguments, not a reportId (a stored report has already been paid for).");
+          return estimateTemplate(c, { ...runArgs, homeDir: HOME.dir }, await loadDefaultRunDeps());
+        }
         let report;
         if (reportId) {
           const given = (["template", "month", "quarter", "startDate", "endDate", "include", "allowPaid"] as const).filter((k) => runArgs[k] !== undefined);
@@ -284,6 +297,102 @@ export function registerReportTools(server: McpServer) {
         // User-supplied overrides are checked up front so a refused URL fails the call, not just one section.
         for (const url of opts.urls ?? []) await assertUserUrl(url);
         return runAudit(c, { ...opts, signal });
+      },
+      { timeoutMs: TIMEOUTS.auditMs },
+    ),
+  );
+
+  server.registerTool(
+    "technical_issues",
+    {
+      title: "Technical SEO issues",
+      description:
+        "One deduplicated, severity-grouped list of a client's technical SEO problems from every stored source: the newest saved audit (Lighthouse, axe, URL Inspection, on-page and rendering checks), " +
+        "its site checks (robots.txt, sitemaps, orphans, AI crawlers), the newest local crawl, the newest stored DataForSEO full crawl within 30 days (its summary only; no crawl is started) and stored URL Inspection results. " +
+        "The same problem found by two sources is one item, listing both sources with their own severity; `affected` is the largest page count any one source reports. " +
+        "`changes` compares with the newest snapshot older than 24 hours: new, persistent, resolved (only when the source that reported it ran again) and unverified (not re-checked, never counted as fixed); null on the first run. " +
+        "Each call saves a snapshot (local). Never starts a crawl or audit; stale sources (older than maxAgeDays) are shown with their date. " +
+        "Free: the Ahrefs and Semrush Site Audit sources aren't available in this version (they're listed in `unavailable`).",
+      inputSchema: {
+        client: clientArg,
+        sources: z.array(z.enum(ISSUE_SOURCES)).min(1).max(ISSUE_SOURCES.length).optional().describe("Default: every free source (audit, local_crawl, site_hygiene, dataforseo_crawl, gsc_inspection)."),
+        minSeverity: z.enum(["critical", "high", "medium", "low"]).optional().describe("Leave out issues below this severity. Default low (everything)."),
+        limit: z.number().int().min(1).max(200).optional().describe("Issues listed (counts cover all). Default 50."),
+        issueUrls: z.number().int().min(0).max(5).optional().describe("Example URLs per top issue from a provider Site Audit source (paid; Stage B). Default 0."),
+        maxAgeDays: z.number().int().min(7).max(120).optional().describe("Sources older than this are flagged stale. Default 45."),
+        allowPaid: z.boolean().optional().describe("Needed for the Ahrefs / Semrush Site Audit sources (paid; not in this version)."),
+        estimateOnly: z.boolean().optional().describe("Return the provider units this would spend, read nothing and save nothing."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    handler("technical_issues", async ({ client, estimateOnly, ...o }) => {
+      const c = await resolveClient(client);
+      const sources = o.sources ?? [...FREE_ISSUE_SOURCES];
+      if ((o.issueUrls ?? 0) > 0 && !sources.some((x) => PAID_ISSUE_SOURCES.has(x))) throw new Error("issueUrls needs an ahrefs_site_audit or semrush_site_audit source.");
+      if (estimateOnly) {
+        return {
+          estimateOnly: true,
+          sources,
+          spend: { usd: 0, units: { ahrefs: 0, semrush: 0 } },
+          requests: 0,
+          message: sources.some((x) => PAID_ISSUE_SOURCES.has(x))
+            ? "Free: the Ahrefs and Semrush Site Audit sources aren't available in this version, so nothing would be spent."
+            : "Free: every source requested is stored locally (a stored DataForSEO crawl's summary is a free read).",
+        };
+      }
+      const ti = await import("../reports/technical-issues.js");
+      const deps = await ti.loadTechIssuesDeps();
+      const r = await ti.technicalIssues(c, { ...o, sources, limit: o.limit ?? 50, baseBeforeMs: deps.now() - ti.TOOL_BASE_AGE_MS }, deps);
+      return { client: c.slug, ...r, spend: { usd: 0, units: { ahrefs: 0, semrush: 0 } } };
+    }),
+  );
+
+  server.registerTool(
+    "index_coverage",
+    {
+      title: "Google indexing coverage (stored)",
+      description:
+        "Google's indexing of a client's site from stored URL Inspection results (the latest per URL): how many checked URLs are indexed, coverage states, the worst URLs (not found, soft 404, " +
+        "crawled or discovered but not indexed, duplicates, noindex, blocked by robots.txt), Google's canonical choices, Search Console sitemap errors and warnings, and the share indexed by month. " +
+        "It's a sample (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's Page indexing report, which the API doesn't offer; fill it with inspect_index_coverage or crawlmark-cli index-coverage. " +
+        "Free and local apart from Search Console's sitemap list (cached a day). `quota` is today's URL Inspection use for the property (Pacific-time day).",
+      inputSchema: {
+        client: clientArg,
+        trendMonths: z.number().int().min(0).max(12).optional().describe("Months of trend. Default 6."),
+        limit: z.number().int().min(1).max(100).optional().describe("Worst URLs listed. Default 25."),
+      },
+      annotations: READ_ONLY,
+    },
+    handler("index_coverage", async ({ client, trendMonths, limit }) => {
+      const c = await resolveClient(client);
+      const ix = await import("../reports/indexing.js");
+      return { client: c.slug, ...(await ix.indexCoverage(c, { trendMonths, limit }, await ix.loadIndexingDeps())) };
+    }),
+  );
+
+  server.registerTool(
+    "inspect_index_coverage",
+    {
+      title: "Inspect URLs for indexing",
+      description:
+        "Check how Google indexes a client's URLs with Search Console's URL Inspection API (free, read-only; it never asks Google to index anything) and store the results for index_coverage and the indexing_issues report section. " +
+        "Order: key pages not checked in `staleDays`, then the top 50 Search Console pages, then sitemap URLs never checked (a sample that rotates weekly), then the oldest checks. " +
+        "Stays within GSC_INSPECTION_DAILY_BUDGET per property per Pacific-time day (default 1,000 of Google's 2,000, so other tools keep headroom) and GSC_INSPECTION_PER_MINUTE (default 60); " +
+        "a quota error from Google stops the run and marks the day used up. `dryRun` counts what it would check per origin and inspects nothing. Takes about a second per URL.",
+      inputSchema: {
+        client: clientArg,
+        maxInspections: z.number().int().min(1).max(500).optional().describe("URLs to inspect in this run. Default 100."),
+        staleDays: z.number().int().min(1).max(90).optional().describe("A URL checked more recently than this is skipped. Default 7."),
+        dryRun: z.boolean().optional().describe("Plan only: counts per origin, no inspection."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    handler(
+      "inspect_index_coverage",
+      async ({ client, maxInspections, staleDays, dryRun }, { signal }) => {
+        const c = await resolveClient(client);
+        const ix = await import("../reports/indexing.js");
+        return { client: c.slug, ...(await ix.inspectIndexCoverage(c, { maxInspections, staleDays, dryRun, signal }, await ix.loadIndexingDeps())) };
       },
       { timeoutMs: TIMEOUTS.auditMs },
     ),

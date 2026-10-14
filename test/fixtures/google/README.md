@@ -17,3 +17,8 @@ Tag Manager (Phase 6b):
 - `gtm-accounts.json`: `tagmanager.accounts.list` (v2)
 - `gtm-containers.json`: `accounts.containers.list` responses keyed by account ID. Covers a container with two domains (one a full URL), a web container with no domain list, a server container (skipped), and a second container for a host another container already claims.
 - `../gtm/container-version.json`: a hand-built live container version (example IDs) for the gtm_audit rules.
+
+Phase 13 (indexing, research G3 and G4):
+
+- `p13/url-inspection-indexed.json`, `p13/url-inspection-not-indexed.json`: `urlInspection.index.inspect` (v1) responses built from the documented `IndexStatusInspectionResult` fields (verdict, coverageState, robotsTxtState, indexingState, lastCrawlTime, pageFetchState, googleCanonical, userCanonical, sitemap, referringUrls, crawledAs). The second has Google choosing a different canonical.
+- `p13/sitemaps-list.json`: `sitemaps.list` (v1) with errors, warnings and `contents[].submitted` (`indexed` is deprecated and never read).

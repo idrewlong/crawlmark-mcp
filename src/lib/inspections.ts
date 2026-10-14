@@ -1,0 +1,210 @@
+/**
+ * Stored URL Inspection results and the per-property daily inspection count (Phase 13, spec 13.5.4,
+ * D14, D15). Every inspection crawlmark makes (index-coverage runs, the indexing_issues section,
+ * gsc_inspect_url and run_audit's key-page checks) is saved here and counted against the property's
+ * Pacific-time day, so the daily budget holds across tools and processes.
+ *
+ * Google's text (coverage state, canonicals) is untrusted: control and invisible characters are stripped
+ * and lengths capped before it is stored.
+ */
+import { normalizeUrl } from "../analysis/findings.js";
+import { stripControl } from "./terminal-text.js";
+import { db } from "./store.js";
+
+export type InspectionOrigin = "key" | "gsc_top" | "sitemap" | "audit" | "manual";
+
+/** What one inspection returned (IndexStatusInspectionResult, research G3). */
+export interface InspectionRecord {
+  url: string;
+  verdict: string | null;
+  coverageState: string | null;
+  indexingState: string | null;
+  pageFetchState: string | null;
+  robotsTxtState: string | null;
+  googleCanonical: string | null;
+  userCanonical: string | null;
+  lastCrawlTime: string | null;
+  crawledAs: string | null;
+}
+
+export interface StoredInspection extends InspectionRecord {
+  id: number;
+  client: string;
+  property: string;
+  inspectedAt: number;
+  origin: InspectionOrigin;
+  inSitemap: boolean;
+}
+
+/** Inspections older than this are deleted on insert. */
+export const INSPECTION_RETENTION_DAYS = 400;
+/** Quota rows older than this are deleted on insert. */
+export const QUOTA_RETENTION_DAYS = 7;
+const DAY_MS = 86_400_000;
+
+const PACIFIC = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** The Google quota day (D15): the calendar day in America/Los_Angeles, `YYYY-MM-DD`, DST included. */
+export function pacificDay(now: number | Date = Date.now()): string {
+  const parts = PACIFIC.formatToParts(typeof now === "number" ? new Date(now) : now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/** One line of untrusted Google text: control/invisible characters stripped, whitespace collapsed, capped. */
+export function cleanText(s: string | null | undefined, max = 200): string | null {
+  if (s === null || s === undefined) return null;
+  const out = stripControl(String(s)).replace(/\s+/g, " ").trim();
+  return out ? out.slice(0, max) : null;
+}
+
+/** A URL from Google: cleaned and normalised, or null. */
+export function cleanUrl(s: string | null | undefined): string | null {
+  const t = cleanText(s, 2000);
+  return t ? normalizeUrl(t) : null;
+}
+
+interface Row {
+  id: number;
+  client: string;
+  property: string;
+  url: string;
+  inspected_at: number;
+  origin: string;
+  verdict: string | null;
+  coverage_state: string | null;
+  indexing_state: string | null;
+  page_fetch_state: string | null;
+  robots_txt_state: string | null;
+  google_canonical: string | null;
+  user_canonical: string | null;
+  last_crawl_time: string | null;
+  crawled_as: string | null;
+  in_sitemap: number;
+}
+
+const fromRow = (r: Row): StoredInspection => ({
+  id: r.id,
+  client: r.client,
+  property: r.property,
+  url: r.url,
+  inspectedAt: r.inspected_at,
+  origin: r.origin as InspectionOrigin,
+  verdict: r.verdict,
+  coverageState: r.coverage_state,
+  indexingState: r.indexing_state,
+  pageFetchState: r.page_fetch_state,
+  robotsTxtState: r.robots_txt_state,
+  googleCanonical: r.google_canonical,
+  userCanonical: r.user_canonical,
+  lastCrawlTime: r.last_crawl_time,
+  crawledAs: r.crawled_as,
+  inSitemap: r.in_sitemap === 1,
+});
+
+/** Save one inspection (sanitised) and delete inspections older than INSPECTION_RETENTION_DAYS. */
+export function saveInspection(i: InspectionRecord & { client: string; property: string; origin: InspectionOrigin; inspectedAt: number; inSitemap?: boolean }): void {
+  const enumText = (s: string | null) => cleanText(s, 60);
+  db.prepare("DELETE FROM url_inspections WHERE inspected_at < ?").run(i.inspectedAt - INSPECTION_RETENTION_DAYS * DAY_MS);
+  db.prepare(
+    `INSERT INTO url_inspections (client, property, url, inspected_at, origin, verdict, coverage_state, indexing_state, page_fetch_state, robots_txt_state, google_canonical, user_canonical, last_crawl_time, crawled_as, in_sitemap)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    i.client,
+    i.property,
+    normalizeUrl(cleanText(i.url, 2000) ?? i.url),
+    i.inspectedAt,
+    i.origin,
+    enumText(i.verdict),
+    cleanText(i.coverageState),
+    enumText(i.indexingState),
+    enumText(i.pageFetchState),
+    enumText(i.robotsTxtState),
+    cleanUrl(i.googleCanonical),
+    cleanUrl(i.userCanonical),
+    cleanText(i.lastCrawlTime, 40),
+    enumText(i.crawledAs),
+    i.inSitemap ? 1 : 0,
+  );
+}
+
+/** Every stored inspection of a client inspected in [fromMs, toMs), oldest first. */
+export function inspectionsBetween(client: string, fromMs: number, toMs: number): StoredInspection[] {
+  const rows = db.prepare("SELECT * FROM url_inspections WHERE client = ? AND failed = 0 AND inspected_at >= ? AND inspected_at < ? ORDER BY inspected_at ASC, id ASC").all(client, fromMs, toMs) as unknown as Row[];
+  return rows.map(fromRow);
+}
+
+/** The newest inspection of each URL for a client (optionally one property), newest first. */
+export function latestInspections(client: string, property?: string): StoredInspection[] {
+  const rows = db
+    .prepare(
+      `SELECT * FROM url_inspections u WHERE client = ? AND failed = 0${property ? " AND property = ?" : ""}
+       AND id = (SELECT id FROM url_inspections v WHERE v.client = u.client AND v.url = u.url AND v.failed = 0${property ? " AND v.property = u.property" : ""} ORDER BY inspected_at DESC, id DESC LIMIT 1)
+       ORDER BY inspected_at DESC, id DESC`,
+    )
+    .all(...(property ? [client, property] : [client])) as unknown as Row[];
+  return rows.map(fromRow);
+}
+
+/**
+ * A failed inspection (Google answered with an error): recorded so the URL rotates to the back of the pool, but never
+ * read as a result (latestInspections, the trend and the aggregate skip it).
+ */
+export function saveFailedInspection(i: { client: string; property: string; url: string; origin: InspectionOrigin; inspectedAt: number }): void {
+  db.prepare("DELETE FROM url_inspections WHERE inspected_at < ?").run(i.inspectedAt - INSPECTION_RETENTION_DAYS * DAY_MS);
+  db.prepare("INSERT INTO url_inspections (client, property, url, inspected_at, origin, failed) VALUES (?, ?, ?, ?, ?, 1)").run(i.client, i.property, normalizeUrl(cleanText(i.url, 2000) ?? i.url), i.inspectedAt, i.origin);
+}
+
+/** Whether the URL's newest stored result said it was in a sitemap (null when there is none). */
+export function lastInSitemap(client: string, url: string): boolean | null {
+  const row = db.prepare("SELECT in_sitemap FROM url_inspections WHERE client = ? AND url = ? AND failed = 0 ORDER BY inspected_at DESC, id DESC LIMIT 1").get(client, normalizeUrl(url)) as { in_sitemap: number } | undefined;
+  return row ? row.in_sitemap === 1 : null;
+}
+
+/** When each URL was last inspected (normalised URL → ms), for the pool ordering. Failed attempts count, so they rotate. */
+export function lastInspectedAt(client: string): Map<string, number> {
+  const rows = db.prepare("SELECT url, MAX(inspected_at) AS at FROM url_inspections WHERE client = ? GROUP BY url").all(client) as unknown as { url: string; at: number }[];
+  return new Map(rows.map((r) => [r.url, Number(r.at)]));
+}
+
+export interface QuotaDay {
+  property: string;
+  day: string;
+  used: number;
+  exhausted: boolean;
+}
+
+/** This property's count for a Pacific-time day (0 and not exhausted when nothing is stored). */
+export function quotaFor(property: string, day: string): QuotaDay {
+  const row = db.prepare("SELECT used, exhausted FROM gsc_inspection_quota WHERE property = ? AND day = ?").get(property, day) as { used: number; exhausted: number } | undefined;
+  return { property, day, used: Number(row?.used ?? 0), exhausted: row?.exhausted === 1 };
+}
+
+function pruneQuota(day: string): void {
+  const cutoff = new Date(Date.parse(`${day}T00:00:00Z`) - QUOTA_RETENTION_DAYS * DAY_MS).toISOString().slice(0, 10);
+  db.prepare("DELETE FROM gsc_inspection_quota WHERE day < ?").run(cutoff);
+}
+
+/** Count `n` inspections against a property's day. */
+export function addQuotaUse(property: string, day: string, n = 1): void {
+  pruneQuota(day);
+  db.prepare("INSERT INTO gsc_inspection_quota (property, day, used) VALUES (?, ?, ?) ON CONFLICT (property, day) DO UPDATE SET used = used + excluded.used").run(property, day, n);
+}
+
+/**
+ * Reserve one inspection against the property's Pacific day before it's made (R-2): atomic, so concurrent runs (cron,
+ * the MCP server, report sections) can never pass the budget together. True when reserved; false when the day is
+ * marked used up or `budget` is reached. A reserved call counts whether it succeeds or fails.
+ */
+export function reserveQuota(property: string, day: string, budget: number): boolean {
+  pruneQuota(day);
+  db.prepare("INSERT OR IGNORE INTO gsc_inspection_quota (property, day, used, exhausted) VALUES (?, ?, 0, 0)").run(property, day);
+  const r = db.prepare("UPDATE gsc_inspection_quota SET used = used + 1 WHERE property = ? AND day = ? AND exhausted = 0 AND used < ?").run(property, day, budget);
+  return Number(r.changes) === 1;
+}
+
+/** Google said the property's quota is used up: no more inspections for it this Pacific day. */
+export function markQuotaExhausted(property: string, day: string): void {
+  pruneQuota(day);
+  db.prepare("INSERT INTO gsc_inspection_quota (property, day, exhausted) VALUES (?, ?, 1) ON CONFLICT (property, day) DO UPDATE SET exhausted = 1").run(property, day);
+}

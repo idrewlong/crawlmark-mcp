@@ -6,7 +6,7 @@
 import { basename } from "node:path";
 import { styleText } from "node:util";
 
-export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "report", "crawl", "logs"] as const;
+export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "index-coverage", "report", "crawl", "logs"] as const;
 export type HelpGroup = (typeof HELP_GROUPS)[number];
 
 export function isHelpGroup(name: string | undefined): name is HelpGroup {
@@ -48,6 +48,7 @@ export function topHelp(o: HelpOptions): string {
     heading("Scheduled", o),
     "  audit, check-traffic  Run from cron; exit 2 means alerts",
     "  check-ranks           Save tracked keyword positions (free; --live is paid)",
+    "  index-coverage        Check how Google indexes key and sitemap URLs (free)",
     "  report                Report files (Markdown, HTML, PDF, Word) from templates",
     heading("Site checks", o),
     "  crawl                 Crawl a client's site from this machine (free)",
@@ -244,6 +245,26 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  live rank left the top 10 or fell by ALERT_RANK_DROP places (default 5).",
     "  Search Console positions never alert. Exit code: 0 no alerts, 1 error,",
     "  2 alerts.",
+  ],
+  "index-coverage": (p) => [
+    `Usage: ${p} index-coverage --client <domain|slug> | --all [--max <n>]`,
+    "                [--stale-days <n>] [--dry-run]",
+    "",
+    "  Checks how Google indexes the client's URLs with Search Console's URL",
+    "  Inspection API (free, read-only) and stores the results for the",
+    "  index_coverage tool and the indexing_issues report section. Key pages",
+    "  first, then the top Search Console pages, then a weekly-rotating sample of",
+    "  sitemap URLs. Stays within GSC_INSPECTION_DAILY_BUDGET per property per",
+    "  Pacific-time day (default 1,000 of Google's 2,000) and",
+    "  GSC_INSPECTION_PER_MINUTE a minute (default 60).",
+    "  --client <domain|slug>  One client",
+    "  --all                   Every client (no Search Console property: skipped)",
+    "  --max <n>               URLs to inspect per client (default 200, max 500)",
+    "  --stale-days <n>        Skip URLs checked in the last n days (default 7)",
+    "  --dry-run               Count what it would inspect; inspect nothing",
+    "",
+    "  Prints JSON to stdout. Exit code: 0 done, 1 error, 2 a client failed or",
+    "  Google's daily quota ran out before the run finished.",
   ],
   crawl: (p) => [
   `Usage: ${p} crawl --client <domain|slug> [--max-pages <n>]`,

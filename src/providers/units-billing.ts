@@ -3,6 +3,7 @@
  * secret redaction for anything shown or thrown, the cached + unit-capped call
  * wrapper, timeout detection and Retry-After parsing. No provider-specific logic.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Client } from "../config.js";
 import { assertUnits, globalUnitCap, unitsThisMonth, type UnitProvider } from "../lib/budget.js";
 import { cached, cacheKey } from "../lib/cache.js";
@@ -46,6 +47,8 @@ interface Reservation {
   provider: UnitProvider;
   keys: string[];
   units: number;
+  /** A per-call reservation made inside a whole-run reservation for the same provider and client: the run's reservation already counts it. */
+  covered?: boolean;
 }
 
 /**
@@ -55,16 +58,45 @@ interface Reservation {
  * which can only make the check stricter.
  */
 const inFlight = new Set<Reservation>();
+/** The whole-run reservations (withUnitsReservation) the code running here is inside: never counted against itself (D16). */
+const currentUnitReservation = new AsyncLocalStorage<ReadonlySet<Reservation>>();
 
-function pendingFor(provider: UnitProvider, keys: readonly string[]): { client: number; global: number } {
+/** Reserved units of calls in progress, other than the caller's own whole-run reservations and the calls they cover. */
+export function pendingFor(provider: UnitProvider, keys: readonly string[]): { client: number; global: number } {
+  const own = currentUnitReservation.getStore();
   let client = 0;
   let global = 0;
   for (const r of inFlight) {
-    if (r.provider !== provider) continue;
+    if (r.provider !== provider || r.covered || own?.has(r)) continue;
     global += r.units;
     if (r.keys.some((k) => keys.includes(k))) client += r.units;
   }
   return { client, global };
+}
+
+/** True when the code running here is inside a whole-run reservation for this provider that covers one of these ledger keys. */
+function coveredByRun(provider: UnitProvider, keys: readonly string[]): boolean {
+  for (const r of currentUnitReservation.getStore() ?? []) if (r.provider === provider && r.keys.some((k) => keys.includes(k))) return true;
+  return false;
+}
+
+/**
+ * Check a whole operation's unit estimate against the client's and the global monthly caps (counting other
+ * operations in progress), then reserve it for as long as `fn` runs (D16, the units mirror of withUsdReservation).
+ * Unit calls made inside `fn` still check their own estimate, but never count this reservation, and other
+ * operations count this reservation instead of the calls inside it, so nothing is counted twice.
+ * Per process: a cron run and the MCP server each hold their own reservations.
+ */
+export async function withUnitsReservation<T>(client: Pick<Client, "slug" | "aliases" | "domain" | "monthlyUnits">, provider: UnitProvider, units: number, fn: () => Promise<T>): Promise<T> {
+  const keys = spendKeys(client);
+  assertUnits(client, provider, units, pendingFor(provider, keys));
+  const r: Reservation = { provider, keys, units };
+  inFlight.add(r);
+  try {
+    return await currentUnitReservation.run(new Set([...(currentUnitReservation.getStore() ?? []), r]), fn);
+  } finally {
+    inFlight.delete(r);
+  }
 }
 
 export interface UnitsCallResult<T> {
@@ -98,7 +130,7 @@ export async function unitsCall<T>(o: {
     async () => {
       const keys = spendKeys(o.client);
       assertUnits(o.client, o.provider, o.estimate, pendingFor(o.provider, keys));
-      const reservation: Reservation = { provider: o.provider, keys, units: o.estimate };
+      const reservation: Reservation = { provider: o.provider, keys, units: o.estimate, ...(coveredByRun(o.provider, keys) ? { covered: true } : {}) };
       inFlight.add(reservation);
       try {
         return await o.run();

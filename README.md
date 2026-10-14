@@ -354,7 +354,7 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 | `list_report_templates` | Report templates for a client: the builtin `monthly`, `quarterly`, `executive` (one page), `technical` and `local`, your global file and the client's own file, with optional and paid sections. Free |
 | `get_report_template` | One template with its defaults filled in and the resolved branding. Free |
 | `validate_report_template` | Checks template YAML (or a saved file) and names each problem's YAML path. Free |
-| `run_report_template` | Runs a template for a client: per-section data and status, computed highlights, and a `reportId` kept for 24 hours. Free unless you allow a paid section |
+| `run_report_template` | Runs a template for a client: per-section data and status, computed highlights, and a `reportId` kept for 24 hours. Free unless you allow a paid section; `estimateOnly: true` prices the paid sections without fetching or spending anything |
 | `export_report` | Saves a report as Markdown, HTML, PDF or Word files under the reports folder, data-only or with the agent's commentary, and can return a docs-friendly HTML copy for Google Docs |
 
 ### Opportunities (free, Search Console only)
@@ -376,6 +376,9 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers), orphan pages (from the newest complete local or DataForSEO crawl), AI crawler access in robots.txt (AI search vs training-only crawlers) and llms.txt (informational: Google says it doesn't use it). Free |
 | `local_crawl` | Crawls the client's own site from your machine (free): status codes, redirects and chains, titles, meta descriptions, canonicals, H1s, internal links, depth, broken links, noindex pages and orphans against the sitemaps. Obeys robots.txt and Crawl-delay; same host only by default; up to 2,000 pages. Saved for `local_crawl_pages`, `site_hygiene` and audits |
 | `local_crawl_pages` | Pages from a saved local crawl, filtered by issue or status code. Free, local |
+| `technical_issues` | One deduplicated, severity-grouped list of technical problems from the saved audit, its site checks, the newest local crawl, a stored DataForSEO crawl and stored URL Inspection results, with the sources per issue and what's new, resolved or not re-checked since the last snapshot. Never starts a crawl. Free ([details](docs/audits.md#technical-issues)) |
+| `index_coverage` | Google's indexing of a sample of the client's URLs from stored URL Inspection results: indexed share, coverage states, the worst URLs, canonical mismatches, sitemap errors and the monthly trend. Free, local ([details](docs/audits.md#indexing-coverage)) |
+| `inspect_index_coverage` | Inspects key pages, top Search Console pages and a weekly-rotating sample of sitemap URLs with URL Inspection (free, read-only) within a daily per-property budget, and stores the results |
 | `render_check` | Compares a page's raw HTML with what Chrome renders and flags SEO elements that only appear after JavaScript. Free |
 | `gtm_audit` | Audits the live Tag Manager container: paused, unfired and legacy tags, duplicate GA4 tags, unused variables, custom HTML, consent gaps and unpublished changes. Free |
 | `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |
@@ -510,6 +513,7 @@ These CLI commands are built for cron, launchd or CI:
 crawlmark-cli check-traffic --all   # last 7 days vs the 7 before, branded vs non-branded (free)
 crawlmark-cli audit --all           # a fresh audit per client, diffed against the previous one
 crawlmark-cli check-ranks --all     # saves every tracked keyword's Search Console position (free)
+crawlmark-cli index-coverage --all  # Google indexing of key pages and a rotating sitemap sample (free, daily budget)
 ```
 
 `check-ranks --live` adds a paid live Google rank per keyword (DataForSEO). It only runs when you pass `--live`, each client's total is checked against its cap first (a client over its cap is skipped, the others run), and `--dry-run` shows the keywords and the estimate without calling anything. Only live ranks alert: a keyword that leaves the top 10 or drops at least `ALERT_RANK_DROP` places (default 5). Search Console averages never alert.
@@ -575,6 +579,9 @@ The config home holds `.env`, `config/clients.yaml`, `config/report-templates.ya
 | `RESTRICT_TO_CLIENT_DOMAINS` | | `true` only accepts URLs on your clients' domains |
 | `ALERT_TRAFFIC_DROP_PCT`, `ALERT_MIN_CLICKS_LOST` | `25`, `50` | Traffic-drop alert thresholds |
 | `ALERT_RANK_DROP` | `5` | Places a live rank must fall to alert (`check-ranks --live`) |
+| `GSC_INSPECTION_DAILY_BUDGET` | `1000` | URL Inspection requests per Search Console property per Pacific-time day (Google allows 2,000; max 2000) |
+| `GSC_INSPECTION_PER_MINUTE` | `60` | URL Inspection requests per minute (Google allows 600; max 600) |
+| `SNAPSHOT_REUSE_DAYS` | `7` | A stored provider snapshot this recent is reused instead of a new paid call (used by the paid report sections coming next) |
 | `ALERT_WEBHOOK_URL` | | Incoming webhook for alerts |
 | `CRAWLMARK_NO_UPDATE_CHECK` | | `1` turns off the daily "Update available" check in `init`, `setup`, `--help` and `--version` (`NO_UPDATE_NOTIFIER=1` works too) |
 
@@ -599,6 +606,7 @@ CLI
 | `audit --client <domain>\|--all [--dry-run] [--include-tag-manager]` | Scheduled audits |
 | `check-traffic --client <domain>\|--all [--dry-run]` | Scheduled traffic check |
 | `check-ranks --client <domain>\|--all [--live] [--dry-run]` | Save tracked keyword positions (free); `--live` adds paid live ranks |
+| `index-coverage --client <domain>\|--all [--max <n>] [--stale-days <n>] [--dry-run]` | Inspect key pages, top pages and a rotating sitemap sample with URL Inspection (free, read-only) within the daily budget. Exit 0 done, 2 a client failed or Google's quota ran out, 1 error |
 | `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format pdf,docx,html,md] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
 | `crawl --client <domain> [--max-pages <n>] [--max-depth <n>] [--concurrency <n>] [--user-agent crawlmark\|googlebot] [--include-subdomains] [--start-url <url,url>]` | Free local crawl of a client's site, saved like `local_crawl`. Exit 0 saved, 1 error |

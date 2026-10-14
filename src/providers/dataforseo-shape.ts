@@ -175,7 +175,7 @@ export interface RawInstantPages {
  * has_html_doctype, seo_friendly_url*, high_content_rate, ...) are excluded, and
  * so are checks DataForSEO adds later: those are missed rather than misreported.
  */
-const PROBLEM_CHECKS = new Set([
+export const PROBLEM_CHECKS: ReadonlySet<string> = new Set([
   "no_content_encoding",
   "high_loading_time",
   "is_redirect",

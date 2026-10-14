@@ -39,7 +39,9 @@ describe("template schema", () => {
     }
     expect(BUILTIN_TEMPLATES.executive).toMatchObject({ layout: "onepage", sections: [{ type: "search_overview" }, { type: "query_movers", limit: 3 }, { type: "opportunities", limit: 3 }] });
     expect(BUILTIN_TEMPLATES.quarterly).toMatchObject({ period: { range: "last_quarter" }, compare: ["previous_period", "previous_year"] });
-    expect(BUILTIN_TEMPLATES.technical!.sections.map((s) => s.type)).toEqual(["site_crawl", "core_web_vitals_history", "audit_changes", "ai_readiness", "tag_manager"]);
+    expect(BUILTIN_TEMPLATES.technical!.sections.map((s) => s.type)).toEqual(["site_crawl", "core_web_vitals_history", "audit_changes", "ai_readiness", "tag_manager", "technical_issues", "indexing_issues"]);
+    // Phase 13 A: the new sections are optional in every builtin that has them (indexing is the only Search Console one in technical).
+    for (const t of Object.values(BUILTIN_TEMPLATES)) for (const s of t.sections) if (s.type === "technical_issues" || s.type === "indexing_issues") expect(s.optional, s.id).toBe(true);
     // Paid data spend is opt-in in the builtin monthly: operator information, not client content.
     expect(BUILTIN_MONTHLY.sections.find((s) => s.type === "data_spend")).toMatchObject({ optional: true });
   });
@@ -139,7 +141,7 @@ describe("template loader", () => {
     const list = listReportTemplates(h, undefined, today);
     expect(list.templates.map((t) => [t.id, t.source])).toEqual([["monthly", "builtin"], ["quarterly", "builtin"], ["executive", "builtin"], ["technical", "builtin"], ["local", "builtin"]]);
     expect(list.files.global).toMatchObject({ exists: true, valid: false, errors: [{ path: "templates.mine.sections[0].type" }] });
-    expect(list.templates[0]).toMatchObject({ optionalSections: ["spend", "cwv", "gtm", "ranks", "ai"], paidSections: [] });
+    expect(list.templates[0]).toMatchObject({ optionalSections: ["spend", "cwv", "gtm", "ranks", "ai", "issues", "indexing"], paidSections: [] });
     expect(() => resolveTemplate(loadTemplates({ homeDir: h, today }), "mine")).toThrow(/No report template "mine".*monthly.*have errors/);
   });
 

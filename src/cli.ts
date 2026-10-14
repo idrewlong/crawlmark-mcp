@@ -45,6 +45,7 @@ import { chooseRenderer } from "./setup/ui.js";
 import { closeEgressProxy } from "./lib/egress-proxy.js";
 import { crawlCommand } from "./crawl-cli.js";
 import { logsCommand } from "./logs-cli.js";
+import { indexCoverageCommand } from "./index-coverage-cli.js";
 
 /** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
 async function updateNoticeAfterHelp(json = false): Promise<void> {
@@ -579,6 +580,8 @@ async function main(argv: string[]): Promise<number> {
       until: { type: "string" },
       bots: { type: "string" },
       "no-verify": { type: "boolean", default: false },
+      max: { type: "string" },
+      "stale-days": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -596,6 +599,21 @@ async function main(argv: string[]): Promise<number> {
       run: async (client, opts) => {
         const { runLocalCrawl, loadLocalCrawlDeps } = await import("./reports/local-crawl.js");
         return (await runLocalCrawl(client, opts, await loadLocalCrawlDeps())).result;
+      },
+    });
+  }
+  if (group === "index-coverage") {
+    return indexCoverageCommand(command ? [command, ...args] : args, values, { out, warn, usage: scheduledUsage }, {
+      loadClients: async ({ client, all }) => {
+        if (!all) return { clients: [await resolveClient(client!)], skipped: [] };
+        const registry = await loadRegistry({ refresh: true });
+        const d = registry.discovery;
+        if (d.error) warn(`Discovery failed, using clients.yaml entries only: ${d.error}`);
+        return { clients: registry.clients, skipped: registry.ignored.map((domain) => ({ client: domain, reason: "ignore: true in clients.yaml" })), discoveryError: d.error };
+      },
+      run: async (c, o) => {
+        const ix = await import("./reports/indexing.js");
+        return ix.inspectIndexCoverage(c, o, await ix.loadIndexingDeps());
       },
     });
   }

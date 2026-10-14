@@ -11,7 +11,7 @@ import { exportReport, reportFilePath, ReportRenderError, ReportWriteError, type
 import type { DateRange } from "./lib/dates.js";
 import type { PdfPrinter } from "./reports/render/pdf.js";
 import { loadTemplates } from "./reports/templates/load.js";
-import { planRun, runTemplate, type RunDeps } from "./reports/templates/run.js";
+import { estimateTemplate, planRun, runTemplate, type RunDeps, type RunEstimate } from "./reports/templates/run.js";
 import { FORMATS, type Format } from "./reports/templates/schema.js";
 import { initStarterFile, listReportTemplates, validateTemplateFileAt } from "./reports/templates/service.js";
 import { globalTemplatesFile } from "./reports/paths.js";
@@ -172,6 +172,8 @@ export interface ReportDryRunResult {
   period: { label: string; current: DateRange; folderMonth: string };
   sections: string[];
   wouldWrite: string[];
+  /** Phase 13 (D17): the paid sections' estimate, when the run has any (no request is made). */
+  estimate?: RunEstimate;
 }
 
 export interface ReportRunOutput {
@@ -282,7 +284,16 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
     const period = { label: plan.period.label, current: plan.period.current, folderMonth: plan.period.folderMonth };
     if (flags["dry-run"]) {
       const target = { client: { slug: client.slug, name: client.name, domain: client.domain }, template: { id: plan.template.id, title: plan.template.spec.title, source: plan.template.source }, period: { ...period, comparisons: plan.period.comparisons } };
-      results.push({ client: client.slug, template: plan.template.id, period, sections: plan.sections.map((s) => s.id), wouldWrite: wanted.map((f) => reportFilePath(deps.reportsDir, target, f)) });
+      let estimate: RunEstimate | undefined;
+      if (plan.paidSections.length) {
+        try {
+          runDeps ??= await deps.runDeps();
+          estimate = await estimateTemplate(client, runOpts, runDeps);
+        } catch (err) {
+          errors.push(`${client.slug}: the paid sections couldn't be estimated: ${msg(err)}`);
+        }
+      }
+      results.push({ client: client.slug, template: plan.template.id, period, sections: plan.sections.map((s) => s.id), wouldWrite: wanted.map((f) => reportFilePath(deps.reportsDir, target, f)), ...(estimate ? { estimate } : {}) });
       continue;
     }
     attempted++;

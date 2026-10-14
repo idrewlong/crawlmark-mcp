@@ -55,6 +55,48 @@ A sub-check that could not finish (fetch error, a cap reached, or the time budge
 
 In a saved audit, every page the crawl checked is recorded, so `compare_audits` resolves a crawl finding only when the later audit's crawl fetched that page again. Duplicate and canonical-target findings resolve only after a later exhaustive crawl; an audit without `localCrawl` leaves earlier crawl findings `unverified`.
 
+## Technical issues
+
+`technical_issues` (and the `technical_issues` report section) puts every stored technical problem for a client into one list, without starting a crawl or an audit:
+
+| Source | What it reads |
+|---|---|
+| `audit` | The newest saved audit's findings: Lighthouse, axe, index status, on-page checks, rendering, CrUX and Tag Manager when they ran |
+| `site_hygiene` | The same audit's site checks: robots.txt, sitemaps, structured data, hreflang, orphans, AI crawler access, llms.txt |
+| `local_crawl` | The newest saved local crawl |
+| `dataforseo_crawl` | The newest stored DataForSEO full crawl (from `run_audit` with `fullCrawl`) if it's at most 30 days old: a GET of its summary (per-check page counts), nothing else |
+| `gsc_inspection` | Stored URL Inspection results (latest per URL): not indexed, and Google choosing a different canonical |
+| `ahrefs_site_audit`, `semrush_site_audit` | Paid; coming in a later version. Listed as unavailable until then, and nothing is requested |
+
+**Merging.** Each source's rule maps to one canonical issue (`missing-title`, `broken-internal-link`, `not-indexed`, `orphan-page`, …; the table is in `src/analysis/tech-issues.ts` and is data, so it can be tuned). URL-level findings merge on the issue and the normalised URL, so the audit's on-page `no_title` and the crawl's `missing-title` on `/contact` are one row with two sources. Count-only sources (the DataForSEO crawl summary) merge on the issue alone, and `affected` is the largest count any one source reports, never a sum. A rule with no mapping keeps its own key (`<source>:<rule>`) and is never dropped. axe rules stay one row per rule.
+
+**Severity.** crawlmark's own findings keep their severity; DataForSEO crawl checks use the on-page mapping (`no_title`, `is_broken`, `is_4xx_code`, `is_5xx_code` high; `no_description`, `duplicate_title_tag`, `no_h1_tag` medium; anything else low); URL Inspection results use the coverage mapping below. The merged severity is the highest across sources, except that an issue only a provider reports is never `critical` (critical stays crawlmark's own, such as axe critical). Each source's own label is kept beside it.
+
+**Changes.** Every call saves a snapshot (the newest 24 per client are kept, plus the newest of each calendar month for 25 months). The tool compares with the newest snapshot older than 24 hours; the report section with the newest one taken before the report period ended (so a September report run on 2 October compares with the snapshot the August report took around 2 September), never one the same run made. An issue is `new`, `persistent`, `resolved` (gone, and a source that reported it has a newer run: for an audit, one whose same check ran again; for a crawl, a complete one for duplicate checks) or `unverified` (gone, but nothing that reported it ran again). Unverified issues stay in the open list and are never counted as fixed, but only while a source that reported them is still read and its data is no older than `maxAgeDays`; after that they're dropped as no longer checked (`noLongerChecked` in the result, one line in the report's About section). The first run has `changes: null`. Sources older than `maxAgeDays` (45 by default) are still used and flagged `stale`.
+
+## Indexing coverage
+
+Search Console's API has no Page indexing report, so crawlmark builds the closest honest view from URL Inspection (free, with the read-only `webmasters.readonly` scope crawlmark already asks for; it never asks Google to index anything):
+
+- **What gets inspected.** `inspect_index_coverage` and `crawlmark-cli index-coverage` inspect, in order: key pages not inspected in the last `staleDays` (7), the top 50 Search Console pages by impressions over the last 28 days (same rule), sitemap URLs never inspected (in an order that rotates weekly, seeded by client and ISO week), then the oldest inspected URLs. `dryRun` counts what it would inspect per origin and inspects nothing.
+- **Budget.** At most `GSC_INSPECTION_DAILY_BUDGET` inspections per Search Console property per Pacific-time day (default 1,000 of Google's 2,000, so other tools keep headroom), at most `GSC_INSPECTION_PER_MINUTE` a minute (default 60; Google allows 600), and a per-run cap (100 for the tool, 200 for the CLI, 25 for the report section). Each inspection is reserved against the day before it's made (one atomic database update, so a cron run, the MCP server and report sections running at once can't pass the budget together), and a failed call still counts. Runs for one property take turns within a process, so they don't double the pace or inspect the same URLs. Every inspection counts, including `gsc_inspect_url` and `run_audit`'s key-page checks, which are refused once the day is used up. If Google answers that the daily limit is reached, the property's day is marked used up and the run stops at once; later runs that day inspect nothing. Another 429 (the per-minute limit) stops the run without marking the day. A 401/403 stops the run at once, and so do 5 failed inspections in a row; failed URLs are recorded so they move to the back of the queue, but never shown as results.
+- **Scope.** Only URLs inside the client's Search Console property are inspected (`sc-domain:example.com` covers example.com and its subdomains; a URL-prefix property covers its scheme, host and path). A template can have only one `indexing_issues` section.
+- **Stored.** Every result is kept (400 days) with its coverage state, fetch, robots.txt and noindex state, canonicals and last crawl time. Google's text is stripped of control characters before it's stored. `index_coverage` (free, local apart from Search Console's sitemap list, cached a day) reads the latest result per URL: the indexed share, coverage states, the worst URLs, canonical mismatches, sitemap errors and warnings, the share indexed by month and today's inspection count (`quota`, for you; report files never show it).
+
+| Google says (checked in this order) | Severity |
+|---|---|
+| Page fetch: server error | high |
+| Page fetch: not found, blocked (4xx), access denied or forbidden | high for a key page or a sitemap URL, else medium |
+| Page fetch: soft 404 | high |
+| Page fetch: redirect error | medium |
+| robots.txt disallows it | high for a key page or a sitemap URL, else low |
+| noindex (meta tag or HTTP header) | high for a key page or a sitemap URL, else low |
+| Verdict PASS | indexed, no issue |
+| "Crawled - currently not indexed", "Discovered - currently not indexed", "Duplicate …" | medium |
+| "Page with redirect" (and other redirects) | low, medium when the URL is in a sitemap |
+| "URL is unknown to Google" | medium for a key page or a sitemap URL, else low |
+| Anything else that isn't PASS | medium ("Not indexed: <coverage state>") |
+
 ## Tag Manager audit
 
 `gtm_audit` reads the client's live (published) container through the Tag Manager API and flags:

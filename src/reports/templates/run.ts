@@ -5,7 +5,6 @@
  * exact numbers the commentary was written from (D9). Sources are injected
  * (RunDeps) so tests never touch Google; the defaults load the real providers.
  */
-import { randomBytes } from "node:crypto";
 import type { Client } from "../../config.js";
 import { markBranded } from "../../analysis/branded.js";
 import { isBranded } from "../../lib/brand.js";
@@ -43,6 +42,8 @@ import type {
   SearchOverviewData,
   SectionResult,
   TagManagerData,
+  TechnicalIssuesData,
+  IndexingIssuesData,
   TemplateReport,
   TopRowsData,
   TrackedKeywordsData,
@@ -53,6 +54,7 @@ import { isPaidSection, SECTION_TITLES, type SectionSpec } from "./schema.js";
 import type { RankHistoryOptions, RankHistoryResult } from "../../ranks.js";
 import type { EstimateResult, KeywordGapRequest, KeywordGapRouted } from "../../providers/seo-data.js";
 import { analyzeCrawl, topFindings } from "../../analysis/crawl.js";
+import type { TechIssuesOptions, TechIssuesResult } from "../technical-issues.js";
 import type { StoredCrawl } from "../../lib/crawls.js";
 
 /** At most this many stored points per keyword and source go into a report (evenly thinned). */
@@ -121,6 +123,16 @@ export interface RunDeps {
   remainingAiUsd(): number;
   /** Phase 12 C5: AI-search visibility (paid). */
   aiVisibility(client: Client, req: AiSectionRequest): Promise<AiVisibilityData>;
+  /** Phase 13 (D16): check and reserve the run's whole Ahrefs or Semrush unit estimate while the sections run. */
+  withUnitsReservation<T>(client: Client, provider: "ahrefs" | "semrush", units: number, fn: () => Promise<T>): Promise<T>;
+  /** Phase 13 (D17): USD left this month for the client and for everyone (reservations in progress included). */
+  remainingUsd(client: Client): { clientUsd: number; globalUsd: number };
+  /** Phase 13 (D17): Ahrefs or Semrush units left this month for the client and for everyone. */
+  remainingUnits(client: Client, provider: "ahrefs" | "semrush"): { client: number; global: number };
+  /** Phase 13 A: the deduplicated technical-issues list from stored sources (saves an issue snapshot). */
+  technicalIssues(client: Client, opts: TechIssuesOptions): Promise<TechIssuesResult>;
+  /** Phase 13 A: Google indexing from stored URL Inspection results, topping up at most maxInspections first (free; Google's daily quota). */
+  indexingSection(client: Client, opts: { maxInspections: number; staleDays: number; limit: number; trendMonths: number }): Promise<IndexingIssuesData>;
 }
 
 export interface AiSectionRequest {
@@ -149,6 +161,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
   const local = await import("../../local-seo.js");
   const ai = await import("../../ai-visibility.js");
   const config = await import("../../config.js");
+  const units = await import("../../providers/units-billing.js");
   return {
     googleConfigured: google.googleConfigured,
     gscQuery: gsc.gscQuery,
@@ -186,6 +199,148 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     },
     aiVisibility: (c, r) => ai.aiVisibilitySection(c, r),
     remainingAiUsd: () => budget.remainingAiUsd().remainingUsd,
+    withUnitsReservation: (c, p, u, fn) => units.withUnitsReservation(c, p, u, fn),
+    remainingUsd: (c) => budget.remainingUsd(c),
+    remainingUnits: (c, p) => units.remainingUnits(c, p),
+    technicalIssues: async (c, o) => {
+      const ti = await import("../technical-issues.js");
+      return ti.technicalIssues(c, o, await ti.loadTechIssuesDeps());
+    },
+    indexingSection: async (c, o) => {
+      const ix = await import("../indexing.js");
+      return ix.indexingSection(c, o, await ix.loadIndexingDeps());
+    },
+  };
+}
+
+type PaidProvider = "dataforseo" | "ahrefs" | "semrush";
+
+/** One paid section's estimate (D17). No request is made to produce it. */
+export interface SectionEstimate {
+  id: string;
+  type: string;
+  /** Null when the section can't spend anything in this run (see `note`). */
+  provider: PaidProvider | null;
+  usd: number;
+  units: number;
+  requests: number;
+  /** Served from the cache (or a stored snapshot), so it costs nothing. */
+  reused: boolean;
+  note?: string;
+  /** Set when this section alone would go over a cap: the provider's own message. */
+  exceeded?: string;
+}
+
+/** run_report_template / export_report with estimateOnly (D17): the run's paid part, priced, with no provider request. */
+export interface RunEstimate {
+  estimateOnly: true;
+  template: string;
+  period: { label: string; current: DateRange };
+  sections: SectionEstimate[];
+  total: { usd: number; units: { ahrefs: number; semrush: number } };
+  remaining: { usd: { client: number; global: number }; units: { ahrefs: { client: number; global: number }; semrush: { client: number; global: number } }; aiUsd?: number };
+  wouldExceed: boolean;
+  message: string;
+}
+
+const r4 = (n: number) => Number(n.toFixed(4));
+
+/**
+ * Price every paid section of a planned run (D17), with no provider request: live ranks per tracked keyword,
+ * keyword gap and AI visibility through their own estimate functions (caches honoured), local profile from its
+ * plan. Sections that couldn't run (no competitors, AI visibility off) are listed with 0 and a note.
+ */
+export async function estimatePaidSections(client: Client, sections: SectionSpec[], deps: RunDeps): Promise<SectionEstimate[]> {
+  const out: SectionEstimate[] = [];
+  for (const s of sections) {
+    const base = { id: s.id, type: s.type };
+    if (s.type === "tracked_keywords" && s.liveRanks === true) {
+      const n = client.trackedKeywords.length;
+      out.push({ ...base, provider: "dataforseo", usd: r4(n * LIVE_RANK_ESTIMATE_USD), units: 0, requests: n, reused: false, ...(n ? {} : { note: `no tracked keywords for ${client.domain}` }) });
+    } else if (s.type === "keyword_gap") {
+      let competitors: string[];
+      try {
+        competitors = deps.gapCompetitors(client, s.competitors);
+      } catch (err) {
+        out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: errorText(err) });
+        continue;
+      }
+      let e: KeywordGapRouted | EstimateResult;
+      try {
+        e = await deps.keywordGap(client, { competitors, limit: s.limit ?? 50, minVolume: 0 }, { estimateOnly: true });
+      } catch (err) {
+        if (err instanceof BudgetExceededError) throw err;
+        out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: errorText(err) });
+        continue;
+      }
+      if (!("estimateOnly" in e)) continue;
+      out.push({ ...base, provider: e.provider, usd: r4(e.estimate.usd), units: e.estimate.units ?? 0, requests: e.estimate.requests, reused: e.estimate.cached, ...(e.wouldExceed ? { exceeded: e.message } : {}) });
+    } else if (s.type === "local_profile") {
+      const usd = deps.localProfileEstimateUsd(client, { packKeywords: s.packKeywords ?? 3 });
+      const pack = Math.min(s.packKeywords ?? 3, client.trackedKeywords.length);
+      out.push({ ...base, provider: usd > 0 ? "dataforseo" : null, usd: r4(usd), units: 0, requests: usd > 0 ? 1 + pack : 0, reused: false, ...(usd > 0 ? {} : { note: "nothing to fetch (no confirmed Google Business Profile, no DataForSEO, or already cached)" }) });
+    } else if (s.type === "ai_visibility") {
+      if (!deps.aiVisibilityEnabled()) {
+        out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: "AI-search visibility is off (AI_VISIBILITY_ENABLED), so the section is left out" });
+        continue;
+      }
+      try {
+        const e = deps.aiVisibilityEstimate(client, aiReq(s));
+        out.push({ ...base, provider: "dataforseo", usd: r4(e.usd), units: 0, requests: e.usd > 0 ? 1 : 0, reused: e.usd === 0, ...(e.wouldExceed ? { exceeded: e.message } : {}) });
+      } catch (err) {
+        // The estimate threw before any request (no DataForSEO, or chat_gpt for a non-US client); the section reports it when it runs.
+        out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: errorText(err) });
+      }
+    } else if (s.type === "technical_issues" && isPaidSection(s)) {
+      out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: "the Ahrefs and Semrush Site Audit sources aren't available in this version; the section uses the free sources only" });
+    }
+  }
+  return out;
+}
+
+/** Plan a run and price its paid sections (D17). Reads only the template files, caches and the spend ledger. */
+export async function estimateTemplate(client: Client, opts: RunOptions, deps: RunDeps): Promise<RunEstimate> {
+  const plan = planRun(client, opts);
+  const paid = plan.sections.filter((s) => isPaidSection(s) || s.paid === true);
+  const sections = await estimatePaidSections(client, paid, deps);
+  const usd = r4(sections.filter((x) => x.provider === "dataforseo").reduce((a, x) => a + x.usd, 0));
+  const unitsOf = (p: "ahrefs" | "semrush") => sections.filter((x) => x.provider === p).reduce((a, x) => a + x.units, 0);
+  const total = { usd, units: { ahrefs: unitsOf("ahrefs"), semrush: unitsOf("semrush") } };
+  const ru = deps.remainingUsd(client);
+  const ra = deps.remainingUnits(client, "ahrefs");
+  const rs = deps.remainingUnits(client, "semrush");
+  const aiUsd = r4(sections.filter((x) => x.type === "ai_visibility").reduce((a, x) => a + x.usd, 0));
+  const aiLeft = aiUsd > 0 ? deps.remainingAiUsd() : undefined;
+  const problems: string[] = sections.flatMap((x) => (x.exceeded ? [`${x.id}: ${x.exceeded}`] : []));
+  const usdLeft = Math.min(ru.clientUsd, ru.globalUsd);
+  if (usd > usdLeft) problems.push(`DataForSEO: the paid sections need $${usd.toFixed(4)} but ${ru.clientUsd <= ru.globalUsd ? client.domain : "the global cap"} has $${usdLeft.toFixed(4)} left this month. Raise monthlyBudgetUsd for this client (or DEFAULT_CLIENT_MONTHLY_BUDGET_USD), or leave a paid section out.`);
+  for (const [p, r, label] of [["ahrefs", ra, "Ahrefs"], ["semrush", rs, "Semrush"]] as const) {
+    const need = total.units[p];
+    const left = Math.min(r.client, r.global);
+    if (need > left) problems.push(`${label}: the paid sections need ${need.toLocaleString("en-US")} units but ${r.client <= r.global ? client.domain : "the global cap"} has ${left.toLocaleString("en-US")} left this month. Raise monthlyUnits.${p} in clients.yaml (or DEFAULT_CLIENT_MONTHLY_${p.toUpperCase()}_UNITS), or leave a paid section out.`);
+  }
+  if (aiLeft !== undefined && aiUsd > aiLeft) problems.push(`AI visibility: the ai_visibility sections need about $${aiUsd.toFixed(4)} but AI_VISIBILITY_MONTHLY_BUDGET_USD has $${aiLeft.toFixed(4)} left this month.`);
+  const parts = [
+    usd > 0 ? `DataForSEO $${usd.toFixed(4)}` : "",
+    total.units.ahrefs > 0 ? `Ahrefs ${total.units.ahrefs.toLocaleString("en-US")} units` : "",
+    total.units.semrush > 0 ? `Semrush ${total.units.semrush.toLocaleString("en-US")} units` : "",
+  ].filter(Boolean);
+  const message = !paid.length
+    ? `Template "${plan.template.id}" has no paid sections in this run: it costs nothing.`
+    : problems.length
+      ? `Over a cap: ${problems.join(" ")}`
+      : parts.length
+        ? `${paid.length} paid section${paid.length === 1 ? "" : "s"}: ${parts.join(" + ")} (estimates; actual costs are recorded). ${client.domain} has $${ru.clientUsd.toFixed(4)} of DataForSEO budget left this month${total.units.ahrefs ? `, ${ra.client.toLocaleString("en-US")} Ahrefs units` : ""}${total.units.semrush ? `, ${rs.client.toLocaleString("en-US")} Semrush units` : ""}. Run with allowPaid: true (tool) or --paid (CLI) to spend it.`
+        : `${paid.length} paid section${paid.length === 1 ? "" : "s"}, but nothing to buy this run (cached, or the sections can't run; see each section's note).`;
+  return {
+    estimateOnly: true,
+    template: plan.template.id,
+    period: { label: plan.period.label, current: plan.period.current },
+    sections,
+    total,
+    remaining: { usd: { client: ru.clientUsd, global: ru.globalUsd }, units: { ahrefs: ra, semrush: rs }, ...(aiLeft !== undefined ? { aiUsd: aiLeft } : {}) },
+    wouldExceed: problems.length > 0,
+    message,
   };
 }
 
@@ -204,7 +359,7 @@ export class SectionUnavailableError extends Error {
   override name = "SectionUnavailableError";
 }
 
-const GSC_TYPES = new Set(["search_overview", "branded_split", "top_queries", "query_movers", "top_pages", "page_movers", "tracked_keywords", "opportunities"]);
+const GSC_TYPES = new Set(["search_overview", "branded_split", "top_queries", "query_movers", "top_pages", "page_movers", "tracked_keywords", "opportunities", "indexing_issues"]);
 const GA4_TYPES = new Set(["organic_traffic", "landing_pages"]);
 
 export interface RunPlan {
@@ -231,20 +386,8 @@ export function planRun(client: Pick<Client, "slug">, opts: RunOptions): RunPlan
   return { loaded, template, period, sections, paidSections: sections.filter((s) => isPaidSection(s) || s.paid === true).map((s) => s.id) };
 }
 
-/** Crockford base32 ULID: 48-bit time + 80 random bits, sortable. */
-export function ulid(now = Date.now()): string {
-  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-  let time = "";
-  let t = now;
-  for (let i = 0; i < 10; i++) {
-    time = alphabet[t % 32]! + time;
-    t = Math.floor(t / 32);
-  }
-  const bytes = randomBytes(16);
-  let rand = "";
-  for (let i = 0; i < 16; i++) rand += alphabet[bytes[i]! % 32];
-  return time + rand;
-}
+export { ulid } from "../../lib/ulid.js";
+import { ulid } from "../../lib/ulid.js";
 
 const storeKey = (reportId: string) => cacheKey("report-run", reportId);
 
@@ -277,51 +420,24 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   const allowPaid = opts.allowPaid === true;
   const keys = spendKeys(client);
 
-  // Pre-flight for the whole paid part, before any paid request.
-  const liveRankSections = plan.sections.filter((s) => s.type === "tracked_keywords" && s.liveRanks === true);
-  let paidUsd = allowPaid && liveRankSections.length && client.trackedKeywords.length ? client.trackedKeywords.length * LIVE_RANK_ESTIMATE_USD : 0;
-  // Keyword gap sections (Phase 12 B): every section's estimate, summed per unit, against what's left.
-  const gapSections = allowPaid ? plan.sections.filter((s): s is Extract<SectionSpec, { type: "keyword_gap" }> => s.type === "keyword_gap") : [];
-  let gapUnits = 0;
-  let unitEstimate: EstimateResult | undefined;
-  for (const s of gapSections) {
-    let competitors: string[];
-    try {
-      competitors = deps.gapCompetitors(client, s.competitors);
-    } catch {
-      continue; // reported by the section itself (unavailable)
-    }
-    const e = await deps.keywordGap(client, { competitors, limit: s.limit ?? 50, minVolume: 0 }, { estimateOnly: true });
-    if (!("estimateOnly" in e)) continue;
-    if (e.wouldExceed) throw new BudgetExceededError(e.message);
-    if (e.remaining.unit === "usd") paidUsd += e.estimate.usd;
-    else {
-      gapUnits += e.estimate.units ?? 0;
-      unitEstimate = e;
+  // Pre-flight for the whole paid part, before any paid request: every paid section priced (no request), each
+  // section's own cap check, then the run's totals per provider against what's left (D16).
+  const estimates = allowPaid ? await estimatePaidSections(client, plan.sections, deps) : [];
+  for (const e of estimates) if (e.exceeded) throw new BudgetExceededError(e.exceeded);
+  let paidUsd = estimates.filter((e) => e.provider === "dataforseo" && e.type !== "ai_visibility").reduce((a, e) => a + e.usd, 0);
+  const runUnits = { ahrefs: 0, semrush: 0 };
+  for (const e of estimates) if (e.provider === "ahrefs" || e.provider === "semrush") runUnits[e.provider] += e.units;
+  for (const p of ["ahrefs", "semrush"] as const) {
+    if (runUnits[p] <= 0) continue;
+    const left = deps.remainingUnits(client, p);
+    const min = Math.min(left.client, left.global);
+    if (runUnits[p] > min) {
+      throw new BudgetExceededError(`The paid sections together need ${runUnits[p].toLocaleString("en-US")} ${p} units but ${client.domain} has ${min.toLocaleString("en-US")} left this month. Lower their limits, or raise the cap.`);
     }
   }
-  if (unitEstimate && gapUnits > Math.min(unitEstimate.remaining.client, unitEstimate.remaining.global)) {
-    throw new BudgetExceededError(`The keyword gap sections together need ${gapUnits.toLocaleString("en-US")} ${unitEstimate.provider} units but ${client.domain} has ${Math.min(unitEstimate.remaining.client, unitEstimate.remaining.global).toLocaleString("en-US")} left this month. Lower their limits, or raise the cap.`);
-  }
-  // Local profile sections (Phase 12 C4): the profile lookup plus a maps SERP per keyword.
-  if (allowPaid) for (const s of plan.sections) if (s.type === "local_profile") paidUsd += deps.localProfileEstimateUsd(client, { packKeywords: s.packKeywords ?? 3 });
-  // AI visibility sections (Phase 12 C5): only when switched on; their own sub-cap is checked here too, before any paid request.
-  let aiUsd = 0;
-  if (allowPaid && deps.aiVisibilityEnabled()) {
-    for (const s of plan.sections) {
-      if (s.type !== "ai_visibility") continue;
-      let e: { usd: number; wouldExceed: boolean; message: string };
-      try {
-        e = deps.aiVisibilityEstimate(client, aiReq(s));
-      } catch {
-        // The estimate threw before any request (no DataForSEO, or chat_gpt for a non-US client). The section's own
-        // call throws the same error when it runs, and the section shows it as unavailable or failed; nothing is spent.
-        continue;
-      }
-      if (e.wouldExceed) throw new BudgetExceededError(e.message);
-      aiUsd += e.usd;
-    }
-    // Every AI section together against the AI sub-cap (R-1/SEC-4), before any paid request.
+  // AI visibility sections (Phase 12 C5): every AI section together against the AI sub-cap (R-1/SEC-4), before any paid request.
+  const aiUsd = estimates.filter((e) => e.type === "ai_visibility").reduce((a, e) => a + e.usd, 0);
+  if (aiUsd > 0) {
     const aiLeft = deps.remainingAiUsd();
     if (aiUsd > aiLeft) {
       throw new BudgetExceededError(
@@ -333,6 +449,8 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   const reservedUsd = Number(paidUsd.toFixed(4));
   const spentBefore = { usd: deps.spentThisMonth(keys), ahrefs: deps.unitsThisMonth(keys, "ahrefs"), semrush: deps.unitsThisMonth(keys, "semrush") };
 
+  // Issue snapshots this run saved (Phase 13): never the base of another technical_issues section in the same run.
+  const issueSnapshotIds = new Set<string>();
   // Shared fetches: several sections read the same rows.
   const memo = new Map<string, Promise<unknown>>();
   const once = <T>(key: string, fn: () => Promise<T>): Promise<T> => {
@@ -487,6 +605,32 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       units: { ahrefs: deps.unitsThisMonth(keys, "ahrefs"), semrush: deps.unitsThisMonth(keys, "semrush") },
     }),
     text: async (s: Extract<SectionSpec, { type: "text" }>) => ({ text: s.text }),
+    // Phase 13 A: fetchers land in A-4 (technical_issues) and A-5 (indexing_issues).
+    // Phase 13 A: stored sources only (never starts a crawl).
+    technical_issues: async (s: Extract<SectionSpec, { type: "technical_issues" }>): Promise<TechnicalIssuesData> => {
+      const r = await deps.technicalIssues(client, {
+        sources: s.sources,
+        minSeverity: s.minSeverity,
+        limit: s.limit ?? 25,
+        maxAgeDays: s.maxAgeDays,
+        issueUrls: s.issueUrls,
+        allowPaid,
+        // The base is the newest snapshot from before the period ended (for a September report run on 2 October, the
+        // one the August report took about 2 September), never one this run made.
+        baseBeforeMs: Date.parse(`${cur.endDate}T00:00:00Z`) + 86_400_000,
+        excludeSnapshotIds: [...issueSnapshotIds],
+      });
+      if (r.snapshotId) issueSnapshotIds.add(r.snapshotId);
+      if (!r.sources.length) throw new SectionUnavailableError(`no saved audit, crawl or URL Inspection results for ${client.domain} yet (run run_audit or crawlmark-cli crawl, free)`);
+      const { snapshotId: _id, ...data } = r;
+      return data;
+    },
+    // Phase 13 A: a sample, labelled as one in the file; never Search Console's full Page indexing report.
+    indexing_issues: async (s: Extract<SectionSpec, { type: "indexing_issues" }>): Promise<IndexingIssuesData> => {
+      const r = await deps.indexingSection(client, { maxInspections: s.maxInspections ?? 25, staleDays: s.staleDays ?? 7, limit: s.limit ?? 10, trendMonths: s.trendMonths ?? 6 });
+      if (r.sample.inspected === 0) throw new SectionUnavailableError(`no URL Inspection results for ${client.domain} yet (run crawlmark-cli index-coverage, free)`);
+      return r;
+    },
     rank_trend: async (s: Extract<SectionSpec, { type: "rank_trend" }>): Promise<RankTrendData> => {
       // Local only: the stored rows up to the end of the report period.
       const days = { "90d": 90, "180d": 180, "365d": 365 }[s.since ?? "180d"];
@@ -583,7 +727,8 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
 
   const runOne = async (s: SectionSpec): Promise<SectionResult> => {
     const base = { id: s.id, type: s.type, title: s.title ?? SECTION_TITLES[s.type] };
-    if ((isPaidSection(s) || s.paid === true) && !allowPaid) {
+    // technical_issues still runs its free sources without allowPaid; its paid sources are listed as unavailable.
+    if ((isPaidSection(s) || s.paid === true) && !allowPaid && s.type !== "technical_issues") {
       return { ...base, status: "skipped", reason: "paid section; run with allowPaid: true (tool) or --paid (CLI) to include it" };
     }
     if (GSC_TYPES.has(s.type) || GA4_TYPES.has(s.type)) {
@@ -601,8 +746,14 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
     }
   };
 
-  // The paid sections' whole USD estimate is checked once and reserved while they run (SEC-1).
-  const runAll = () => Promise.all(plan.sections.map(runOne));
+  // The paid sections' whole USD estimate is checked once and reserved while they run (SEC-1), and each unit
+  // provider's whole estimate likewise (D16), so a concurrent cron run and Claude session can't both pass.
+  let runAll = () => Promise.all(plan.sections.map(runOne));
+  for (const p of ["ahrefs", "semrush"] as const) {
+    if (runUnits[p] <= 0) continue;
+    const inner = runAll;
+    runAll = () => deps.withUnitsReservation(client, p, runUnits[p], inner);
+  }
   // The AI share is reserved against the AI sub-cap too, so a concurrent ai_visibility call sees it.
   const aiReserved = Number(aiUsd.toFixed(4));
   const sections =

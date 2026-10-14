@@ -63,6 +63,13 @@ const common = {
 };
 const limit = (max: number) => z.number().int().min(1).max(max).optional();
 
+/** technical_issues sources (spec 13.6.1). The two provider site audits are paid and arrive in Stage B. */
+export const ISSUE_SOURCES = ["audit", "local_crawl", "site_hygiene", "dataforseo_crawl", "gsc_inspection", "ahrefs_site_audit", "semrush_site_audit"] as const;
+/** The free sources: the default when a technical_issues section names none. */
+export const FREE_ISSUE_SOURCES = ["audit", "local_crawl", "site_hygiene", "dataforseo_crawl", "gsc_inspection"] as const;
+/** Sources that spend Ahrefs or Semrush units. */
+export const PAID_ISSUE_SOURCES: ReadonlySet<string> = new Set(["ahrefs_site_audit", "semrush_site_audit"]);
+
 const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("search_overview"), metrics: z.array(z.enum(["clicks", "impressions", "ctr", "position"])).min(1).optional() }),
   z.strictObject({ ...common, type: z.literal("branded_split") }),
@@ -104,6 +111,25 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("ai_visibility"), mode: z.enum(["mentions", "metrics"]).optional(), platform: z.enum(["google", "chat_gpt"]).optional(), limit: limit(50) }),
   // llms.txt and AI crawler access from the newest saved audit (free, local; never fetches).
   z.strictObject({ ...common, type: z.literal("ai_readiness") }),
+  // Phase 13 A: one deduplicated technical-issues list from stored results (free sources; Ahrefs/Semrush Site Audit are paid, Stage B).
+  z.strictObject({
+    ...common,
+    type: z.literal("technical_issues"),
+    limit: limit(200),
+    minSeverity: z.enum(["critical", "high", "medium", "low"]).optional(),
+    sources: z.array(z.enum(ISSUE_SOURCES)).min(1).max(ISSUE_SOURCES.length).optional(),
+    issueUrls: z.number().int().min(0).max(5).optional(),
+    maxAgeDays: z.number().int().min(7).max(120).optional(),
+  }),
+  // Phase 13 A: Google's indexing of a sample of the site's URLs (URL Inspection within a daily budget, free).
+  z.strictObject({
+    ...common,
+    type: z.literal("indexing_issues"),
+    maxInspections: z.number().int().min(0).max(200).optional(),
+    staleDays: z.number().int().min(1).max(90).optional(),
+    limit: limit(50),
+    trendMonths: z.number().int().min(0).max(12).optional(),
+  }),
   z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
 ] as const;
 
@@ -136,7 +162,44 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   ai_readiness: "AI readiness",
   local_profile: "Local search (Google Business Profile)",
   ai_visibility: "AI search visibility",
+  technical_issues: "Technical SEO issues",
+  indexing_issues: "Google indexing",
   text: "Note",
+};
+
+export type SectionGroup = "search" | "analytics" | "site" | "seo_data" | "local" | "ai" | "other";
+export type SectionCost = "free" | "free_key" | "paid" | "paid_optional";
+
+/**
+ * The section catalogue for the template builder (spec 13.6.1; Stage C reads it): each type's group, what it
+ * costs (free, free with the user's own key, paid, or paid only with an option), what it needs, and one line
+ * about what it shows. Stage B adds the provider sections.
+ */
+export const SECTION_CATALOGUE: Record<SectionType, { group: SectionGroup; cost: SectionCost; needs?: string; summary: string }> = {
+  search_overview: { group: "search", cost: "free", needs: "Google Search Console", summary: "Clicks, impressions, CTR and average position against the comparison periods, with daily charts." },
+  branded_split: { group: "search", cost: "free", needs: "Google Search Console", summary: "Branded and non-branded searches side by side." },
+  organic_traffic: { group: "analytics", cost: "free", needs: "Google Analytics 4", summary: "Organic sessions, users, engagement and key events." },
+  top_queries: { group: "search", cost: "free", needs: "Google Search Console", summary: "The searches that brought the most clicks." },
+  query_movers: { group: "search", cost: "free", needs: "Google Search Console", summary: "Searches that gained or lost the most clicks." },
+  page_movers: { group: "search", cost: "free", needs: "Google Search Console", summary: "Pages that gained or lost the most clicks." },
+  top_pages: { group: "search", cost: "free", needs: "Google Search Console", summary: "The pages with the most clicks from search." },
+  landing_pages: { group: "analytics", cost: "free", needs: "Google Analytics 4", summary: "Top organic landing pages by sessions." },
+  tracked_keywords: { group: "search", cost: "paid_optional", needs: "Google Search Console (live ranks: DataForSEO, paid)", summary: "Positions of the client's tracked keywords; live Google ranks only with liveRanks." },
+  opportunities: { group: "search", cost: "free", needs: "Google Search Console", summary: "Searches close to page one, low click-through results and pages competing for one search." },
+  audit_changes: { group: "site", cost: "free", needs: "a saved audit", summary: "New and resolved audit findings since the last audit." },
+  core_web_vitals_history: { group: "site", cost: "free_key", needs: "CRUX_API_KEY or PSI_API_KEY", summary: "Real-user Core Web Vitals week by week (Chrome UX Report)." },
+  tag_manager: { group: "analytics", cost: "free", needs: "Google Tag Manager access", summary: "Findings from the client's Tag Manager container (opt-in)." },
+  data_spend: { group: "other", cost: "free", summary: "Paid data used this month (operator information)." },
+  rank_trend: { group: "search", cost: "free", needs: "stored rank checks", summary: "Tracked keyword positions over time from stored checks." },
+  keyword_gap: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider", summary: "Keywords competitors rank for and the client doesn't." },
+  site_crawl: { group: "site", cost: "free", needs: "a saved local crawl", summary: "Broken links, redirects, titles and orphans from the newest local crawl." },
+  bing_overview: { group: "search", cost: "free_key", needs: "BING_WEBMASTER_API_KEY", summary: "Bing clicks, impressions, top queries and crawl stats." },
+  local_profile: { group: "local", cost: "paid", needs: "DataForSEO and a confirmed Google Business Profile", summary: "The Google Business Profile and map-pack positions." },
+  ai_visibility: { group: "ai", cost: "paid", needs: "DataForSEO with AI_VISIBILITY_ENABLED=true", summary: "AI answers (Google AI Overviews, ChatGPT) that cite the site." },
+  ai_readiness: { group: "ai", cost: "free", needs: "a saved audit", summary: "llms.txt and which AI crawlers robots.txt lets in." },
+  technical_issues: { group: "site", cost: "paid_optional", needs: "a saved audit or crawl (Ahrefs / Semrush Site Audit sources are paid)", summary: "One deduplicated, severity-grouped list of technical problems from every stored source, with what changed since the last report." },
+  indexing_issues: { group: "site", cost: "free", needs: "Google Search Console (uses the daily URL Inspection quota)", summary: "Google's verdict for key pages, top pages and a rotating sample of sitemap URLs, plus sitemap errors." },
+  text: { group: "other", cost: "free", summary: "A fixed paragraph of your own." },
 };
 
 /**
@@ -147,6 +210,7 @@ export const PAID_SECTION_TYPES: ReadonlySet<string> = new Set<string>(["keyword
 
 /** True when a section spends money (and so needs `paid: true` in the template and allowPaid at run time). */
 export function isPaidSection(s: SectionSpec): boolean {
+  if (s.type === "technical_issues") return (s.sources ?? []).some((x) => PAID_ISSUE_SOURCES.has(x));
   return PAID_SECTION_TYPES.has(s.type) || (s.type === "tracked_keywords" && s.liveRanks === true);
 }
 
@@ -235,14 +299,28 @@ export function semanticIssues(file: TemplateFile, today: Date): ValidationIssue
       for (const p of customRangeProblems(t.period.start, t.period.end, today)) push([...base, "period"], p);
     }
     const seen = new Map<string, number>();
+    // One indexing section per template: each tops up URL Inspection, and two would spend the daily budget twice (R-2).
+    const firstIndexing = t.sections.findIndex((s) => s.type === "indexing_issues");
     t.sections.forEach((s, i) => {
+      if (s.type === "indexing_issues" && i !== firstIndexing) push([...base, "sections", i, "type"], `a template can have only one indexing_issues section (also sections[${firstIndexing}])`);
       const at = [...base, "sections", i];
       const first = seen.get(s.id);
       if (first !== undefined) push([...at, "id"], `duplicate section id "${s.id}" (also sections[${first}])`);
       else seen.set(s.id, i);
       if (s.type === "tag_manager" && s.optional !== true) push([...at, "optional"], "a tag_manager section must set optional: true (Tag Manager findings are opt-in)");
       if (isPaidSection(s) && s.paid !== true) {
-        push([...at, "paid"], s.type === "tracked_keywords" ? "liveRanks: true is a paid live SERP check, so the section must set paid: true" : `${s.type} is paid, so the section must set paid: true`);
+        push(
+          [...at, "paid"],
+          s.type === "tracked_keywords"
+            ? "liveRanks: true is a paid live SERP check, so the section must set paid: true"
+            : s.type === "technical_issues"
+              ? "the ahrefs_site_audit and semrush_site_audit sources spend provider units, so the section must set paid: true"
+              : `${s.type} is paid, so the section must set paid: true`,
+        );
+      }
+      if (s.type === "technical_issues") {
+        if (s.sources && new Set(s.sources).size !== s.sources.length) push([...at, "sources"], "entries must be unique");
+        if ((s.issueUrls ?? 0) > 0 && !(s.sources ?? []).some((x) => PAID_ISSUE_SOURCES.has(x))) push([...at, "issueUrls"], "issueUrls needs an ahrefs_site_audit or semrush_site_audit source (it fetches example URLs from the provider)");
       }
       if (s.type === "core_web_vitals_history") {
         if (s.scope === "url" && !s.url) push([...at, "url"], "scope: url needs a url");

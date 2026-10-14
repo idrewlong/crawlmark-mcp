@@ -6,7 +6,7 @@
  * <style>, plain bordered tables, charts as their small tables, and only
  * inline colour on change values (which Docs keeps).
  */
-import { DEFAULT_ACCENT, DEFAULT_PRIMARY, NEUTRAL, TONE, inkOn, mix, textOn } from "./color.js";
+import { DEFAULT_ACCENT, DEFAULT_PRIMARY, NEUTRAL, TONE, inkOn, mix, softTextOn, textOn } from "./color.js";
 import type { Block, Chart, DocSection, Kpi, ReportDoc, TableBlock, Text } from "./doc.js";
 import { clean, escapeHtml, safeColor } from "./escape.js";
 import type { NarrativeBlock, Run } from "./narrative.js";
@@ -114,7 +114,7 @@ function chart(c: Chart, ctx: Ctx): string {
     }
   } else {
     svg = shareChartSvg(c, ctx.width, ctx.primary);
-    const colors = shareColors(ctx.primary);
+    const colors = shareColors(ctx.primary, c.parts.length);
     legend = `<span class="legend">${c.parts.map((p, i) => `<span class="key-item"><span class="key box" style="background:${colors[i % colors.length]}"></span>${escapeHtml(p)}</span>`).join("")}</span>`;
   }
   if (!svg) return c.fallback ? table(c.fallback, ctx) : "";
@@ -171,7 +171,7 @@ export function cssString(s: string): string {
 function style(primary: string, accent: string, onepage: boolean, runningHeader: string): string {
   const ink = inkOn(primary);
   const on = textOn(primary);
-  const onSoft = mix(on, primary, 0.25);
+  const onSoft = softTextOn(on, primary);
   const rule = mix(on, primary, 0.72);
   return `<style>
 :root { --primary: ${primary}; --primary-ink: ${ink}; --on-primary: ${on}; --on-primary-soft: ${onSoft}; --cover-rule: ${rule}; --accent: ${accent};
@@ -280,7 +280,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
   h3, .table-title { margin: 6px 0 3px; } p { margin: 4px 0; } .note { margin: 3px 0 6px; } figure.chart { margin-bottom: 6px; } .cols { gap: 12px; }
   .about { margin-top: 10px; padding: 10px 14px; }
   .pair .track { display: none; } .pair .barbox { grid-template-columns: auto; } .pair td.lead { min-width: 0; } .pair th { letter-spacing: 0; } .pair .num { white-space: normal; }
-  /* Only atomic units stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
+  /* Only atomic blocks stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
   .card h2, h3, .table-title, figcaption { break-after: avoid; }
   .summary { font-size: 10px; }
   .lead-in { break-inside: avoid; } p.note { break-before: avoid; }

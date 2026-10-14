@@ -7,8 +7,8 @@
 <meta name="referrer" content="no-referrer">
 <title>Example Co - SEO report - September 2026</title>
 <style>
-:root { --primary: #1f5ea8; --primary-ink: #1f5ea8; --on-primary: #ffffff; --on-primary-soft: #c7d7e9; --cover-rule: #5e8bc0; --accent: #5b9bd5;
-  --ink: #1f2933; --muted: #52606d; --faint: #7b8794; --rule: #e4e7eb; --zebra: #f7f8fa; --surface: #f4f6f9;
+:root { --primary: #1f5ea8; --primary-ink: #1f5ea8; --on-primary: #ffffff; --on-primary-soft: #d2dfee; --cover-rule: #5e8bc0; --accent: #5b9bd5;
+  --ink: #1f2933; --muted: #52606d; --faint: #616c78; --rule: #e4e7eb; --zebra: #f7f8fa; --surface: #f4f6f9;
   --bar: #84a6cf; --tint: #eff4f9;
   --good: #13723a; --good-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fdecea; --neutral: #52606d; --neutral-bg: #eef1f4; }
 * { box-sizing: border-box; }
@@ -101,7 +101,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
   h1 { font-size: 24px; }
 }
 /* PDF running header in the page's top margin (CSS page-margin box), left off the first page where the cover band is. */
-@page { @top-left { content: "Example Co \b7  Monthly SEO report \b7  September 2026"; font: 8px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #7b8794; vertical-align: bottom; padding-bottom: 3mm; } }
+@page { @top-left { content: "Example Co \b7  Monthly SEO report \b7  September 2026"; font: 8px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #616c78; vertical-align: bottom; padding-bottom: 3mm; } }
 @page :first { @top-left { content: none; } }
 @media print {
   /* Print density: a dashboard export fills its pages. */
@@ -116,7 +116,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
   h3, .table-title { margin: 6px 0 3px; } p { margin: 4px 0; } .note { margin: 3px 0 6px; } figure.chart { margin-bottom: 6px; } .cols { gap: 12px; }
   .about { margin-top: 10px; padding: 10px 14px; }
   .pair .track { display: none; } .pair .barbox { grid-template-columns: auto; } .pair td.lead { min-width: 0; } .pair th { letter-spacing: 0; } .pair .num { white-space: normal; }
-  /* Only atomic units stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
+  /* Only atomic blocks stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
   .card h2, h3, .table-title, figcaption { break-after: avoid; }
   .summary { font-size: 10px; }
   .lead-in { break-inside: avoid; } p.note { break-before: avoid; }

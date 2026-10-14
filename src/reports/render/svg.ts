@@ -146,7 +146,7 @@ export function shareChartSvg(ch: ShareChart, width: number, primary: string): s
   const labelW = 118;
   const H = ch.rows.length * (rowH + gapY) - gapY + 4;
   const bw = width - labelW - 4;
-  const fills = [inkOn(primary, "#ffffff", 3), mix(primary, "#ffffff", 0.6), NEUTRAL.previous];
+  const fills = shareColors(primary, ch.parts.length);
   const out = [`<svg class="chart-svg" viewBox="0 0 ${width} ${H}" role="img" aria-label="${escapeHtml(ch.summary)}">`, `<title>${escapeHtml(ch.summary)}</title>`];
   ch.rows.forEach((row, ri) => {
     const top = ri * (rowH + gapY) + 2;
@@ -168,7 +168,13 @@ export function shareChartSvg(ch: ShareChart, width: number, primary: string): s
   return out.join("");
 }
 
-/** Fill colours of a share chart's parts, for the legend. */
-export function shareColors(primary: string): string[] {
-  return [inkOn(primary, "#ffffff", 3), mix(primary, "#ffffff", 0.6), NEUTRAL.previous];
+/**
+ * Fill colours of a share chart's parts, for the chart and its legend: the brand colour, a light tint and grey
+ * for up to three parts; with more (Phase 13: coverage states), the brand colour, the categorical series, a tint
+ * and grey last (for "Other").
+ */
+export function shareColors(primary: string, parts = 3): string[] {
+  if (parts <= 3) return [inkOn(primary, "#ffffff", 3), mix(primary, "#ffffff", 0.6), NEUTRAL.previous];
+  const palette = [inkOn(primary, "#ffffff", 3), SERIES[1], SERIES[2], SERIES[3], SERIES[4], mix(primary, "#ffffff", 0.6)];
+  return [...palette.slice(0, Math.min(parts - 1, palette.length)), NEUTRAL.previous];
 }

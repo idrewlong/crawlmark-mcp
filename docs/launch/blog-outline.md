@@ -175,6 +175,20 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - llms.txt check: present or not, format against the llmstxt.org proposal, and links that don't load. For information only, since Google says it doesn't use llms.txt.
 - Part of `site_hygiene` and `run_audit`, with a new optional `ai_readiness` report section.
 
+**Technical issues in one list** (Shipped)
+
+- Every stored technical problem for a client in one deduplicated, severity-grouped list: the saved audit, its site checks, the local crawl, a stored DataForSEO crawl and Google URL Inspection results, with which source found each issue and what's new, resolved or not re-checked since the last report. Never starts a crawl. _"What's broken on example.com right now, and what did we fix since last month?"_
+- New tool `technical_issues` and an optional `issues` section in the builtin monthly, quarterly and technical templates.
+
+**Google indexing coverage** (Shipped)
+
+- How Google indexes a client's key pages, top Search Console pages and a weekly-rotating sample of sitemap URLs, with Search Console's sitemap errors, from the free URL Inspection API within a daily budget, labelled as a sample in the report. _"Which of example.com's pages aren't indexed, and why?"_
+- New tools `index_coverage` and `inspect_index_coverage`, new command `crawlmark-cli index-coverage --client example.com|--all` for a daily cron, and an optional `indexing` report section.
+
+**Report cost up front** (Shipped)
+
+- `estimateOnly` on `run_report_template` and `export_report` (and `report --dry-run`) prices a report's paid sections before anything is fetched, and the whole run's budget is reserved while it runs.
+
 ## 6. How to use it (a 5-minute walkthrough)
 
 1. Install: `npx crawlmark-mcp@latest init`.

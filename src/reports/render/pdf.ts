@@ -36,7 +36,7 @@ export interface PdfRequest {
 const MARGIN = "15mm";
 const CONTENT_TIMEOUT_MS = 30_000;
 
-const TEMPLATE_STYLE = "font-size:8px;width:100%;padding:0 15mm;color:#7b8794;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;justify-content:space-between;gap:12px";
+const TEMPLATE_STYLE = "font-size:8px;width:100%;padding:0 15mm;color:#616c78;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;justify-content:space-between;gap:12px";
 
 export function footerTemplate(footer: string): string {
   return `<div style="${TEMPLATE_STYLE}"><span>${escapeHtml(footer)}</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;

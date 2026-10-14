@@ -83,6 +83,16 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
     aiVisibility: async () => {
       throw new Error("aiVisibility isn't part of this test");
     },
+    // Phase 13: whole-run unit reservations and what's left (estimateOnly).
+    withUnitsReservation: async (_c, _p, _u, fn) => fn(),
+    remainingUsd: () => ({ clientUsd: 4.61, globalUsd: 49.5 }),
+    remainingUnits: () => ({ client: 10_000, global: 50_000 }),
+    technicalIssues: async () => {
+      throw new Error("technicalIssues isn't part of this test");
+    },
+    indexingSection: async () => {
+      throw new Error("indexingSection isn't part of this test");
+    },
     ...over,
   };
 }

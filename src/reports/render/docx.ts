@@ -31,12 +31,12 @@ import {
   type ParagraphChild,
 } from "docx";
 import { ChartRun, type ChartRunOptions } from "docx/charts";
-import { DEFAULT_ACCENT, DEFAULT_PRIMARY, NEUTRAL, SERIES, TONE, inkOn, mix, textOn } from "./color.js";
+import { DEFAULT_ACCENT, DEFAULT_PRIMARY, NEUTRAL, SERIES, TONE, inkOn, mix, softTextOn, textOn } from "./color.js";
 import type { Block, Chart, Kpi, LineChart, ReportDoc, TableBlock, Text } from "./doc.js";
 import { docxText, safeColor } from "./escape.js";
 import { fit, imageSize } from "./image.js";
 import type { NarrativeBlock } from "./narrative.js";
-import { niceStep, wholeStep } from "./svg.js";
+import { niceStep, shareColors, wholeStep } from "./svg.js";
 
 const PAGE = { Letter: { width: 12240, height: 15840 }, A4: { width: 11906, height: 16838 } } as const;
 /** 15 mm in twips. */
@@ -227,7 +227,7 @@ function chart(c: Chart, ctx: Ctx, half: boolean): (Paragraph | Table)[] {
       altText: { name: docxText(c.title), description: docxText(c.summary), title: docxText(c.title) },
     };
   } else {
-    const colors = [inkOn(ctx.primary, "#ffffff", 3), mix(ctx.primary, "#ffffff", 0.6), NEUTRAL.previous].map(hex);
+    const colors = shareColors(ctx.primary, c.parts.length).map(hex);
     opts = {
       type: "bar",
       font,
@@ -283,7 +283,7 @@ function sectionHeading(title: string, ctx: Ctx): Paragraph {
 function cover(doc: ReportDoc, ctx: Ctx): Table {
   const b = doc.branding;
   const on = hex(textOn(ctx.primary));
-  const soft = hex(mix(textOn(ctx.primary), ctx.primary, 0.25));
+  const soft = hex(softTextOn(textOn(ctx.primary), ctx.primary));
   const m = doc.meta;
   const logo = b.logo;
   const size = logo ? imageSize(logo.data) : undefined;

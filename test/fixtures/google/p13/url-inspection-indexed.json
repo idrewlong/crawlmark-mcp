@@ -1,0 +1,20 @@
+{
+  "inspectionResult": {
+    "inspectionResultLink": "https://search.google.com/search-console/inspect?resource_id=sc-domain:example.com&id=example",
+    "indexStatusResult": {
+      "verdict": "PASS",
+      "coverageState": "Submitted and indexed",
+      "robotsTxtState": "ALLOWED",
+      "indexingState": "INDEXING_ALLOWED",
+      "lastCrawlTime": "2026-10-01T03:12:45Z",
+      "pageFetchState": "SUCCESSFUL",
+      "googleCanonical": "https://example.com/",
+      "userCanonical": "https://example.com/",
+      "sitemap": ["https://example.com/sitemap.xml"],
+      "referringUrls": ["https://example.com/about"],
+      "crawledAs": "MOBILE"
+    },
+    "mobileUsabilityResult": { "verdict": "VERDICT_UNSPECIFIED" },
+    "richResultsResult": { "verdict": "PASS", "detectedItems": [{ "richResultType": "Breadcrumbs", "items": [{ "name": "Unnamed item" }] }] }
+  }
+}

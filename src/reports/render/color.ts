@@ -11,7 +11,8 @@ export const DEFAULT_ACCENT = "#5b9bd5";
 export const NEUTRAL = {
   ink: "#1f2933",
   muted: "#52606d",
-  faint: "#7b8794",
+  // Small text (captions, colophon, page header and footer): 4.9:1 or more on white, the zebra rows and the surface (WCAG AA).
+  faint: "#616c78",
   rule: "#e4e7eb",
   zebra: "#f7f8fa",
   surface: "#f4f6f9",
@@ -57,5 +58,20 @@ export function inkOn(color: string, background = "#ffffff", min = 4.5): string 
 
 /** White or near-black text for a filled background, whichever reads better. */
 export function textOn(fill: string): string {
-  return contrast("#ffffff", fill) >= 4.5 ? "#ffffff" : contrast("#ffffff", fill) >= contrast("#111827", fill) ? "#ffffff" : "#111827";
+  if (contrast("#ffffff", fill) >= 4.5) return "#ffffff";
+  if (contrast("#111827", fill) >= 4.5) return "#111827";
+  // A mid-tone fill where neither reaches 4.5:1: pure black always does (at least about 4.58:1) when white doesn't.
+  return "#000000";
+}
+
+/**
+ * A softer version of `on` (the cover's text colour) for secondary cover text, still at least 4.5:1 on `fill`: the
+ * mix toward the fill is reduced until it passes (down to `on` itself).
+ */
+export function softTextOn(on: string, fill: string, t = 0.25): string {
+  for (let k = t; k > 0; k -= 0.05) {
+    const c = mix(on, fill, k);
+    if (contrast(c, fill) >= 4.5) return c;
+  }
+  return on;
 }
