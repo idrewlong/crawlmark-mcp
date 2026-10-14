@@ -38,7 +38,7 @@ import { packageVersion } from "./lib/entry.js";
 import { setupCommand } from "./setup/cli-setup.js";
 import { groupHelp, HELP_GROUPS, isHelpGroup, programName, topHelp } from "./cli-help.js";
 import { printUpdateNotice, updateCacheFile } from "./lib/update-check.js";
-import { FORMAT_CHOICES, previewBrandingCommand, reportCommand, templatesCommand, type ReportCliDeps } from "./report-cli.js";
+import { FORMAT_CHOICES, previewBrandingCommand, reportCommand, templatesCommand, templatesNewCommand, type ReportCliDeps } from "./report-cli.js";
 import { openPath } from "./lib/terminal-links.js";
 import type { Format } from "./reports/templates/schema.js";
 import { chooseRenderer } from "./setup/ui.js";
@@ -600,6 +600,8 @@ async function main(argv: string[]): Promise<number> {
       reason: { type: "string" },
       "confirm-property": { type: "boolean", default: false },
       kinds: { type: "string" },
+      file: { type: "string" },
+      replace: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -681,6 +683,28 @@ async function main(argv: string[]): Promise<number> {
     } finally {
       await closeEgressProxy();
     }
+  }
+  if (group === "report" && command === "templates" && args[0] === "new") {
+    // Phase 13 C: the interactive template builder. Fancy (clack) on a capable terminal, plain text otherwise.
+    const renderer = chooseRenderer({ stdinTTY: process.stdin.isTTY, stdoutTTY: process.stdout.isTTY, env: process.env, yes: values.yes });
+    const [{ loadDefaultRunDeps }, { cliPrefix }] = await Promise.all([import("./reports/templates/run.js"), import("./setup/status-providers.js")]);
+    return templatesNewCommand(args.slice(1), values, { out, warn, homeDir: HOME.dir, cwd: process.cwd() }, {
+      interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+      ui: async () => {
+        if (renderer === "fancy") {
+          const clack = await import("./setup/ui-clack.js");
+          return { ui: clack.clackUi({ banner: false }), prompt: clack.clackPrompter() };
+        }
+        const [{ plainUi }, { terminalPrompter }] = await Promise.all([import("./setup/ui.js"), import("./setup/prompter.js")]);
+        return { ui: plainUi(out), prompt: terminalPrompter() };
+      },
+      resolveClient: resolveClientOffline,
+      runDeps: loadDefaultRunDeps,
+      reportsDir: env.REPORTS_DIR,
+      version: packageVersion(import.meta.url),
+      cliDisplay: cliPrefix(),
+      ...(renderer === "fancy" ? { openPath: (p: string) => openPath(p) } : {}),
+    });
   }
   if (group === "report" && command === "templates") {
     const [sub, ...rest] = args;

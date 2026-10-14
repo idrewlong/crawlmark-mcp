@@ -205,6 +205,11 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 
 - `estimateOnly` on `run_report_template` and `export_report` (and `report --dry-run`) prices a report's paid sections before anything is fetched, and the whole run's budget is reserved while it runs.
 
+**Build report templates by picking sections** (Shipped)
+
+- `crawlmark-cli report templates new`: pick sections from a grouped list marked free or paid (with the client's cost per run), the period, comparisons and layout, see a one-page preview with sample data and the change to your template file, then save, change or cancel. Comments in the file are kept. _"I want a quarterly board pack with search, backlinks and the technical issues."_
+- In Claude: new tools `create_report_template` and `update_report_template` and a new prompt `build-report-template`. Claude drafts the template from a plain-language request and shows the YAML and diff; nothing is saved until you say yes (a single-use confirmation that expires after 15 minutes, a refusal if the file changed in the meantime, an explicit OK for any paid section, and a direct question from apps that support it).
+
 ## 6. How to use it (a 5-minute walkthrough)
 
 1. Install: `npx crawlmark-mcp@latest init`.

@@ -71,6 +71,14 @@
       "description": "Validate report template YAML or the saved template file; errors carry YAML paths."
     },
     {
+      "name": "create_report_template",
+      "description": "Draft a new report template and save it to the global or a client's template file only after the user confirms (proposal with YAML and diff first, then a single-use token; paid sections need explicit agreement)."
+    },
+    {
+      "name": "update_report_template",
+      "description": "Change a saved report template (whole template or a patch of sections and settings), with the same propose, show and confirm steps."
+    },
+    {
       "name": "run_report_template",
       "description": "Build a client report from a template: per-section data and status, computed highlights, and a reportId for export_report."
     },
@@ -353,6 +361,15 @@
         "month"
       ],
       "text": "Run the crawlmark \"monthly-report-writeup\" prompt for ${arguments.client} for ${arguments.month}."
+    },
+    {
+      "name": "build-report-template",
+      "description": "Turn a plain-language request into a report template: draft it, show the YAML and diff, ask about each paid section by name and cost, and save it only after your explicit yes.",
+      "arguments": [
+        "request",
+        "client"
+      ],
+      "text": "Run the crawlmark \"build-report-template\" prompt for ${arguments.client}: ${arguments.request}"
     },
     {
       "name": "template-report",

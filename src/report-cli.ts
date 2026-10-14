@@ -18,6 +18,13 @@ import { globalTemplatesFile } from "./reports/paths.js";
 import { PromptAbortedError } from "./setup/prompter.js";
 import type { PreviewResult } from "./reports/branding-preview.js";
 import type { ResolvedBranding } from "./reports/templates/load.js";
+import { readTemplateFile } from "./reports/templates/load.js";
+import { defaultSection, estimateSectionsFor, templateCatalogue } from "./reports/templates/builder.js";
+import { runTemplateBuilder, type BuilderDeps } from "./reports/templates/new-cli.js";
+import { applyTemplateWrite, planTemplateWrite, templateTargetPath } from "./reports/templates/write.js";
+import { renderTemplatePreview } from "./reports/template-preview.js";
+import type { Prompter } from "./setup/prompter.js";
+import type { Ui } from "./setup/ui.js";
 
 export interface CliIo {
   out(line?: string): void;
@@ -105,6 +112,96 @@ export function templatesCommand(command: string | undefined, args: string[], io
     return 0;
   }
   return usage(io, `Unknown command: report templates ${command ?? ""}`.trim());
+}
+
+export interface TemplatesNewFlags {
+  client?: string | undefined;
+  file?: string | undefined;
+  replace?: boolean | undefined;
+  "dry-run"?: boolean | undefined;
+  yes?: boolean | undefined;
+}
+
+export interface TemplatesNewDeps {
+  /** stdin and stdout are terminals (the builder asks questions). */
+  interactive: boolean;
+  /** The Ui and Prompter: clack in fancy mode, plain text otherwise. */
+  ui(): Promise<{ ui: Ui; prompt: Prompter }>;
+  /** `--client` to the client (clients.yaml, offline); throws for an unknown client. */
+  resolveClient(idOrDomain: string): Client;
+  /** The run dependencies the paid-section estimates use (no request is made). */
+  runDeps(): Promise<RunDeps>;
+  reportsDir: string;
+  version: string;
+  /** How to run crawlmark-cli here (for hints). */
+  cliDisplay: string;
+  openPath?: ((path: string) => boolean) | undefined;
+}
+
+/**
+ * `report templates new [--client <d>] [--file global|client] [--replace] [--dry-run]`: the interactive template
+ * builder. Needs a terminal (otherwise exit 1); --yes asks nothing and creates nothing (exit 0, as the branding
+ * step). Ctrl-C at any point writes nothing (exit 130). A dry run writes only the preview.
+ */
+export async function templatesNewCommand(args: string[], flags: TemplatesNewFlags, io: CliIo, deps: TemplatesNewDeps): Promise<number> {
+  if (args.length) return usage(io, `report templates new takes only flags, got: ${args.join(" ")}`);
+  const file = flags.file ?? "global";
+  if (file !== "global" && file !== "client") return usage(io, "--file takes global or client.");
+  if (file === "client" && flags.client === undefined) return usage(io, "--file client needs --client <domain>.");
+  if (flags.yes) {
+    io.out(`Nothing created: templates new asks questions, and --yes skips them. Write the YAML and run \`${deps.cliDisplay} report templates validate\`, or ask Claude to draft one (create_report_template).`);
+    return 0;
+  }
+  if (!deps.interactive) return usage(io, `templates new is interactive; write the YAML and run \`${deps.cliDisplay} report templates validate\`.`);
+  let client: Client | undefined;
+  try {
+    client = flags.client !== undefined ? deps.resolveClient(flags.client) : undefined;
+  } catch (err) {
+    io.warn(`Error: ${msg(err)}`);
+    return 1;
+  }
+  const slug = client?.slug;
+  const today = io.today;
+  const { ui, prompt } = await deps.ui();
+  const catalogue = templateCatalogue();
+  const builder: BuilderDeps = {
+    ui,
+    prompt,
+    cliDisplay: deps.cliDisplay,
+    client: client ? { slug: client.slug, domain: client.domain } : undefined,
+    file,
+    replace: flags.replace === true,
+    dryRun: flags["dry-run"] === true,
+    catalogue,
+    async estimates() {
+      const paid = catalogue.filter((c) => c.paid);
+      const byId = await estimateSectionsFor(client!, paid.map((c) => defaultSection(c.type)), await deps.runDeps(), today ? { today } : {});
+      return new Map(paid.flatMap((c) => (byId.has(c.defaultId) ? [[c.type, byId.get(c.defaultId)!] as const] : [])));
+    },
+    target() {
+      const path = templateTargetPath(io.homeDir, file, file === "client" ? slug : null);
+      const r = readTemplateFile(path, io.homeDir, today);
+      return { path, ids: Object.keys(r.value?.templates ?? {}), hasDefaultFormats: Boolean(r.value?.defaults?.formats), valid: r.status.valid };
+    },
+    plan: (id, spec, o) =>
+      planTemplateWrite({ homeDir: io.homeDir, file, clientSlug: file === "client" ? slug : undefined, id, mode: "create", template: spec, replace: flags.replace === true, defaultFormats: o.defaultFormats, ...(today ? { today } : {}) }),
+    preview: async (id, spec) => renderTemplatePreview(deps.reportsDir, { clientSlug: slug, id, spec, branding: loadTemplates({ homeDir: io.homeDir, clientSlug: slug, ...(today ? { today } : {}) }).branding, version: deps.version }),
+    openPath: deps.openPath,
+    save: (plan) => applyTemplateWrite(plan, io.homeDir, today),
+  };
+  try {
+    const code = await runTemplateBuilder(builder);
+    ui.outro(code === 0 ? "Done" : "Finished, with problems above");
+    return code;
+  } catch (err) {
+    if (err instanceof PromptAbortedError) {
+      io.warn("Cancelled; nothing written.");
+      return 130;
+    }
+    throw err;
+  } finally {
+    prompt.close();
+  }
 }
 
 function usage(io: CliIo, problem: string): number {

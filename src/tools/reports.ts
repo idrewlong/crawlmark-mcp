@@ -22,6 +22,8 @@ import { estimateTemplate, getStoredReport, loadDefaultRunDeps, runTemplate } fr
 import { TIMEOUTS } from "../lib/timeout.js";
 import { purgeOldToolCalls, summarizeUsage, toolCallsSince } from "../lib/usage.js";
 import { assertUserUrl } from "../user-url.js";
+import { templateCatalogue } from "../reports/templates/builder.js";
+import { registerTemplateWriteTools } from "./report-template-write.js";
 import { handler, READ_ONLY } from "./util.js";
 
 const clientArg = z
@@ -121,13 +123,14 @@ export function registerReportTools(server: McpServer) {
     {
       title: "Get a report template",
       description:
-        "One report template with its defaults filled in (period, comparisons, sections) and the resolved branding (client file over global, field by field; the logo as a path plus whether it exists). Free and local.",
+        "One report template with its defaults filled in (period, comparisons, sections) and the resolved branding (client file over global, field by field; the logo as a path plus whether it exists). " +
+        "Also returns `catalogue`: every section type with its title, group, cost (free, free with the user's own key, paid, or paid only with an option), what it needs and what it shows, for drafting templates with create_report_template. Free and local.",
       inputSchema: { client: clientArg.optional(), template: z.string().min(1).max(40).describe("Template id, e.g. monthly. See list_report_templates.") },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     handler("get_report_template", async ({ client, template }) => {
       const slug = client ? (await resolveClient(client)).slug : undefined;
-      return getReportTemplate(HOME.dir, template, slug);
+      return { ...getReportTemplate(HOME.dir, template, slug), catalogue: templateCatalogue() };
     }),
   );
 
@@ -150,6 +153,9 @@ export function registerReportTools(server: McpServer) {
       return validateReportTemplate(HOME.dir, { yaml, file, clientSlug: slug });
     }),
   );
+
+  // Phase 13 C: draft a template, then save it only after the user confirms.
+  registerTemplateWriteTools(server);
 
   server.registerTool(
     "run_report_template",

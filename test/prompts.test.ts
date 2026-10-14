@@ -45,7 +45,11 @@ const EXPECTED_PROMPTS: Record<string, { required: string[]; optional: string[] 
   "getting-started": { required: [], optional: [] },
   "template-report": { required: ["client"], optional: ["period", "template"] },
   "keyword-research": { required: ["client"], optional: ["seeds"] },
+  "build-report-template": { required: ["request"], optional: ["client"] },
 };
+
+/** Required arguments besides client, per prompt. */
+const EXTRA_ARGS: Record<string, Record<string, string>> = { "build-report-template": { request: "a one-page monthly summary with search and technical issues" } };
 
 /** Prompts with no client argument. */
 const NO_CLIENT = new Set(["getting-started"]);
@@ -67,7 +71,7 @@ describe("registered prompts", () => {
   it("every prompt renders with no unfilled placeholders and says to prefer free tools and not to guess", async () => {
     const client = await connect();
     for (const name of Object.keys(EXPECTED_PROMPTS)) {
-      const r = await client.getPrompt({ name, arguments: NO_CLIENT.has(name) ? {} : { client: "example.com" } });
+      const r = await client.getPrompt({ name, arguments: { ...(NO_CLIENT.has(name) ? {} : { client: "example.com" }), ...EXTRA_ARGS[name] } });
       const t = r.messages[0]!.content;
       expect(t.type).toBe("text");
       const text = (t as { text: string }).text;
@@ -113,6 +117,7 @@ describe("tool names mentioned in templates", () => {
       "client-health-check": ["list_clients", "gsc_query", "ga4_report", "render_check", "dataforseo_status"],
       "getting-started": ["setup_status", "list_clients", "gsc_query", "striking_distance", "monthly_report"],
       "keyword-research": ["keyword_ideas", "keyword_gap", "list_keywords", "list_competitors", "add_keywords"],
+      "build-report-template": ["list_report_templates", "get_report_template", "create_report_template", "update_report_template"],
     };
     for (const [file, names] of Object.entries(need)) {
       const text = readFileSync(new URL(`${file}.md`, TEMPLATE_DIR), "utf8");

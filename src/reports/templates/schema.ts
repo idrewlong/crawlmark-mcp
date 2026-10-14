@@ -30,6 +30,29 @@ export function isRealDate(s: string): boolean {
 }
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").refine(isRealDate, "is not a real date");
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a #rrggbb colour");
+/**
+ * Text that ends up in report files and terminal output (SEC-3): no control, bidi or invisible characters.
+ * One-line text (titles, descriptions) has its tabs and line breaks collapsed to single spaces first (a folded
+ * `>` or literal `|` YAML block ends in a newline and is fine), then the check runs on the collapsed value.
+ * Free text (the text section) may have newlines and tabs only.
+ */
+const NO_CONTROL = "must not contain control or invisible characters";
+const lineText = (max: number) =>
+  z
+    .string()
+    .transform((s) => s.replace(/[\t\n\r]+/g, " ").trim())
+    .pipe(
+      z
+        .string()
+        .max(max)
+        .refine((s) => stripControl(s) === s, NO_CONTROL)
+        // SEC-6: stacked combining marks ("Zalgo") and blank filler characters that look like nothing.
+        .refine((s) => !/\p{Mn}{3,}/u.test(s), "must not stack three or more combining marks")
+        .refine((s) => !BLANK_FILLER_RE.test(s), "must not contain blank filler characters (Hangul fillers, braille blank)"),
+    );
+/** Characters that render as blank space but aren't whitespace. */
+const BLANK_FILLER_RE = /[\u115F\u1160\u3164\uFFA0\u2800]/u;
+const freeText = (max: number) => z.string().max(max).refine((s) => stripControl(s) === s, `${NO_CONTROL} (newlines and tabs are fine)`);
 
 export const BrandingSchema = z.strictObject({
   // Shown on the cover and in terminal output: no control, bidi or invisible characters.
@@ -57,7 +80,7 @@ export type Comparison = (typeof COMPARISONS)[number];
 
 const common = {
   id,
-  title: z.string().min(1).max(120).optional(),
+  title: lineText(120).pipe(z.string().min(1)).optional(),
   optional: z.boolean().optional(),
   paid: z.boolean().optional(),
 };
@@ -134,7 +157,7 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("backlinks"), trendMonths: z.number().int().min(0).max(24).optional(), history: z.boolean().optional() }),
   z.strictObject({ ...common, type: z.literal("organic_visibility"), trendMonths: z.number().int().min(0).max(24).optional(), history: z.boolean().optional() }),
   z.strictObject({ ...common, type: z.literal("competitor_overview"), limit: limit(10), source: z.enum(["saved", "suggested", "saved_then_suggested"]).optional() }),
-  z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
+  z.strictObject({ ...common, type: z.literal("text"), text: freeText(2000).pipe(z.string().min(1)) }),
 ] as const;
 
 export const SECTION_TYPES = sectionSchemas.map((s) => s.shape.type.value);
@@ -226,8 +249,8 @@ export function isPaidSection(s: SectionSpec): boolean {
 }
 
 export const TemplateSchema = z.strictObject({
-  title: z.string().min(1).max(120),
-  description: z.string().max(300).optional(),
+  title: lineText(120).pipe(z.string().min(1)),
+  description: lineText(300).optional(),
   period: PeriodSchema.optional(),
   compare: z.array(z.enum(COMPARISONS)).max(2).optional(),
   /** `onepage`: the compact executive layout (key figures, one chart, short lists) sized for one page. */

@@ -362,6 +362,8 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 | `list_report_templates` | Report templates for a client: the builtin `monthly`, `quarterly`, `executive` (one page), `technical` and `local`, your global file and the client's own file, with optional and paid sections. Free |
 | `get_report_template` | One template with its defaults filled in and the resolved branding. Free |
 | `validate_report_template` | Checks template YAML (or a saved file) and names each problem's YAML path. Free |
+| `create_report_template` | Drafts a new template in the global or a client's template file. The first call only proposes (YAML, diff, paid sections with estimates, a 15-minute single-use token); the second, after you say yes, saves it. Paid sections need your explicit OK; apps with elicitation also ask you directly. Free |
+| `update_report_template` | Changes a saved template (the whole template, or sections added or removed and settings changed) with the same propose-then-confirm steps. Free |
 | `run_report_template` | Runs a template for a client: per-section data and status, computed highlights, and a `reportId` kept for 24 hours. Free unless you allow a paid section; `estimateOnly: true` prices the paid sections without fetching or spending anything |
 | `export_report` | Saves a report as Markdown, HTML, PDF or Word files under the reports folder, data-only or with the agent's commentary, and can return a docs-friendly HTML copy for Google Docs |
 
@@ -474,6 +476,7 @@ Prompts
 | `getting-started` | none | Checks setup, gives the command for anything missing, and offers a first report |
 | `monthly-report-writeup` | `client`, `month` (optional, `YYYY-MM`) | Writes a client-facing monthly report: summary, what moved and why, branded vs non-branded, fixes since the last audit, top opportunities, next month's priorities. Offers to save it as files, and as a Google Doc when you have a Google Drive connector |
 | `template-report` | `client`, `template` (optional), `period` (optional: `YYYY-MM`, `YYYY-Qn` or `YYYY-MM-DD..YYYY-MM-DD`) | Runs a report template, writes commentary per section and saves Markdown, HTML, PDF or Word files. Offers a Google Doc only when a Drive connector is available and you say yes |
+| `build-report-template` | `request` (what you want in your words), `client` (optional) | Turns the request into a report template: shows you the YAML and diff, asks about each paid section by name and cost, and saves only after your yes |
 | `audit-findings` | `client` | Uses a recent audit or runs one, compares it with the last, and writes findings by severity with a prioritized fix list |
 | `opportunity-review` | `client` | Runs the five opportunity tools and writes a prioritized action list with estimated click upside |
 | `client-health-check` | `client` | One cheap check per source, then a status table and fix list. Useful when onboarding a client |
@@ -512,7 +515,10 @@ crawlmark-cli report templates init                         # writes config/repo
 crawlmark-cli report --client example.com --format md,pdf,docx
 crawlmark-cli report --all --template quarterly --quarter 2026-Q3 --format pdf
 crawlmark-cli report --client example.com --template executive --format pdf
+crawlmark-cli report templates new --client example.com    # build your own: pick sections, preview, save
 ```
+
+To build your own template without writing YAML, run `crawlmark-cli report templates new` on a terminal, or ask Claude ("draft me a one-page monthly summary with search, traffic and technical issues"): it shows you the template and the change to your file, and saves only after you say yes. Paid sections are always named with their cost and never added without your OK.
 
 Optional sections are added with `--include` (`include` in Claude): `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history), `ai` (llms.txt and AI crawler access from the newest saved audit) and `spend` (paid data used this month; the tool and CLI results always report it, the files only with this section). A template can also have a paid `keyword_gap` section, which runs only with `--paid` (`allowPaid`) after its estimate fits the caps.
 
@@ -628,6 +634,7 @@ CLI
 | `data purge --provider <ahrefs\|semrush\|dataforseo> [--client <domain>]` | Delete one provider's stored data (local only) |
 | `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format pdf,docx,html,md] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
+| `report templates new [--client <domain>] [--file global\|client] [--replace] [--dry-run]` | Build a template on a terminal: pick sections (marked free or paid, with the client's cost per run), period, comparisons and layout, see a sample-data preview and the file diff, then save, change or cancel. Exit 0 saved or cancelled, 1 error or no terminal, 130 Ctrl-C |
 | `crawl --client <domain> [--max-pages <n>] [--max-depth <n>] [--concurrency <n>] [--user-agent crawlmark\|googlebot] [--include-subdomains] [--start-url <url,url>]` | Free local crawl of a client's site, saved like `local_crawl`. Exit 0 saved, 1 error |
 | `logs --client <domain> <file>... [--since <date>] [--until <date>] [--bots <name,name>] [--no-verify]` | Crawler hits in access logs you name (local only, aggregates only). Exit 0 done, 1 error |
 

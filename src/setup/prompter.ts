@@ -28,7 +28,17 @@ export interface Prompter {
    * older test double) takes the defaults.
    */
   multiselect?<T extends string>(question: string, choices: readonly Choice<T>[], defaults: readonly T[], opts?: { summary?: string }): Promise<T[]>;
+  /**
+   * Pick any number of choices shown under group headings (the template builder's sections). Optional; a
+   * prompter without it falls back to `multiselect` with the group in each label.
+   */
+  groupMultiselect?<T extends string>(question: string, groups: readonly ChoiceGroup<T>[], defaults: readonly T[]): Promise<T[]>;
   close(): void;
+}
+
+export interface ChoiceGroup<T extends string> {
+  label: string;
+  choices: readonly Choice<T>[];
 }
 
 /** Parse a comma list of numbers or names against the choices (pure). Empty input is undefined (take the defaults). */
@@ -121,6 +131,21 @@ export function createPrompter(src: LineSource, out: (s: string) => void): Promp
       choices.forEach((c, i) => out(`  ${i + 1}) ${c.label}${c.hint ? ` (${c.hint})` : ""}${defaults.includes(c.value) ? " (default)" : ""}`));
       for (;;) {
         const parsed = parseMultiSelect(await src.line(`Choose numbers or names, comma-separated, or "none" [${defaults.join(",") || "none"}]: `), choices);
+        if (parsed === undefined) return [...defaults];
+        if ("values" in parsed) return parsed.values;
+        out(`Not one of the options: ${parsed.unknown.join(", ")}.`);
+      }
+    },
+    async groupMultiselect(question, groups, defaults) {
+      const flat = groups.flatMap((g) => g.choices);
+      out(question);
+      let n = 0;
+      for (const g of groups) {
+        out(`  ${g.label}`);
+        for (const c of g.choices) out(`    ${++n}) ${c.label}${c.hint ? ` (${c.hint})` : ""}${defaults.includes(c.value) ? " (default)" : ""}`);
+      }
+      for (;;) {
+        const parsed = parseMultiSelect(await src.line(`Choose numbers or names, comma-separated, or "none" [${defaults.join(",") || "none"}]: `), flat);
         if (parsed === undefined) return [...defaults];
         if ("values" in parsed) return parsed.values;
         out(`Not one of the options: ${parsed.unknown.join(", ")}.`);

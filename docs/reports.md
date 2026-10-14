@@ -140,6 +140,50 @@ A template can set `layout: onepage` for the compact one-page layout the builtin
 
 The charts need daily rows: run_report_template adds them to the `search_overview` and `organic_traffic` data as `daily` (Search Console and GA4 `date` dimension; free, extra fields only), and stored rank points to `rank_trend` keywords as `series`. When the daily rows can't be fetched, the section still renders, without its chart.
 
+## Build a template
+
+You don't have to write the YAML by hand. Both ways below show you exactly what will be saved, save nothing until you say so, and only ever write a report template file (never branding, `clients.yaml` or settings). Comments and layout in an existing file are kept: the new template is added as its own block, and the previous version is saved next to it as `<file>.bak`.
+
+### From the terminal
+
+```bash
+crawlmark-cli report templates new --client example.com
+```
+
+It asks for an id and a title, then shows every section type grouped (Search Console, Analytics, Site health, SEO data, Local search, AI search, Other), each marked `(free)`, `(free · needs <key>)` or `(paid · DataForSEO · ~$0.025 per run for example.com)`. The paid numbers are estimates for that client from its own data provider and caches; working them out makes no request and spends nothing. Each paid section you tick is confirmed once more by name and cost (the default is No). Then the optional sections (paid ones start optional, so they run only with `--include <id> --paid`), the period (last month, last quarter, last 28 days or the last N days), the comparisons, the layout (standard or one page) and, when the file has none yet, its default formats.
+
+Before saving it writes a one-page preview with **sample example.com data** (never the client's own) to `<home>/reports/.preview/<client>/<id>.html`, offers to open it, shows the diff of the template file, and asks: save, change something, or cancel. Ctrl-C at any point writes nothing.
+
+| Flag | Does |
+|---|---|
+| `--client <domain>` | Prices the paid sections for that client and uses its branding in the preview. Without it, paid sections show as `(paid)` and the preview uses the global branding |
+| `--file global\|client` | Where to save: the global file (default) or the client's own file (needs `--client`) |
+| `--replace` | Allow an id that is already in the file (overwritten) or a builtin id (your copy then hides the builtin) |
+| `--dry-run` | Everything up to save, then writes nothing but the preview |
+| `--yes` | Asks nothing and creates nothing (the builder is interactive) |
+
+It needs an interactive terminal; in a pipe or cron it exits 1 and points at `report templates validate` for hand-written YAML.
+
+### In Claude
+
+```
+> Draft me a quarterly board pack for example.com with search, backlinks and the technical issues.
+  get_report_template { template: "monthly" }                          # the `catalogue` of section types
+  create_report_template { client: "example.com", id: "board", template: { title: "Quarterly board pack", period: { range: "last_quarter" }, sections: [...] } }
+  → nothing saved: the YAML, the diff of report-templates.yaml, paid sections with estimates (backlinks about $0.025 per run), a confirmToken
+> Yes, save it, paid is fine.
+  create_report_template { ...same arguments..., confirmToken: "tpl_...", paidAcknowledged: true }  → saved
+```
+
+The `build-report-template` prompt walks through this. The rules:
+
+- A call without `confirmToken` only proposes: it validates the template with the same schema as `report templates validate`, returns the template's YAML, a diff of the whole target file and the paid sections with this client's estimates, and stores a single-use token for 15 minutes. Nothing is written.
+- Saving needs the same arguments plus the token. It fails if the token is unknown, used or expired, if the arguments changed, or if the file changed since the proposal (propose again and look at the new diff).
+- A template with paid sections also needs `paidAcknowledged: true`, which Claude may pass only after you agreed to those sections by name and cost.
+- When your app supports MCP elicitation (Claude Code, for example), crawlmark also asks you directly before saving ("Save template "board" to ...? It includes 1 paid section (backlinks). Sections: ...", with the start of any free-text section) and saves only on yes.
+- Without elicitation, the token is only a two-step the model can complete by itself: it shows that Claude made the proposal first, not that you agreed. So without elicitation crawlmark saves only simple new templates (no paid sections, no free-text `text` sections, not replacing a template in the file, not hiding a builtin, and no `update_report_template` changes). Anything else is refused with a pointer to `crawlmark-cli report templates new`, where you make the choices yourself. This keeps text injected into a page Claude read from reaching every client report.
+- `update_report_template` changes a template that is already in a file: the whole `template`, or a `patch` that adds sections (at the end), removes sections by id, or sets the title, description, period, comparisons or layout. Builtin templates aren't in a file; copy one with `create_report_template` and `replace: true`.
+
 ## Files and formats
 
 Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `quarterly-2026-q3.html` or `monthly-2026-07-01-to-2026-09-30.docx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.

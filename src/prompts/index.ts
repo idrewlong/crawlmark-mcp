@@ -164,6 +164,31 @@ export function registerPrompts(server: McpServer) {
   );
 
   server.registerPrompt(
+    "build-report-template",
+    {
+      title: "Build a report template",
+      description:
+        "Turn a plain-language request (\"a quarterly board pack with search, backlinks and technical issues\") into a report template: pick sections from the catalogue, propose it with create_report_template, show you the YAML and diff, ask about each paid section by name and cost, and save only after your explicit yes.",
+      argsSchema: {
+        request: z.string().min(1).max(1000).describe("What the template should contain, in your words."),
+        client: z.string().optional().describe("Client domain or clients.yaml slug: saves to that client's own template file and prices paid sections for it. Leave empty for the global file."),
+      },
+    },
+    ({ request, client }) => {
+      const c = client?.trim();
+      const r = request.replace(/\s+/g, " ").replace(/["`]/g, "'").trim();
+      return text(
+        template("build-report-template", {
+          request: r,
+          scope: c ? `for \`${c}\`` : "for every client",
+          clientArg: c ? ` with \`client: "${c}"\`` : "",
+          fileNote: c ? `in ${c}'s own template file (\`file: "client"\`), unless I say it's for every client (then leave \`file\` out)` : "in the global template file (leave `file` out)",
+        }),
+      );
+    },
+  );
+
+  server.registerPrompt(
     "audit-findings",
     {
       title: "Audit findings",

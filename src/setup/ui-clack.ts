@@ -7,7 +7,7 @@
 import type { Writable } from "node:stream";
 import { styleText } from "node:util";
 import * as clack from "@clack/prompts";
-import { PromptAbortedError, type Choice, type Prompter } from "./prompter.js";
+import { PromptAbortedError, type Choice, type ChoiceGroup, type Prompter } from "./prompter.js";
 import { formatElapsed, formatTotal, type Outcome, type Ui } from "./ui.js";
 import { stripControl } from "../lib/terminal-text.js";
 import { linkify, supportsHyperlinks } from "../lib/terminal-links.js";
@@ -20,6 +20,8 @@ export interface ClackPromptFns {
   confirm: typeof clack.confirm;
   select: typeof clack.select;
   multiselect: typeof clack.multiselect;
+  /** Optional so older test doubles still fit; without it groups fall back to a flat multiselect. */
+  groupMultiselect?: typeof clack.groupMultiselect;
   isCancel: typeof clack.isCancel;
 }
 
@@ -29,6 +31,7 @@ const realPromptFns: ClackPromptFns = {
   confirm: clack.confirm,
   select: clack.select,
   multiselect: clack.multiselect,
+  groupMultiselect: clack.groupMultiselect,
   isCancel: clack.isCancel,
 };
 
@@ -62,6 +65,14 @@ export function clackPrompter(fns: ClackPromptFns = realPromptFns): Prompter {
     },
     async multiselect<T extends string>(question: string, choices: readonly Choice<T>[], defaults: readonly T[]): Promise<T[]> {
       return unwrap(await fns.multiselect<T>({ message: question, options: options(choices) as never, initialValues: [...defaults], required: false }));
+    },
+    async groupMultiselect<T extends string>(question: string, groups: readonly ChoiceGroup<T>[], defaults: readonly T[]): Promise<T[]> {
+      if (!fns.groupMultiselect) {
+        const flat = groups.flatMap((g) => g.choices.map((c) => ({ ...c, label: `${g.label}: ${c.label}` })));
+        return unwrap(await fns.multiselect<T>({ message: question, options: options(flat) as never, initialValues: [...defaults], required: false }));
+      }
+      const grouped = Object.fromEntries(groups.map((g) => [g.label, options(g.choices)]));
+      return unwrap(await fns.groupMultiselect<T>({ message: question, options: grouped as never, initialValues: [...defaults], required: false, selectableGroups: false }));
     },
     close() {},
   };
