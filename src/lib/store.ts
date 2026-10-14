@@ -225,3 +225,53 @@ export function migrateUrlInspections(database: DatabaseSync): boolean {
 }
 
 migrateUrlInspections(db);
+
+/**
+ * Phase 13 B (Ahrefs storage decision, docs/research/2026-10-13-ahrefs-storage-terms.md): which cache entries hold a
+ * unit provider's data (so they can be purged with it), and where the provider's key came from when its data was
+ * last stored (so a removed key can be detected safely). Additive and idempotent; older builds never read them.
+ */
+export function migrateProviderData(database: DatabaseSync): boolean {
+  const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'provider_cache_keys'").get() !== undefined;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS provider_cache_keys (
+      key      TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      client   TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS provider_cache_keys_provider ON provider_cache_keys (provider, client);
+    CREATE TABLE IF NOT EXISTS provider_data_marks (
+      provider   TEXT PRIMARY KEY,
+      key_source TEXT NOT NULL,
+      entry      TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+  return !existed;
+}
+
+migrateProviderData(db);
+
+/**
+ * Phase 13 B fix round (R-3, R-4): provider-history purchases per series, with how far back each reached, so a
+ * purchase that returned nothing (or less than asked) isn't bought again every run, and a later report that needs an
+ * older month can still buy it. Additive and idempotent.
+ */
+export function migrateHistoryPurchases(database: DatabaseSync): boolean {
+  const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'seo_history_purchases'").get() !== undefined;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS seo_history_purchases (
+      client      TEXT NOT NULL,
+      kind        TEXT NOT NULL,
+      target      TEXT NOT NULL,
+      provider    TEXT NOT NULL,
+      market      TEXT NOT NULL,
+      captured_at INTEGER NOT NULL,
+      date_from   TEXT NOT NULL,
+      PRIMARY KEY (client, kind, target, provider, market)
+    );
+  `);
+  return !existed;
+}
+
+migrateHistoryPurchases(db);

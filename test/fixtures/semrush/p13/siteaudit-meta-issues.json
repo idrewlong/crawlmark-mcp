@@ -1,0 +1,25 @@
+{
+  "issues": [
+    {
+      "id": 8,
+      "title": "internal links are broken",
+      "title_page": "x",
+      "url_column": "Page URL",
+      "info_column": "y"
+    },
+    {
+      "id": 103,
+      "title": "pages don't have an h1 heading",
+      "title_page": "x",
+      "url_column": "Page URL",
+      "info_column": "y"
+    },
+    {
+      "id": 215,
+      "title": "pages have only one incoming internal link",
+      "title_page": "x",
+      "url_column": "Page URL",
+      "info_column": "y"
+    }
+  ]
+}

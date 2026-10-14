@@ -9,7 +9,7 @@
  * marks the property's day exhausted and stops the run at once (no retries).
  */
 import type { Client } from "../config.js";
-import { aggregateInspections, inspectionTrend, isoWeek, planPool, type PoolGroup } from "../analysis/indexing.js";
+import { aggregateInspections, inProperty, inspectionTrend, isoWeek, planPool, type PoolGroup } from "../analysis/indexing.js";
 import { cleanText, inspectionsBetween, lastInSitemap, lastInspectedAt, latestInspections, markQuotaExhausted, pacificDay, quotaFor, reserveQuota, saveFailedInspection, saveInspection, type InspectionRecord } from "../lib/inspections.js";
 import type { IndexingIssuesData } from "./report-types.js";
 
@@ -144,6 +144,17 @@ export async function inspectIndexCoverage(client: Client, opts: InspectOptions,
     } catch {
       sitemapKnown = false;
       notes.push("The sitemaps couldn't be read; key pages and top Search Console pages were used.");
+    }
+    // Say so when the live sitemaps list fewer URLs than Search Console last counted (a sitemap that shrank, or one
+    // Search Console lists that no longer loads): otherwise a short sample looks like a bug.
+    if (sitemapKnown) {
+      try {
+        const submitted = (await deps.sitemaps(client)).reduce((a, x) => a + (x.submitted ?? 0), 0);
+        const listed = sitemapUrls.filter((u) => inProperty(u, property)).length;
+        if (submitted > listed) notes.push(`The site's sitemaps list ${listed} URL${listed === 1 ? "" : "s"} in this property now, but Search Console last counted ${submitted} submitted; only the listed ones can be sampled. Check the sitemap files Search Console shows.`);
+      } catch {
+        /* Search Console's sitemap list is optional here */
+      }
     }
   }
 

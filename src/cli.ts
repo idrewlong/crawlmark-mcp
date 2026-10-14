@@ -46,6 +46,8 @@ import { closeEgressProxy } from "./lib/egress-proxy.js";
 import { crawlCommand } from "./crawl-cli.js";
 import { logsCommand } from "./logs-cli.js";
 import { indexCoverageCommand } from "./index-coverage-cli.js";
+import { dataCommand } from "./data-cli.js";
+import { seoSnapshotCommand } from "./seo-snapshot-cli.js";
 
 /** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
 async function updateNoticeAfterHelp(json = false): Promise<void> {
@@ -236,6 +238,12 @@ async function clientsRemove(domains: string[], ignore: boolean): Promise<number
         out(`Removed ${r.domain} from ${env.CLIENTS_FILE}.`);
         removed.push(r.domain);
       }
+      if (r.status !== "not-found") {
+        // Phase 13 B: a removed (or hidden) client's stored Ahrefs data is deleted (Ahrefs storage decision).
+        const { purgeProviderData } = await import("./lib/provider-data.js");
+        const p = purgeProviderData("ahrefs", r.domain);
+        if (p.snapshots + p.cacheEntries + p.issueSnapshotsEdited > 0) out(`Deleted stored Ahrefs data for ${r.domain} (${p.snapshots} snapshot rows, ${p.cacheEntries} cache entries).`);
+      }
     } catch (err) {
       warn(`Could not remove ${domain}: ${message(err)}`);
       failed++;
@@ -389,6 +397,8 @@ type ClientsSetFlags = {
   country?: string | undefined;
   "bing-site"?: string | undefined;
   "place-id"?: string | undefined;
+  "ahrefs-site-audit-project"?: string | undefined;
+  "semrush-project"?: string | undefined;
 };
 
 /** `none` (any case) clears a value: the empty string setClientProfile expects. */
@@ -396,8 +406,8 @@ const noneToEmpty = (v: string | undefined) => (v !== undefined && v.trim().toLo
 
 async function clientsSet(args: string[], values: ClientsSetFlags): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
-  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"] }).every((v) => v === undefined)) {
-    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site or --place-id.");
+  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"], ah: values["ahrefs-site-audit-project"], sp: values["semrush-project"] }).every((v) => v === undefined)) {
+    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site, --place-id, --ahrefs-site-audit-project or --semrush-project.");
   }
   const provider = noneToEmpty(values.provider)?.trim().toLowerCase();
   if (provider !== undefined && provider !== "" && !(PROVIDER_IDS as readonly string[]).includes(provider)) {
@@ -408,7 +418,7 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
     return usageError(`--country must be a two-letter ISO code such as US or GB, or none (got "${values.country}").`);
   }
   const brandTerms = values["brand-terms"] === undefined ? undefined : values["brand-terms"].split(",");
-  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]) }, { trustedPlaceId: true });
+  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]), ahrefsSiteAuditProject: noneToEmpty(values["ahrefs-site-audit-project"]), semrushProject: noneToEmpty(values["semrush-project"]) }, { trustedPlaceId: true });
   for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
   for (const k of r.cleared) out(`Cleared ${k}.`);
   out(
@@ -416,6 +426,8 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
       (r.profile.country !== undefined ? `data provider ${r.profile.dataProvider ?? "(default)"}; country ${r.profile.country ?? "(none)"}. ` : "") +
       (r.profile.bingSite !== undefined ? `Bing site ${r.profile.bingSite ?? "(matched by domain)"}. ` : "") +
       (r.profile.gbpPlaceId !== undefined ? `Google Business Profile place ID ${r.profile.gbpPlaceId ?? "(not set)"}. ` : "") +
+      (r.profile.ahrefsSiteAuditProject !== undefined ? `Ahrefs Site Audit project ${r.profile.ahrefsSiteAuditProject ?? "(matched by domain)"}. ` : "") +
+      (r.profile.semrushProject !== undefined ? `Semrush project ${r.profile.semrushProject ?? "(matched by domain)"}. ` : "") +
       `File: ${r.clientsFile}`,
   );
   return 0;
@@ -546,6 +558,8 @@ async function main(argv: string[]): Promise<number> {
       country: { type: "string" },
       "bing-site": { type: "string" },
       "place-id": { type: "string" },
+      "ahrefs-site-audit-project": { type: "string" },
+      "semrush-project": { type: "string" },
       all: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
       "min-confidence": { type: "string" },
@@ -582,6 +596,7 @@ async function main(argv: string[]): Promise<number> {
       "no-verify": { type: "boolean", default: false },
       max: { type: "string" },
       "stale-days": { type: "string" },
+      kinds: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -667,6 +682,27 @@ async function main(argv: string[]): Promise<number> {
       // A PDF starts the egress proxy; its sockets would keep the CLI alive.
       await closeEgressProxy();
     }
+  }
+  // Phase 13 B: commands that read or write stored provider data first check whether the Ahrefs key was removed.
+  if (["report", "seo-snapshot", "data", "audit", "check-ranks", "clients"].includes(group ?? "")) (await import("./lib/provider-data.js")).reconcileOnce();
+  if (group === "seo-snapshot") {
+    return seoSnapshotCommand(command ? [command, ...args] : args, values, { out, warn, usage: scheduledUsage }, {
+      loadClients: async ({ client, all }) => {
+        if (!all) return { clients: [await resolveClient(client!)], skipped: [] };
+        const registry = await loadRegistry({ refresh: true });
+        const d = registry.discovery;
+        if (d.error) warn(`Discovery failed, using clients.yaml entries only: ${d.error}`);
+        return { clients: registry.clients, skipped: registry.ignored.map((domain) => ({ client: domain, reason: "ignore: true in clients.yaml" })), discoveryError: d.error };
+      },
+      sections: async () => {
+        const ps = await import("./reports/provider-sections.js");
+        return { deps: await ps.loadProviderSectionDeps(), spend: await ps.loadSpendDeps(), ps };
+      },
+    });
+  }
+  if (group === "data") {
+    const { purgeProviderData } = await import("./lib/provider-data.js");
+    return dataCommand(command, args, values, { out, warn, usage: scheduledUsage }, { resolveClient: async (id) => resolveClientOffline(id), purge: purgeProviderData });
   }
   if (group === "clients" && command === "add") return clientsAdd(args, values.name);
   if (group === "clients" && command === "remove") return clientsRemove(args, values.ignore);

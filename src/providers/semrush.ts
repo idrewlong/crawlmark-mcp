@@ -51,7 +51,13 @@ import {
   type SemrushErrorKind,
   type SemrushReport,
 } from "./semrush-shape.js";
+import { mapSemrushCompetitorsFull, mapSemrushVisibility, mapSemrushVisibilityHistory } from "./semrush-shape.js";
 import type {
+  CompetitorOverviewRequest,
+  CompetitorOverviewRouted,
+  OrganicHistoryRouted,
+  OrganicOverviewRouted,
+  ProviderCompetitor,
   BacklinksRouted,
   CompetitorsRouted,
   KeywordGapRequest,
@@ -64,6 +70,7 @@ import type {
   SeoDataProvider,
 } from "./seo-data.js";
 import { isTimeoutOrAbort, redact, retryAfterMs, unitsCall } from "./units-billing.js";
+import { assertSemrushAllowed } from "./semrush-site-audit.js";
 
 export class SemrushApiError extends Error {
   override name = "SemrushApiError";
@@ -128,6 +135,21 @@ function v3Key(capability: string): string {
   if (!env.SEMRUSH_API_KEY) throw new ProviderUnavailableError(capability, "semrush", "SEMRUSH_API_KEY is not set. Run setup --step semrush.");
   return env.SEMRUSH_API_KEY;
 }
+
+/**
+ * Phase 13 B: one Semrush Projects API GET (JSON) for the Site Audit reader (semrush-site-audit.ts), which checks its
+ * own path allowlist first. The v3 key goes in the query string (never shown); `ledgerLabel` is what the ledger
+ * records. Units are recorded by the caller once the body is read. Errors carry redacted vendor text only.
+ */
+export async function semrushProjectsGet(path: string, ledgerLabel: string, params: Record<string, string>): Promise<{ status: number; text: string }> {
+  // Defence in depth (SEC-6): the Site Audit allowlist is checked here too.
+  assertSemrushAllowed("GET", path, params);
+  const key = v3Key("siteAudit");
+  return send({ path, label: ledgerLabel, auth: { v3: key }, params });
+}
+
+/** Vendor text made safe to show (keys redacted, control characters stripped, capped). */
+export const semrushRedact = (text: string) => redact(text, secrets());
 
 /** The client's Semrush database, or unavailable (no country, or one Semrush has no documented database for). */
 function database(client: Client, capability: string): string {
@@ -458,9 +480,131 @@ export async function semrushKeywordGap(client: Client, req: KeywordGapRequest, 
   return { gaps: merged.gaps, perCompetitor: merged.perCompetitor, ...withNotes(r.value.notes), ...meta(r) };
 }
 
+// ------------------------------------------------------------------ Phase 13 B: visibility, history, competitors
+
+const bareT = (t: string) => t.replace(/^www\./, "").toLowerCase();
+
+export function planSemrushBacklinksSummary(_client: Client, target: string): PaidPlan {
+  const v4 = Boolean(env.SEMRUSH_V4_API_KEY);
+  const units = SEMRUSH_UNITS[v4 ? "backlinks_overview_v4" : "backlinks_overview_v3"];
+  return { keyParts: { target, semrushApi: v4 ? "v4" : "v3" }, unit: "units", requests: 1, cost: () => units, breakdown: () => `backlinks overview (${units} units)` };
+}
+
+export function planSemrushOrganicOverview(client: Client, target: string): PaidPlan {
+  return { keyParts: { target: bareT(target), database: database(client, "organicOverview") }, unit: "units", requests: 1, cost: () => SEMRUSH_UNITS.domain_rank, breakdown: () => `domain_rank 1 line × ${SEMRUSH_UNITS.domain_rank} units` };
+}
+
+/** One v3 report line set, cached and unit-capped (shared by the Phase 13 B calls). */
+async function v3Lines(client: Client, o: { capability: string; keyParts: Record<string, unknown>; estimate: number; refresh?: boolean | undefined; type: SemrushReport; columns: readonly string[]; params: Record<string, string>; db: string }) {
+  const key = v3Key(o.capability);
+  return unitsCall({
+    client,
+    provider: "semrush",
+    capability: o.capability,
+    keyParts: o.keyParts,
+    // Semrush terms: nothing kept longer than a month (research S5); a week here.
+    ttl: TTL.week,
+    estimate: o.estimate,
+    refresh: o.refresh,
+    run: async () => {
+      const req: Req = { path: "/", label: o.params.type!, auth: { v3: key }, params: { ...o.params, database: o.db, export_columns: o.columns.join(",") } };
+      const out = await v3Report(client, req, o.columns, o.type, o.estimate, o.db);
+      return { value: out.rows, units: out.units };
+    },
+  });
+}
+
+/** Visibility now: domain_rank (Or, Ot). Semrush has no position bands (D6). */
+export async function semrushOrganicOverview(client: Client, target: string, opts: { refresh?: boolean } = {}): Promise<OrganicOverviewRouted> {
+  const plan = planSemrushOrganicOverview(client, target);
+  const db = plan.keyParts.database as string;
+  const r = await v3Lines(client, { capability: "organicOverview", keyParts: plan.keyParts, estimate: plan.cost(1), refresh: opts.refresh, type: "domain_rank", columns: SEMRUSH_COLUMNS.domain_rank, params: { type: "domain_rank", domain: plan.keyParts.target as string }, db });
+  return { figures: mapSemrushVisibility(r.value), market: db, ...meta(r) };
+}
+
+export function planSemrushOrganicHistory(client: Client, target: string, months: number): PaidPlan {
+  const units = estimateSemrushUnits("domain_rank_history", months);
+  return { keyParts: { target: bareT(target), database: database(client, "organicOverview"), months }, unit: "units", requests: 1, cost: () => units, breakdown: () => `domain_rank_history ${months} lines × ${SEMRUSH_UNITS.domain_rank_history} units` };
+}
+
+/** Monthly visibility history: domain_rank_history, display_limit = months (always sent), newest first. */
+export async function semrushOrganicHistory(client: Client, target: string, months: number, opts: { refresh?: boolean } = {}): Promise<OrganicHistoryRouted> {
+  const plan = planSemrushOrganicHistory(client, target, months);
+  const db = plan.keyParts.database as string;
+  const r = await v3Lines(client, {
+    capability: "organicHistory",
+    keyParts: plan.keyParts,
+    estimate: plan.cost(1),
+    refresh: opts.refresh,
+    type: "domain_rank_history",
+    columns: SEMRUSH_COLUMNS.domain_rank_history,
+    params: { type: "domain_rank_history", domain: plan.keyParts.target as string, display_limit: String(months), display_sort: "dt_desc" },
+    db,
+  });
+  return { points: mapSemrushVisibilityHistory(r.value), market: db, ...meta(r) };
+}
+
+export const semrushCompetitorLines = (limit: number) => Math.max(limit, 10);
+
+export function planSemrushCompetitorOverview(client: Client, req: CompetitorOverviewRequest): PaidPlan {
+  const lines = semrushCompetitorLines(req.limit);
+  const units = estimateSemrushUnits("domain_organic_organic", lines) + req.saved.length * SEMRUSH_UNITS.domain_rank;
+  return {
+    keyParts: { target: bareT(client.domain), database: database(client, "competitorOverview"), lines, saved: req.saved },
+    unit: "units",
+    requests: 1 + req.saved.length,
+    cost: () => units,
+    breakdown: () => `domain_organic_organic ${lines} lines × 40${req.saved.length ? ` + up to ${req.saved.length} domain_rank call(s) (10 each) for saved competitors the list misses` : ""} = ${units} units`,
+  };
+}
+
+/** Competitors: domain_organic_organic (Dn, Np, Or, Ot) and a domain_rank per saved competitor the list misses (D7). */
+export async function semrushCompetitorOverview(client: Client, req: CompetitorOverviewRequest, opts: { refresh?: boolean } = {}): Promise<CompetitorOverviewRouted> {
+  const plan = planSemrushCompetitorOverview(client, req);
+  const db = plan.keyParts.database as string;
+  const key = v3Key("competitorOverview");
+  const target = plan.keyParts.target as string;
+  const lines = plan.keyParts.lines as number;
+  const r = await unitsCall({
+    client,
+    provider: "semrush",
+    capability: "competitorOverview",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate: plan.cost(1),
+    refresh: opts.refresh,
+    run: async () => {
+      const columns = SEMRUSH_COLUMNS.domain_organic_organic_full;
+      const q: Req = { path: "/", label: "domain_organic_organic", auth: { v3: key }, params: { type: "domain_organic_organic", domain: target, database: db, export_columns: columns.join(","), display_sort: "np_desc", display_limit: String(lines) } };
+      const out = await v3Report(client, q, columns, "domain_organic_organic", estimateSemrushUnits("domain_organic_organic", lines), db);
+      let units = out.units;
+      const rows: ProviderCompetitor[] = mapSemrushCompetitorsFull(out.rows, target);
+      const size = rows.length;
+      for (const saved of req.saved) {
+        if (rows.some((x) => x.domain === saved)) continue;
+        const dc = SEMRUSH_COLUMNS.domain_rank;
+        const one = await v3Report(client, { path: "/", label: "domain_rank", auth: { v3: key }, params: { type: "domain_rank", domain: saved, database: db, export_columns: dc.join(",") } }, dc, "domain_rank", SEMRUSH_UNITS.domain_rank, db);
+        units += one.units;
+        const f = mapSemrushVisibility(one.rows);
+        rows.push({ domain: saved, commonKeywords: null, keywords: f.keywords, traffic: f.traffic, inProviderList: false });
+      }
+      return { value: { rows, providerListSize: size }, units };
+    },
+  });
+  return { ...r.value, market: db, ...meta(r) };
+}
+
 export const semrushProvider: SeoDataProvider = {
   id: "semrush",
-  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap"]),
+  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap", "organicOverview", "competitorOverview"]),
+  planBacklinksSummary: (c, t) => planSemrushBacklinksSummary(c, t),
+  planOrganicOverview: (c, t) => planSemrushOrganicOverview(c, t),
+  organicOverview: (c, t, o) => semrushOrganicOverview(c, t, o),
+  planOrganicHistory: (c, t, m) => planSemrushOrganicHistory(c, t, m),
+  organicHistory: (c, t, m, o) => semrushOrganicHistory(c, t, m, o),
+  planCompetitorOverview: (c, r) => planSemrushCompetitorOverview(c, r),
+  competitorOverview: (c, r, o) => semrushCompetitorOverview(c, r, o),
+  market: (c, cap) => database(c, cap),
   configured: () => Boolean(env.SEMRUSH_API_KEY),
   planKeywordIdeas: (c, r) => planSemrushKeywordIdeas(c, r),
   keywordIdeas: (c, r, o) => semrushKeywordIdeas(c, r, o),

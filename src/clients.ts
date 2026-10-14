@@ -53,6 +53,7 @@ import {
   type KeywordEntry,
   type DiscoverySkipped,
   type Settled,
+  PROJECT_ID_RE,
 } from "./lib/clients.js";
 import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, squash, toBrandTerms } from "./lib/brand.js";
 import { mapLimit } from "./lib/concurrency.js";
@@ -552,6 +553,10 @@ export interface ProfileUpdate {
   bingSite?: string | undefined;
   /** Phase 12 C4: the confirmed Google Business Profile place ID (from local_profile, after the user confirms); empty string clears it. */
   gbpPlaceId?: string | undefined;
+  /** Phase 13 B: an existing Ahrefs Site Audit project ID (digits); empty string clears it. */
+  ahrefsSiteAuditProject?: string | undefined;
+  /** Phase 13 B: an existing Semrush project ID (digits); empty string clears it. */
+  semrushProject?: string | undefined;
 }
 
 export interface ProfileResult {
@@ -559,7 +564,7 @@ export interface ProfileResult {
   set: Record<string, string>;
   cleared: string[];
   /** dataProvider and country are included when the update set or cleared either of them. */
-  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null };
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null; ahrefsSiteAuditProject?: string | null; semrushProject?: string | null };
   clientsFile: string;
 }
 
@@ -614,13 +619,19 @@ export async function setClientProfile(
     if (v !== "" && !PLACE_ID_RE.test(v)) throw new Error(`"${stripControl(update.gbpPlaceId).slice(0, 100)}" is not a Google place ID (letters, digits, - and _, as local_profile returns it in matched.placeId).`);
     fields.gbpPlaceId = v;
   }
+  for (const k of ["ahrefsSiteAuditProject", "semrushProject"] as const) {
+    if (update[k] === undefined) continue;
+    const v = update[k]!.trim();
+    if (v !== "" && !PROJECT_ID_RE.test(v)) throw new Error(`"${stripControl(update[k]!).slice(0, 60)}" isn't ${k === "semrushProject" ? "a Semrush project" : "an Ahrefs Site Audit project"} ID (digits, from the project's URL).`);
+    fields[k] = v;
+  }
   let brandTerms: string[] | undefined;
   if (update.brandTerms !== undefined) {
     brandTerms = toBrandTerms(update.brandTerms);
     const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
     if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
   }
-  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite or gbpPlaceId.");
+  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ahrefsSiteAuditProject or semrushProject.");
   const client = await resolveClient(idOrDomain);
   if (fields.bingSite && !bingSiteOnDomain(fields.bingSite, client.domain)) {
     throw new Error(`bingSite ${fields.bingSite.slice(0, 200)} isn't on ${client.domain}: it would show another site's Bing data in this client's reports. Use a Bing site on ${client.domain} or a subdomain of it.`);
@@ -653,6 +664,8 @@ export async function setClientProfile(
       ...(update.dataProvider !== undefined || update.country !== undefined ? { dataProvider: updated.dataProvider ?? null, country: updated.country } : {}),
       ...(update.bingSite !== undefined ? { bingSite: updated.bingSite ?? null } : {}),
       ...(update.gbpPlaceId !== undefined ? { gbpPlaceId: updated.gbpPlaceId ?? null } : {}),
+      ...(update.ahrefsSiteAuditProject !== undefined ? { ahrefsSiteAuditProject: updated.ahrefsSiteAuditProject ?? null } : {}),
+      ...(update.semrushProject !== undefined ? { semrushProject: updated.semrushProject ?? null } : {}),
     },
     clientsFile: env.CLIENTS_FILE,
   };

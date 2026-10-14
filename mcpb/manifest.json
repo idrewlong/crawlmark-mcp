@@ -91,6 +91,18 @@
       "description": "Free local crawl of a client's own site: status codes, redirects, titles, descriptions, canonicals, H1s, internal and broken links, depth, noindex and orphan pages. Obeys robots.txt and Crawl-delay; saved for audits."
     },
     {
+      "name": "organic_visibility",
+      "description": "Organic search visibility from the client's SEO data provider: ranking keywords, keywords by position band and estimated traffic, stored as dated snapshots for month-over-month. Paid (estimateOnly first); provider history only when asked."
+    },
+    {
+      "name": "competitor_overview",
+      "description": "Top organic competitors from the client's SEO data provider (saved ones first), with shared keywords and their visibility next to the client's. Paid (estimateOnly first); stored as snapshots."
+    },
+    {
+      "name": "seo_trends",
+      "description": "Stored backlinks and visibility snapshots over time, one series per provider and market. Free, local."
+    },
+    {
       "name": "technical_issues",
       "description": "One deduplicated, severity-grouped list of technical SEO problems from the stored audit, local crawl, site checks, a stored DataForSEO crawl and URL Inspection results, with changes since the last snapshot. Free, local; never starts a crawl."
     },

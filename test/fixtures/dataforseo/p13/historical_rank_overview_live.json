@@ -1,0 +1,132 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.5 sec.",
+  "cost": 0.106,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131200-1111-0000-0000-000000000001",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.4 sec.",
+      "cost": 0.106,
+      "result_count": 1,
+      "path": [],
+      "data": {},
+      "result": [
+        {
+          "se_type": "google",
+          "target": "example.com",
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 3,
+          "items_count": 3,
+          "items": [
+            {
+              "se_type": "google",
+              "year": 2026,
+              "month": 7,
+              "metrics": {
+                "organic": {
+                  "pos_1": 11,
+                  "pos_2_3": 26,
+                  "pos_4_10": 104,
+                  "pos_11_20": 141,
+                  "pos_21_30": 132,
+                  "pos_31_40": 123,
+                  "pos_41_50": 114,
+                  "pos_51_60": 106,
+                  "pos_61_70": 97,
+                  "pos_71_80": 79,
+                  "pos_81_90": 70,
+                  "pos_91_100": 57,
+                  "etv": 3476.4,
+                  "impressions_etv": 45083.0,
+                  "count": 1060,
+                  "estimated_paid_traffic_cost": 5386.0,
+                  "is_new": 35,
+                  "is_up": 185,
+                  "is_down": 158,
+                  "is_lost": 31
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "year": 2026,
+              "month": 8,
+              "metrics": {
+                "organic": {
+                  "pos_1": 11,
+                  "pos_2_3": 26,
+                  "pos_4_10": 107,
+                  "pos_11_20": 146,
+                  "pos_21_30": 136,
+                  "pos_31_40": 127,
+                  "pos_41_50": 118,
+                  "pos_51_60": 109,
+                  "pos_61_70": 100,
+                  "pos_71_80": 82,
+                  "pos_81_90": 73,
+                  "pos_91_100": 59,
+                  "etv": 3594.9,
+                  "impressions_etv": 46619.9,
+                  "count": 1096,
+                  "estimated_paid_traffic_cost": 5569.7,
+                  "is_new": 36,
+                  "is_up": 191,
+                  "is_down": 164,
+                  "is_lost": 32
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "year": 2026,
+              "month": 9,
+              "metrics": {
+                "organic": {
+                  "pos_1": 11,
+                  "pos_2_3": 27,
+                  "pos_4_10": 111,
+                  "pos_11_20": 150,
+                  "pos_21_30": 141,
+                  "pos_31_40": 132,
+                  "pos_41_50": 122,
+                  "pos_51_60": 113,
+                  "pos_61_70": 103,
+                  "pos_71_80": 85,
+                  "pos_81_90": 75,
+                  "pos_91_100": 61,
+                  "etv": 3713.4,
+                  "impressions_etv": 48156.9,
+                  "count": 1132,
+                  "estimated_paid_traffic_cost": 5753.3,
+                  "is_new": 38,
+                  "is_up": 197,
+                  "is_down": 169,
+                  "is_lost": 33
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

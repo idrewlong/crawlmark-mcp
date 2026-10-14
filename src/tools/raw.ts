@@ -197,7 +197,33 @@ export function registerRawTools(server: McpServer) {
       inputSchema: { client: clientArg, target: z.string().optional() },
       annotations: READ_ONLY,
     },
-    handler("backlinks_summary", async ({ client, target }) => backlinksSummary(await resolveClient(client), target)),
+    handler("backlinks_summary", async ({ client, target }) => {
+      const c = await resolveClient(client);
+      const r = await backlinksSummary(c, target);
+      // Phase 13 B (side effect only; the output is unchanged): a fresh summary of the client's own domain is stored as
+      // a dated snapshot, so the backlinks report section can compare months without buying it again.
+      const bare = (d: string) => d.toLowerCase().replace(/^www\./, "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      if (!r.fromCache && r.summary && bare(target ?? c.domain) === bare(c.domain)) {
+        try {
+          const { saveSnapshot } = await import("../lib/snapshots.js");
+          const s = r.summary;
+          saveSnapshot({
+            client: c.slug,
+            kind: "backlinks",
+            target: bare(c.domain),
+            provider: r.provider,
+            market: "global",
+            day: new Date().toISOString().slice(0, 10),
+            source: "live",
+            capturedAt: Date.now(),
+            data: { backlinks: s.backlinks, referringDomains: s.referringDomains, authority: s.authority, newBacklinks: s.newBacklinks, lostBacklinks: s.lostBacklinks, newReferringDomains: null, lostReferringDomains: null },
+          });
+        } catch (err) {
+          console.error(`crawlmark: couldn't store the backlinks snapshot: ${(err as Error).message}`);
+        }
+      }
+      return r;
+    }),
   );
 
   server.registerTool(

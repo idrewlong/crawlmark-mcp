@@ -23,3 +23,16 @@ describe("Phase 13 highlights", () => {
     });
   });
 });
+
+describe("Phase 13 B highlights", () => {
+  it("(9) referring domains moved at least 5% and 10 domains; (10) ranking keywords at least 5% and 20, naming the provider", async () => {
+    const { p13bReport, BACKLINKS, VISIBILITY } = await import("./fixtures/reports/p13-data.js");
+    const h = computeHighlights(p13bReport());
+    expect(h.find((x) => x.kind === "referring-domains")).toEqual({ kind: "referring-domains", sectionId: "backlinks", text: "Referring domains rose 7.1% (from 198 to 212) vs August 2026 (DataForSEO).", value: 7.1 });
+    expect(h.find((x) => x.kind === "ranking-keywords")).toEqual({ kind: "ranking-keywords", sectionId: "visibility", text: "Ranking keywords rose 6.5% (from 1,130 to 1,204) vs August 2026 (DataForSEO).", value: 6.5 });
+    // Below a threshold, or without a comparison: nothing.
+    const small = { ...BACKLINKS, current: { ...BACKLINKS.current, referringDomains: 206 } };
+    expect(computeHighlights(p13bReport({ backlinks: small })).some((x) => x.kind === "referring-domains")).toBe(false);
+    expect(computeHighlights(p13bReport({ visibility: { ...VISIBILITY, comparisons: {} } })).some((x) => x.kind === "ranking-keywords")).toBe(false);
+  });
+});

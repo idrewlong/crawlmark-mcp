@@ -32,6 +32,9 @@ export const BUILTIN_MONTHLY: TemplateSpec = {
     // Phase 13 A (free): one technical-issues list from stored results, and Google indexing of a sample of URLs.
     { id: "issues", type: "technical_issues", optional: true },
     { id: "indexing", type: "indexing_issues", optional: true },
+    // Phase 13 B (paid, through the client's SEO data provider): --include backlinks,visibility --paid.
+    { id: "backlinks", type: "backlinks", optional: true, paid: true },
+    { id: "visibility", type: "organic_visibility", optional: true, paid: true },
   ],
 };
 
@@ -55,6 +58,9 @@ export const BUILTIN_QUARTERLY: TemplateSpec = {
     { id: "audit", type: "audit_changes" },
     { id: "cwv", type: "core_web_vitals_history", optional: true, formFactor: "PHONE", weeks: 25 },
     { id: "issues", type: "technical_issues", optional: true },
+    { id: "backlinks", type: "backlinks", optional: true, paid: true },
+    { id: "visibility", type: "organic_visibility", optional: true, paid: true },
+    { id: "competitors", type: "competitor_overview", optional: true, paid: true },
   ],
 };
 
@@ -161,6 +167,9 @@ templates:
       - { id: issues, type: technical_issues, optional: true }
       # Google indexing of a sample of URLs (free URL Inspection, within a daily budget): --include indexing.
       - { id: indexing, type: indexing_issues, optional: true }
+      # Paid: runs with --include <id> --paid (allowPaid in Claude) through the client's SEO data provider; check the cost with --dry-run.
+      - { id: backlinks, type: backlinks, optional: true, paid: true }
+      - { id: visibility, type: organic_visibility, optional: true, paid: true }
       # Paid example: competitor keyword gap (needs paid: true here and --paid / allowPaid at run time).
       # - { id: gap, type: keyword_gap, optional: true, paid: true, limit: 25 }
   quarterly:
@@ -183,4 +192,8 @@ templates:
       - { id: audit, type: audit_changes }
       - { id: cwv, type: core_web_vitals_history, optional: true, formFactor: PHONE, weeks: 25 }
       - { id: issues, type: technical_issues, optional: true }
+      # Paid: runs with --include <id> --paid (allowPaid in Claude).
+      - { id: backlinks, type: backlinks, optional: true, paid: true }
+      - { id: visibility, type: organic_visibility, optional: true, paid: true }
+      - { id: competitors, type: competitor_overview, optional: true, paid: true }
 `;

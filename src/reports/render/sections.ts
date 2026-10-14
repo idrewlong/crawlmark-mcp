@@ -10,6 +10,12 @@
  * the section is about URLs (crawl issues, llms.txt, Bing).
  */
 import type {
+  BacklinksData,
+  BacklinksNow,
+  CompetitorOverviewData,
+  CompetitorRow,
+  VisibilityData,
+  VisibilityNow,
   AiReadinessData,
   AiVisibilityData,
   AuditChangesData,
@@ -255,10 +261,204 @@ const issueExample = (i: TechIssue, domain: string): Text => {
   const u = i.url ?? i.sources.flatMap((x) => x.examples)[0];
   return u ? pagePath(u, domain) : cell("several pages");
 };
+// ---- Phase 13 B: provider sections ----
+
+/** A change chip for a count (or a provider's authority score): more is better. */
+function countDelta(change: number | null | undefined, pctOf: number | null | undefined): Delta | undefined {
+  if (change === null || change === undefined) return undefined;
+  if (pctOf !== null && pctOf !== undefined && pctOf > 0) return kpiDelta((change / pctOf) * 100, "pct");
+  const flat = Math.abs(change) < 0.05;
+  return { text: fmtInt(Math.abs(change)), dir: flat ? "flat" : change > 0 ? "up" : "down", tone: flat ? "neutral" : change > 0 ? "good" : "bad" };
+}
+/** The first comparison with figures, and its period's name ("August 2026"), or its date when the period isn't known. */
+function firstComparison<T>(report: TemplateReport, c: { previous_period?: { asOf: string; previous: T; change: T } | null; previous_year?: { asOf: string; previous: T; change: T } | null }) {
+  for (const which of ["previous_period", "previous_year"] as const) {
+    const x = c[which];
+    if (x) return { which, name: vsLabel(report, which) || fullDay(x.asOf), ...x };
+  }
+  return null;
+}
+/** One note when a comparison the report asks for has no stored figures from this provider. */
+function missingComparisons(report: TemplateReport, c: Partial<Record<"previous_period" | "previous_year", unknown>>, provider: string, title: string, ctx: MapContext) {
+  for (const which of ["previous_period", "previous_year"] as const) {
+    if (which in c && c[which] === null && report.period.comparisons[which]) ctx.note(`${title}: no ${provider} figures are stored for ${periodName(report.period.comparisons[which]!)}, so that comparison is left out.`);
+  }
+}
+/** Kept in every file, white label included (the providers' terms ask for attribution). */
+const sourceLine = (provider: keyof typeof PROVIDER_NAME, asOf: string, extra = ""): Block => ({ kind: "note", text: [t(`Source: ${PROVIDER_NAME[provider]}. Figures as of ${fullDay(asOf)}${extra}.`)] });
+const monthOf = (day: string) => `${MONTHS[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`;
+const signedInt = (n: number | null) => (n === null ? "n/a" : n === 0 ? "no change" : signed(n));
+const anyFigure = (o: object) => Object.values(o).some((v) => typeof v === "number");
+
+function backlinksBlocks(data: BacklinksData, report: TemplateReport, ctx: MapContext): Block[] {
+  const cur = data.current;
+  if (!anyFigure({ r: cur.referringDomains, b: cur.backlinks, a: cur.authority })) return [];
+  const cmp = firstComparison<BacklinksNow>(report, data.comparisons);
+  const prev = cmp?.previous;
+  const tile = (label: string, v: number | null, p: number | null | undefined, ch: number | null | undefined, pct = true): Kpi => {
+    const delta = p !== null && p !== undefined && v !== null ? countDelta(ch, pct ? p : null) : undefined;
+    return { label, value: fmtInt(v), ...(delta ? { delta } : {}), ...(delta && cmp ? { detail: `vs ${fmtInt(p)} in ${cmp.name}` } : {}) };
+  };
+  const tiles: Kpi[] = [tile("Referring domains", cur.referringDomains, prev?.referringDomains, cmp?.change.referringDomains)];
+  if (cur.backlinks !== null) tiles.push(tile("Backlinks", cur.backlinks, prev?.backlinks, cmp?.change.backlinks));
+  // The provider's own scale: the chip shows points, never a percentage, and never against another provider's metric.
+  tiles.push({ ...tile(data.authority.label, cur.authority, prev?.authority, cmp?.change.authority, false) });
+  const newLost = data.newLostLabel ?? "";
+  if (cur.newReferringDomains !== null) tiles.push({ label: "New referring domains", value: fmtInt(cur.newReferringDomains), detail: newLost, ...(cur.newReferringDomains > 0 ? { tone: "good" as const } : {}) });
+  if (cur.lostReferringDomains !== null) tiles.push({ label: "Lost referring domains", value: fmtInt(cur.lostReferringDomains), detail: newLost, ...(cur.lostReferringDomains > 0 ? { tone: "bad" as const } : {}) });
+  if (cur.newReferringDomains === null && cur.newBacklinks !== null) tiles.push({ label: "New backlinks", value: fmtInt(cur.newBacklinks), detail: newLost });
+  if (cur.lostReferringDomains === null && cur.lostBacklinks !== null) tiles.push({ label: "Lost backlinks", value: fmtInt(cur.lostBacklinks), detail: newLost });
+  const blocks: Block[] = [{ kind: "kpiRow", items: tiles }];
+  const trend = data.trend.filter((p) => p.referringDomains !== null);
+  if (trend.length >= 2 && !ctx.onepage) {
+    blocks.push({
+      kind: "chart",
+      chart: {
+        type: "line",
+        title: "Referring domains by month",
+        x: trend.map((p) => p.day),
+        series: [{ name: "Referring domains", values: trend.map((p) => p.referringDomains), role: "current" }],
+        format: "count",
+        connectGaps: true,
+        summary: `Referring domains went from ${fmtInt(trend[0]!.referringDomains)} in ${monthOf(trend[0]!.day)} to ${fmtInt(trend.at(-1)!.referringDomains)} in ${monthOf(trend.at(-1)!.day)} (${PROVIDER_NAME[data.provider]}).`,
+        fallback: {
+          kind: "table",
+          title: "Referring domains by month",
+          header: ["Month", "Referring domains", ...(trend.some((p) => p.backlinks !== null) ? ["Backlinks"] : []), data.authority.label],
+          rows: trend.map((p) => [cell(monthOf(p.day)), cell(fmtInt(p.referringDomains)), ...(trend.some((x) => x.backlinks !== null) ? [cell(fmtInt(p.backlinks))] : []), cell(fmtInt(p.authority))]),
+          numeric: [false, true, true, true],
+        },
+      },
+    });
+  }
+  if (cmp && !ctx.onepage) {
+    const row = (label: string, a: number | null, b: number | null, ch: number | null) => [cell(label), cell(fmtInt(a)), cell(fmtInt(b)), changeCell(ch, signedInt(ch))];
+    const rows = [row("Referring domains", cur.referringDomains, cmp.previous.referringDomains, cmp.change.referringDomains)];
+    if (cur.backlinks !== null || cmp.previous.backlinks !== null) rows.push(row("Backlinks", cur.backlinks, cmp.previous.backlinks, cmp.change.backlinks));
+    rows.push(row(data.authority.label, cur.authority, cmp.previous.authority, cmp.change.authority));
+    blocks.push({ kind: "table", header: ["Metric", fullDay(data.asOf), cmp.name, "Change"], rows, numeric: [false, true, true, true] });
+  }
+  missingComparisons(report, data.comparisons, PROVIDER_NAME[data.provider], "Backlinks", ctx);
+  for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
+  if (cur.newReferringDomains === null && cur.newBacklinks === null && data.provider === "ahrefs") blocks.push({ kind: "note", text: [t("Ahrefs doesn't report new and lost referring domains in these figures, so only the change is shown.")] });
+  blocks.push(sourceLine(data.provider, data.asOf, `. ${data.authority.label.replace(/ \(.*\)$/, "")} is ${PROVIDER_NAME[data.provider]}'s own measure; don't compare it with another provider's`));
+  return blocks;
+}
+
+const BANDS = [
+  ["top3", "Top 3"],
+  ["pos4_10", "4\u201310"],
+  ["pos11_20", "11\u201320"],
+  ["pos21_100", "21\u2013100"],
+] as const;
+
+function visibilityBlocks(data: VisibilityData, report: TemplateReport, ctx: MapContext): Block[] {
+  const cur = data.current;
+  if (cur.keywords === null && cur.traffic === null) return [];
+  const cmp = firstComparison<VisibilityNow>(report, data.comparisons);
+  const tile = (label: string, v: number | null, p: number | null | undefined, ch: number | null | undefined, detail?: string): Kpi => {
+    const delta = p !== null && p !== undefined && v !== null ? countDelta(ch, p) : undefined;
+    const vs = delta && cmp ? `vs ${fmtInt(p)} in ${cmp.name}` : "";
+    const d = [vs, detail].filter(Boolean).join(" · ");
+    return { label, value: fmtInt(v), ...(delta ? { delta } : {}), ...(d ? { detail: d } : {}) };
+  };
+  const tiles: Kpi[] = [tile("Ranking keywords (top 100)", cur.keywords, cmp?.previous.keywords, cmp?.change.keywords)];
+  if (data.distributionAvailable && cur.top3 !== null) tiles.push(tile("In the top 3", cur.top3, cmp?.previous.top3, cmp?.change.top3));
+  tiles.push(tile("Estimated traffic", cur.traffic, cmp?.previous.traffic, cmp?.change.traffic, data.trafficLabel));
+  const blocks: Block[] = [{ kind: "kpiRow", items: tiles }];
+  const charts: Block[][] = [];
+  const bandsOf = (v: VisibilityNow) => BANDS.map(([k]) => v[k]);
+  if (data.distributionAvailable && bandsOf(cur).every((x) => x !== null)) {
+    const rows = [{ label: fullDay(data.asOf), values: bandsOf(cur) as number[] }, ...(cmp && bandsOf(cmp.previous).every((x) => x !== null) ? [{ label: cmp.name, values: bandsOf(cmp.previous) as number[] }] : [])];
+    charts.push([
+      {
+        kind: "chart",
+        chart: {
+          type: "share",
+          title: "Keywords by position",
+          parts: BANDS.map(([, l]) => l),
+          rows,
+          summary: `Of ${fmtInt(cur.keywords)} ranking keywords, ${fmtInt(cur.top3)} are in the top 3, ${fmtInt(cur.pos4_10)} in positions 4\u201310, ${fmtInt(cur.pos11_20)} in 11\u201320 and ${fmtInt(cur.pos21_100)} in 21\u2013100.`,
+          fallback: { kind: "table", title: "Keywords by position", header: ["Position", ...rows.map((r) => r.label)], rows: BANDS.map(([, l], i) => [cell(l), ...rows.map((r) => cell(fmtInt(r.values[i])))]), numeric: [false, true, true] },
+        },
+      },
+    ]);
+  }
+  const trend = data.trend.filter((p) => p.keywords !== null);
+  if (trend.length >= 2 && !ctx.onepage) {
+    charts.push([
+      {
+        kind: "chart",
+        chart: {
+          type: "line",
+          title: "Ranking keywords by month",
+          x: trend.map((p) => p.day),
+          series: [{ name: "Ranking keywords", values: trend.map((p) => p.keywords), role: "current" }],
+          format: "count",
+          connectGaps: true,
+          summary: `Ranking keywords went from ${fmtInt(trend[0]!.keywords)} in ${monthOf(trend[0]!.day)} to ${fmtInt(trend.at(-1)!.keywords)} in ${monthOf(trend.at(-1)!.day)} (${PROVIDER_NAME[data.provider]}).`,
+          fallback: { kind: "table", title: "Ranking keywords by month", header: ["Month", "Ranking keywords", "Estimated traffic"], rows: trend.map((p) => [cell(monthOf(p.day)), cell(fmtInt(p.keywords)), cell(fmtInt(p.traffic))]), numeric: [false, true, true] },
+        },
+      },
+    ]);
+  }
+  if (charts.length === 2) blocks.push({ kind: "columns", columns: charts });
+  else for (const c of charts) blocks.push(...c);
+  if (cmp && !ctx.onepage) {
+    const rows: Text[][] = [];
+    const add = (label: string, a: number | null, b: number | null, ch: number | null) => rows.push([cell(label), cell(fmtInt(a)), cell(fmtInt(b)), changeCell(ch, signedInt(ch))]);
+    add("Ranking keywords (top 100)", cur.keywords, cmp.previous.keywords, cmp.change.keywords);
+    if (data.distributionAvailable) for (const [k, l] of BANDS) add(`Positions ${l === "Top 3" ? "1\u20133" : l}`, cur[k], cmp.previous[k], cmp.change[k]);
+    add("Estimated traffic", cur.traffic, cmp.previous.traffic, cmp.change.traffic);
+    blocks.push({ kind: "table", header: ["Keywords", fullDay(data.asOf), cmp.name, "Change"], rows, numeric: [false, true, true, true] });
+  }
+  missingComparisons(report, data.comparisons, PROVIDER_NAME[data.provider], "Organic search visibility", ctx);
+  for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
+  blocks.push(sourceLine(data.provider, data.asOf, `. Estimated traffic is ${data.trafficLabel}, a modelled figure; it isn't comparable with Google Analytics or another provider`));
+  return blocks;
+}
+
+/** A location code means "the client's market"; a country or database is shown uppercase. */
+const marketName = (m: string) => (/^\d+$/.test(m) ? "the client's market" : m.toUpperCase());
+
+function competitorBlocks(data: CompetitorOverviewData, _report: TemplateReport, ctx: MapContext): Block[] {
+  if (!data.competitors.length) return [];
+  const origin: Record<CompetitorRow["origin"], string> = { client: "This site", saved: "Saved", suggested: "Suggested" };
+  const rows = [data.client, ...data.competitors];
+  const missing = data.competitors.some((r) => !r.inProviderList);
+  const ch = (r: CompetitorRow) => (r.keywordsChange === null ? [] : [t(" "), ...changeCell(r.keywordsChange, `(${signed(r.keywordsChange)})`)]);
+  const blocks: Block[] = [
+    { kind: "paragraph", text: [t(`Organic competitors in ${marketName(data.market)} (${PROVIDER_NAME[data.provider]} data, as of ${fullDay(data.asOf)}); saved competitors first.`)] },
+    {
+      kind: "table",
+      header: ["Domain", "", "Shared keywords", "Their ranking keywords", "Est. traffic"],
+      rows: rows.map((r) => [
+        r.origin === "client" ? [{ t: r.domain, c: true as const, b: true as const }] : [c(r.domain)],
+        r.origin === "client" ? [{ t: origin.client, tag: "neutral" as const }] : cell(origin[r.origin]),
+        cell(r.origin === "client" ? "\u2014" : r.inProviderList ? fmtInt(r.commonKeywords) : "n/a"),
+        [t(fmtInt(r.keywords)), ...ch(r)],
+        cell(fmtInt(r.traffic)),
+      ]),
+      numeric: [false, false, true, true, true],
+      bar: { col: 2, values: rows.map((r) => (r.origin === "client" ? 0 : (r.commonKeywords ?? 0))) },
+    },
+  ];
+  if (missing) blocks.push({ kind: "note", text: [t(`"n/a": not among ${PROVIDER_NAME[data.provider]}'s top ${fmtInt(data.providerListSize)} competitors for this site, so shared keywords aren't known; its own figures were looked up separately.`)] });
+  for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
+  if (data.competitors.some((r) => r.keywordsChange !== null)) blocks.push({ kind: "note", text: [t("The change in brackets is ranking keywords against the previous period's stored figures.")] });
+  void ctx;
+  blocks.push(sourceLine(data.provider, data.asOf, `. Estimated traffic is ${data.trafficLabel}`));
+  return blocks;
+}
+
 /** The most coverage states shown in the indexing share chart before the rest are grouped as "Other". */
 export const COVERAGE_PARTS = 6;
 
 export const SECTION_MAPPERS: Record<string, Mapper> = {
+  // Phase 13 B: provider figures (DataForSEO, Ahrefs or Semrush), one provider per section, never mixed.
+  backlinks: (data: BacklinksData, report, ctx) => backlinksBlocks(data, report, ctx),
+  organic_visibility: (data: VisibilityData, report, ctx) => visibilityBlocks(data, report, ctx),
+  competitor_overview: (data: CompetitorOverviewData, report, ctx) => competitorBlocks(data, report, ctx),
   search_overview: (data: SearchOverviewData, report, ctx) => {
     const blocks: Block[] = [];
     const cur = periodName(report.period.current);

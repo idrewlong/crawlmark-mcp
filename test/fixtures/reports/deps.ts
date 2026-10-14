@@ -93,6 +93,10 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
     indexingSection: async () => {
       throw new Error("indexingSection isn't part of this test");
     },
+    planIssueSources: async () => [],
+    planProviderSection: async () => {
+      throw new Error("planProviderSection isn't part of this test");
+    },
     ...over,
   };
 }

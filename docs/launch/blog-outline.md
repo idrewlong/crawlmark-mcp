@@ -185,6 +185,15 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - How Google indexes a client's key pages, top Search Console pages and a weekly-rotating sample of sitemap URLs, with Search Console's sitemap errors, from the free URL Inspection API within a daily budget, labelled as a sample in the report. _"Which of example.com's pages aren't indexed, and why?"_
 - New tools `index_coverage` and `inspect_index_coverage`, new command `crawlmark-cli index-coverage --client example.com|--all` for a daily cron, and an optional `indexing` report section.
 
+**Backlinks, keyword visibility and competitors in the report** (Shipped)
+
+- Referring domains, backlinks and the provider's own authority metric (labelled, never mixed), ranking keywords by position band with estimated traffic, and top organic competitors (saved ones first) with shared keywords, from the client's own DataForSEO, Ahrefs or Semrush account. Month-over-month comes from figures crawlmark stores locally each month, so re-running a report costs nothing and provider history is bought at most once, only for report templates, with the cost shown before anything is spent. _"Add backlinks and keyword visibility to example.com's September report."_
+- New tools `organic_visibility`, `competitor_overview` and `seo_trends`; new command `crawlmark-cli seo-snapshot --all --paid` for a monthly cron; optional paid `backlinks`, `visibility` and `competitors` sections in the builtin monthly and quarterly templates. Every provider figure carries a "Source:" line, white label included.
+
+**Ahrefs and Semrush Site Audit in the technical-issues list** (Shipped)
+
+- The client's existing Ahrefs or Semrush Site Audit project as extra (paid, opt-in) sources for `technical_issues`, merged with crawlmark's own findings and mapped onto one severity scale. Read-only: crawlmark never starts a crawl or creates a project.
+
 **Report cost up front** (Shipped)
 
 - `estimateOnly` on `run_report_template` and `export_report` (and `report --dry-run`) prices a report's paid sections before anything is fetched, and the whole run's budget is reserved while it runs.

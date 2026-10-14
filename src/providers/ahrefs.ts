@@ -60,7 +60,33 @@ import {
   type RawAhrefsLimitsAndUsage,
   type RawAhrefsOrganicKeywords,
 } from "./ahrefs-shape.js";
+import {
+  ahrefsCompetitorRows,
+  domainRatingHistoryRequest,
+  keywordsHistoryRequest,
+  mapAhrefsBacklinksHistory,
+  mapAhrefsCompetitorsFull,
+  mapAhrefsVisibility,
+  mapAhrefsVisibilityHistory,
+  metricsHistoryRequest,
+  metricsRequest,
+  organicCompetitorsFullRequest,
+  p13AhrefsEstimates,
+  refdomainsHistoryRequest,
+  type RawAhrefsCompetitorsFull,
+  type RawAhrefsDomainRatingHistory,
+  type RawAhrefsKeywordsHistory,
+  type RawAhrefsMetrics,
+  type RawAhrefsMetricsHistory,
+  type RawAhrefsRefdomainsHistory,
+} from "./ahrefs-shape.js";
 import type {
+  BacklinksHistoryRouted,
+  CompetitorOverviewRequest,
+  CompetitorOverviewRouted,
+  OrganicHistoryRouted,
+  OrganicOverviewRouted,
+  ProviderCompetitor,
   BacklinksRouted,
   CompetitorsRouted,
   GapContext,
@@ -75,6 +101,14 @@ import type {
 } from "./seo-data.js";
 import { normalizeKeywordList } from "./semrush-shape.js";
 import { isTimeoutOrAbort, redact, retryAfterMs, todayUtc, unitsCall } from "./units-billing.js";
+import { assertAhrefsAllowed } from "./ahrefs-site-audit.js";
+
+/**
+ * Ahrefs storage decision (fix round R-5): responses that are row lists (keywords, competitors, ideas, the gap) are
+ * cached for at most a day, and every Ahrefs cache entry is tracked so a purge deletes it. Counts and aggregates
+ * (backlink totals, visibility figures and their history) keep the usual week.
+ */
+export const AHREFS_ROW_TTL = TTL.day;
 
 export class AhrefsApiError extends Error {
   override name = "AhrefsApiError";
@@ -178,8 +212,18 @@ async function billed<T>(client: Client, req: AhrefsParams, estimate: number, fa
   }
 }
 
+/**
+ * Phase 13 B: one billed Ahrefs GET for the Site Audit reader (ahrefs-site-audit.ts), which checks its own path
+ * allowlist before calling this. Same limiter, key handling, redaction and unit recording as every Ahrefs call.
+ */
+export async function ahrefsGet<T>(client: Client, req: AhrefsParams, estimate: number): Promise<{ json: T; units: number }> {
+  // Defence in depth (SEC-6): the Site Audit allowlist is checked here too, so no other caller can reach a write.
+  assertAhrefsAllowed("GET", req.path);
+  return billed<T>(client, req, estimate, () => estimate);
+}
+
 /** The client's Ahrefs country, or unavailable (a city-level location code and no `country`). */
-function country(client: Client, capability: "keywordVolume" | "rankedKeywords" | "competitorDomains" | "keywordIdeas" | "keywordGap"): string {
+function country(client: Client, capability: "keywordVolume" | "rankedKeywords" | "competitorDomains" | "keywordIdeas" | "keywordGap" | "organicOverview" | "competitorOverview"): string {
   if (!client.country) throw new ProviderUnavailableError(capability, "ahrefs", noCountryMessage(client));
   return ahrefsCountry(client.country);
 }
@@ -200,7 +244,7 @@ export async function ahrefsKeywordVolume(client: Client, input: string[], opts:
     provider: "ahrefs",
     capability: "keywordVolume",
     keyParts: { country: cc, keywords },
-    ttl: TTL.month,
+    ttl: AHREFS_ROW_TTL,
     // The whole batch is checked before the first request.
     estimate: batches.reduce((sum, b) => sum + ahrefsEstimates.keywordBatch(b.length), 0),
     refresh: opts.refresh,
@@ -230,7 +274,7 @@ export async function ahrefsRankedKeywords(client: Client, target: string, limit
     provider: "ahrefs",
     capability: "rankedKeywords",
     keyParts: { target, country: cc, limit },
-    ttl: TTL.week,
+    ttl: AHREFS_ROW_TTL,
     estimate,
     refresh: opts.refresh,
     run: async () => {
@@ -251,7 +295,7 @@ export async function ahrefsCompetitorDomains(client: Client, limit: number, opt
     provider: "ahrefs",
     capability: "competitorDomains",
     keyParts: { target, country: cc, limit },
-    ttl: TTL.month,
+    ttl: AHREFS_ROW_TTL,
     estimate,
     refresh: opts.refresh,
     run: async () => {
@@ -311,7 +355,7 @@ export async function ahrefsKeywordIdeas(client: Client, req: KeywordIdeasReques
     provider: "ahrefs",
     capability: "keywordIdeas",
     keyParts: plan.keyParts,
-    ttl: TTL.week,
+    ttl: AHREFS_ROW_TTL,
     estimate,
     refresh: opts.refresh,
     run: async () => {
@@ -352,7 +396,7 @@ export async function ahrefsKeywordGap(client: Client, req: KeywordGapRequest, c
     provider: "ahrefs",
     capability: "keywordGap",
     keyParts: plan.keyParts,
-    ttl: TTL.week,
+    ttl: AHREFS_ROW_TTL,
     estimate: plan.cost(req.limit),
     refresh: opts.refresh,
     run: async () => {
@@ -396,9 +440,159 @@ export async function ahrefsKeywordGap(client: Client, req: KeywordGapRequest, c
   };
 }
 
+// ------------------------------------------------------------------ Phase 13 B: visibility, history, competitors
+
+/** The first day of the month `months` months before now (UTC). */
+const monthsBack = (months: number, now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1)).toISOString().slice(0, 10);
+const bareTarget = (t: string) => t.replace(/^www\./, "").toLowerCase();
+
+export function planAhrefsBacklinksSummary(_client: Client, target: string): PaidPlan {
+  const units = ahrefsEstimates.backlinksStats() + ahrefsEstimates.domainRating();
+  return { keyParts: { target }, unit: "units", requests: 2, cost: () => units, breakdown: () => `backlinks-stats + domain-rating (${units} units)` };
+}
+
+export function planAhrefsOrganicOverview(client: Client, target: string): PaidPlan {
+  const units = p13AhrefsEstimates.organicOverview();
+  return { keyParts: { target: bareTarget(target), country: country(client, "organicOverview") }, unit: "units", requests: 2, cost: () => units, breakdown: () => `metrics (50) + keywords-history for the latest month (50) = ${units} units` };
+}
+
+/** Visibility now: metrics (keywords, top 3, traffic) + the latest month's keywords-history row (the other bands). */
+export async function ahrefsOrganicOverview(client: Client, target: string, opts: { refresh?: boolean } = {}): Promise<OrganicOverviewRouted> {
+  const plan = planAhrefsOrganicOverview(client, target);
+  const cc = plan.keyParts.country as string;
+  const t = plan.keyParts.target as string;
+  const r = await unitsCall({
+    client,
+    provider: "ahrefs",
+    capability: "organicOverview",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate: plan.cost(1),
+    refresh: opts.refresh,
+    run: async () => {
+      const today = todayUtc();
+      const m = await billed<RawAhrefsMetrics>(client, metricsRequest({ target: t, country: cc, date: today }), p13AhrefsEstimates.metricsOne(), () => p13AhrefsEstimates.metricsOne());
+      const kh = await billed<RawAhrefsKeywordsHistory>(client, keywordsHistoryRequest({ target: t, country: cc, dateFrom: monthsBack(1), dateTo: today }), 50, () => 50);
+      return { value: mapAhrefsVisibility(m.json, kh.json), units: m.units + kh.units };
+    },
+  });
+  return { figures: r.value, market: cc, ...meta(r) };
+}
+
+export function planAhrefsOrganicHistory(client: Client, target: string, months: number, now = new Date()): PaidPlan {
+  const units = p13AhrefsEstimates.organicHistory(months);
+  return { keyParts: { target: bareTarget(target), country: country(client, "organicOverview"), dateFrom: monthsBack(months, now) }, unit: "units", requests: 2, cost: () => units, breakdown: () => `keywords-history + metrics-history, ${months} months = ${units} units` };
+}
+
+export async function ahrefsOrganicHistory(client: Client, target: string, months: number, opts: { refresh?: boolean } = {}): Promise<OrganicHistoryRouted> {
+  const plan = planAhrefsOrganicHistory(client, target, months);
+  const cc = plan.keyParts.country as string;
+  const t = plan.keyParts.target as string;
+  const dateFrom = plan.keyParts.dateFrom as string;
+  const r = await unitsCall({
+    client,
+    provider: "ahrefs",
+    capability: "organicHistory",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate: plan.cost(1),
+    refresh: opts.refresh,
+    run: async () => {
+      const today = todayUtc();
+      const kh = await billed<RawAhrefsKeywordsHistory>(client, keywordsHistoryRequest({ target: t, country: cc, dateFrom, dateTo: today }), Math.max(50, 6 * months), () => Math.max(50, 6 * months));
+      const mh = await billed<RawAhrefsMetricsHistory>(client, metricsHistoryRequest({ target: t, country: cc, dateFrom, dateTo: today }), Math.max(50, 11 * months), () => Math.max(50, 11 * months));
+      return { value: mapAhrefsVisibilityHistory(kh.json, mh.json), units: kh.units + mh.units };
+    },
+  });
+  return { points: r.value, market: cc, ...meta(r) };
+}
+
+export function planAhrefsBacklinksHistory(_client: Client, target: string, months: number, now = new Date()): PaidPlan {
+  const units = p13AhrefsEstimates.backlinksHistory(months);
+  return { keyParts: { target: bareTarget(target), dateFrom: monthsBack(months, now) }, unit: "units", requests: 2, cost: () => units, breakdown: () => `refdomains-history + domain-rating-history, ${months} months = ${units} units` };
+}
+
+export async function ahrefsBacklinksHistory(client: Client, target: string, months: number, opts: { refresh?: boolean } = {}): Promise<BacklinksHistoryRouted> {
+  const plan = planAhrefsBacklinksHistory(client, target, months);
+  const t = plan.keyParts.target as string;
+  const dateFrom = plan.keyParts.dateFrom as string;
+  const r = await unitsCall({
+    client,
+    provider: "ahrefs",
+    capability: "backlinksHistory",
+    keyParts: plan.keyParts,
+    ttl: TTL.week,
+    estimate: plan.cost(1),
+    refresh: opts.refresh,
+    run: async () => {
+      const today = todayUtc();
+      const rd = await billed<RawAhrefsRefdomainsHistory>(client, refdomainsHistoryRequest({ target: t, dateFrom, dateTo: today }), Math.max(50, 6 * months), () => Math.max(50, 6 * months));
+      const dr = await billed<RawAhrefsDomainRatingHistory>(client, domainRatingHistoryRequest({ target: t, dateFrom, dateTo: today }), 50, () => 50);
+      return { value: mapAhrefsBacklinksHistory(rd.json, dr.json), units: rd.units + dr.units };
+    },
+  });
+  return { points: r.value, ...meta(r) };
+}
+
+export function planAhrefsCompetitorOverview(client: Client, req: CompetitorOverviewRequest): PaidPlan {
+  const units = p13AhrefsEstimates.competitorOverview(req.limit, req.saved.length);
+  const rows = ahrefsCompetitorRows(req.limit);
+  return {
+    keyParts: { target: bareTarget(client.domain), country: country(client, "competitorOverview"), rows, saved: req.saved },
+    unit: "units",
+    requests: 1 + req.saved.length,
+    cost: () => units,
+    breakdown: () => `organic-competitors max(50, 15 × ${rows} rows)${req.saved.length ? ` + up to ${req.saved.length} metrics call(s) (50 each) for saved competitors the list misses` : ""} = ${units} units`,
+  };
+}
+
+/** Organic competitors (organic-competitors, 15 units per row) and a metrics call per saved competitor the list misses (D7). */
+export async function ahrefsCompetitorOverview(client: Client, req: CompetitorOverviewRequest, opts: { refresh?: boolean } = {}): Promise<CompetitorOverviewRouted> {
+  const plan = planAhrefsCompetitorOverview(client, req);
+  const cc = plan.keyParts.country as string;
+  const t = plan.keyParts.target as string;
+  const r = await unitsCall({
+    client,
+    provider: "ahrefs",
+    capability: "competitorOverview",
+    keyParts: plan.keyParts,
+    ttl: AHREFS_ROW_TTL,
+    estimate: plan.cost(1),
+    refresh: opts.refresh,
+    run: async () => {
+      const today = todayUtc();
+      const rows = plan.keyParts.rows as number;
+      const list = await billed<RawAhrefsCompetitorsFull>(client, organicCompetitorsFullRequest({ target: t, country: cc, date: today, limit: rows }), p13AhrefsEstimates.competitorOverview(req.limit, 0), () => 50);
+      let units = list.units;
+      const out: ProviderCompetitor[] = mapAhrefsCompetitorsFull(list.json, t);
+      const size = out.length;
+      for (const saved of req.saved) {
+        if (out.some((x) => x.domain === saved)) continue;
+        const m = await billed<RawAhrefsMetrics>(client, metricsRequest({ target: saved, country: cc, date: today }), p13AhrefsEstimates.metricsOne(), () => p13AhrefsEstimates.metricsOne());
+        units += m.units;
+        const f = mapAhrefsVisibility(m.json, undefined);
+        out.push({ domain: saved, commonKeywords: null, keywords: f.keywords, traffic: f.traffic, inProviderList: false });
+      }
+      // Counts per competitor only (no keyword lists): what Ahrefs data crawlmark keeps (Ahrefs storage decision).
+      return { value: { rows: out, providerListSize: size }, units };
+    },
+  });
+  return { ...r.value, market: cc, ...meta(r) };
+}
+
 export const ahrefsProvider: SeoDataProvider = {
   id: "ahrefs",
-  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap"]),
+  capabilities: new Set(["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap", "organicOverview", "competitorOverview"]),
+  planBacklinksSummary: (c, t) => planAhrefsBacklinksSummary(c, t),
+  planOrganicOverview: (c, t) => planAhrefsOrganicOverview(c, t),
+  organicOverview: (c, t, o) => ahrefsOrganicOverview(c, t, o),
+  planOrganicHistory: (c, t, m) => planAhrefsOrganicHistory(c, t, m),
+  organicHistory: (c, t, m, o) => ahrefsOrganicHistory(c, t, m, o),
+  planBacklinksHistory: (c, t, m) => planAhrefsBacklinksHistory(c, t, m),
+  backlinksHistory: (c, t, m, o) => ahrefsBacklinksHistory(c, t, m, o),
+  planCompetitorOverview: (c, r) => planAhrefsCompetitorOverview(c, r),
+  competitorOverview: (c, r, o) => ahrefsCompetitorOverview(c, r, o),
+  market: (c, cap) => country(c, cap),
   configured: () => Boolean(env.AHREFS_API_KEY),
   planKeywordIdeas: (c, r) => planAhrefsKeywordIdeas(c, r),
   keywordIdeas: (c, r, o) => ahrefsKeywordIdeas(c, r, o),

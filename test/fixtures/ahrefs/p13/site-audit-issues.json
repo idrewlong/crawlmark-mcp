@@ -1,0 +1,38 @@
+{
+  "issues": [
+    {
+      "issue_id": "a1b2-title",
+      "name": "Title tag missing or empty",
+      "category": "Content",
+      "importance": "Error",
+      "crawled": 3,
+      "is_indexable": true,
+      "change": null,
+      "added": null,
+      "new": null,
+      "removed": null,
+      "missing": null
+    },
+    {
+      "issue_id": "a1b2-4xx",
+      "name": "4XX page",
+      "category": "Internal pages",
+      "importance": "Error",
+      "crawled": 5
+    },
+    {
+      "issue_id": "a1b2-ogt",
+      "name": "Open Graph tags incomplete <script>x</script>",
+      "category": "Social tags",
+      "importance": "Notice",
+      "crawled": 40
+    },
+    {
+      "issue_id": "a1b2-zero",
+      "name": "Slow page",
+      "category": "Usability and performance",
+      "importance": "Warning",
+      "crawled": 0
+    }
+  ]
+}

@@ -9,7 +9,7 @@ import {
   setClientProfile,
 } from "../clients.js";
 import { suggestCompetitors } from "../competitors.js";
-import { ENTRY_SOURCES, keywordInput } from "../lib/clients.js";
+import { ENTRY_SOURCES, isPlainDomain, keywordInput, normalizeHost } from "../lib/clients.js";
 import { gapCompetitors, keywordGap, keywordIdeas } from "../providers/seo-data.js";
 import { handler, READ_ONLY } from "./util.js";
 
@@ -162,6 +162,7 @@ export function registerCompetitorTools(server: McpServer) {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
+    // Site Audit project IDs are set in a terminal only (crawlmark-cli clients set, SEC-1), never through chat.
     handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId }) =>
       setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId }),
     ),
@@ -241,6 +242,82 @@ export function registerCompetitorTools(server: McpServer) {
     handler("keyword_gap", async ({ client, competitors, limit, minVolume, estimateOnly }) => {
       const c = await resolveClient(client);
       return keywordGap(c, { competitors: gapCompetitors(c, competitors), limit: limit ?? 50, minVolume: minVolume ?? 0 }, { estimateOnly });
+    }),
+  );
+
+  // ------------------------------------------------ Phase 13 B: provider visibility, competitors and stored trends
+
+  const LOCAL_WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
+  const SNAPSHOTS =
+    "Results are stored as dated snapshots (counts only) so later reports can compare months; a stored snapshot from the last 7 days (SNAPSHOT_REUSE_DAYS) is reused instead of calling the provider, unless refresh: true. " +
+    "Through the client's data provider only (no fallback to another provider). Call with estimateOnly: true first, state the provider, cost and what's left, and run it only after the user agrees.";
+
+  server.registerTool(
+    "organic_visibility",
+    {
+      title: "Organic visibility",
+      description:
+        "A domain's organic search visibility from the client's data provider: ranking keywords (top 100), keywords by position band (top 3, 4-10, 11-20, 21-100; not available from Semrush) and estimated organic traffic, labelled by provider (never compare traffic across providers). " +
+        "Comparisons with a month and a year ago appear only when stored snapshots (or, with history: true, the provider's own history, paid) have them. " +
+        SNAPSHOTS,
+      inputSchema: {
+        client: clientArg,
+        history: z.boolean().optional().describe("Buy the provider's monthly history when no stored snapshot covers the comparisons or the trend (paid; default false)."),
+        months: z.number().int().min(1).max(24).optional().describe("Trend months (default 12)."),
+        refresh: z.boolean().optional().describe("Fetch today's figures even when a stored snapshot would do."),
+        estimateOnly: z.boolean().optional().describe("Return the estimate and the remaining cap only; no request."),
+      },
+      annotations: LOCAL_WRITE,
+    },
+    handler("organic_visibility", async ({ client, history, months, refresh, estimateOnly }) => {
+      const ps = await import("../reports/provider-sections.js");
+      return ps.providerTool(await resolveClient(client), { type: "organic_visibility", history, trendMonths: months, refresh }, { estimateOnly }, await ps.loadProviderSectionDeps(), await ps.loadSpendDeps());
+    }),
+  );
+
+  server.registerTool(
+    "competitor_overview",
+    {
+      title: "Competitor overview",
+      description:
+        "The client's top organic competitors from its data provider: saved competitors first (in saved order), then the provider's suggestions (big platforms and denylisted domains left out), each with keywords shared with the client, its ranking keywords and estimated traffic. " +
+        "A saved competitor the provider doesn't list is looked up on its own (shared keywords unknown). " +
+        SNAPSHOTS,
+      inputSchema: {
+        client: clientArg,
+        limit: z.number().int().min(1).max(10).optional().describe("Competitors listed (default 5)."),
+        source: z.enum(["saved", "suggested", "saved_then_suggested"]).optional().describe('Default "saved_then_suggested".'),
+        refresh: z.boolean().optional().describe("Fetch today's figures even when stored snapshots would do."),
+        estimateOnly: z.boolean().optional().describe("Return the estimate and the remaining cap only; no request."),
+      },
+      annotations: LOCAL_WRITE,
+    },
+    handler("competitor_overview", async ({ client, limit, source, refresh, estimateOnly }) => {
+      const ps = await import("../reports/provider-sections.js");
+      return ps.providerTool(await resolveClient(client), { type: "competitor_overview", limit, source, refresh }, { estimateOnly }, await ps.loadProviderSectionDeps(), await ps.loadSpendDeps());
+    }),
+  );
+
+  server.registerTool(
+    "seo_trends",
+    {
+      title: "Stored SEO trends",
+      description:
+        "Stored backlinks or visibility snapshots for a client (or a competitor's domain) over time, one series per provider and market (they're never mixed). " +
+        "Snapshots come from the backlinks, organic_visibility and competitor_overview report sections and tools, backlinks_summary on the client's own domain, and crawlmark-cli seo-snapshot. Free and local: no provider request.",
+      inputSchema: {
+        client: clientArg,
+        kind: z.enum(["backlinks", "visibility"]),
+        target: z.string().max(253).optional().describe("A domain (default: the client's own; competitors' visibility is stored too)."),
+        months: z.number().int().min(1).max(24).optional().describe("Months back (default 12)."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    handler("seo_trends", async ({ client, kind, target, months }) => {
+      const ps = await import("../reports/provider-sections.js");
+      const t = target === undefined ? undefined : normalizeHost(target);
+      if (target !== undefined && (!t || !isPlainDomain(t))) throw new Error(`"${target.slice(0, 100)}" isn't a domain.`);
+      return ps.seoTrends(await resolveClient(client), kind, t, months ?? 12);
     }),
   );
 }

@@ -1,0 +1,11 @@
+{
+  "data": [
+    {
+      "source_url": "https://example.com/old-link"
+    },
+    {
+      "source_url": "https://example.com/also-broken"
+    }
+  ],
+  "total": 2
+}

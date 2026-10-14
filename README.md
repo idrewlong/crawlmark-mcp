@@ -160,6 +160,8 @@ Ahrefs is optional. With an API v3 key it can supply keyword volume, ranked keyw
 
 By hand, set `AHREFS_API_KEY` (and `SEO_DATA_PROVIDER=ahrefs` to make it the default). The `ahrefs_status` tool shows the plan, units used and the reset date.
 
+**Ahrefs data in client reports.** crawlmark calls Ahrefs only through its REST API v3 (never Ahrefs' hosted MCP server) and keeps only counts long-term (per site, metric and month, for up to 25 months; never link or keyword lists). Ahrefs row lists (keywords, competitors, keyword ideas) are cached for at most a day so a repeat question is free, and are purged with the rest; Site Audit example URLs are shown in that run's result and its report (kept 24 hours for export) and never stored beyond that. Each report section with Ahrefs figures says "Source: Ahrefs", white label included. Before sending Ahrefs figures to clients, confirm that your Ahrefs plan allows sharing Ahrefs-derived metrics with them. `crawlmark-cli data purge --provider ahrefs` deletes what's stored; removing a client or the Ahrefs key does too.
+
 ### Semrush
 
 > **Beta.** The Semrush integration is built to the official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps and key handling are fully tested. If anything looks wrong (an error you don't expect, a missing field, units that don't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
@@ -172,6 +174,8 @@ Semrush is optional. Its API needs an **SEO Toolkit Business** plan **plus** a s
 
 By hand, set `SEMRUSH_API_KEY` (and `SEMRUSH_V4_API_KEY`, and `SEO_DATA_PROVIDER=semrush` to make it the default). The `semrush_status` tool shows the balance.
 
+Semrush's API terms don't allow keeping its data longer than a month, so crawlmark deletes stored Semrush figures 31 days after fetching them.
+
 ### Data providers
 
 Keyword volume, rankings, competitors, backlinks, keyword ideas and the competitor keyword gap can come from any of the three providers. DataForSEO is the default and is verified against its live API; Ahrefs and Semrush are in beta (see above). Live SERPs, on-page checks and crawls come from DataForSEO only.
@@ -182,6 +186,10 @@ Keyword volume, rankings, competitors, backlinks, keyword ideas and the competit
 | `ranked_keywords` | Labs ranked keywords | Site Explorer organic keywords | Domain organic search keywords |
 | `competitor_domains` | Labs competitors | Site Explorer organic competitors | Competitors in organic search |
 | `backlinks_summary` | Backlinks summary (rank, spam score) | Backlinks stats plus Domain Rating | Backlinks overview (v4 with a v4 key, else v3) plus authority score |
+| `organic_visibility`, `organic_visibility` report section | Labs domain rank overview (position bands, estimated traffic); history: historical rank overview | Metrics plus keywords history (position bands, organic traffic); history: keywords and metrics history | Domain overview (keywords, traffic; no position bands); history: domain overview history |
+| `backlinks` report section | Backlinks summary; history: backlinks history (monthly, with new and lost referring domains) | Backlinks stats plus Domain Rating; history: referring domains and Domain Rating history | Backlinks overview; no history (stored figures only) |
+| `competitor_overview`, `competitor_overview` report section | Labs competitors with each competitor's whole footprint | Organic competitors | Competitors in organic search |
+| `technical_issues` sources (paid, opt-in) | A stored full crawl's summary (free) | Site Audit issues of your existing project | Site Audit of your existing project |
 | `keyword_ideas` | Labs keyword ideas (`related`) or keyword suggestions (`matching`) | Keywords Explorer related terms or matching terms | Related keywords or broad match |
 | `keyword_gap` | Labs domain intersection | Each competitor's organic keywords, minus what the client already gets Search Console impressions for | Domain vs Domain |
 | `serp_check`, `check_ranks` with `live`, on-page checks, crawls | Yes | No (DataForSEO is used) | No (DataForSEO is used) |
@@ -376,7 +384,7 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers), orphan pages (from the newest complete local or DataForSEO crawl), AI crawler access in robots.txt (AI search vs training-only crawlers) and llms.txt (informational: Google says it doesn't use it). Free |
 | `local_crawl` | Crawls the client's own site from your machine (free): status codes, redirects and chains, titles, meta descriptions, canonicals, H1s, internal links, depth, broken links, noindex pages and orphans against the sitemaps. Obeys robots.txt and Crawl-delay; same host only by default; up to 2,000 pages. Saved for `local_crawl_pages`, `site_hygiene` and audits |
 | `local_crawl_pages` | Pages from a saved local crawl, filtered by issue or status code. Free, local |
-| `technical_issues` | One deduplicated, severity-grouped list of technical problems from the saved audit, its site checks, the newest local crawl, a stored DataForSEO crawl and stored URL Inspection results, with the sources per issue and what's new, resolved or not re-checked since the last snapshot. Never starts a crawl. Free ([details](docs/audits.md#technical-issues)) |
+| `technical_issues` | One deduplicated, severity-grouped list of technical problems from the saved audit, its site checks, the newest local crawl, a stored DataForSEO crawl and stored URL Inspection results, with the sources per issue and what's new, resolved or not re-checked since the last snapshot. Never starts a crawl. Free; your existing Ahrefs or Semrush Site Audit project can be added as a paid source with `allowPaid` (read-only) ([details](docs/audits.md#technical-issues)) |
 | `index_coverage` | Google's indexing of a sample of the client's URLs from stored URL Inspection results: indexed share, coverage states, the worst URLs, canonical mismatches, sitemap errors and the monthly trend. Free, local ([details](docs/audits.md#indexing-coverage)) |
 | `inspect_index_coverage` | Inspects key pages, top Search Console pages and a weekly-rotating sample of sitemap URLs with URL Inspection (free, read-only) within a daily per-property budget, and stores the results |
 | `render_check` | Compares a page's raw HTML with what Chrome renders and flags SEO elements that only appear after JavaScript. Free |
@@ -423,6 +431,9 @@ All three take `estimateOnly: true` (the estimate and what's left of the caps, w
 | `list_keywords`, `add_keywords`, `remove_keywords` | Tracked keywords; `monthly_report` reports their positions. Free |
 | `add_brand_terms`, `remove_brand_terms` | Terms that mark a query as branded, per client. Free |
 | `keyword_ideas` | **Paid** (the client's data provider). Keyword ideas from 1-20 seeds, `related` or `matching`, with volume, CPC and the provider's own difficulty score (labelled; scales differ). `estimateOnly: true` first |
+| `organic_visibility` | **Paid** (the client's data provider). Ranking keywords, keywords by position band and estimated traffic, stored for month-over-month; the provider's history only with `history: true`. `estimateOnly: true` first |
+| `competitor_overview` | **Paid** (the client's data provider). Top organic competitors, saved ones first, with shared keywords and their keywords and traffic. `estimateOnly: true` first |
+| `seo_trends` | Stored backlinks and visibility figures over time, one series per provider. Free, local |
 | `keyword_gap` | **Paid** (the client's data provider). Keywords the client's competitors (its saved ones, or up to 5 you name) rank for and it doesn't, sorted by volume. `estimateOnly: true` first; a call that wouldn't fit the cap is refused with a limit that does |
 | `suggest_brand_terms` | Infers how people search for the client by name from its Search Console queries (free), or the client's data provider's ranked keywords when it has no Search Console data (about $0.02 on DataForSEO) |
 
@@ -451,6 +462,8 @@ Paid results carry `provider` (whose data it is) and `units` (Ahrefs or Semrush 
 | `spend_summary` | Paid API spend this month, by client and provider: dollars for DataForSEO, units for Ahrefs and Semrush |
 | `usage_summary` | Calls, errors and durations per tool |
 | `purge_cache` | Drops expired cache entries and old usage rows |
+
+`crawlmark-cli data purge --provider <ahrefs|semrush|dataforseo> [--client example.com]` deletes what crawlmark stored from one provider (trend figures, its Site Audit items in saved technical-issue lists, and cached responses).
 
 Prompts
 -------
@@ -514,6 +527,7 @@ crawlmark-cli check-traffic --all   # last 7 days vs the 7 before, branded vs no
 crawlmark-cli audit --all           # a fresh audit per client, diffed against the previous one
 crawlmark-cli check-ranks --all     # saves every tracked keyword's Search Console position (free)
 crawlmark-cli index-coverage --all  # Google indexing of key pages and a rotating sitemap sample (free, daily budget)
+crawlmark-cli seo-snapshot --all --paid  # monthly: store backlinks, visibility and competitor figures (paid; try --dry-run)
 ```
 
 `check-ranks --live` adds a paid live Google rank per keyword (DataForSEO). It only runs when you pass `--live`, each client's total is checked against its cap first (a client over its cap is skipped, the others run), and `--dry-run` shows the keywords and the estimate without calling anything. Only live ranks alert: a keyword that leaves the top 10 or drops at least `ALERT_RANK_DROP` places (default 5). Search Console averages never alert.
@@ -607,6 +621,8 @@ CLI
 | `check-traffic --client <domain>\|--all [--dry-run]` | Scheduled traffic check |
 | `check-ranks --client <domain>\|--all [--live] [--dry-run]` | Save tracked keyword positions (free); `--live` adds paid live ranks |
 | `index-coverage --client <domain>\|--all [--max <n>] [--stale-days <n>] [--dry-run]` | Inspect key pages, top pages and a rotating sitemap sample with URL Inspection (free, read-only) within the daily budget. Exit 0 done, 2 a client failed or Google's quota ran out, 1 error |
+| `seo-snapshot --client <domain>\|--all --paid [--kinds backlinks,visibility,competitors] [--dry-run]` | Store today's backlinks, visibility and competitor figures through each client's SEO data provider (paid; each client's estimate is checked against its caps first; never buys history). Exit 0 done, 2 a client failed or was over its cap, 1 error or no `--paid` |
+| `data purge --provider <ahrefs\|semrush\|dataforseo> [--client <domain>]` | Delete one provider's stored data (local only) |
 | `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format pdf,docx,html,md] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
 | `crawl --client <domain> [--max-pages <n>] [--max-depth <n>] [--concurrency <n>] [--user-agent crawlmark\|googlebot] [--include-subdomains] [--start-url <url,url>]` | Free local crawl of a client's site, saved like `local_crawl`. Exit 0 saved, 1 error |

@@ -76,9 +76,25 @@ function matchKey(r: RawIssue): string {
   return `${r.source}:${r.rule}`;
 }
 
+/**
+ * Stage B: an Ahrefs Site Audit issue matches a row by its name (case-insensitive prefix: Ahrefs doesn't document its
+ * issue IDs, research §1); a Semrush Site Audit issue by its documented numeric ID (S2). Unmatched ones keep their own key.
+ */
+function providerRow(r: RawIssue): CatalogueRow | undefined {
+  if (r.source === "ahrefs_site_audit") {
+    const name = r.rule.toLowerCase();
+    return CATALOGUE.find((row) => row.ahrefs?.some((a) => name.startsWith(a.toLowerCase())));
+  }
+  if (r.source === "semrush_site_audit") {
+    const id = Number(r.rule);
+    return Number.isInteger(id) ? CATALOGUE.find((row) => row.semrush?.includes(id)) : undefined;
+  }
+  return undefined;
+}
+
 /** Canonical key, title and category for a raw issue: its catalogue row, axe rules per rule, else `<source>:<rule>`. */
 export function canonicalOf(r: RawIssue): { key: string; title: string; category: string } {
-  const row = BY_MATCH.get(matchKey(r));
+  const row = BY_MATCH.get(matchKey(r)) ?? providerRow(r);
   if (row) return { key: row.key, title: row.title, category: row.category };
   if (r.source === "audit" && r.rule.startsWith("axe:")) return { key: `a11y:${r.rule.slice(4)}`, title: r.title, category: "accessibility" };
   return { key: `${r.source}:${r.rule}`, title: r.title, category: "other" };

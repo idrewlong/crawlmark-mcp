@@ -480,3 +480,24 @@ describe("fix round: reservations, property scope, failures, error kinds (R-2, S
 function markQuotaExhaustedFor(property: string, day: string) {
   db.prepare("INSERT INTO gsc_inspection_quota (property, day, exhausted) VALUES (?, ?, 1) ON CONFLICT (property, day) DO UPDATE SET exhausted = 1").run(property, day);
 }
+
+describe("regression: a www-host sitemap under an sc-domain property", () => {
+  it("its URLs join the pool after the key page, and a sitemap shorter than Search Console's count says so", async () => {
+    const W = "https://www.example.com";
+    const c = client("ix-www.example.com", "sc-domain:example.com", [`${E}/`]);
+    const urls = Array.from({ length: 6 }, (_, i) => `${W}/page-${i}/`);
+    fake.topPages = [];
+    const r = await inspectIndexCoverage(c, { maxInspections: 5, dryRun: true }, await deps({ sitemapUrls: urls }));
+    // Top Search Console pages (cached for this property by an earlier test) come before sitemap URLs; the www ones fill the rest.
+    expect(r.byOrigin.key).toBe(1);
+    expect(r.byOrigin.sitemap).toBeGreaterThan(0);
+    expect(r.byOrigin.sitemap).toBe(5 - 1 - r.byOrigin.gsc_top);
+    expect(r.planned).toBe(5);
+    // Search Console's fixture counts more submitted URLs than these 6: the run says why the sample is short.
+    expect(r.notes.join(" ")).toMatch(/sitemaps list 6 URLs in this property now, but Search Console last counted \d+ submitted/);
+    // The pool itself: an apex key page and www sitemap URLs under sc-domain:example.com.
+    const pool = planPool({ property: "sc-domain:example.com", keyPages: [`${E}/`], gscTop: [], sitemapUrls: urls, lastInspected: new Map(), now: NOW, staleDays: 7, seed: "s", max: 5 });
+    expect(pool.map((p) => p.group)).toEqual(["key", "sitemap", "sitemap", "sitemap", "sitemap"]);
+    expect(pool.slice(1).every((p) => p.url.startsWith(W) && p.inSitemap)).toBe(true);
+  });
+});

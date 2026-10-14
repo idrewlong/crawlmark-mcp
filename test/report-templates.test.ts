@@ -141,7 +141,7 @@ describe("template loader", () => {
     const list = listReportTemplates(h, undefined, today);
     expect(list.templates.map((t) => [t.id, t.source])).toEqual([["monthly", "builtin"], ["quarterly", "builtin"], ["executive", "builtin"], ["technical", "builtin"], ["local", "builtin"]]);
     expect(list.files.global).toMatchObject({ exists: true, valid: false, errors: [{ path: "templates.mine.sections[0].type" }] });
-    expect(list.templates[0]).toMatchObject({ optionalSections: ["spend", "cwv", "gtm", "ranks", "ai", "issues", "indexing"], paidSections: [] });
+    expect(list.templates[0]).toMatchObject({ optionalSections: ["spend", "cwv", "gtm", "ranks", "ai", "issues", "indexing", "backlinks", "visibility"], paidSections: ["backlinks", "visibility"] });
     expect(() => resolveTemplate(loadTemplates({ homeDir: h, today }), "mine")).toThrow(/No report template "mine".*monthly.*have errors/);
   });
 

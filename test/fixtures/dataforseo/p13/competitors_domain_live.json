@@ -1,0 +1,278 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.5 sec.",
+  "cost": 0.0144,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131200-1111-0000-0000-000000000001",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.4 sec.",
+      "cost": 0.0144,
+      "result_count": 1,
+      "path": [],
+      "data": {},
+      "result": [
+        {
+          "se_type": "google",
+          "target": "example.com",
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 5,
+          "items_count": 5,
+          "items": [
+            {
+              "se_type": "google",
+              "domain": "example.com",
+              "avg_position": 14.2,
+              "sum_position": 4400,
+              "intersections": 1204,
+              "full_domain_metrics": {
+                "organic": {
+                  "pos_1": 12,
+                  "pos_2_3": 29,
+                  "pos_4_10": 118,
+                  "pos_11_20": 160,
+                  "pos_21_30": 150,
+                  "pos_31_40": 140,
+                  "pos_41_50": 130,
+                  "pos_51_60": 120,
+                  "pos_61_70": 110,
+                  "pos_71_80": 90,
+                  "pos_81_90": 80,
+                  "pos_91_100": 65,
+                  "etv": 3950.4,
+                  "impressions_etv": 51230.7,
+                  "count": 1204,
+                  "estimated_paid_traffic_cost": 6120.5,
+                  "is_new": 40,
+                  "is_up": 210,
+                  "is_down": 180,
+                  "is_lost": 35
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              },
+              "metrics": {
+                "organic": {
+                  "count": 1204,
+                  "etv": 120.5
+                },
+                "paid": {
+                  "count": 0
+                }
+              },
+              "competitor_metrics": {
+                "organic": {
+                  "count": 1204
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "domain": "competitor-a.example",
+              "avg_position": 14.2,
+              "sum_position": 4400,
+              "intersections": 312,
+              "full_domain_metrics": {
+                "organic": {
+                  "pos_1": 24,
+                  "pos_2_3": 58,
+                  "pos_4_10": 236,
+                  "pos_11_20": 320,
+                  "pos_21_30": 300,
+                  "pos_31_40": 280,
+                  "pos_41_50": 260,
+                  "pos_51_60": 240,
+                  "pos_61_70": 220,
+                  "pos_71_80": 180,
+                  "pos_81_90": 160,
+                  "pos_91_100": 130,
+                  "etv": 7900.8,
+                  "impressions_etv": 102461.4,
+                  "count": 2408,
+                  "estimated_paid_traffic_cost": 12241.0,
+                  "is_new": 80,
+                  "is_up": 420,
+                  "is_down": 360,
+                  "is_lost": 70
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              },
+              "metrics": {
+                "organic": {
+                  "count": 312,
+                  "etv": 120.5
+                },
+                "paid": {
+                  "count": 0
+                }
+              },
+              "competitor_metrics": {
+                "organic": {
+                  "count": 312
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "domain": "www.rival.example.net",
+              "avg_position": 14.2,
+              "sum_position": 4400,
+              "intersections": 205,
+              "full_domain_metrics": {
+                "organic": {
+                  "pos_1": 19,
+                  "pos_2_3": 46,
+                  "pos_4_10": 185,
+                  "pos_11_20": 251,
+                  "pos_21_30": 236,
+                  "pos_31_40": 220,
+                  "pos_41_50": 204,
+                  "pos_51_60": 188,
+                  "pos_61_70": 173,
+                  "pos_71_80": 141,
+                  "pos_81_90": 126,
+                  "pos_91_100": 102,
+                  "etv": 6202.1,
+                  "impressions_etv": 80432.2,
+                  "count": 1890,
+                  "estimated_paid_traffic_cost": 9609.2,
+                  "is_new": 63,
+                  "is_up": 330,
+                  "is_down": 283,
+                  "is_lost": 55
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              },
+              "metrics": {
+                "organic": {
+                  "count": 205,
+                  "etv": 120.5
+                },
+                "paid": {
+                  "count": 0
+                }
+              },
+              "competitor_metrics": {
+                "organic": {
+                  "count": 205
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "domain": "another.example.org",
+              "avg_position": 14.2,
+              "sum_position": 4400,
+              "intersections": 166,
+              "full_domain_metrics": {
+                "organic": {
+                  "pos_1": 10,
+                  "pos_2_3": 23,
+                  "pos_4_10": 96,
+                  "pos_11_20": 130,
+                  "pos_21_30": 122,
+                  "pos_31_40": 113,
+                  "pos_41_50": 105,
+                  "pos_51_60": 97,
+                  "pos_61_70": 89,
+                  "pos_71_80": 73,
+                  "pos_81_90": 65,
+                  "pos_91_100": 53,
+                  "etv": 3199.8,
+                  "impressions_etv": 41496.9,
+                  "count": 975,
+                  "estimated_paid_traffic_cost": 4957.6,
+                  "is_new": 32,
+                  "is_up": 170,
+                  "is_down": 146,
+                  "is_lost": 28
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              },
+              "metrics": {
+                "organic": {
+                  "count": 166,
+                  "etv": 120.5
+                },
+                "paid": {
+                  "count": 0
+                }
+              },
+              "competitor_metrics": {
+                "organic": {
+                  "count": 166
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "domain": "evil\u202egro.example",
+              "avg_position": 14.2,
+              "sum_position": 4400,
+              "intersections": 9,
+              "full_domain_metrics": {
+                "organic": {
+                  "pos_1": 0,
+                  "pos_2_3": 0,
+                  "pos_4_10": 1,
+                  "pos_11_20": 2,
+                  "pos_21_30": 2,
+                  "pos_31_40": 1,
+                  "pos_41_50": 1,
+                  "pos_51_60": 1,
+                  "pos_61_70": 1,
+                  "pos_71_80": 1,
+                  "pos_81_90": 1,
+                  "pos_91_100": 1,
+                  "etv": 39.5,
+                  "impressions_etv": 512.3,
+                  "count": 12,
+                  "estimated_paid_traffic_cost": 61.2,
+                  "is_new": 0,
+                  "is_up": 2,
+                  "is_down": 2,
+                  "is_lost": 0
+                },
+                "paid": {
+                  "count": 0,
+                  "etv": 0
+                }
+              },
+              "metrics": {
+                "organic": {
+                  "count": 9,
+                  "etv": 120.5
+                },
+                "paid": {
+                  "count": 0
+                }
+              },
+              "competitor_metrics": {
+                "organic": {
+                  "count": 9
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

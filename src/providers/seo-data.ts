@@ -43,10 +43,13 @@ export type Capability =
   | "localPack"
   | "localReviews"
   // Phase 12 C5: AI-search visibility from DataForSEO LLM Mentions (also gated by AI_VISIBILITY_ENABLED).
-  | "aiVisibility";
+  | "aiVisibility"
+  // Phase 13 B: organic visibility (position bands, traffic) and the competitor overview, routed to the client's provider.
+  | "organicOverview"
+  | "competitorOverview";
 
 /** The capabilities that route to the client's provider (Phase 12 B adds keyword ideas and keyword gap). */
-export const ROUTED_CAPABILITIES = ["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap"] as const satisfies readonly Capability[];
+export const ROUTED_CAPABILITIES = ["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary", "keywordIdeas", "keywordGap", "organicOverview", "competitorOverview"] as const satisfies readonly Capability[];
 const DFS_ONLY = ["serpLive", "onPageInstant", "siteCrawl", "localProfile", "localPack", "localReviews", "aiVisibility"] as const satisfies readonly Capability[];
 
 export const CAPABILITIES: Readonly<Record<ProviderId, ReadonlySet<Capability>>> = {
@@ -143,11 +146,61 @@ export interface GapContext {
  */
 export interface PaidPlan {
   keyParts: Record<string, unknown>;
+  /** The cache key the call itself uses, when it isn't cacheKey("seo", provider, capability, keyParts) (Phase 13 B). */
+  cacheKey?: string;
   unit: "usd" | "units";
   requests: number;
   cost(limit: number): number;
   breakdown(limit: number): string;
 }
+
+// ------------------------------------------------------------------ Phase 13 B: visibility, history, competitors
+
+/** Backlink figures one snapshot stores (spec 13.5.1): counts only, never link lists. */
+export interface BacklinksFigures {
+  backlinks: number | null;
+  referringDomains: number | null;
+  authority: { metric: AuthorityMetric; value: number | null };
+  newBacklinks: number | null;
+  lostBacklinks: number | null;
+  newReferringDomains: number | null;
+  lostReferringDomains: number | null;
+}
+
+/** Visibility figures one snapshot stores (spec 13.5.1, D6): counts per band and the provider's own traffic estimate. */
+export interface VisibilityFigures {
+  keywords: number | null;
+  top3: number | null;
+  pos4_10: number | null;
+  pos11_20: number | null;
+  pos21_100: number | null;
+  traffic: number | null;
+  trafficLabel: string;
+  /** Competitor snapshots only: keywords shared with the client (null when the provider didn't list the competitor). */
+  commonKeywords?: number | null;
+}
+
+/** One competitor as a provider reports it (counts only). */
+export interface ProviderCompetitor {
+  domain: string;
+  commonKeywords: number | null;
+  keywords: number | null;
+  traffic: number | null;
+  /** False for a saved competitor the provider's list didn't include (looked up on its own). */
+  inProviderList: boolean;
+}
+
+export interface CompetitorOverviewRequest {
+  /** Saved competitors (bare domains, normalised), in saved order; looked up on their own when the provider's list misses them. */
+  saved: string[];
+  /** Rows wanted, 1..10. */
+  limit: number;
+}
+
+export type OrganicOverviewRouted = { figures: VisibilityFigures; market: string } & ProviderMeta;
+export type OrganicHistoryRouted = { points: ({ day: string } & VisibilityFigures)[]; market: string } & ProviderMeta;
+export type BacklinksHistoryRouted = { points: ({ day: string } & BacklinksFigures)[] } & ProviderMeta;
+export type CompetitorOverviewRouted = { rows: ProviderCompetitor[]; providerListSize: number; market: string } & ProviderMeta;
 
 export interface SeoDataProvider {
   id: ProviderId;
@@ -163,6 +216,19 @@ export interface SeoDataProvider {
   keywordIdeas?(client: Client, req: KeywordIdeasRequest, opts?: CallOpts): Promise<KeywordIdeasRouted>;
   planKeywordGap?(client: Client, req: KeywordGapRequest, ctx: Pick<GapContext, "gscAvailable">): PaidPlan;
   keywordGap?(client: Client, req: KeywordGapRequest, ctx: GapContext, opts?: CallOpts): Promise<KeywordGapRouted>;
+  /** Phase 13 B. Plans are pure (no request); a plan's `cost` ignores its argument. */
+  planBacklinksSummary?(client: Client, target: string): PaidPlan;
+  planOrganicOverview?(client: Client, target: string): PaidPlan;
+  organicOverview?(client: Client, target: string, opts?: CallOpts): Promise<OrganicOverviewRouted>;
+  planOrganicHistory?(client: Client, target: string, months: number): PaidPlan;
+  organicHistory?(client: Client, target: string, months: number, opts?: CallOpts): Promise<OrganicHistoryRouted>;
+  /** DataForSEO and Ahrefs; Semrush has no backlink history (local snapshots only). */
+  planBacklinksHistory?(client: Client, target: string, months: number): PaidPlan;
+  backlinksHistory?(client: Client, target: string, months: number, opts?: CallOpts): Promise<BacklinksHistoryRouted>;
+  planCompetitorOverview?(client: Client, req: CompetitorOverviewRequest): PaidPlan;
+  competitorOverview?(client: Client, req: CompetitorOverviewRequest, opts?: CallOpts): Promise<CompetitorOverviewRouted>;
+  /** The market string snapshots are keyed by (location code, country or database); throws ProviderUnavailableError when there is none. */
+  market?(client: Client, capability: "organicOverview" | "competitorOverview"): string;
 }
 
 // ------------------------------------------------------------------ resolution (pure)
@@ -292,6 +358,17 @@ const dataforseoProvider: SeoDataProvider = {
     const r = await dfs.backlinksSummary(client, target);
     return { ...r, summary: authority(r.summary), provider: "dataforseo", units: null };
   },
+  // Phase 13 B
+  planBacklinksSummary: (_c, t) => dfs.planBacklinksSummaryDfs(t),
+  planOrganicOverview: (c, t) => dfs.planRankOverview(c, t),
+  organicOverview: (c, t, o) => dfs.rankOverview(c, t, o),
+  planOrganicHistory: (c, t, m) => dfs.planRankHistory(c, t, m),
+  organicHistory: (c, t, m, o) => dfs.rankHistory(c, t, m, o),
+  planBacklinksHistory: (c, t, m) => dfs.planBacklinksHistoryDfs(c, t, m),
+  backlinksHistory: (c, t, m, o) => dfs.backlinksHistoryDfs(c, t, m, o),
+  planCompetitorOverview: (c, r) => dfs.planCompetitorOverviewDfs(c, r),
+  competitorOverview: (c, r, o) => dfs.competitorOverviewDfs(c, r, o),
+  market: (c) => dfs.dfsMarket(c),
 };
 
 const registry: Partial<Record<ProviderId, SeoDataProvider>> = { dataforseo: dataforseoProvider, ahrefs: ahrefsProvider, semrush: semrushProvider };
@@ -300,6 +377,17 @@ function impl(id: ProviderId): SeoDataProvider {
   const p = registry[id];
   if (!p) throw new Error(`${PROVIDER_LABELS[id]} is not available in this build.`);
   return p;
+}
+
+/** Phase 13 B: a provider's implementation (provider sections plan and call it directly after routing). */
+export const providerImpl = (id: ProviderId): SeoDataProvider => impl(id);
+
+/**
+ * Phase 13 B: which provider serves `capability` for this client (routed, D2: a missing key is ProviderUnavailableError,
+ * never another provider). Provider history follows the provider this returns and is never routed on its own.
+ */
+export async function routeProvider(client: Client, capability: Capability): Promise<{ provider: ProviderId; fallbackFrom?: ProviderId }> {
+  return choose(client, capability);
 }
 
 function withFallback<T extends object>(r: T, fallbackFrom: ProviderId | undefined): T {
@@ -416,7 +504,7 @@ function remainingFor(client: Client, provider: ProviderId): { unit: "usd" | "un
 
 /** The whole operation's estimate against what's left, and the largest round limit that fits when it doesn't. Pure apart from reading the ledger. */
 function estimateFor(client: Client, provider: ProviderId, capability: Capability, plan: PaidPlan, limit: number, fallbackFrom: ProviderId | undefined, refresh: boolean): EstimateResult {
-  const cachedAlready = !refresh && peekCache(cacheKey("seo", provider, capability, plan.keyParts)) !== undefined;
+  const cachedAlready = !refresh && peekCache(plan.cacheKey ?? cacheKey("seo", provider, capability, plan.keyParts)) !== undefined;
   const cost = cachedAlready ? 0 : plan.cost(limit);
   const remaining = remainingFor(client, provider);
   const left = Math.min(remaining.client, remaining.global);

@@ -3,7 +3,19 @@ import { TIMEOUTS } from "../lib/timeout.js";
 import { assertAiBudget, assertBudget, recordSpend, withUsdReservation } from "../lib/budget.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import { mergeGaps, mergeIdeas } from "../analysis/keyword-gap.js";
-import type { KeywordGapRequest, KeywordGapRouted, KeywordIdeasRequest, KeywordIdeasRouted, PaidPlan } from "./seo-data.js";
+import type {
+  BacklinksHistoryRouted,
+  CompetitorOverviewRequest,
+  CompetitorOverviewRouted,
+  KeywordGapRequest,
+  KeywordGapRouted,
+  KeywordIdeasRequest,
+  KeywordIdeasRouted,
+  OrganicHistoryRouted,
+  OrganicOverviewRouted,
+  PaidPlan,
+  ProviderCompetitor,
+} from "./seo-data.js";
 import {
   mapLlmMentions,
   mapLlmTargetMetrics,
@@ -23,7 +35,15 @@ import {
   type RawDomainIntersection,
   type RawLabsKeywords,
   mapBacklinksSummary,
+  mapBacklinksHistory,
   mapCompetitors,
+  mapCompetitorsFull,
+  mapRankHistory,
+  mapRankOverview,
+  type RawBacklinksHistory,
+  type RawCompetitorsFull,
+  type RawRankHistory,
+  type RawRankOverview,
   mapInstantPage,
   mapRankedKeywords,
   mapSerpOrganic,
@@ -68,7 +88,12 @@ export const ESTIMATE_USD = {
   serp: 0.002,
   rankedKeywords: 0.02,
   competitors: 0.02,
-  backlinksSummary: 0.02,
+  /** Raised from 0.02 when DataForSEO's Backlinks prices rose 20% (2026-07-01, research D6). */
+  backlinksSummary: 0.025,
+  /** Phase 13 B: backlinks/history/live, 13 months (sample cost $0.02012 before the 2026-07 rise, research D3, D6). */
+  backlinksHistory: 0.025,
+  /** Phase 13 B: Labs historical_rank_overview/live, 13 months (sample cost $0.106, research D2): a ceiling. */
+  rankHistory: 0.11,
   onPageTask: 0.0125, // ~$0.000125 per page × 100 pages
   onPageRead: 0,
   instantPage: 0.0025,
@@ -331,7 +356,7 @@ export function planLabsKeywordIdeas(client: Client, req: KeywordIdeasRequest): 
  */
 async function labsOperation<V>(
   client: Client,
-  capability: "keywordIdeas" | "keywordGap",
+  capability: string,
   plan: PaidPlan,
   limit: number,
   opts: { refresh?: boolean | undefined },
@@ -400,6 +425,134 @@ export async function labsKeywordGap(client: Client, req: KeywordGapRequest, opt
   });
   const merged = mergeGaps(r.value, { metric: "dataforseo_kd", clientCheck: "provider", minVolume: req.minVolume });
   return { gaps: merged.gaps, perCompetitor: merged.perCompetitor, provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
+}
+
+// ------------------------------------------------ Phase 13 B: visibility, history, competitors (spec 13.4)
+
+export const P13_PATHS = {
+  rankOverview: "/dataforseo_labs/google/domain_rank_overview/live",
+  rankHistory: "/dataforseo_labs/google/historical_rank_overview/live",
+  backlinksHistory: "/backlinks/history/live",
+  competitorsDomain: "/dataforseo_labs/google/competitors_domain/live",
+} as const;
+
+/** The market DataForSEO visibility snapshots are keyed by: the client's location code. */
+export const dfsMarket = (c: Client) => String(c.locationCode);
+/** The first day of the month `months` months before `now`'s month (UTC), for date_from. */
+export function monthsBackDay(months: number, now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Cache key of the existing backlinks summary call (dataforseo.ts `paid`), for the pre-flight's "already cached" check. */
+export function planBacklinksSummaryDfs(target: string): PaidPlan {
+  const body = [{ target, internal_list_limit: 10, include_subdomains: true }];
+  return {
+    keyParts: { target },
+    cacheKey: cacheKey("dfs", env.DATAFORSEO_BASE_URL, "/backlinks/summary/live", body),
+    unit: "usd",
+    requests: 1,
+    cost: () => ESTIMATE_USD.backlinksSummary,
+    breakdown: () => `1 backlinks/summary ($${ESTIMATE_USD.backlinksSummary})`,
+  };
+}
+
+export function planRankOverview(client: Client, target: string): PaidPlan {
+  return {
+    keyParts: { base: env.DATAFORSEO_BASE_URL, target: bareDomain(target), ...geo(client) },
+    unit: "usd",
+    requests: 1,
+    cost: () => labsTaskUsd(1),
+    breakdown: () => "1 domain_rank_overview task ($0.012 + 1 × $0.00012)",
+  };
+}
+
+/** Organic visibility now (Labs domain_rank_overview/live): position bands, ETV and the keyword count (D6). */
+export async function rankOverview(client: Client, target: string, opts: { refresh?: boolean } = {}): Promise<OrganicOverviewRouted> {
+  const plan = planRankOverview(client, target);
+  const r = await labsOperation(client, "organicOverview", plan, 1, opts, async (send) => {
+    const task = await send<RawRankOverview>(P13_PATHS.rankOverview, { target: bareDomain(target), ...geo(client) }, labsTaskUsd(1));
+    return mapRankOverview(task.result?.[0]);
+  });
+  return { figures: r.value, market: dfsMarket(client), provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
+}
+
+export function planRankHistory(client: Client, target: string, months: number, now = new Date()): PaidPlan {
+  return {
+    keyParts: { base: env.DATAFORSEO_BASE_URL, target: bareDomain(target), ...geo(client), dateFrom: monthsBackDay(months, now) },
+    unit: "usd",
+    requests: 1,
+    cost: () => ESTIMATE_USD.rankHistory,
+    breakdown: () => `1 historical_rank_overview task, ${months} months (about $${ESTIMATE_USD.rankHistory})`,
+  };
+}
+
+/** Monthly visibility history (Labs historical_rank_overview/live from `months` months back). */
+export async function rankHistory(client: Client, target: string, months: number, opts: { refresh?: boolean } = {}): Promise<OrganicHistoryRouted> {
+  const plan = planRankHistory(client, target, months);
+  const r = await labsOperation(client, "organicHistory", plan, 1, opts, async (send) => {
+    const task = await send<RawRankHistory>(P13_PATHS.rankHistory, { target: bareDomain(target), ...geo(client), date_from: plan.keyParts.dateFrom }, ESTIMATE_USD.rankHistory);
+    return mapRankHistory(task.result?.[0]);
+  });
+  return { points: r.value, market: dfsMarket(client), provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
+}
+
+export function planBacklinksHistoryDfs(_client: Client, target: string, months: number, now = new Date()): PaidPlan {
+  return {
+    keyParts: { base: env.DATAFORSEO_BASE_URL, target: bareDomain(target), dateFrom: monthsBackDay(months, now) },
+    unit: "usd",
+    requests: 1,
+    cost: () => ESTIMATE_USD.backlinksHistory,
+    breakdown: () => `1 backlinks/history task, ${months} months (about $${ESTIMATE_USD.backlinksHistory})`,
+  };
+}
+
+/** Monthly backlink history with new/lost counts (backlinks/history/live, rank on the 0-1000 scale, D5). */
+export async function backlinksHistoryDfs(client: Client, target: string, months: number, opts: { refresh?: boolean } = {}): Promise<BacklinksHistoryRouted> {
+  const plan = planBacklinksHistoryDfs(client, target, months);
+  const r = await labsOperation(client, "backlinksHistory", plan, 1, opts, async (send) => {
+    const task = await send<RawBacklinksHistory>(P13_PATHS.backlinksHistory, { target: bareDomain(target), date_from: plan.keyParts.dateFrom, rank_scale: "one_thousand" }, ESTIMATE_USD.backlinksHistory);
+    return mapBacklinksHistory(task.result?.[0]);
+  });
+  return { points: r.value, provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
+}
+
+/** Rows asked of competitors_domain: at least 20, so saved competitors are likely in the list (spec 13.4). */
+export const competitorRows = (limit: number) => Math.max(limit, 20);
+
+export function planCompetitorOverviewDfs(client: Client, req: CompetitorOverviewRequest): PaidPlan {
+  const rows = competitorRows(req.limit);
+  const n = req.saved.length;
+  return {
+    keyParts: { base: env.DATAFORSEO_BASE_URL, target: bareDomain(client.domain), ...geo(client), rows, saved: req.saved },
+    unit: "usd",
+    requests: 1 + n,
+    // A ceiling: every saved competitor might be missing from the list and need its own domain_rank_overview.
+    cost: () => usd6(labsTaskUsd(rows) + n * labsTaskUsd(1)),
+    breakdown: () => `1 competitors_domain task ($0.012 + ${rows} × $0.00012)${n ? ` + up to ${n} domain_rank_overview task(s) for saved competitors the list misses ($0.01212 each)` : ""}`,
+  };
+}
+
+/**
+ * Organic competitors with their whole footprint (competitors_domain/live, full_domain_metrics) plus, for each saved
+ * competitor the list misses, a domain_rank_overview of its own (overlap unknown: inProviderList false). D7.
+ */
+export async function competitorOverviewDfs(client: Client, req: CompetitorOverviewRequest, opts: { refresh?: boolean } = {}): Promise<CompetitorOverviewRouted> {
+  const plan = planCompetitorOverviewDfs(client, req);
+  const rows = competitorRows(req.limit);
+  const r = await labsOperation(client, "competitorOverview", plan, 1, opts, async (send) => {
+    const task = await send<RawCompetitorsFull>(P13_PATHS.competitorsDomain, { target: bareDomain(client.domain), ...geo(client), limit: rows, item_types: ["organic"] }, labsTaskUsd(rows));
+    const list: ProviderCompetitor[] = mapCompetitorsFull(task.result?.[0], client.domain);
+    const size = list.length;
+    for (const saved of req.saved) {
+      if (list.some((x) => x.domain === saved)) continue;
+      const one = await send<RawRankOverview>(P13_PATHS.rankOverview, { target: saved, ...geo(client) }, labsTaskUsd(1));
+      const f = mapRankOverview(one.result?.[0]);
+      list.push({ domain: saved, commonKeywords: null, keywords: f.keywords, traffic: f.traffic, inProviderList: false });
+    }
+    return { rows: list, providerListSize: size };
+  });
+  return { ...r.value, market: dfsMarket(client), provider: "dataforseo", costUsd: r.costUsd, units: null, fromCache: r.fromCache };
 }
 
 // ------------------------------------------------ local SEO: Business Data and Maps (Phase 12 C4)

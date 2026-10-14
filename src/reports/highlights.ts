@@ -10,6 +10,8 @@ import type {
   CruxHistoryResult,
   Highlight,
   IndexingIssuesData,
+  BacklinksData,
+  VisibilityData,
   TechnicalIssuesData,
   MoversData,
   OrganicTrafficData,
@@ -26,6 +28,8 @@ export const MIN_DELTA = 20;
 export const MIN_POSITION_MOVE = 3;
 /** Phase 13: an indexed-share change of at least this many percentage points is a highlight. */
 export const MIN_SHARE_POINTS = 5;
+/** Phase 13 B: referring domains must move at least this many domains (and MIN_CHANGE_PCT) to be a highlight. */
+export const MIN_REFERRING_DOMAINS = 10;
 
 const int = (n: number) => Math.round(n).toLocaleString("en-US");
 const pct = (n: number) => `${Math.abs(n).toFixed(1)}%`;
@@ -134,6 +138,30 @@ export function computeHighlights(report: Pick<TemplateReport, "sections" | "per
         value: series.p75[b]! - series.p75[a]!,
       });
     }
+  }
+
+  // (9), (10) Phase 13 B: referring domains and ranking keywords against the first comparison with stored figures
+  // (same provider; the provider is named, since another provider's figures differ).
+  const PROVIDER = { dataforseo: "DataForSEO", ahrefs: "Ahrefs", semrush: "Semrush" } as const;
+  const providerChange = (cur: number | null, prev: number | null, minDelta: number) => {
+    if (cur === null || prev === null || prev <= 0) return undefined;
+    const change = ((cur - prev) / prev) * 100;
+    if (Math.abs(change) < MIN_CHANGE_PCT || Math.abs(cur - prev) < minDelta) return undefined;
+    return { text: `${change > 0 ? "rose" : "fell"} ${pct(change)} (from ${int(prev)} to ${int(cur)})`, change };
+  };
+  const firstCmp = <T,>(c: { previous_period?: { previous: T } | null; previous_year?: { previous: T } | null }) =>
+    c.previous_period ? { which: "previous_period" as const, previous: c.previous_period.previous } : c.previous_year ? { which: "previous_year" as const, previous: c.previous_year.previous } : undefined;
+  const bl = okData<BacklinksData>(sections, "backlinks");
+  const blCmp = bl && firstCmp(bl.data.comparisons);
+  if (bl && blCmp) {
+    const c = providerChange(bl.data.current.referringDomains, blCmp.previous.referringDomains, MIN_REFERRING_DOMAINS);
+    if (c) out.push({ kind: "referring-domains", sectionId: bl.id, text: `Referring domains ${c.text} vs ${name(blCmp.which)} (${PROVIDER[bl.data.provider]}).`, value: Number(c.change.toFixed(1)) });
+  }
+  const vis = okData<VisibilityData>(sections, "organic_visibility");
+  const visCmp = vis && firstCmp(vis.data.comparisons);
+  if (vis && visCmp) {
+    const c = providerChange(vis.data.current.keywords, visCmp.previous.keywords, MIN_DELTA);
+    if (c) out.push({ kind: "ranking-keywords", sectionId: vis.id, text: `Ranking keywords ${c.text} vs ${name(visCmp.which)} (${PROVIDER[vis.data.provider]}).`, value: Number(c.change.toFixed(1)) });
   }
 
   // (11) new critical or high technical issues (Phase 13). Issues not re-checked are never counted as resolved.

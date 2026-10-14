@@ -10,8 +10,8 @@ import { exportReport } from "../reports/export.js";
 import { chromePdfPrinter } from "../reports/render/pdf.js";
 import { loadTemplates, templateFileWarnings } from "../reports/templates/load.js";
 import { FORMATS, FREE_ISSUE_SOURCES, ISSUE_SOURCES, PAID_ISSUE_SOURCES } from "../reports/templates/schema.js";
-import { canonicalSpendNames } from "../lib/spend.js";
-import { spendSummary } from "../lib/budget.js";
+import { canonicalSpendNames, spendKeys } from "../lib/spend.js";
+import { spendSummary, unitsThisMonth } from "../lib/budget.js";
 import { purgeExpired } from "../lib/cache.js";
 import { onPagePagesWithIssue, onPageSummary } from "../providers/dataforseo.js";
 import { runAudit } from "../reports/audit.js";
@@ -312,15 +312,17 @@ export function registerReportTools(server: McpServer) {
         "The same problem found by two sources is one item, listing both sources with their own severity; `affected` is the largest page count any one source reports. " +
         "`changes` compares with the newest snapshot older than 24 hours: new, persistent, resolved (only when the source that reported it ran again) and unverified (not re-checked, never counted as fixed); null on the first run. " +
         "Each call saves a snapshot (local). Never starts a crawl or audit; stale sources (older than maxAgeDays) are shown with their date. " +
-        "Free: the Ahrefs and Semrush Site Audit sources aren't available in this version (they're listed in `unavailable`).",
+        "Free by default. The ahrefs_site_audit and semrush_site_audit sources read the client's existing Site Audit project (clients.yaml ahrefsSiteAuditProject / semrushProject, else matched by domain) and spend units " +
+        "(Ahrefs: 50 for the issues, plus 50 per issueUrls call; Semrush: about 100 per call, up to 400 with the project list and titles): they need allowPaid: true, read only (never start a crawl or create a project). " +
+        "Call with estimateOnly: true first, state the units and ask before passing allowPaid.",
       inputSchema: {
         client: clientArg,
         sources: z.array(z.enum(ISSUE_SOURCES)).min(1).max(ISSUE_SOURCES.length).optional().describe("Default: every free source (audit, local_crawl, site_hygiene, dataforseo_crawl, gsc_inspection)."),
         minSeverity: z.enum(["critical", "high", "medium", "low"]).optional().describe("Leave out issues below this severity. Default low (everything)."),
         limit: z.number().int().min(1).max(200).optional().describe("Issues listed (counts cover all). Default 50."),
-        issueUrls: z.number().int().min(0).max(5).optional().describe("Example URLs per top issue from a provider Site Audit source (paid; Stage B). Default 0."),
+        issueUrls: z.number().int().min(0).max(5).optional().describe("Top issues to fetch up to 3 example URLs for from a provider Site Audit source (paid: one call each). Default 0."),
         maxAgeDays: z.number().int().min(7).max(120).optional().describe("Sources older than this are flagged stale. Default 45."),
-        allowPaid: z.boolean().optional().describe("Needed for the Ahrefs / Semrush Site Audit sources (paid; not in this version)."),
+        allowPaid: z.boolean().optional().describe("Needed for the Ahrefs / Semrush Site Audit sources (they spend provider units); set only after the user agreed to the estimate."),
         estimateOnly: z.boolean().optional().describe("Return the provider units this would spend, read nothing and save nothing."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -329,21 +331,26 @@ export function registerReportTools(server: McpServer) {
       const c = await resolveClient(client);
       const sources = o.sources ?? [...FREE_ISSUE_SOURCES];
       if ((o.issueUrls ?? 0) > 0 && !sources.some((x) => PAID_ISSUE_SOURCES.has(x))) throw new Error("issueUrls needs an ahrefs_site_audit or semrush_site_audit source.");
+      const ti = await import("../reports/technical-issues.js");
       if (estimateOnly) {
+        const paid = await ti.planPaidIssueSources(c, sources, o.issueUrls ?? 0);
+        const units = { ahrefs: paid.filter((p) => p.provider === "ahrefs").reduce((a, p) => a + p.units, 0), semrush: paid.filter((p) => p.provider === "semrush").reduce((a, p) => a + p.units, 0) };
         return {
           estimateOnly: true,
           sources,
-          spend: { usd: 0, units: { ahrefs: 0, semrush: 0 } },
-          requests: 0,
-          message: sources.some((x) => PAID_ISSUE_SOURCES.has(x))
-            ? "Free: the Ahrefs and Semrush Site Audit sources aren't available in this version, so nothing would be spent."
+          paidSources: paid,
+          spend: { usd: 0, units },
+          requests: paid.reduce((a, p) => a + p.requests, 0),
+          message: paid.length
+            ? `${paid.map((p) => p.breakdown).join("; ")}. Pass allowPaid: true to read them (only after the user agrees).`
             : "Free: every source requested is stored locally (a stored DataForSEO crawl's summary is a free read).",
         };
       }
-      const ti = await import("../reports/technical-issues.js");
       const deps = await ti.loadTechIssuesDeps();
+      const before = { ahrefs: unitsThisMonth(spendKeys(c), "ahrefs"), semrush: unitsThisMonth(spendKeys(c), "semrush") };
       const r = await ti.technicalIssues(c, { ...o, sources, limit: o.limit ?? 50, baseBeforeMs: deps.now() - ti.TOOL_BASE_AGE_MS }, deps);
-      return { client: c.slug, ...r, spend: { usd: 0, units: { ahrefs: 0, semrush: 0 } } };
+      const after = { ahrefs: unitsThisMonth(spendKeys(c), "ahrefs"), semrush: unitsThisMonth(spendKeys(c), "semrush") };
+      return { client: c.slug, ...r, spend: { usd: 0, units: { ahrefs: Math.max(0, after.ahrefs - before.ahrefs), semrush: Math.max(0, after.semrush - before.semrush) } } };
     }),
   );
 

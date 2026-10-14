@@ -36,6 +36,8 @@ Every field is in `config/clients.example.yaml`. The file is re-read on every ca
 | `country` | The country of a country-level `locationCode` (2840 gives `US`, 2826 gives `GB`); none for a city or region code |
 | `bingSite` | The verified Bing Webmaster Tools site whose host is the client's domain (https first, then the root path) |
 | `gbpPlaceId` | None: `local_profile` searches by the client's name until you confirm a listing |
+| `ahrefsSiteAuditProject` | None: `technical_issues` matches the client's existing Ahrefs Site Audit project by domain (exactly one must match); set it with `clients set example.com --ahrefs-site-audit-project <id>` (the ID in `app.ahrefs.com/site-audit/<id>`) or by editing clients.yaml; not through Claude. The project's site must be the client's domain or a subdomain of it, or the source is refused |
+| `semrushProject` | None: matched by domain among your Semrush projects that have Site Audit; set it with `clients set example.com --semrush-project <id>` or in clients.yaml, not through Claude (saves the project-list call, 100 units). An audit whose site isn't the client's domain or a subdomain is refused |
 | `monthlyUnits.ahrefs`, `monthlyUnits.semrush` | `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS` (10,000) and `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` (5,000) |
 
 Arrays you set (`competitors`, `trackedKeywords`, `keyPages`) replace the defaults rather than append.

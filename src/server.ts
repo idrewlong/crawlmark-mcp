@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { providerUrlNotice, seoDefaultProvider } from "./config.js";
 import { closeEgressProxy } from "./lib/egress-proxy.js";
+import { reconcileOnce, setProcessEntry } from "./lib/provider-data.js";
 import { restrictToClientDomains } from "./lib/url-guard.js";
 import { closeAllBrowsers } from "./providers/browser.js";
 import { registerPrompts } from "./prompts/index.js";
@@ -19,6 +20,10 @@ import { registerRankTools } from "./tools/ranks.js";
 import { registerRawTools } from "./tools/raw.js";
 import { registerReportTools } from "./tools/reports.js";
 import { registerSetupTools } from "./tools/setup.js";
+
+// Phase 13 B: this process is the MCP server; a removed Ahrefs key deletes stored Ahrefs data (Ahrefs storage decision).
+setProcessEntry("mcp");
+reconcileOnce();
 
 // Fail at boot, not on the first URL, when RESTRICT_TO_CLIENT_DOMAINS has a typo.
 restrictToClientDomains();

@@ -474,3 +474,94 @@ export interface IndexingIssuesData {
   quota: { day: string; used: number; budget: number; exhausted: boolean };
   notes: string[];
 }
+
+// ---------------------------------------------------------------- Phase 13 B (spec 13.6.2)
+
+export type SeoProviderId = "dataforseo" | "ahrefs" | "semrush";
+/** live = fetched in this run; reused = a stored live snapshot (D2/D3); provider_history = bought from the provider's history. */
+export type SnapshotOrigin = "live" | "reused" | "provider_history";
+/** A comparison point: the stored figures, when they describe (`asOf`), and current − previous per field (null when either is null). */
+export interface Compared<T> {
+  asOf: string;
+  origin: SnapshotOrigin;
+  previous: T;
+  change: T;
+}
+
+export interface BacklinksNow {
+  backlinks: number | null;
+  referringDomains: number | null;
+  authority: number | null;
+  newBacklinks: number | null;
+  lostBacklinks: number | null;
+  newReferringDomains: number | null;
+  lostReferringDomains: number | null;
+}
+
+export interface BacklinksData {
+  provider: SeoProviderId;
+  target: string;
+  /** YYYY-MM-DD the current figures describe. */
+  asOf: string;
+  origin: SnapshotOrigin;
+  /** Each provider's own domain-strength metric, never mixed (D4). */
+  authority: { metric: "dataforseo_rank" | "domain_rating" | "semrush_score"; label: string; scale: "0-100" | "0-1000" };
+  current: BacklinksNow;
+  /** What the new/lost figures cover, e.g. "September 2026 (DataForSEO, monthly)"; null when there are none (D5). */
+  newLostLabel: string | null;
+  comparisons: { previous_period?: Compared<BacklinksNow> | null; previous_year?: Compared<BacklinksNow> | null };
+  trend: { day: string; referringDomains: number | null; backlinks: number | null; authority: number | null; origin: SnapshotOrigin }[];
+  /** crawlmark's own fixed wording (no provider text). */
+  notes: string[];
+}
+
+export interface VisibilityNow {
+  keywords: number | null;
+  top3: number | null;
+  pos4_10: number | null;
+  pos11_20: number | null;
+  pos21_100: number | null;
+  traffic: number | null;
+}
+
+export interface VisibilityData {
+  provider: SeoProviderId;
+  target: string;
+  /** Location code (DataForSEO), country (Ahrefs) or database (Semrush). */
+  market: string;
+  asOf: string;
+  origin: SnapshotOrigin;
+  /** "DataForSEO estimated traffic", "Ahrefs organic traffic", "Semrush organic traffic": never compared across providers. */
+  trafficLabel: string;
+  /** False for Semrush (its API has no keywords by position band). */
+  distributionAvailable: boolean;
+  current: VisibilityNow;
+  comparisons: { previous_period?: Compared<VisibilityNow> | null; previous_year?: Compared<VisibilityNow> | null };
+  trend: ({ day: string; origin: SnapshotOrigin } & VisibilityNow)[];
+  notes: string[];
+}
+
+export interface CompetitorRow {
+  /** Bare domain (stripControl'd, normalised). */
+  domain: string;
+  origin: "saved" | "suggested" | "client";
+  commonKeywords: number | null;
+  keywords: number | null;
+  traffic: number | null;
+  /** False for a saved competitor missing from the provider's competitor list (its overlap is unknown). */
+  inProviderList: boolean;
+  /** Ranking keywords against the previous period's stored figures, when there are some. */
+  keywordsChange: number | null;
+}
+
+export interface CompetitorOverviewData {
+  provider: SeoProviderId;
+  market: string;
+  asOf: string;
+  trafficLabel: string;
+  client: CompetitorRow;
+  /** Saved first, in saved order (D7), then suggested; at most `limit`. */
+  competitors: CompetitorRow[];
+  providerListSize: number;
+  notes: string[];
+}

@@ -130,6 +130,10 @@ const sectionSchemas = [
     limit: limit(50),
     trendMonths: z.number().int().min(0).max(12).optional(),
   }),
+  // Phase 13 B: provider sections (paid) through the client's SEO data provider, with month-over-month from stored snapshots.
+  z.strictObject({ ...common, type: z.literal("backlinks"), trendMonths: z.number().int().min(0).max(24).optional(), history: z.boolean().optional() }),
+  z.strictObject({ ...common, type: z.literal("organic_visibility"), trendMonths: z.number().int().min(0).max(24).optional(), history: z.boolean().optional() }),
+  z.strictObject({ ...common, type: z.literal("competitor_overview"), limit: limit(10), source: z.enum(["saved", "suggested", "saved_then_suggested"]).optional() }),
   z.strictObject({ ...common, type: z.literal("text"), text: z.string().min(1).max(2000) }),
 ] as const;
 
@@ -164,6 +168,9 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   ai_visibility: "AI search visibility",
   technical_issues: "Technical SEO issues",
   indexing_issues: "Google indexing",
+  backlinks: "Backlinks",
+  organic_visibility: "Organic search visibility",
+  competitor_overview: "Competitors",
   text: "Note",
 };
 
@@ -173,7 +180,7 @@ export type SectionCost = "free" | "free_key" | "paid" | "paid_optional";
 /**
  * The section catalogue for the template builder (spec 13.6.1; Stage C reads it): each type's group, what it
  * costs (free, free with the user's own key, paid, or paid only with an option), what it needs, and one line
- * about what it shows. Stage B adds the provider sections.
+ * about what it shows.
  */
 export const SECTION_CATALOGUE: Record<SectionType, { group: SectionGroup; cost: SectionCost; needs?: string; summary: string }> = {
   search_overview: { group: "search", cost: "free", needs: "Google Search Console", summary: "Clicks, impressions, CTR and average position against the comparison periods, with daily charts." },
@@ -199,14 +206,18 @@ export const SECTION_CATALOGUE: Record<SectionType, { group: SectionGroup; cost:
   ai_readiness: { group: "ai", cost: "free", needs: "a saved audit", summary: "llms.txt and which AI crawlers robots.txt lets in." },
   technical_issues: { group: "site", cost: "paid_optional", needs: "a saved audit or crawl (Ahrefs / Semrush Site Audit sources are paid)", summary: "One deduplicated, severity-grouped list of technical problems from every stored source, with what changed since the last report." },
   indexing_issues: { group: "site", cost: "free", needs: "Google Search Console (uses the daily URL Inspection quota)", summary: "Google's verdict for key pages, top pages and a rotating sample of sitemap URLs, plus sitemap errors." },
+  backlinks: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Referring domains, backlinks and the provider's authority metric, with the change since last month from stored snapshots." },
+  organic_visibility: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Ranking keywords by position band and estimated organic traffic, with the trend from stored snapshots." },
+  competitor_overview: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Top organic competitors (saved ones first), shared keywords and their visibility next to the client's." },
   text: { group: "other", cost: "free", summary: "A fixed paragraph of your own." },
 };
 
 /**
- * Section types that always cost money (Stage B: keyword_gap; Stage C adds local_profile and ai_visibility).
+ * Section types that always cost money (Phase 12: keyword_gap, local_profile, ai_visibility; Phase 13 B: backlinks,
+ * organic_visibility, competitor_overview).
  * `tracked_keywords` is paid only with `liveRanks: true`.
  */
-export const PAID_SECTION_TYPES: ReadonlySet<string> = new Set<string>(["keyword_gap", "local_profile", "ai_visibility"]);
+export const PAID_SECTION_TYPES: ReadonlySet<string> = new Set<string>(["keyword_gap", "local_profile", "ai_visibility", "backlinks", "organic_visibility", "competitor_overview"]);
 
 /** True when a section spends money (and so needs `paid: true` in the template and allowPaid at run time). */
 export function isPaidSection(s: SectionSpec): boolean {

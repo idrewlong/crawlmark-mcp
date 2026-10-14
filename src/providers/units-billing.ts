@@ -7,6 +7,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Client } from "../config.js";
 import { assertUnits, globalUnitCap, unitsThisMonth, type UnitProvider } from "../lib/budget.js";
 import { cached, cacheKey } from "../lib/cache.js";
+import { markProviderData, trackCacheKey } from "../lib/provider-data.js";
 import { spendKeys } from "../lib/spend.js";
 import { stripControl } from "../lib/terminal-text.js";
 
@@ -124,6 +125,10 @@ export async function unitsCall<T>(o: {
   run: () => Promise<{ value: T; units: number }>;
 }): Promise<UnitsCallResult<T>> {
   const key = cacheKey("seo", o.provider, o.capability, o.keyParts);
+  // Phase 13 B: a purge of this provider's data (crawlmark-cli data purge, a removed key or client) deletes this entry too.
+  trackCacheKey(o.provider, o.client.slug, key);
+  // So a removed key's purge also covers data that only ever lived in the cache (SEC-5).
+  markProviderData(o.provider);
   const { value, fromCache } = await cached(
     key,
     o.ttl,

@@ -1,0 +1,101 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.5 sec.",
+  "cost": 0.02012,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131200-1111-0000-0000-000000000001",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.4 sec.",
+      "cost": 0.02012,
+      "result_count": 1,
+      "path": [],
+      "data": {},
+      "result": [
+        {
+          "target": "example.com",
+          "date_from": "2025-09-01",
+          "date_to": "2026-10-13",
+          "rank_scale": "one_thousand",
+          "items_count": 3,
+          "items": [
+            {
+              "type": "backlinks_history",
+              "date": "2026-07-01 00:00:00 +00:00",
+              "rank": 298,
+              "backlinks": 1588,
+              "new_backlinks": 80,
+              "lost_backlinks": 52,
+              "new_referring_domains": 12,
+              "lost_referring_domains": 7,
+              "crawled_pages": 900,
+              "info": null,
+              "internal_links_count": 4000,
+              "external_links_count": 300,
+              "broken_backlinks": 3,
+              "broken_pages": 2,
+              "referring_domains": 186,
+              "referring_domains_nofollow": 20,
+              "referring_main_domains": 176,
+              "referring_main_domains_nofollow": 15,
+              "referring_ips": 150,
+              "referring_subnets": 120,
+              "referring_pages": 1500
+            },
+            {
+              "type": "backlinks_history",
+              "date": "2026-08-01 00:00:00 +00:00",
+              "rank": 301,
+              "backlinks": 1650,
+              "new_backlinks": 80,
+              "lost_backlinks": 52,
+              "new_referring_domains": 12,
+              "lost_referring_domains": 7,
+              "crawled_pages": 900,
+              "info": null,
+              "internal_links_count": 4000,
+              "external_links_count": 300,
+              "broken_backlinks": 3,
+              "broken_pages": 2,
+              "referring_domains": 191,
+              "referring_domains_nofollow": 20,
+              "referring_main_domains": 181,
+              "referring_main_domains_nofollow": 15,
+              "referring_ips": 150,
+              "referring_subnets": 120,
+              "referring_pages": 1500
+            },
+            {
+              "type": "backlinks_history",
+              "date": "2026-09-01 00:00:00 +00:00",
+              "rank": 305,
+              "backlinks": 1702,
+              "new_backlinks": 80,
+              "lost_backlinks": 52,
+              "new_referring_domains": 12,
+              "lost_referring_domains": 7,
+              "crawled_pages": 900,
+              "info": null,
+              "internal_links_count": 4000,
+              "external_links_count": 300,
+              "broken_backlinks": 3,
+              "broken_pages": 2,
+              "referring_domains": 198,
+              "referring_domains_nofollow": 20,
+              "referring_main_domains": 188,
+              "referring_main_domains_nofollow": 15,
+              "referring_ips": 150,
+              "referring_subnets": 120,
+              "referring_pages": 1500
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

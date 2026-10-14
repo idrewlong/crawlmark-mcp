@@ -8,6 +8,7 @@
  * database list come from there; items under its "Not confirmed" take the spec's safe
  * reading (specs/2026-10-13-1500-phase-9-seo-data-providers.md 9.11 N7-N15), marked below.
  */
+import { stripControl } from "../lib/terminal-text.js";
 import type { KeywordVolume } from "./dataforseo.js";
 import type { BacklinksSummary, CompetitorsResult, RankedKeywordsResult } from "./dataforseo-shape.js";
 
@@ -41,6 +42,8 @@ export const SEMRUSH_HEADER_TEXT: Readonly<Record<string, string>> = {
   ascore: "ascore",
   total: "total",
   domains_num: "domains_num",
+  // Phase 13 B: domain_rank_history's date column.
+  Dt: "Date",
 };
 
 /**
@@ -62,6 +65,10 @@ export const SEMRUSH_COLUMNS = {
   phrase_fullsearch: ["Ph", "Nq", "Cp", "Co", "Kd"],
   /** Phase 12 B keyword gap (Domain vs Domain): P0 is the first domain's position (the competitor), P1 the client's. */
   domain_domains: ["Ph", "P0", "P1", "Nq", "Kd"],
+  /** Phase 13 B: organic visibility now (domain_rank, 10/line), monthly history (domain_rank_history, 10/line) and competitors with their keyword counts. */
+  domain_rank: ["Dn", "Or", "Ot"],
+  domain_rank_history: ["Dt", "Or", "Ot"],
+  domain_organic_organic_full: ["Dn", "Np", "Or", "Ot"],
 } as const;
 
 export const SEMRUSH_V4_BACKLINK_FIELDS = ["backlinks_count", "domains_count", "new_count", "lost_count", "score"] as const;
@@ -76,6 +83,8 @@ export const SEMRUSH_UNITS = {
   phrase_related: 40,
   phrase_fullsearch: 20,
   domain_domains: 80,
+  domain_rank: 10,
+  domain_rank_history: 10,
 } as const;
 export type SemrushReport = keyof typeof SEMRUSH_UNITS;
 
@@ -366,4 +375,40 @@ export function positionHeaderFor(domain: string, code: "P0" | "P1"): (header: s
     const t = h.trim().toLowerCase().replace(/^www\./, "");
     return t === d || t === code.toLowerCase() || /position/.test(t);
   };
+}
+
+// ------------------------------------------------------------------ Phase 13 B: visibility, history, competitors
+
+export const SEMRUSH_TRAFFIC_LABEL = "Semrush organic traffic";
+/** D6: Semrush's API reports no keywords by position band, so the bands are null. */
+const NO_BANDS = { top3: null, pos4_10: null, pos11_20: null, pos21_100: null } as const;
+
+/** domain_rank's one line -> visibility figures (Or keywords, Ot traffic; bands null). Null figures when there is no line. */
+export function mapSemrushVisibility(rows: Record<string, string>[]) {
+  const r = rows[0];
+  return { keywords: num(r?.Or), ...NO_BANDS, traffic: num(r?.Ot), trafficLabel: SEMRUSH_TRAFFIC_LABEL };
+}
+
+/** domain_rank_history lines (Dt is YYYYMMDD; Semrush dates monthly points mid-month) -> points, oldest first. */
+export function mapSemrushVisibilityHistory(rows: Record<string, string>[]) {
+  const out = [];
+  for (const r of rows) {
+    const m = /^(\d{4})(\d{2})(\d{2})$/.exec((r.Dt ?? "").trim());
+    if (!m) continue;
+    out.push({ day: `${m[1]}-${m[2]}-${m[3]}`, keywords: num(r.Or), ...NO_BANDS, traffic: num(r.Ot), trafficLabel: SEMRUSH_TRAFFIC_LABEL });
+  }
+  return out.sort((a, b) => a.day.localeCompare(b.day));
+}
+
+/** domain_organic_organic (Dn, Np, Or, Ot) -> competitors; the target and empty domains dropped; domains stripControl'd. */
+export function mapSemrushCompetitorsFull(rows: Record<string, string>[], target: string) {
+  const own = target.toLowerCase().replace(/^www\./, "");
+  const out: { domain: string; commonKeywords: number | null; keywords: number | null; traffic: number | null; inProviderList: true }[] = [];
+  for (const r of rows) {
+    const raw = str(r.Dn);
+    const domain = raw ? stripControl(raw).trim().toLowerCase().replace(/^www\./, "") : null;
+    if (!domain || domain === own || out.some((o) => o.domain === domain)) continue;
+    out.push({ domain, commonKeywords: num(r.Np), keywords: num(r.Or), traffic: num(r.Ot), inProviderList: true });
+  }
+  return out;
 }

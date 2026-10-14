@@ -8,6 +8,41 @@ import type { IssueSource, SourceRun, TechIssue } from "../reports/report-types.
 import { db } from "./store.js";
 
 export const ISSUE_SNAPSHOTS_KEPT = 24;
+/** Semrush's API terms: nothing from Semrush is kept longer than this (the Semrush Site Audit items in a snapshot). */
+export const SEMRUSH_ISSUE_RETENTION_DAYS = 31;
+const DAY_MS = 86_400_000;
+
+/**
+ * Remove one source's items and source runs from stored issue snapshots (all of them, one client's, or only those
+ * captured before `beforeMs`); an item left with no source is dropped. Runs in the caller's transaction (it opens
+ * none). Returns the number of snapshots changed.
+ */
+export function stripSourceFromIssueSnapshots(source: IssueSource, o: { client?: string | null | undefined; beforeMs?: number | undefined } = {}): number {
+  const where = ["(items LIKE ? OR checked LIKE ?)"];
+  const args: (string | number)[] = [`%"${source}"%`, `%"${source}"%`];
+  if (o.client) {
+    where.push("client = ?");
+    args.push(o.client);
+  }
+  if (o.beforeMs !== undefined) {
+    where.push("captured_at < ?");
+    args.push(o.beforeMs);
+  }
+  const rows = db.prepare(`SELECT id, items, checked FROM issue_snapshots WHERE ${where.join(" AND ")}`).all(...args) as { id: string; items: string; checked: string }[];
+  let changed = 0;
+  for (const r of rows) {
+    const items = (JSON.parse(r.items) as { sources: { source: string }[]; seen?: { source: string }[] }[])
+      .map((i) => ({ ...i, sources: i.sources.filter((x) => x.source !== source), ...(i.seen ? { seen: i.seen.filter((x) => x.source !== source) } : {}) }))
+      .filter((i) => i.sources.length > 0);
+    const checked = (JSON.parse(r.checked) as { source: string }[]).filter((x) => x.source !== source);
+    db.prepare("UPDATE issue_snapshots SET items = ?, checked = ? WHERE id = ?").run(JSON.stringify(items), JSON.stringify(checked), r.id);
+    changed++;
+  }
+  return changed;
+}
+
+/** Semrush Site Audit items older than 31 days are removed (on every save and every read). */
+const pruneSemrush = (now: number) => stripSourceFromIssueSnapshots("semrush_site_audit", { beforeMs: now - SEMRUSH_ISSUE_RETENTION_DAYS * DAY_MS });
 /** The newest snapshot of each calendar month is also kept for this many months. */
 export const MONTHLY_KEPT = 25;
 
@@ -45,9 +80,10 @@ const fromRow = (r: Row): IssueSnapshot => ({
   settings: JSON.parse(r.settings) as IssueSnapshot["settings"],
 });
 
-export function saveIssueSnapshot(s: IssueSnapshot): void {
+export function saveIssueSnapshot(s: IssueSnapshot, now = Math.max(Date.now(), s.capturedAt)): void {
   db.exec("BEGIN");
   try {
+    pruneSemrush(now);
     db.prepare("INSERT INTO issue_snapshots (id, client, captured_at, items, checked, settings) VALUES (?, ?, ?, ?, ?, ?)").run(
       s.id,
       s.client,
@@ -78,7 +114,8 @@ export function saveIssueSnapshot(s: IssueSnapshot): void {
 }
 
 /** The client's newest snapshot captured strictly before `beforeMs`, leaving out `excludeIds` (the current run's own). */
-export function latestIssueSnapshotBefore(client: string, beforeMs: number, excludeIds: readonly string[] = []): IssueSnapshot | undefined {
+export function latestIssueSnapshotBefore(client: string, beforeMs: number, excludeIds: readonly string[] = [], now = Date.now()): IssueSnapshot | undefined {
+  pruneSemrush(now);
   const ex = excludeIds.length ? ` AND id NOT IN (${excludeIds.map(() => "?").join(", ")})` : "";
   const row = db.prepare(`SELECT * FROM issue_snapshots WHERE client = ? AND captured_at < ?${ex} ORDER BY captured_at DESC, id DESC LIMIT 1`).get(client, beforeMs, ...excludeIds) as Row | undefined;
   return row ? fromRow(row) : undefined;

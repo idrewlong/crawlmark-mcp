@@ -50,6 +50,8 @@ clients:
     country: US # ISO alpha-2 market for Ahrefs and Semrush; default: from a country-level locationCode
     bingSite: https://www.example.com/ # the Bing Webmaster Tools site bing_report reads; default: the verified site with this domain
     gbpPlaceId: ChIJexamplePlaceId000001 # the confirmed Google Business Profile (from local_profile; save it only after checking the match)
+    ahrefsSiteAuditProject: "1234567" # an existing Ahrefs Site Audit project (app.ahrefs.com/site-audit/<id>) for technical_issues; default: matched by domain
+    semrushProject: "7654321" # an existing Semrush project with Site Audit for technical_issues; default: matched by domain
     monthlyUnits: # Ahrefs/Semrush API unit caps; default DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS / _SEMRUSH_UNITS
       ahrefs: 20000
       semrush: 5000

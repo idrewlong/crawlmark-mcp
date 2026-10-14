@@ -1,0 +1,36 @@
+{
+  "competitors": [
+    {
+      "competitor_domain": "competitor-a.example",
+      "keywords_common": 312,
+      "keywords_competitor": 2098,
+      "share": 11.2,
+      "domain_rating": 55.0,
+      "traffic": 8800
+    },
+    {
+      "competitor_domain": "www.rival.example.net",
+      "keywords_common": 205,
+      "keywords_competitor": 1685,
+      "share": 8.1,
+      "domain_rating": 47.0,
+      "traffic": 5100
+    },
+    {
+      "competitor_domain": null,
+      "keywords_common": 5,
+      "keywords_competitor": 5,
+      "share": 0.1,
+      "domain_rating": 1.0,
+      "traffic": 1
+    },
+    {
+      "competitor_domain": "bad\u200b.example",
+      "keywords_common": 4,
+      "keywords_competitor": 10,
+      "share": 0.1,
+      "domain_rating": 2.0,
+      "traffic": 3
+    }
+  ]
+}

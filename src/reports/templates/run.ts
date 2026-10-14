@@ -56,6 +56,9 @@ import type { EstimateResult, KeywordGapRequest, KeywordGapRouted } from "../../
 import { analyzeCrawl, topFindings } from "../../analysis/crawl.js";
 import type { TechIssuesOptions, TechIssuesResult } from "../technical-issues.js";
 import type { StoredCrawl } from "../../lib/crawls.js";
+import type { ProviderEstimate, SectionRequest, SectionWindow } from "../provider-sections.js";
+import type { BacklinksData, CompetitorOverviewData, VisibilityData } from "../report-types.js";
+import { wholeQuarter } from "./period.js";
 
 /** At most this many stored points per keyword and source go into a report (evenly thinned). */
 export const RANK_SERIES_MAX = 120;
@@ -133,7 +136,41 @@ export interface RunDeps {
   technicalIssues(client: Client, opts: TechIssuesOptions): Promise<TechIssuesResult>;
   /** Phase 13 A: Google indexing from stored URL Inspection results, topping up at most maxInspections first (free; Google's daily quota). */
   indexingSection(client: Client, opts: { maxInspections: number; staleDays: number; limit: number; trendMonths: number }): Promise<IndexingIssuesData>;
+  /**
+   * Phase 13 B: plan a provider section (backlinks, organic_visibility, competitor_overview) with no request: its
+   * estimate (stored snapshots and the cache honoured, provider history included when it would be bought) and a
+   * `run` that makes exactly those requests and builds the section. Throws ProviderUnavailableError when the
+   * client's provider can't serve it (never another provider).
+   */
+  planProviderSection(client: Client, req: SectionRequest, window: SectionWindow): Promise<PlannedProviderSection>;
+  /** Phase 13 B: the technical_issues section's paid sources (Ahrefs / Semrush Site Audit) priced, no request. */
+  planIssueSources(client: Client, sources: readonly string[], issueUrls: number): Promise<{ source: string; provider: "ahrefs" | "semrush"; units: number; requests: number; breakdown: string }[]>;
 }
+
+export interface PlannedProviderSection {
+  estimate: ProviderEstimate;
+  run(): Promise<BacklinksData | VisibilityData | CompetitorOverviewData>;
+}
+
+const PROVIDER_SECTION_TYPES: ReadonlySet<string> = new Set(["backlinks", "organic_visibility", "competitor_overview"]);
+
+/** The provider sections' window (D3): the period's last day, tolerance 20 days for a quarter and 10 otherwise, the comparisons' last days. */
+export function providerWindow(period: { current: DateRange; comparisons: { previous_period?: DateRange | undefined; previous_year?: DateRange | undefined } }): SectionWindow {
+  return {
+    kind: "period",
+    end: period.current.endDate,
+    toleranceDays: wholeQuarter(period.current) ? 20 : 10,
+    comparisons: { previous_period: period.comparisons.previous_period?.endDate, previous_year: period.comparisons.previous_year?.endDate },
+    trendMonths: 12,
+  };
+}
+
+const sectionRequest = (s: SectionSpec): SectionRequest | null =>
+  s.type === "backlinks" || s.type === "organic_visibility"
+    ? { type: s.type, trendMonths: s.trendMonths, history: s.history }
+    : s.type === "competitor_overview"
+      ? { type: s.type, limit: s.limit, source: s.source }
+      : null;
 
 export interface AiSectionRequest {
   mode: "mentions" | "metrics";
@@ -210,6 +247,13 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
       const ix = await import("../indexing.js");
       return ix.indexingSection(c, o, await ix.loadIndexingDeps());
     },
+    planIssueSources: async (c, sources, n) => (await import("../technical-issues.js")).planPaidIssueSources(c, sources as never, n),
+    planProviderSection: async (c, req, window) => {
+      const ps = await import("../provider-sections.js");
+      const deps = await ps.loadProviderSectionDeps();
+      const planned = await ps.planSection(c, req, window, deps);
+      return { estimate: ps.estimateOf(planned), run: () => ps.runSection(planned, deps) };
+    },
   };
 }
 
@@ -250,10 +294,28 @@ const r4 = (n: number) => Number(n.toFixed(4));
  * keyword gap and AI visibility through their own estimate functions (caches honoured), local profile from its
  * plan. Sections that couldn't run (no competitors, AI visibility off) are listed with 0 and a note.
  */
-export async function estimatePaidSections(client: Client, sections: SectionSpec[], deps: RunDeps): Promise<SectionEstimate[]> {
+export async function estimatePaidSections(
+  client: Client,
+  sections: SectionSpec[],
+  deps: RunDeps,
+  ctx: { window?: SectionWindow; plans?: Map<string, PlannedProviderSection> } = {},
+): Promise<SectionEstimate[]> {
   const out: SectionEstimate[] = [];
   for (const s of sections) {
     const base = { id: s.id, type: s.type };
+    const req = sectionRequest(s);
+    if (req && ctx.window) {
+      try {
+        const planned = await deps.planProviderSection(client, req, ctx.window);
+        ctx.plans?.set(s.id, planned);
+        const e = planned.estimate;
+        out.push({ ...base, provider: e.provider, usd: r4(e.usd), units: e.units, requests: e.requests, reused: e.reused, ...(e.parts.length ? { note: e.parts.join(" + ") } : {}) });
+      } catch (err) {
+        if (err instanceof BudgetExceededError) throw err;
+        out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: errorText(err) });
+      }
+      continue;
+    }
     if (s.type === "tracked_keywords" && s.liveRanks === true) {
       const n = client.trackedKeywords.length;
       out.push({ ...base, provider: "dataforseo", usd: r4(n * LIVE_RANK_ESTIMATE_USD), units: 0, requests: n, reused: false, ...(n ? {} : { note: `no tracked keywords for ${client.domain}` }) });
@@ -292,7 +354,10 @@ export async function estimatePaidSections(client: Client, sections: SectionSpec
         out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: errorText(err) });
       }
     } else if (s.type === "technical_issues" && isPaidSection(s)) {
-      out.push({ ...base, provider: null, usd: 0, units: 0, requests: 0, reused: false, note: "the Ahrefs and Semrush Site Audit sources aren't available in this version; the section uses the free sources only" });
+      // One estimate per paid source (Ahrefs and Semrush units are capped separately).
+      for (const p of await deps.planIssueSources(client, s.sources ?? [], s.issueUrls ?? 0)) {
+        out.push({ ...base, provider: p.provider, usd: 0, units: p.units, requests: p.requests, reused: p.units === 0, note: p.breakdown });
+      }
     }
   }
   return out;
@@ -302,7 +367,7 @@ export async function estimatePaidSections(client: Client, sections: SectionSpec
 export async function estimateTemplate(client: Client, opts: RunOptions, deps: RunDeps): Promise<RunEstimate> {
   const plan = planRun(client, opts);
   const paid = plan.sections.filter((s) => isPaidSection(s) || s.paid === true);
-  const sections = await estimatePaidSections(client, paid, deps);
+  const sections = await estimatePaidSections(client, paid, deps, { window: providerWindow(plan.period) });
   const usd = r4(sections.filter((x) => x.provider === "dataforseo").reduce((a, x) => a + x.usd, 0));
   const unitsOf = (p: "ahrefs" | "semrush") => sections.filter((x) => x.provider === p).reduce((a, x) => a + x.units, 0);
   const total = { usd, units: { ahrefs: unitsOf("ahrefs"), semrush: unitsOf("semrush") } };
@@ -422,7 +487,10 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
 
   // Pre-flight for the whole paid part, before any paid request: every paid section priced (no request), each
   // section's own cap check, then the run's totals per provider against what's left (D16).
-  const estimates = allowPaid ? await estimatePaidSections(client, plan.sections, deps) : [];
+  // Phase 13 B: the provider sections' plans made for the pre-flight are the ones that run (same requests).
+  const providerPlans = new Map<string, PlannedProviderSection>();
+  const window = providerWindow(plan.period);
+  const estimates = allowPaid ? await estimatePaidSections(client, plan.sections, deps, { window, plans: providerPlans }) : [];
   for (const e of estimates) if (e.exceeded) throw new BudgetExceededError(e.exceeded);
   let paidUsd = estimates.filter((e) => e.provider === "dataforseo" && e.type !== "ai_visibility").reduce((a, e) => a + e.usd, 0);
   const runUnits = { ahrefs: 0, semrush: 0 };
@@ -498,6 +566,11 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
     } catch {
       return undefined;
     }
+  };
+
+  const providerSection = async (s: SectionSpec) => {
+    const planned = providerPlans.get(s.id) ?? (await deps.planProviderSection(client, sectionRequest(s)!, window));
+    return planned.run();
   };
 
   const fetchers: Record<SectionSpec["type"], (s: never) => Promise<unknown>> = {
@@ -605,6 +678,10 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       units: { ahrefs: deps.unitsThisMonth(keys, "ahrefs"), semrush: deps.unitsThisMonth(keys, "semrush") },
     }),
     text: async (s: Extract<SectionSpec, { type: "text" }>) => ({ text: s.text }),
+    // Phase 13 B: provider sections, from the plan the pre-flight priced (stored snapshots first; D1-D7).
+    backlinks: (s: Extract<SectionSpec, { type: "backlinks" }>) => providerSection(s),
+    organic_visibility: (s: Extract<SectionSpec, { type: "organic_visibility" }>) => providerSection(s),
+    competitor_overview: (s: Extract<SectionSpec, { type: "competitor_overview" }>) => providerSection(s),
     // Phase 13 A: fetchers land in A-4 (technical_issues) and A-5 (indexing_issues).
     // Phase 13 A: stored sources only (never starts a crawl).
     technical_issues: async (s: Extract<SectionSpec, { type: "technical_issues" }>): Promise<TechnicalIssuesData> => {
@@ -748,7 +825,16 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
 
   // The paid sections' whole USD estimate is checked once and reserved while they run (SEC-1), and each unit
   // provider's whole estimate likewise (D16), so a concurrent cron run and Claude session can't both pass.
-  let runAll = () => Promise.all(plan.sections.map(runOne));
+  // Competitor overviews run after the other sections, so this run's own visibility figures are stored first (their client row).
+  const runWaves = async () => {
+    const results = new Map<string, SectionResult>();
+    const first = plan.sections.filter((s) => s.type !== "competitor_overview");
+    for (const [i, r] of (await Promise.all(first.map(runOne))).entries()) results.set(first[i]!.id, r);
+    const second = plan.sections.filter((s) => s.type === "competitor_overview");
+    for (const [i, r] of (await Promise.all(second.map(runOne))).entries()) results.set(second[i]!.id, r);
+    return plan.sections.map((s) => results.get(s.id)!);
+  };
+  let runAll = runWaves;
   for (const p of ["ahrefs", "semrush"] as const) {
     if (runUnits[p] <= 0) continue;
     const inner = runAll;

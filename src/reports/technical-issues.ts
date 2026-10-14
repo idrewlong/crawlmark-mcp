@@ -4,12 +4,15 @@
  *
  * Reports never start crawls (D11): this reads the newest saved audit (findings already extracted), the
  * newest local crawl, the newest stored DataForSEO full crawl within 30 days (a GET of its summary; no
- * task is posted) and stored URL Inspection results. The Ahrefs and Semrush Site Audit sources (paid) are
- * Stage B: until then they're listed as unavailable and nothing is requested.
+ * task is posted) and stored URL Inspection results. The Ahrefs and Semrush Site Audit sources (paid, Stage B) are
+ * read only with allowPaid, for an existing project, through each reader's read-only path allowlist; without
+ * allowPaid they're listed as unavailable and nothing is requested. Ahrefs example URLs are never stored (the
+ * snapshot keeps Ahrefs issue names and counts only: the Ahrefs storage decision).
  *
  * Every string from a source passes cleanText / cleanUrl before it's stored or returned (Phase 12 D4).
  */
 import type { Client } from "../config.js";
+import { BudgetExceededError } from "../lib/budget.js";
 import { analyzeCrawl } from "../analysis/crawl.js";
 import type { StoredAudit } from "../analysis/diff.js";
 import { CRAWL_COMPLETE_KEY, onPageSeverity } from "../analysis/findings.js";
@@ -40,6 +43,10 @@ export interface TechIssuesDeps {
   inspectionIssues?(client: Client): { run: SourceRun; issues: RawIssue[] } | undefined;
   /** DataForSEO on-page checks that mean a problem. */
   problemChecks: ReadonlySet<string>;
+  /** Phase 13 B: read a provider Site Audit (paid; existing project only). Throws ProviderUnavailableError for a missing key or project. */
+  siteAudit?(client: Client, source: "ahrefs_site_audit" | "semrush_site_audit", opts: { issueUrls: number }): Promise<{ run: SourceRun; issues: RawIssue[] }>;
+  /** Phase 13 B: remember that this provider's data was stored (key-removal purge). */
+  markProviderData?(provider: "ahrefs" | "semrush"): void;
   latestIssueSnapshotBefore(client: string, beforeMs: number, excludeIds?: readonly string[]): IssueSnapshot | undefined;
   saveIssueSnapshot(s: IssueSnapshot): void;
 }
@@ -75,6 +82,13 @@ export async function loadTechIssuesDeps(): Promise<TechIssuesDeps> {
     },
     latestIssueSnapshotBefore: snaps.latestIssueSnapshotBefore,
     saveIssueSnapshot: snaps.saveIssueSnapshot,
+    siteAudit: async (c, source, o) => {
+      if (source === "ahrefs_site_audit") return (await import("../providers/ahrefs-site-audit.js")).readAhrefsSiteAudit(c, o);
+      return (await import("../providers/semrush-site-audit.js")).readSemrushSiteAudit(c, o);
+    },
+    markProviderData: (p) => {
+      void import("../lib/provider-data.js").then((m) => m.markProviderData(p));
+    },
   };
 }
 
@@ -209,9 +223,26 @@ export async function technicalIssues(client: Client, opts: TechIssuesOptions, d
     }
   }
 
-  for (const s of sources.filter((x) => PAID_ISSUE_SOURCES.has(x))) {
-    // Stage B reads Ahrefs / Semrush Site Audit here; nothing is requested in this version.
-    unavailable.push({ source: s, reason: opts.allowPaid ? "provider Site Audit sources aren't available in this version" : "paid source: needs allowPaid (it spends provider units)" });
+  for (const s of sources.filter((x) => PAID_ISSUE_SOURCES.has(x)) as ("ahrefs_site_audit" | "semrush_site_audit")[]) {
+    const label = s === "ahrefs_site_audit" ? "Ahrefs" : "Semrush";
+    if (!opts.allowPaid) {
+      unavailable.push({ source: s, reason: "paid source: needs allowPaid (it spends provider units)" });
+      continue;
+    }
+    if (!deps.siteAudit) {
+      unavailable.push({ source: s, reason: `the ${label} Site Audit reader isn't available in this build` });
+      continue;
+    }
+    try {
+      const r = await deps.siteAudit(client, s, { issueUrls: opts.issueUrls ?? 0 });
+      raws.push(...r.issues);
+      runs.push({ ...r.run, stale: stale(Date.parse(r.run.ranAt)) });
+      deps.markProviderData?.(s === "ahrefs_site_audit" ? "ahrefs" : "semrush");
+    } catch (err) {
+      // crawlmark's own wording only (a missing key or project names the setting); never the provider's error text.
+      const e = err as Error;
+      unavailable.push({ source: s, reason: e.name === "ProviderUnavailableError" || e instanceof BudgetExceededError ? e.message : `the ${label} Site Audit couldn't be read` });
+    }
   }
 
   // Each item remembers the source runs that reported it, so a later run can tell when a carried item is no longer checked.
@@ -222,7 +253,9 @@ export async function technicalIssues(client: Client, opts: TechIssuesOptions, d
   let snapshotId: string | null = null;
   if (opts.save !== false && runs.length) {
     snapshotId = `iss_${ulid(now)}`;
-    deps.saveIssueSnapshot({ id: snapshotId, client: client.slug, capturedAt: now, items: diff.items.map(({ change: _c, ...i }) => i), checked: runs, settings: { sources, maxAgeDays } });
+    // Ahrefs storage decision: counts per issue only; example URLs from Ahrefs are shown in this result, never stored.
+    const items = diff.items.map(({ change: _c, ...i }) => ({ ...i, sources: i.sources.map((x) => (x.source === "ahrefs_site_audit" ? { ...x, examples: [] } : x)) }));
+    deps.saveIssueSnapshot({ id: snapshotId, client: client.slug, capturedAt: now, items, checked: runs, settings: { sources, maxAgeDays } });
   }
 
   const open = atLeast(diff.items, opts.minSeverity ?? "low").map(({ seen: _s, ...i }) => i);
@@ -240,4 +273,18 @@ export async function technicalIssues(client: Client, opts: TechIssuesOptions, d
     ...(diff.noLongerChecked ? { noLongerChecked: diff.noLongerChecked } : {}),
     snapshotId,
   };
+}
+
+/** Phase 13 B: the paid sources' pre-flight (no request): units and requests per provider Site Audit source asked for. */
+export async function planPaidIssueSources(client: Client, sources: readonly IssueSource[], issueUrls: number): Promise<{ source: IssueSource; provider: "ahrefs" | "semrush"; units: number; requests: number; breakdown: string }[]> {
+  const out = [];
+  if (sources.includes("ahrefs_site_audit")) {
+    const { planAhrefsSiteAudit } = await import("../providers/ahrefs-site-audit.js");
+    out.push({ source: "ahrefs_site_audit" as const, provider: "ahrefs" as const, ...planAhrefsSiteAudit(issueUrls) });
+  }
+  if (sources.includes("semrush_site_audit")) {
+    const { estimateSemrushSiteAudit } = await import("../providers/semrush-site-audit.js");
+    out.push({ source: "semrush_site_audit" as const, provider: "semrush" as const, ...(await estimateSemrushSiteAudit(client, issueUrls)) });
+  }
+  return out;
 }

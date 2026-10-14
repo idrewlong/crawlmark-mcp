@@ -718,3 +718,125 @@ export function mapLlmTargetMetrics(raw: RawLlmTargetMetrics | undefined): LlmTa
     sourcesDomain: metricRows(a?.sources_domain),
   };
 }
+
+// ------------------------------------------------ Phase 13 B: visibility, history, competitors (research D1-D5)
+
+/** DataForSEO Labs `metrics.organic`: keyword counts per position band, the estimated traffic (ETV) and the total. */
+export interface RawOrganicMetrics {
+  pos_1?: number | null;
+  pos_2_3?: number | null;
+  pos_4_10?: number | null;
+  pos_11_20?: number | null;
+  pos_21_30?: number | null;
+  pos_31_40?: number | null;
+  pos_41_50?: number | null;
+  pos_51_60?: number | null;
+  pos_61_70?: number | null;
+  pos_71_80?: number | null;
+  pos_81_90?: number | null;
+  pos_91_100?: number | null;
+  etv?: number | null;
+  count?: number | null;
+}
+
+export const DFS_TRAFFIC_LABEL = "DataForSEO estimated traffic";
+
+const sumOrNull = (vals: (number | null)[]): number | null => (vals.every((v) => v === null) ? null : vals.reduce<number>((a, v) => a + (v ?? 0), 0));
+
+/** D6: top 3 = pos_1 + pos_2_3; 21-100 = pos_21_30 + ... + pos_91_100; total = count; traffic = etv (rounded). */
+export function mapOrganicMetrics(m: RawOrganicMetrics | null | undefined) {
+  const o = m ?? {};
+  const etv = num(o.etv);
+  return {
+    keywords: num(o.count),
+    top3: sumOrNull([num(o.pos_1), num(o.pos_2_3)]),
+    pos4_10: num(o.pos_4_10),
+    pos11_20: num(o.pos_11_20),
+    pos21_100: sumOrNull([o.pos_21_30, o.pos_31_40, o.pos_41_50, o.pos_51_60, o.pos_61_70, o.pos_71_80, o.pos_81_90, o.pos_91_100].map(num)),
+    traffic: etv === null ? null : Math.round(etv),
+    trafficLabel: DFS_TRAFFIC_LABEL,
+  };
+}
+
+export interface RawRankOverview {
+  items?: { metrics?: { organic?: RawOrganicMetrics | null } | null }[] | null;
+}
+
+/** domain_rank_overview/live: the first item's organic metrics (null figures when DataForSEO has none for the target). */
+export const mapRankOverview = (raw: RawRankOverview | undefined) => mapOrganicMetrics(raw?.items?.[0]?.metrics?.organic);
+
+export interface RawRankHistory {
+  items?: { year?: number | null; month?: number | null; metrics?: { organic?: RawOrganicMetrics | null } | null }[] | null;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** historical_rank_overview/live: one point per month, dated the first of the month, oldest first. */
+export function mapRankHistory(raw: RawRankHistory | undefined) {
+  const out: ({ day: string } & ReturnType<typeof mapOrganicMetrics>)[] = [];
+  for (const i of raw?.items ?? []) {
+    const y = num(i.year);
+    const m = num(i.month);
+    if (y === null || m === null || m < 1 || m > 12) continue;
+    out.push({ day: `${y}-${pad2(m)}-01`, ...mapOrganicMetrics(i.metrics?.organic) });
+  }
+  return out.sort((a, b) => a.day.localeCompare(b.day));
+}
+
+export interface RawBacklinksHistory {
+  items?: {
+    date?: string | null;
+    rank?: number | null;
+    backlinks?: number | null;
+    new_backlinks?: number | null;
+    lost_backlinks?: number | null;
+    referring_domains?: number | null;
+    new_referring_domains?: number | null;
+    lost_referring_domains?: number | null;
+  }[] | null;
+}
+
+/** backlinks/history/live: monthly points (DataForSEO dates them the first of the month), oldest first; new/lost as reported (D5). */
+export function mapBacklinksHistory(raw: RawBacklinksHistory | undefined) {
+  const out = [];
+  for (const i of raw?.items ?? []) {
+    const day = str(i.date)?.slice(0, 10);
+    if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    out.push({
+      day,
+      backlinks: num(i.backlinks),
+      referringDomains: num(i.referring_domains),
+      authority: { metric: "dataforseo_rank" as const, value: num(i.rank) },
+      newBacklinks: num(i.new_backlinks),
+      lostBacklinks: num(i.lost_backlinks),
+      newReferringDomains: num(i.new_referring_domains),
+      lostReferringDomains: num(i.lost_referring_domains),
+    });
+  }
+  return out.sort((a, b) => a.day.localeCompare(b.day));
+}
+
+export interface RawCompetitorsFull {
+  items?: {
+    domain?: string | null;
+    intersections?: number | null;
+    full_domain_metrics?: { organic?: RawOrganicMetrics | null } | null;
+  }[] | null;
+}
+
+/**
+ * competitors_domain/live with full_domain_metrics (D5): each competitor's whole organic footprint (count, ETV) and the
+ * keywords it shares with the target (`intersections`). The target itself (DataForSEO lists it) is left out. Domains are
+ * stripControl'd, lowercased and bare.
+ */
+export function mapCompetitorsFull(raw: RawCompetitorsFull | undefined, target: string) {
+  const own = target.toLowerCase().replace(/^www\./, "");
+  const out: { domain: string; commonKeywords: number | null; keywords: number | null; traffic: number | null; inProviderList: true }[] = [];
+  for (const i of raw?.items ?? []) {
+    const domain = str(i.domain) && stripControl(i.domain!).trim().toLowerCase().replace(/^www\./, "");
+    if (!domain || domain === own || out.some((o) => o.domain === domain)) continue;
+    const f = mapOrganicMetrics(i.full_domain_metrics?.organic);
+    out.push({ domain, commonKeywords: num(i.intersections), keywords: f.keywords, traffic: f.traffic, inProviderList: true });
+  }
+  return out;
+}

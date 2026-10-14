@@ -1,0 +1,67 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.5 sec.",
+  "cost": 0.0101,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "10131200-1111-0000-0000-000000000001",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.4 sec.",
+      "cost": 0.0101,
+      "result_count": 1,
+      "path": [],
+      "data": {},
+      "result": [
+        {
+          "se_type": "google",
+          "target": "example.com",
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 1,
+          "items_count": 1,
+          "items": [
+            {
+              "se_type": "google",
+              "location_code": 2840,
+              "language_code": "en",
+              "metrics": {
+                "organic": {
+                  "pos_1": 12,
+                  "pos_2_3": 29,
+                  "pos_4_10": 118,
+                  "pos_11_20": 160,
+                  "pos_21_30": 150,
+                  "pos_31_40": 140,
+                  "pos_41_50": 130,
+                  "pos_51_60": 120,
+                  "pos_61_70": 110,
+                  "pos_71_80": 90,
+                  "pos_81_90": 80,
+                  "pos_91_100": 65,
+                  "etv": 3950.4,
+                  "impressions_etv": 51230.7,
+                  "count": 1204,
+                  "estimated_paid_traffic_cost": 6120.5,
+                  "is_new": 40,
+                  "is_up": 210,
+                  "is_down": 180,
+                  "is_lost": 35
+                },
+                "paid": {
+                  "pos_1": 0,
+                  "etv": 0,
+                  "count": 0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

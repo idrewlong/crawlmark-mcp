@@ -6,7 +6,7 @@
 import { basename } from "node:path";
 import { styleText } from "node:util";
 
-export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "index-coverage", "report", "crawl", "logs"] as const;
+export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "index-coverage", "seo-snapshot", "report", "crawl", "logs", "data"] as const;
 export type HelpGroup = (typeof HELP_GROUPS)[number];
 
 export function isHelpGroup(name: string | undefined): name is HelpGroup {
@@ -49,10 +49,13 @@ export function topHelp(o: HelpOptions): string {
     "  audit, check-traffic  Run from cron; exit 2 means alerts",
     "  check-ranks           Save tracked keyword positions (free; --live is paid)",
     "  index-coverage        Check how Google indexes key and sitemap URLs (free)",
+    "  seo-snapshot          Store backlinks and visibility figures (paid)",
     "  report                Report files (Markdown, HTML, PDF, Word) from templates",
     heading("Site checks", o),
     "  crawl                 Crawl a client's site from this machine (free)",
     "  logs                  Crawler hits in your server logs (local, never uploaded)",
+    heading("Stored data", o),
+    "  data purge            Delete a provider's stored data (e.g. Ahrefs)",
     "",
     heading("Examples", o),
     "  npx crawlmark-mcp@latest init",
@@ -120,6 +123,8 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "                [--provider <dataforseo|ahrefs|semrush|none>]",
     "                [--country <XX|none>] [--bing-site <url|none>]",
     "                [--place-id <id|none>]",
+    "                [--ahrefs-site-audit-project <id|none>]",
+    "                [--semrush-project <id|none>]",
     "",
     "clients list",
     "  Show every client. When Google is set up, newly discovered Search Console",
@@ -154,6 +159,13 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "                       local_profile returns it (matched.placeId); save it",
     "                       only once you've checked it's the right business;",
     "                       none clears it",
+    "  --ahrefs-site-audit-project <id>",
+    "                       The client's existing Ahrefs Site Audit project",
+    "                       (app.ahrefs.com/site-audit/<id>), read by",
+    "                       technical_issues; none matches by domain",
+    "  --semrush-project <id>",
+    "                       The client's existing Semrush project with Site",
+    "                       Audit; none matches by domain",
   ],
   competitors: (p) => [
     `Usage: ${p} competitors list <client>`,
@@ -245,6 +257,39 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  live rank left the top 10 or fell by ALERT_RANK_DROP places (default 5).",
     "  Search Console positions never alert. Exit code: 0 no alerts, 1 error,",
     "  2 alerts.",
+  ],
+  "seo-snapshot": (p) => [
+    `Usage: ${p} seo-snapshot --client <domain|slug> | --all --paid`,
+    "                [--kinds backlinks,visibility,competitors] [--dry-run]",
+    "",
+    "  Stores today's backlinks, organic visibility and competitor figures for",
+    "  each client through its SEO data provider (DataForSEO, Ahrefs or Semrush),",
+    "  so monthly reports can compare months without buying history. Paid: each",
+    "  client's estimate is checked against its caps first (a client over its",
+    "  cap is skipped). A snapshot stored in the last SNAPSHOT_REUSE_DAYS (default",
+    "  7) is reused. Provider history is never bought here.",
+    "  --client <domain|slug>  One client",
+    "  --all                   Every client",
+    "  --paid                  Required: this spends provider credits or units",
+    "  --kinds <list>          Any of backlinks, visibility, competitors (all)",
+    "  --dry-run               Print the estimates; request nothing",
+    "",
+    "  Prints JSON to stdout. Exit code: 0 done, 1 error or no --paid, 2 a client",
+    "  failed or was over its cap.",
+  ],
+  data: (p) => [
+    `Usage: ${p} data purge --provider <ahrefs|semrush|dataforseo>`,
+    "                [--client <domain|slug>]",
+    "",
+    "  Deletes what crawlmark stored from one provider: trend snapshots (backlinks,",
+    "  visibility, competitors), that provider's Site Audit items in saved",
+    "  technical-issue snapshots, and its cached responses. Local only; nothing is",
+    "  requested. Stored Ahrefs data is also deleted when you remove a client or",
+    "  the Ahrefs key, and is kept at most 25 months; Semrush data at most 31 days.",
+    "  --provider <id>         ahrefs, semrush or dataforseo",
+    "  --client <domain|slug>  Only this client (default: every client)",
+    "",
+    "  Prints JSON to stdout. Exit code: 0 done, 1 error, 2 usage error.",
   ],
   "index-coverage": (p) => [
     `Usage: ${p} index-coverage --client <domain|slug> | --all [--max <n>]`,

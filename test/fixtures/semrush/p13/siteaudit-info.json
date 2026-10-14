@@ -1,0 +1,30 @@
+{
+  "id": 7701,
+  "name": "Example Co",
+  "url": "example.com",
+  "status": "FINISHED",
+  "errors": 9,
+  "warnings": 31,
+  "notices": 60,
+  "errors_delta": -1,
+  "warnings_delta": 2,
+  "notices_delta": 0,
+  "broken": 2,
+  "blocked": 0,
+  "redirected": 4,
+  "healthy": 300,
+  "haveIssues": 80,
+  "haveIssuesDelta": 1,
+  "pages_crawled": 400,
+  "pages_limit": 500,
+  "defects": {
+    "8": 4,
+    "103": 7,
+    "215": 20,
+    "999": 0
+  },
+  "last_audit": 1791428400000,
+  "current_snapshot": {
+    "snapshot_id": "5f1e00aa"
+  }
+}

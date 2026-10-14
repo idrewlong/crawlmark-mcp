@@ -2,7 +2,7 @@
  * Phase 13 A fixture data (spec A-2): TemplateReports with the technical_issues and indexing_issues
  * sections, data only (example.com), for the renderer tests and the sample PDF. No network.
  */
-import type { IndexingIssuesData, SectionResult, TechIssue, TechnicalIssuesData, TemplateReport } from "../../../src/reports/report-types.js";
+import type { BacklinksData, CompetitorOverviewData, IndexingIssuesData, SectionResult, TechIssue, TechnicalIssuesData, TemplateReport, VisibilityData } from "../../../src/reports/report-types.js";
 
 const issue = (o: Partial<TechIssue> & Pick<TechIssue, "key" | "title" | "severity">): TechIssue => ({
   category: "content",
@@ -116,5 +116,119 @@ export function p13Report(o: { issues?: TechnicalIssuesData; indexing?: Indexing
     highlights: [],
     notes: [],
     spend: { usd: 0, units: { ahrefs: 0, semrush: 0 } },
+  };
+}
+
+// ---------------------------------------------------------------- Phase 13 B (spec B-1): provider sections
+
+export const BACKLINKS: BacklinksData = {
+  provider: "dataforseo",
+  target: "example.com",
+  asOf: "2026-10-02",
+  origin: "live",
+  authority: { metric: "dataforseo_rank", label: "DataForSEO Rank (0–1000)", scale: "0-1000" },
+  current: { backlinks: 1840, referringDomains: 212, authority: 312, newBacklinks: 96, lostBacklinks: 41, newReferringDomains: 19, lostReferringDomains: 5 },
+  newLostLabel: "September 2026 (DataForSEO, monthly)",
+  comparisons: {
+    previous_period: {
+      asOf: "2026-09-01",
+      origin: "provider_history",
+      previous: { backlinks: 1702, referringDomains: 198, authority: 305, newBacklinks: 80, lostBacklinks: 52, newReferringDomains: 12, lostReferringDomains: 7 },
+      change: { backlinks: 138, referringDomains: 14, authority: 7, newBacklinks: 16, lostBacklinks: -11, newReferringDomains: 7, lostReferringDomains: -2 },
+    },
+    previous_year: null,
+  },
+  trend: [
+    { day: "2026-05-01", referringDomains: 171, backlinks: 1420, authority: 290, origin: "provider_history" },
+    { day: "2026-06-01", referringDomains: 180, backlinks: 1510, authority: 294, origin: "provider_history" },
+    { day: "2026-07-01", referringDomains: 186, backlinks: 1588, authority: 298, origin: "provider_history" },
+    { day: "2026-08-01", referringDomains: 191, backlinks: 1650, authority: 301, origin: "provider_history" },
+    { day: "2026-09-01", referringDomains: 198, backlinks: 1702, authority: 305, origin: "provider_history" },
+    { day: "2026-10-02", referringDomains: 212, backlinks: 1840, authority: 312, origin: "live" },
+  ],
+  notes: [],
+};
+
+export const VISIBILITY: VisibilityData = {
+  provider: "dataforseo",
+  target: "example.com",
+  market: "2840",
+  asOf: "2026-10-02",
+  origin: "live",
+  trafficLabel: "DataForSEO estimated traffic",
+  distributionAvailable: true,
+  current: { keywords: 1204, top3: 41, pos4_10: 118, pos11_20: 160, pos21_100: 885, traffic: 3950 },
+  comparisons: {
+    previous_period: {
+      asOf: "2026-09-01",
+      origin: "provider_history",
+      previous: { keywords: 1130, top3: 36, pos4_10: 109, pos11_20: 151, pos21_100: 834, traffic: 3610 },
+      change: { keywords: 74, top3: 5, pos4_10: 9, pos11_20: 9, pos21_100: 51, traffic: 340 },
+    },
+  },
+  trend: [
+    { day: "2026-06-01", origin: "provider_history", keywords: 1010, top3: 30, pos4_10: 97, pos11_20: 140, pos21_100: 743, traffic: 3200 },
+    { day: "2026-07-01", origin: "provider_history", keywords: 1062, top3: 33, pos4_10: 101, pos11_20: 146, pos21_100: 782, traffic: 3390 },
+    { day: "2026-08-01", origin: "provider_history", keywords: 1098, top3: 35, pos4_10: 105, pos11_20: 148, pos21_100: 810, traffic: 3500 },
+    { day: "2026-09-01", origin: "provider_history", keywords: 1130, top3: 36, pos4_10: 109, pos11_20: 151, pos21_100: 834, traffic: 3610 },
+    { day: "2026-10-02", origin: "live", keywords: 1204, top3: 41, pos4_10: 118, pos11_20: 160, pos21_100: 885, traffic: 3950 },
+  ],
+  notes: [],
+};
+
+export const COMPETITORS: CompetitorOverviewData = {
+  provider: "dataforseo",
+  market: "2840",
+  asOf: "2026-10-02",
+  trafficLabel: "DataForSEO estimated traffic",
+  client: { domain: "example.com", origin: "client", commonKeywords: null, keywords: 1204, traffic: 3950, inProviderList: true, keywordsChange: 74 },
+  competitors: [
+    { domain: "competitor-a.example", origin: "saved", commonKeywords: 312, keywords: 2410, traffic: 8800, inProviderList: true, keywordsChange: 55 },
+    { domain: "competitor-b.example", origin: "saved", commonKeywords: null, keywords: 640, traffic: 1200, inProviderList: false, keywordsChange: null },
+    { domain: "rival.example.net", origin: "suggested", commonKeywords: 205, keywords: 1890, traffic: 5100, inProviderList: true, keywordsChange: null },
+    { domain: "another.example.org", origin: "suggested", commonKeywords: 166, keywords: 980, traffic: 2050, inProviderList: true, keywordsChange: -12 },
+  ],
+  providerListSize: 20,
+  notes: [],
+};
+
+export const BACKLINKS_AHREFS: BacklinksData = {
+  ...BACKLINKS,
+  provider: "ahrefs",
+  authority: { metric: "domain_rating", label: "Ahrefs Domain Rating (0–100)", scale: "0-100" },
+  current: { ...BACKLINKS.current, authority: 41, newBacklinks: null, lostBacklinks: null, newReferringDomains: null, lostReferringDomains: null },
+  newLostLabel: null,
+  comparisons: { previous_period: { ...BACKLINKS.comparisons.previous_period!, previous: { ...BACKLINKS.comparisons.previous_period!.previous, authority: 40, newBacklinks: null, lostBacklinks: null, newReferringDomains: null, lostReferringDomains: null }, change: { ...BACKLINKS.comparisons.previous_period!.change, authority: 1, newBacklinks: null, lostBacklinks: null, newReferringDomains: null, lostReferringDomains: null } } },
+  trend: BACKLINKS.trend.map((p) => ({ ...p, backlinks: null, authority: 40 })),
+};
+
+export const VISIBILITY_SEMRUSH: VisibilityData = {
+  ...VISIBILITY,
+  provider: "semrush",
+  market: "us",
+  trafficLabel: "Semrush organic traffic",
+  distributionAvailable: false,
+  current: { keywords: 1204, top3: null, pos4_10: null, pos11_20: null, pos21_100: null, traffic: 3950 },
+  comparisons: { previous_period: { asOf: "2026-09-15", origin: "provider_history", previous: { keywords: 1130, top3: null, pos4_10: null, pos11_20: null, pos21_100: null, traffic: 3610 }, change: { keywords: 74, top3: null, pos4_10: null, pos11_20: null, pos21_100: null, traffic: 340 } } },
+  trend: VISIBILITY.trend.map((p) => ({ ...p, top3: null, pos4_10: null, pos11_20: null, pos21_100: null })),
+  notes: ["Semrush's API doesn't report keywords by position band."],
+};
+
+export const COMPETITORS_XSS: CompetitorOverviewData = {
+  ...COMPETITORS,
+  competitors: [{ domain: `${XSS}.example`, origin: "suggested", commonKeywords: 3, keywords: 4, traffic: 5, inProviderList: true, keywordsChange: null }],
+};
+
+/** A fixed `monthly` report with the three Phase 13 B sections (and anything in `extra` first). */
+export function p13bReport(o: { backlinks?: BacklinksData; visibility?: VisibilityData; competitors?: CompetitorOverviewData; extra?: SectionResult[]; hideCrawlmark?: boolean } = {}): TemplateReport {
+  return {
+    ...p13Report(),
+    template: { id: "monthly", title: "Monthly SEO report", source: "builtin" },
+    sections: [
+      ...(o.extra ?? []),
+      { id: "backlinks", type: "backlinks", title: "Backlinks", status: "ok", data: o.backlinks ?? BACKLINKS },
+      { id: "visibility", type: "organic_visibility", title: "Organic search visibility", status: "ok", data: o.visibility ?? VISIBILITY },
+      { id: "competitors", type: "competitor_overview", title: "Competitors", status: "ok", data: o.competitors ?? COMPETITORS },
+    ],
   };
 }

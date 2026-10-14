@@ -1,0 +1,32 @@
+{
+  "healthscores": [
+    {
+      "project_id": "4412001",
+      "project_name": "Example Co",
+      "target_url": "https://www.example.com/",
+      "target_mode": "subdomains",
+      "target_protocol": "both",
+      "date": "2026-10-08T03:12:00Z",
+      "status": "Completed",
+      "health_score": 87,
+      "total": 412,
+      "urls_with_errors": 12,
+      "urls_with_warnings": 40,
+      "urls_with_notices": 90
+    },
+    {
+      "project_id": "4412002",
+      "project_name": "Other",
+      "target_url": "https://other.example.org/",
+      "target_mode": "subdomains",
+      "target_protocol": "both",
+      "date": "2026-10-01T03:12:00Z",
+      "status": "Completed",
+      "health_score": 90,
+      "total": 20,
+      "urls_with_errors": 0,
+      "urls_with_warnings": 1,
+      "urls_with_notices": 2
+    }
+  ]
+}
