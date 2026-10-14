@@ -15,6 +15,9 @@ import { planRun, runTemplate, type RunDeps } from "./reports/templates/run.js";
 import { FORMATS, type Format } from "./reports/templates/schema.js";
 import { initStarterFile, listReportTemplates, validateTemplateFileAt } from "./reports/templates/service.js";
 import { globalTemplatesFile } from "./reports/paths.js";
+import { PromptAbortedError } from "./setup/prompter.js";
+import type { PreviewResult } from "./reports/branding-preview.js";
+import type { ResolvedBranding } from "./reports/templates/load.js";
 
 export interface CliIo {
   out(line?: string): void;
@@ -22,6 +25,54 @@ export interface CliIo {
   homeDir: string;
   cwd: string;
   today?: Date;
+}
+
+export interface PreviewBrandingDeps {
+  /** Render the one-page preview (sample data only) with this branding. */
+  render(branding: ResolvedBranding): Promise<PreviewResult>;
+  /** Offer to open it (the real CLI sets this in fancy mode on a terminal only). */
+  open?(path: string): Promise<void>;
+  /** `--client` to the client's slug (clients.yaml, offline); throws for an unknown client. */
+  resolveClient(idOrDomain: string): { slug: string };
+}
+
+/**
+ * `report preview-branding [--client <domain>]`: render the saved branding (the client's override merged over the
+ * global file) on a one-page sample report, print where it went, and offer to open it. Sample data only; no
+ * client data, no network, no paid call. Writes nothing but `<home>/branding/preview.pdf` (or .html).
+ */
+export async function previewBrandingCommand(args: string[], flags: { client?: string | undefined }, io: CliIo, deps: PreviewBrandingDeps): Promise<number> {
+  if (args.length) return usage(io, `report preview-branding takes only --client, got: ${args.join(" ")}`);
+  let slug: string | undefined;
+  try {
+    slug = flags.client !== undefined ? deps.resolveClient(flags.client).slug : undefined;
+  } catch (err) {
+    io.warn(`Error: ${msg(err)}`);
+    return 1;
+  }
+  const loaded = loadTemplates({ homeDir: io.homeDir, clientSlug: slug, ...(io.today ? { today: io.today } : {}) });
+  const bad = [loaded.files.global, loaded.files.client].filter((f) => f && f.exists && !f.valid);
+  if (bad.length) {
+    for (const f of bad) io.warn(`Error: ${f!.path} is not valid; fix it first (crawlmark-cli report templates validate).`);
+    return 1;
+  }
+  const r = await deps.render(loaded.branding);
+  if (r.warning) io.warn(r.warning);
+  if (r.logoWarning) io.warn(r.logoWarning);
+  io.out(`Preview (sample data, not a client report): ${r.path}`);
+  if (deps.open) {
+    try {
+      await deps.open(r.path);
+    } catch (err) {
+      // Ctrl-C at "Press Enter to open": the preview file is there; nothing else was written.
+      if (err instanceof PromptAbortedError) {
+        io.warn("Cancelled; nothing else written.");
+        return 130;
+      }
+      throw err;
+    }
+  }
+  return 0;
 }
 
 /** `report templates list|validate [file]|init`. Usage problems return 1 (this group is used from cron). */
@@ -75,7 +126,17 @@ export interface ReportFlags {
   include?: string | undefined;
   paid: boolean;
   "dry-run": boolean;
+  /** --yes: never prompt (use the saved default formats). */
+  yes?: boolean | undefined;
 }
+
+/** The formats offered by the interactive picker, in order (PDF first). */
+export const FORMAT_CHOICES: readonly { value: Format; label: string }[] = [
+  { value: "pdf", label: "PDF" },
+  { value: "docx", label: "Word (.docx)" },
+  { value: "html", label: "HTML" },
+  { value: "md", label: "Markdown" },
+];
 
 export interface ReportCliDeps {
   /** One client (`--client`), or every client after discovery (`--all`; ignored ones in `skipped`). Throws for an unknown client. */
@@ -85,6 +146,11 @@ export interface ReportCliDeps {
   reportsDir: string;
   version: string;
   today?: Date;
+  /**
+   * Ask which formats to write (the real CLI sets it only on an interactive terminal in fancy mode). Not called
+   * with --format, --all, --dry-run or --yes; an empty answer keeps the saved default.
+   */
+  chooseFormats?(defaults: Format[]): Promise<Format[]>;
 }
 
 export interface ReportClientResult {
@@ -95,6 +161,8 @@ export interface ReportClientResult {
   files: ExportedFile[];
   sections: { ok: number; error: number; unavailable: number; skipped: number };
   sectionErrors?: { id: string; error: string }[];
+  /** Paid data the run used (operator-only; the files never show it). */
+  spend?: { usd: number; units: { ahrefs: number; semrush: number } };
   warnings?: string[];
 }
 
@@ -175,6 +243,9 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
     ...(io.today ? { today: io.today } : {}),
   };
   if (sel.discoveryError) errors.push(`Discovery failed (ran with clients.yaml entries only): ${sel.discoveryError}`);
+  // One client, no --format, interactive: pick the formats once, with the saved default ticked.
+  const ask = !formats && !flags.all && !flags["dry-run"] && !flags.yes && deps.chooseFormats ? deps.chooseFormats.bind(deps) : undefined;
+  let picked: Format[] | undefined;
   let runDeps: RunDeps | undefined;
 
   for (const client of sel.clients) {
@@ -193,7 +264,21 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
       fatal = true;
       continue;
     }
-    const wanted = (formats ?? plan.loaded.defaults.formats) as Format[];
+    if (ask && picked === undefined) {
+      let chosen: Format[];
+      try {
+        chosen = await ask(plan.loaded.defaults.formats);
+      } catch (err) {
+        // Ctrl-C in the picker: nothing has run or been written yet.
+        if (err instanceof PromptAbortedError) {
+          io.warn("Cancelled; nothing written.");
+          return 130;
+        }
+        throw err;
+      }
+      picked = chosen.length ? chosen : plan.loaded.defaults.formats;
+    }
+    const wanted = (formats ?? picked ?? plan.loaded.defaults.formats) as Format[];
     const period = { label: plan.period.label, current: plan.period.current, folderMonth: plan.period.folderMonth };
     if (flags["dry-run"]) {
       const target = { client: { slug: client.slug, name: client.name, domain: client.domain }, template: { id: plan.template.id, title: plan.template.spec.title, source: plan.template.source }, period: { ...period, comparisons: plan.period.comparisons } };
@@ -216,7 +301,8 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
         continue;
       }
       const out = await exportReport(report, { formats: wanted, reportsDir: deps.reportsDir, branding: plan.loaded.branding, version: deps.version, printer: deps.printer });
-      if (out.files.length < new Set(wanted).size || counts.error) attention = true;
+      // A requested format that wasn't written (a PDF without Chrome, even with the HTML fallback) needs attention.
+      if (wanted.some((f) => !out.files.some((x) => x.format === f)) || counts.error) attention = true;
       written++;
       results.push({
         client: client.slug,
@@ -226,6 +312,7 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
         files: out.files,
         sections: counts,
         ...(out.sectionErrors.length ? { sectionErrors: out.sectionErrors } : {}),
+        ...(out.spend ? { spend: out.spend } : {}),
         ...(out.warnings.length ? { warnings: out.warnings } : {}),
       });
     } catch (err) {

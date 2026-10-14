@@ -32,7 +32,7 @@ describe("Markdown and HTML renderers", () => {
     expect(doc.meta.dataOnly).toBe(true);
     await expect(toMarkdown(doc)).toMatchFileSnapshot("fixtures/reports/__snapshots__/data-only.md");
     await expect(toHtml(doc)).toMatchFileSnapshot("fixtures/reports/__snapshots__/data-only.html");
-    expect(toMarkdown(doc)).toContain("**Data-only report.** Built automatically from Search Console and Google Analytics. It has no written commentary.");
+    expect(toMarkdown(doc)).toContain("- Data-only report. Built automatically from Search Console and Google Analytics. It has no written commentary.");
     expect(toHtml(doc)).toContain("Data-only report.");
   });
 
@@ -49,7 +49,9 @@ describe("Markdown and HTML renderers", () => {
     expect(md).toContain("> - \\<b\\>raw html\\</b\\> stays literal");
     expect(html).toContain("<strong>12%</strong>");
     expect(html).toContain("&lt;b&gt;raw html&lt;/b&gt; stays literal");
-    expect(html.match(/class="commentary"/g)).toHaveLength(3);
+    // The summary sits in the summary box; the two section notes are commentary boxes beside their data.
+    expect(html.match(/class="commentary"/g)).toHaveLength(2);
+    expect(html).toMatch(/<section class="summary"[^>]*><h2>Summary<\/h2>\n<p>Organic search grew <strong>12%<\/strong>/);
   });
 
   it("an XSS fixture is inert in Markdown and HTML", async () => {
@@ -82,7 +84,7 @@ describe("Markdown and HTML renderers", () => {
     expect(outsideCode).not.toMatch(/(?<!\\)</);
     expect(md).toContain("a \\| b");
     expect(md).toContain("`see http://evil.example.net/x`");
-    for (const line of md.split("\n").filter((l) => l.startsWith("| ") && l.includes("a \\| b"))) expect(line.split(/(?<!\\)\|/).length).toBe(9);
+    for (const line of md.split("\n").filter((l) => l.startsWith("| ") && l.includes("a \\| b"))) expect(line.split(/(?<!\\)\|/).length).toBe(7);
     // HTML: the CSP meta, no script, no external resources, no event handlers.
     expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${CSP}">`);
     expect(html).not.toMatch(/<script|<link|<iframe|<object|<embed/i);

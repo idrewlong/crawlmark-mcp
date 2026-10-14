@@ -133,7 +133,7 @@ export function renderStatus(report: SetupStatusReport, opts: RenderStatusOption
  * Phase 12: rows that human `setup status` shows only once set up (`--json` and setup_status always
  * include them), so the plain output of an existing setup is unchanged. The summary counts follow.
  */
-export const HIDDEN_UNTIL_CONFIGURED: readonly string[] = ["crux", "bing", "aivisibility"];
+export const HIDDEN_UNTIL_CONFIGURED: readonly string[] = ["crux", "bing", "aivisibility", "branding"];
 
 export function forHumans(report: SetupStatusReport): SetupStatusReport {
   const integrations = report.integrations.filter((i) => !(HIDDEN_UNTIL_CONFIGURED.includes(i.id) && i.state === "missing"));

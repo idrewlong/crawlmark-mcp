@@ -19,6 +19,7 @@ import {
   removeCompetitors,
   removeKeywords,
   resolveClient,
+  resolveClientOffline,
   setClientProfile,
   type ListAddResult,
   type ListRemoveResult,
@@ -37,7 +38,10 @@ import { packageVersion } from "./lib/entry.js";
 import { setupCommand } from "./setup/cli-setup.js";
 import { groupHelp, HELP_GROUPS, isHelpGroup, programName, topHelp } from "./cli-help.js";
 import { printUpdateNotice, updateCacheFile } from "./lib/update-check.js";
-import { reportCommand, templatesCommand, type ReportCliDeps } from "./report-cli.js";
+import { FORMAT_CHOICES, previewBrandingCommand, reportCommand, templatesCommand, type ReportCliDeps } from "./report-cli.js";
+import { openPath } from "./lib/terminal-links.js";
+import type { Format } from "./reports/templates/schema.js";
+import { chooseRenderer } from "./setup/ui.js";
 import { closeEgressProxy } from "./lib/egress-proxy.js";
 import { crawlCommand } from "./crawl-cli.js";
 import { logsCommand } from "./logs-cli.js";
@@ -476,7 +480,7 @@ async function scheduledCommand(kind: "audit" | "check-traffic" | "check-ranks",
 }
 
 /** The real sources for `report`: discovery as `audit --all` (cached for a dry run), Google, Chrome for PDF. */
-async function realReportDeps(): Promise<ReportCliDeps> {
+async function realReportDeps(opts: { interactive?: boolean } = {}): Promise<ReportCliDeps> {
   const [{ loadDefaultRunDeps }, { chromePdfPrinter }] = await Promise.all([import("./reports/templates/run.js"), import("./reports/render/pdf.js")]);
   return {
     loadClients: async ({ client, all, dryRun }) => {
@@ -498,6 +502,19 @@ async function realReportDeps(): Promise<ReportCliDeps> {
     printer: chromePdfPrinter,
     reportsDir: env.REPORTS_DIR,
     version: packageVersion(import.meta.url),
+    ...(opts.interactive
+      ? {
+          chooseFormats: async (defaults: Format[]) => {
+            const { clackPrompter } = await import("./setup/ui-clack.js");
+            const prompt = clackPrompter();
+            try {
+              return (await prompt.multiselect?.("Which formats? (space to tick, Enter to confirm)", FORMAT_CHOICES, defaults)) ?? defaults;
+            } finally {
+              prompt.close();
+            }
+          },
+        }
+      : {}),
   };
 }
 
@@ -591,13 +608,43 @@ async function main(argv: string[]): Promise<number> {
       },
     });
   }
+  if (group === "report" && command === "preview-branding") {
+    const fancy = chooseRenderer({ stdinTTY: process.stdin.isTTY, stdoutTTY: process.stdout.isTTY, env: process.env, yes: values.yes }) === "fancy";
+    try {
+      return await previewBrandingCommand(args, values, { out, warn, homeDir: HOME.dir, cwd: process.cwd() }, {
+        resolveClient: resolveClientOffline,
+        render: async (branding) => {
+          const [{ renderBrandingPreview }, { chromePdfPrinter }] = await Promise.all([import("./reports/branding-preview.js"), import("./reports/render/pdf.js")]);
+          return renderBrandingPreview(HOME.dir, branding, { printer: chromePdfPrinter, version: packageVersion(import.meta.url) });
+        },
+        ...(fancy
+          ? {
+              open: async (path: string) => {
+                const { clackPrompter } = await import("./setup/ui-clack.js");
+                const prompt = clackPrompter();
+                try {
+                  const a = await prompt.ask("Press Enter to open the preview (or s to skip)");
+                  if (a.trim() === "" && !openPath(path)) out(`Couldn't open it. The preview is ${path}`);
+                } finally {
+                  prompt.close();
+                }
+              },
+            }
+          : {}),
+      });
+    } finally {
+      await closeEgressProxy();
+    }
+  }
   if (group === "report" && command === "templates") {
     const [sub, ...rest] = args;
     return templatesCommand(sub, rest, { out, warn, homeDir: HOME.dir, cwd: process.cwd() });
   }
   if (group === "report") {
     try {
-      return await reportCommand(command ? [command, ...args] : args, values, { out, warn, homeDir: HOME.dir, cwd: process.cwd() }, await realReportDeps());
+      // The format picker only on an interactive terminal in fancy mode (never in CI, pipes, NO_COLOR or with --yes).
+      const interactive = chooseRenderer({ stdinTTY: process.stdin.isTTY, stdoutTTY: process.stdout.isTTY, env: process.env, yes: values.yes }) === "fancy";
+      return await reportCommand(command ? [command, ...args] : args, values, { out, warn, homeDir: HOME.dir, cwd: process.cwd() }, await realReportDeps({ interactive }));
     } finally {
       // A PDF starts the egress proxy; its sockets would keep the CLI alive.
       await closeEgressProxy();

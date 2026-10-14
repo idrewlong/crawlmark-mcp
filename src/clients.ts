@@ -343,6 +343,18 @@ export async function resolveClient(idOrDomain: string): Promise<Client> {
   return client;
 }
 
+/**
+ * Resolve a client offline: clients.yaml only (discovery writes the clients it finds there), no network and no
+ * refresh. Same matching as resolveClient (a domain, a URL or `www.` form, `sc-domain:`, or a clients.yaml key);
+ * an unknown one throws, naming the known clients.
+ */
+export function resolveClientOffline(idOrDomain: string): Client {
+  const registry = assembleRegistry({ skipped: "offline" }, loadOverrides(), clientDefaults);
+  const client = findClient(registry.clients, idOrDomain);
+  if (!client) throw new Error(unknownClientMessage(idOrDomain, registry.clients) + ` Add it with \`crawlmark-cli clients add ${normalizeHost(idOrDomain) ?? idOrDomain}\`.`);
+  return client;
+}
+
 // ---------------------------------------------------------------- manual edits (CLI)
 
 export type AddResult = { status: "added" | "unignored" | "exists"; domain: string; key: string };

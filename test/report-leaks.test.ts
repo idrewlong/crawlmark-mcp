@@ -43,7 +43,9 @@ describe("raw errors and local paths stay out of report files", () => {
     }
     expect(files[0]).toContain("Organic traffic (GA4): couldn't be fetched for this report.");
     expect(files[0]).toContain("the previous year comparison couldn't be fetched.");
-    expect(files[0]).toContain("The logo (logo.png) couldn't be used");
+    // The missing logo is an operator warning (export result), not a line in the client's file.
+    expect(out.warnings.join(" ")).toMatch(/Logo .*logo\.png doesn't exist/);
+    for (const text of files) expect(text).not.toContain("logo.png");
     expect(files[0]).toContain("Unpublished changes: some workspaces couldn't be read.");
     // The tool / CLI result keeps the detail.
     expect(out.sectionErrors).toContainEqual({ id: "traffic", error: RAW });

@@ -16,8 +16,8 @@ import { executeMigration, planMigration } from "../lib/migrate.js";
 import { checkServiceAccountKeyFile } from "../providers/google.js";
 import { packageVersion } from "../lib/entry.js";
 import { stripControl } from "../lib/terminal-text.js";
-import { loadOverrides } from "../clients.js";
-import { openUrl } from "../lib/terminal-links.js";
+import { loadOverrides, resolveClientOffline } from "../clients.js";
+import { openPath, openUrl } from "../lib/terminal-links.js";
 import { checkForUpdate, updateCacheFile, updateCheckAllowed, updateNotice } from "../lib/update-check.js";
 import { menuStep, returningUserMenu } from "./menu.js";
 import { autoPrompter, PromptAbortedError, terminalPrompter, type Prompter } from "./prompter.js";
@@ -36,6 +36,8 @@ export interface SetupFlags {
   refresh: boolean;
   to?: string | undefined;
   force: boolean;
+  /** `--step branding --client <domain>`: that client's branding override. */
+  client?: string | undefined;
 }
 
 const out = (line = "") => process.stdout.write(line + "\n");
@@ -236,6 +238,20 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
     warn(`Unknown step: ${step}. Steps: ${[...STEP_NAMES, ...EXTRA_STEP_NAMES].join(", ")}.`);
     return 2;
   }
+  let brandingClient: string | undefined;
+  if (flags.client !== undefined) {
+    if (step !== "branding") {
+      warn("--client goes with --step branding.");
+      return 2;
+    }
+    // The client's own slug (as reports look it up), from clients.yaml; offline, no discovery refresh.
+    try {
+      brandingClient = resolveClientOffline(flags.client).slug;
+    } catch (err) {
+      warn(`Error: ${stripControl((err as Error).message)}`);
+      return 2;
+    }
+  }
   const renderer = chooseRenderer({ stdinTTY: process.stdin.isTTY, stdoutTTY: process.stdout.isTTY, env: process.env, yes: flags.yes });
   let ui: Ui;
   let prompt: Prompter;
@@ -250,6 +266,12 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
   }
   const ctx = realWizardContext(prompt, flags["dry-run"]);
   ctx.ui = ui;
+  if (brandingClient !== undefined) ctx.brandingClient = brandingClient;
+  // The branding preview: sample data only, printed by the local Chrome (offline, JavaScript off).
+  ctx.brandingPreview = async (settings) => {
+    const [{ renderBrandingPreview }, { asResolvedBranding }, { chromePdfPrinter }] = await Promise.all([import("../reports/branding-preview.js"), import("../reports/branding-settings.js"), import("../reports/render/pdf.js")]);
+    return renderBrandingPreview(HOME.dir, asResolvedBranding(HOME.dir, settings), { printer: chromePdfPrinter, version: ctx.version ?? "" });
+  };
   ctx.yes = flags.yes;
   ctx.command = invokedAs;
   // packageVersion expects a module directly under src/ or dist/; this one is a level deeper.
@@ -270,6 +292,7 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
     // Phase 10, fancy mode only (both streams are TTYs, no CI, no --yes): browser shortcuts, and the
     // "Try asking Claude" examples from the local clients.yaml. The examples are only printed here.
     ctx.openUrl = (url) => openUrl(url);
+    ctx.openPath = (path) => openPath(path);
     ctx.exampleClients = () => loadOverrides().map((o) => ({ domain: o.domain, name: o.name, gsc: Boolean(o.gscProperty), ignore: o.ignore }));
   }
   try {
@@ -305,6 +328,8 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
     throw err;
   } finally {
     prompt.close();
+    // The branding preview's PDF starts the egress proxy; its sockets would keep the CLI alive.
+    await closeEgressProxy();
   }
 }
 

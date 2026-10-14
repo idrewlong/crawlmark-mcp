@@ -10,6 +10,10 @@ export interface Run {
   t: string;
   b?: true;
   c?: true;
+  /** A change coloured as good (green) or bad (red); renderers that can't colour show the text alone. */
+  tone?: "good" | "bad";
+  /** A small label pill (severity, "brand"); plain text where pills aren't available. */
+  tag?: "good" | "bad" | "warn" | "neutral";
 }
 export type NarrativeBlock = { kind: "p"; runs: Run[] } | { kind: "ul"; items: Run[][] };
 

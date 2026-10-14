@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { exportReport, ReportRenderError, ReportWriteError, safeSegment, writeReportFile } from "../src/reports/export.js";
+import { exportReport, ReportWriteError, safeSegment, writeReportFile } from "../src/reports/export.js";
 import { reportRelPath } from "../src/reports/paths.js";
 import { reportCommand, type ReportCliDeps, type ReportFlags } from "../src/report-cli.js";
+import { PromptAbortedError } from "../src/setup/prompter.js";
 import { client, fakeDeps } from "./fixtures/reports/deps.js";
 import { fixtureReport, TINY_PNG } from "./fixtures/reports/report.js";
 
@@ -73,12 +74,20 @@ describe("exportReport", () => {
     expect(fakePdf).toHaveBeenLastCalledWith(expect.stringContaining("<!doctype html>"), expect.objectContaining({ paper: "Letter" }));
   });
 
-  it("Chrome missing: PDF goes to warnings with the setup hint, other formats are written; all failing is an error", async () => {
+  it("Chrome missing: PDF goes to warnings with the setup hint, other formats are written, and HTML stands in for the PDF", async () => {
     const dir = join(tmp(), "reports");
     const out = await exportReport(await fixtureReport(), base(dir, { formats: ["pdf", "md"], printer: noChrome }));
-    expect(out.files.map((f) => f.format)).toEqual(["md"]);
+    expect(out.files.map((f) => f.format)).toEqual(["md", "html"]);
     expect(out.warnings[0]).toMatch(/^PDF not written: Could not find Chrome.*npx puppeteer browsers install chrome/);
-    await expect(exportReport(await fixtureReport(), base(dir, { formats: ["pdf"], printer: noChrome }))).rejects.toThrow(ReportRenderError);
+    expect(out.warnings[1]).toBe("Wrote HTML instead of the PDF; open it in a browser, or print it to PDF from there.");
+    // The fallback note is for the operator, not the file.
+    expect(readFileSync(out.files[1]!.path, "utf8")).not.toContain("instead of the PDF");
+    const only = await exportReport(await fixtureReport(), base(dir, { formats: ["pdf"], printer: noChrome }));
+    expect(only.files.map((f) => f.format)).toEqual(["html"]);
+    // HTML asked for as well: no second HTML file, only the PDF warning.
+    const both = await exportReport(await fixtureReport(), base(dir, { formats: ["pdf", "html"], printer: noChrome }));
+    expect(both.files.map((f) => f.format)).toEqual(["html"]);
+    expect(both.warnings).toHaveLength(1);
   });
 
   it("inline docs HTML without files; narrative switches the banner; unknown narrative ids are refused", async () => {
@@ -141,12 +150,45 @@ describe("crawlmark-cli report", () => {
     return { home, reportsDir, deps, io, json, errs };
   }
 
+  it("default formats: one PDF; the interactive picker asks once (PDF ticked) and is never asked with --format, --all, --dry-run or --yes", async () => {
+    const plain = harness();
+    expect(await reportCommand([], flags({ client: "example.com", month: "2026-09" }), plain.io, plain.deps)).toBe(0);
+    expect(plain.json().results[0].files.map((f: { format: string }) => f.format)).toEqual(["pdf"]);
+
+    const ask = vi.fn(async (defaults: string[]) => (expect(defaults).toEqual(["pdf"]), ["docx", "md"] as never));
+    const h = harness({ chooseFormats: ask });
+    expect(await reportCommand([], flags({ client: "example.com", month: "2026-09" }), h.io, h.deps)).toBe(0);
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(h.json().results[0].files.map((f: { format: string }) => f.format)).toEqual(["docx", "md"]);
+
+    const empty = harness({ chooseFormats: async () => [] });
+    expect(await reportCommand([], flags({ client: "example.com", month: "2026-09" }), empty.io, empty.deps)).toBe(0);
+    expect(empty.json().results[0].files.map((f: { format: string }) => f.format)).toEqual(["pdf"]);
+
+    for (const f of [{ format: "html" }, { all: true, client: undefined }, { "dry-run": true }, { yes: true }]) {
+      const never = vi.fn(async () => ["md"] as never);
+      const n = harness({ chooseFormats: never });
+      await reportCommand([], flags({ client: "example.com", month: "2026-09", ...f }), n.io, n.deps);
+      expect(never, JSON.stringify(f)).not.toHaveBeenCalled();
+    }
+  });
+
+  it("Ctrl-C in the format picker: 'Cancelled; nothing written.', exit 130, no report run", async () => {
+    const run = vi.fn();
+    const h = harness({ chooseFormats: async () => { throw new PromptAbortedError(); } });
+    const deps = { ...h.deps, runDeps: async () => (run(), fakeDeps()) };
+    expect(await reportCommand([], flags({ client: "example.com", month: "2026-09" }), h.io, deps)).toBe(130);
+    expect(h.errs).toEqual(["Cancelled; nothing written."]);
+    expect(run).not.toHaveBeenCalled();
+    expect(existsSync(h.reportsDir)).toBe(false);
+  });
+
   it("--client writes four files and prints JSON with exitCode 0", async () => {
     const h = harness();
     expect(await reportCommand([], flags({ client: "example.com", format: "md,html,pdf,docx", month: "2026-09" }), h.io, h.deps)).toBe(0);
     const out = h.json();
     expect(out).toMatchObject({ command: "report", dryRun: false, skipped: [], errors: [], exitCode: 0 });
-    expect(out.results[0]).toMatchObject({ client: "example.com", template: "monthly", dataOnly: true, period: { label: "September 2026" }, sections: { ok: 12, error: 0, unavailable: 0, skipped: 0 } });
+    expect(out.results[0]).toMatchObject({ client: "example.com", template: "monthly", dataOnly: true, period: { label: "September 2026" }, sections: { ok: 11, error: 0, unavailable: 0, skipped: 0 } });
     expect(out.results[0].files.map((f: { format: string }) => f.format)).toEqual(["md", "html", "pdf", "docx"]);
     expect(readdirSync(join(h.reportsDir, "example.com", "2026-09")).sort()).toEqual(["monthly-2026-09.docx", "monthly-2026-09.html", "monthly-2026-09.md", "monthly-2026-09.pdf"]);
   });

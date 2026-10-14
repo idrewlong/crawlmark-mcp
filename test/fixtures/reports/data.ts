@@ -65,6 +65,12 @@ export function gscQuery(_client: unknown, opts: GscQueryOptions): GscRow[] {
   const adj = (q: string, c: number) => (q === "leak detection" && opts.startDate === "2026-08-01" ? c * 3 : c);
   if (dims === "query") return QUERIES.map(([q, c, i, p]) => row([q], Math.round(adj(q, c) * k), Math.round(i * k), p + (k < 1 ? 0.7 : 0)));
   if (dims === "page") return PAGES.map(([u, c, i, p]) => row([u], Math.round(c * k), Math.round(i * k), p + (k < 1 ? 0.4 : 0)));
+  if (dims === "date") {
+    const t = gscTotals(_client, opts);
+    const clicks = dailySplit(opts.startDate, opts.endDate, t.clicks);
+    const impressions = dailySplit(opts.startDate, opts.endDate, t.impressions);
+    return clicks.map((c, i) => row([c.date], c.value, impressions[i]!.value, t.position));
+  }
   if (dims === "query,page") {
     return [
       row(["emergency plumber", "https://example.com/services/emergency"], Math.round(150 * k), Math.round(3000 * k), 6.2),
@@ -77,6 +83,24 @@ export function gscQuery(_client: unknown, opts: GscQueryOptions): GscRow[] {
   return [];
 }
 
+/** Every date from start to end (inclusive), YYYY-MM-DD. */
+function daysBetween(startDate: string, endDate: string): string[] {
+  const out: string[] = [];
+  for (let t = Date.parse(`${startDate}T00:00:00Z`); t <= Date.parse(`${endDate}T00:00:00Z`); t += 86_400_000) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+
+/** A realistic daily shape (weekday highs, weekend dips, a gentle wave), scaled so the days add up to `total`. */
+export function dailySplit(startDate: string, endDate: string, total: number): { date: string; value: number }[] {
+  const days = daysBetween(startDate, endDate);
+  const w = days.map((d, i) => {
+    const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+    return (1 + 0.16 * Math.sin(i / 4.1) + 0.006 * i) * (dow === 0 || dow === 6 ? 0.68 : 1);
+  });
+  const sum = w.reduce((a, b) => a + b, 0);
+  return days.map((date, i) => ({ date, value: Math.round((total * w[i]!) / sum) }));
+}
+
 export function gscTotals(_client: unknown, range: { startDate: string }) {
   const k = scale(range.startDate);
   return { keys: [], clicks: Math.round(1120 * k), impressions: Math.round(20000 * k), ctr: Number((5.6).toFixed(2)), position: k === 1 ? 7.5 : 8.2 };
@@ -85,6 +109,10 @@ export function gscTotals(_client: unknown, range: { startDate: string }) {
 export function ga4OrganicSummary(_client: unknown, range: { startDate: string }) {
   const k = scale(range.startDate);
   return { sessions: Math.round(1500 * k), users: Math.round(1200 * k), engagedSessions: Math.round(900 * k), engagementRate: k === 1 ? 61.2 : 58.4, keyEvents: Math.round(40 * k) };
+}
+
+export function ga4OrganicDaily(_client: unknown, range: { startDate: string; endDate: string }) {
+  return dailySplit(range.startDate, range.endDate, ga4OrganicSummary(_client, range).sessions).map((d) => ({ date: d.date, sessions: d.value }));
 }
 
 export function ga4TopLandingPages(_client: unknown, _range: unknown, limit = 20) {

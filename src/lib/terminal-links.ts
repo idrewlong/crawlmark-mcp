@@ -11,6 +11,8 @@
  * - The browser opener is spawned without a shell.
  */
 import { spawn, type SpawnOptions } from "node:child_process";
+import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { stripControl } from "./terminal-text.js";
 
 const MAX_URL_LENGTH = 2048;
@@ -109,6 +111,25 @@ export function openUrl(url: string, opts: { platform?: NodeJS.Platform; spawn?:
   try {
     const child = (opts.spawn ?? (spawn as unknown as Spawner))(cmd, args, { shell: false, detached: true, stdio: "ignore" });
     // A missing opener (no xdg-open) is reported asynchronously; the URL is on screen anyway.
+    child.on("error", () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Open a local file crawlmark wrote (the branding preview) with the OS default app, without a shell and
+ * without waiting. Only an absolute path to an existing .pdf or .html file with no control characters;
+ * anything else opens nothing and returns false.
+ */
+export function openPath(path: string, opts: { platform?: NodeJS.Platform; spawn?: Spawner; exists?: (p: string) => boolean } = {}): boolean {
+  if (!isAbsolute(path) || !/\.(pdf|html)$/i.test(path) || /[\u0000-\u001f\u007f-\u009f]/.test(path) || stripControl(path) !== path) return false;
+  if (!(opts.exists ?? existsSync)(path)) return false;
+  const { cmd, args } = openerCommand(path, opts.platform ?? process.platform);
+  try {
+    const child = (opts.spawn ?? (spawn as unknown as Spawner))(cmd, args, { shell: false, detached: true, stdio: "ignore" });
     child.on("error", () => {});
     child.unref();
     return true;

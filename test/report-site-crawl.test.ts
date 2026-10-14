@@ -80,6 +80,22 @@ describe("site_crawl section", () => {
     // URLs from the crawl are code, never links; the | is escaped in the Markdown table.
     expect(md).toContain("`https://example.com/a\\|b*c_[x]`");
     expect(html).not.toContain('href="https://example.com/a');
+    expect(md).toContain("crawlmark 0.1.0");
+
+    // White label (branding.hideCrawlmark): neutral wording, no crawlmark name or version in any format.
+    const wl = vi.fn(async () => Buffer.from("%PDF-1.7"));
+    const out2 = await exportReport(report, { formats: ["md", "html", "docx", "pdf"], reportsDir: join(mkdtempSync(join(tmpdir(), "crawlmark-c1-wl-")), "reports"), branding: { hideCrawlmark: true }, version: "0.1.0", printer: wl });
+    const wlTexts = [
+      readFileSync(out2.files[0]!.path, "utf8"),
+      readFileSync(out2.files[1]!.path, "utf8"),
+      await (await JSZip.loadAsync(readFileSync(out2.files[2]!.path))).file("word/document.xml")!.async("string"),
+      String((wl.mock.calls[0] as unknown as [string])[0]),
+    ];
+    for (const text of wlTexts) {
+      expect(text).toContain("A crawl of the site on 2026-10-02");
+      expect(text).not.toMatch(/crawlmark/i);
+    }
+    expect(wlTexts[0]).toContain("Site crawl: a crawl of the site without JavaScript rendering");
   });
 
   it("passes the crawl's own orphan reason through, without error detail (R-4)", async () => {

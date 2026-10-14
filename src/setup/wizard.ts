@@ -20,6 +20,9 @@ import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type Provide
 import { checkPsiKey } from "./checks.js";
 import { checkCruxKey } from "../providers/crux.js";
 import { checkBingKey } from "../providers/bing.js";
+import type { PreviewResult } from "../reports/branding-preview.js";
+import type { BrandingSettings } from "../reports/branding-settings.js";
+import { stepBranding } from "./branding-step.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
 import { uiFor, type SummaryRow, type Ui } from "./ui.js";
 import { tryAskingExamples, type ExampleClient } from "./try-asking.js";
@@ -28,10 +31,10 @@ import { LINKS, type IntegrationId, type IntegrationStatus, type SetupStatusRepo
 
 export const STEP_NAMES = ["node", "provider", "dataforseo", "ahrefs", "semrush", "google", "psi", "discovery", "register"] as const;
 /**
- * Phase 12: steps run only with --step. They are not in the default flow, the returning-user menu or the
- * step lists the wizard prints, so plain installer output is unchanged.
+ * Phase 12: steps run only with --step (branding is also "Set up report branding" in the returning-user menu).
+ * They are not in the default flow or the step lists the wizard prints, so plain installer output is unchanged.
  */
-export const EXTRA_STEP_NAMES = ["crux", "bing"] as const;
+export const EXTRA_STEP_NAMES = ["crux", "bing", "branding"] as const;
 export type StepName = (typeof STEP_NAMES)[number] | (typeof EXTRA_STEP_NAMES)[number];
 
 export { DFS_LIVE_URL, DFS_SANDBOX_URL };
@@ -106,6 +109,12 @@ export interface WizardContext {
    * clients.yaml. The real CLI sets it in fancy mode only; unset means example.com.
    */
   exampleClients?: (() => ExampleClient[]) | undefined;
+  /** `setup --step branding --client <domain>`: write that client's branding override instead of the global one. */
+  brandingClient?: string | undefined;
+  /** Render the branding preview (sample data only) and say where it went; unset means no preview (tests, plain contexts). */
+  brandingPreview?: ((settings: BrandingSettings) => Promise<PreviewResult>) | undefined;
+  /** Open a local file (the preview) with the OS default app. The real CLI sets it in fancy mode only. */
+  openPath?: ((path: string) => boolean) | undefined;
 }
 
 /** Options for a provider credential step. `ticked`: the user just picked it in the provider list, so don't ask again whether to set it up. */
@@ -862,6 +871,7 @@ const STEPS: Record<Exclude<StepName, "provider">, { title: string; run: StepRun
   psi: { title: "PageSpeed Insights key (optional)", run: stepPsi },
   crux: { title: "CrUX History key (optional)", run: stepCrux },
   bing: { title: "Bing Webmaster Tools key (optional)", run: stepBing },
+  branding: { title: "Report branding", run: stepBranding },
   discovery: { title: "Clients", run: stepDiscovery },
   register: { title: "Register with Claude", run: stepRegister },
 };
@@ -890,6 +900,7 @@ const SUMMARY_LABELS: Record<Exclude<StepName, "register">, string> = {
   psi: "PageSpeed",
   crux: "CrUX",
   bing: "Bing",
+  branding: "Branding",
   discovery: "Clients",
 };
 

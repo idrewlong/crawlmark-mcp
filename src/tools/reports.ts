@@ -104,9 +104,9 @@ export function registerReportTools(server: McpServer) {
     {
       title: "List report templates",
       description:
-        "Report templates available for a client: the builtin `monthly`, the global file (<home>/config/report-templates.yaml) and the client's own file " +
+        "Report templates available for a client: the builtin ones (`monthly`, `quarterly`, `executive` for a one-page summary, `technical` for web teams, `local` for local businesses), the global file (<home>/config/report-templates.yaml) and the client's own file " +
         "(<home>/config/report-templates/<domain>.yaml), with each template's period, section count, optional sections (rendered only when asked for with `include`) and paid sections. " +
-        "Also reports whether each file exists and is valid; an invalid file never hides the builtin `monthly`. Free and local.",
+        "Also reports whether each file exists and is valid; an invalid file never hides the builtin templates. Free and local.",
       inputSchema: { client: clientArg.optional() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -157,7 +157,7 @@ export function registerReportTools(server: McpServer) {
       title: "Run a report template",
       description:
         "Build a client's report from a template (default: the `monthly` template, the same data as monthly_report). Returns `reportId`, the period (with comparisons), " +
-        "each section's `status` (ok, error, unavailable, or skipped for a paid section without allowPaid) and `data`, computed `highlights` (facts only), `notes` and this run's paid `spend`. " +
+        "each section's `status` (ok, error, unavailable, or skipped for a paid section without allowPaid) and `data`, computed `highlights` (facts only), `notes` and this run's paid `spend` (for you; report files never show it). " +
         "Read each section's status before writing about it. The data is kept for 24 hours: pass `reportId` to export_report so the files show exactly these numbers. " +
         "Free unless the template has a paid section and you set allowPaid (state the cost first). Optional sections (e.g. cwv, gtm) run only when listed in `include`.",
       inputSchema: {
@@ -184,7 +184,7 @@ export function registerReportTools(server: McpServer) {
         "Pass the `reportId` from run_report_template so the files show exactly the numbers you wrote about (kept 24 hours), or the same arguments as run_report_template to run it first. " +
         "`narrative` is your commentary (summary plus text per section id; paragraphs, `- ` bullets and **bold** only; at most 30,000 characters); without it the files are labelled data-only. " +
         "`inline: \"html\"` also returns a docs-friendly HTML copy (no logo, plain tables) for saving to Google Docs with the user's own Drive tool, only after the user agrees; `formats: []` with inline writes no file. " +
-        "Re-exporting the same template and period overwrites its files. PDF needs Chrome; if it fails, the other formats are still written and `warnings` says why.",
+        "Re-exporting the same template and period overwrites its files. Ask the user which format(s) they want (default PDF) and pass exactly those. PDF needs Chrome; if it fails, an HTML file is written instead (unless HTML was asked for too), the other formats are still written, and `warnings` says why.",
       inputSchema: {
         client: clientArg,
         reportId: z.string().max(40).optional().describe("From run_report_template. Leave out the template and period arguments when you pass it."),
@@ -195,7 +195,7 @@ export function registerReportTools(server: McpServer) {
         endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         include: z.array(z.string().min(1).max(40)).max(40).optional(),
         allowPaid: z.boolean().optional(),
-        formats: z.array(z.enum(FORMATS)).max(4).optional().describe("Default: the template file's defaults.formats, else md and html."),
+        formats: z.array(z.enum(FORMATS)).max(4).optional().describe("Default: the saved default (the template file's defaults.formats), PDF unless changed. Pass exactly the formats the user chose."),
         narrative: z
           .object({
             summary: z.string().max(6000).optional(),

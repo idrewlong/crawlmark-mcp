@@ -55,7 +55,7 @@ Every change is shown before it's made, other servers are listed by name only, a
 
 In a terminal you get arrow-key choices, masked secrets, a spinner with the time taken for each live check, and a short tip under each result. Links are clickable in terminals that support it (iTerm2, WezTerm, VS Code, Ghostty, Windows Terminal, kitty and recent GNOME terminals; `FORCE_HYPERLINK=1` or `0` overrides), and the steps that need a web page (DataForSEO API access, Ahrefs and Semrush keys, Google Cloud, PageSpeed) offer to open it with Enter. The summary box ends with three things to try asking Claude, using up to three of your own clients from `clients.yaml` (read locally and only shown in your terminal; `example.com` when you have none). With piped input, `CI=true`, `TERM=dumb`, `NO_COLOR` or `--yes`, the same steps run as plain numbered prompts without any of that. `init` and `setup` are the same command.
 
-Run `init` again once crawlmark is set up (a `.env` in its config home and at least one working data source) and it shows a menu instead of every step: add or change a data provider, change the Google sign-in, re-register your AI apps, refresh clients, check status, run the full setup again, or exit. `setup --step <name>` still goes straight to one step.
+Run `init` again once crawlmark is set up (a `.env` in its config home and at least one working data source) and it shows a menu instead of every step: add or change a data provider, change the Google sign-in, re-register your AI apps, refresh clients, set up report branding, check status, run the full setup again, or exit. `setup --step <name>` still goes straight to one step.
 
 `init`, `setup`, `--help` and `--version` check npm for a newer crawlmark at most once a day (a plain request for the latest version number, with a 1.5 second timeout and nothing about you or your clients) and print `Update available` when there is one. It never runs in CI, when output isn't a terminal, or with `--json`. Set `CRAWLMARK_NO_UPDATE_CHECK=1` (or the common `NO_UPDATE_NOTIFIER=1`) to turn it off; the MCP server itself never checks.
 
@@ -110,6 +110,7 @@ The setup wizard covers everything here. Each step shows its current status firs
 | `crawlmark-cli setup --step <node\|provider\|dataforseo\|ahrefs\|semrush\|google\|psi\|discovery\|register>` | One step. `provider` picks your SEO data providers and the default one |
 | `crawlmark-cli setup --step crux` | A key for Core Web Vitals history (CrUX). Only run this way; it isn't part of the default wizard |
 | `crawlmark-cli setup --step bing` | A Bing Webmaster Tools API key. Only run this way; it isn't part of the default wizard |
+| `crawlmark-cli setup --step branding [--client <domain>]` | Report branding: agency name, logo, colours, footer, white label, paper size and default formats, with a one-page preview before saving. Only run this way (or from the setup menu) |
 | `crawlmark-cli setup --dry-run` | Runs the free checks and shows what each step would do, without writing, signing in or registering anything |
 | `crawlmark-cli setup --yes` | Accepts every default. Steps that need input (a password, an API key, a key file) are skipped; the default provider is only written to fix a missing or invalid one when a provider works |
 | `crawlmark-cli setup status` | Each integration's state and the next step (`--json` for machine output) |
@@ -350,7 +351,7 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 | `compare_audits` | What's new, resolved, still open or unverified between two audits, plus score changes |
 | `crawl_status` | Progress of a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check |
-| `list_report_templates` | Report templates for a client: the builtin `monthly`, your global file and the client's own file, with optional and paid sections. Free |
+| `list_report_templates` | Report templates for a client: the builtin `monthly`, `quarterly`, `executive` (one page), `technical` and `local`, your global file and the client's own file, with optional and paid sections. Free |
 | `get_report_template` | One template with its defaults filled in and the resolved branding. Free |
 | `validate_report_template` | Checks template YAML (or a saved file) and names each problem's YAML path. Free |
 | `run_report_template` | Runs a template for a client: per-section data and status, computed highlights, and a `reportId` kept for 24 hours. Free unless you allow a paid section |
@@ -483,15 +484,20 @@ Add competitors, tracked keywords, an area and a niche at any time with the tool
 Report files
 ------------
 
-`export_report` (in Claude) and `crawlmark-cli report` (from cron) turn a client's data into Markdown, HTML, PDF or Word files from a YAML template. In Claude the files carry the commentary Claude writes; from cron they are data only and say so. Files go to `<home>/reports/<client>/<YYYY-MM>/`, readable only by you.
+`export_report` (in Claude) and `crawlmark-cli report` (from cron) turn a client's data into Markdown, HTML, PDF or Word files from a YAML template. The files are laid out like an agency dashboard: your logo and colours, four key-figure cards with their changes, a summary, charts (clicks and impressions per day, branded share, organic sessions, Core Web Vitals and rank history), clean tables, and a short "About this report". In Claude the files carry the commentary Claude writes; from cron they are data only and say so. Files go to `<home>/reports/<client>/<YYYY-MM>/`, readable only by you.
+
+Your branding (agency name, logo, colours, footer, white label, paper size and default formats) is set up with `crawlmark-cli setup --step branding`, which shows a one-page preview with sample data before saving; `crawlmark-cli report preview-branding` shows it again later.
+
+Builtin templates: `monthly` (the same data as `monthly_report`), `quarterly` (the quarter against the one before and the same quarter last year), `executive` (one page: key figures, the clicks trend, top wins and next steps) `technical` (site crawl, Core Web Vitals, audit changes and AI readiness, for web teams) and `local` (Local SEO: the Google Business Profile and map-pack positions, paid, plus local-intent searches).
 
 ```bash
-crawlmark-cli report templates init                         # writes config/report-templates.yaml (monthly + quarterly)
+crawlmark-cli report templates init                         # writes config/report-templates.yaml (monthly + quarterly to edit)
 crawlmark-cli report --client example.com --format md,pdf,docx
 crawlmark-cli report --all --template quarterly --quarter 2026-Q3 --format pdf
+crawlmark-cli report --client example.com --template executive --format pdf
 ```
 
-Optional sections are added with `--include` (`include` in Claude): `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history) and `ai` (llms.txt and AI crawler access from the newest saved audit). A template can also have a paid `keyword_gap` section, which runs only with `--paid` (`allowPaid`) after its estimate fits the caps.
+Optional sections are added with `--include` (`include` in Claude): `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history), `ai` (llms.txt and AI crawler access from the newest saved audit) and `spend` (paid data used this month; the tool and CLI results always report it, the files only with this section). A template can also have a paid `keyword_gap` section, which runs only with `--paid` (`allowPaid`) after its estimate fits the caps.
 
 PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, branding, paths and the Docs handoff.
 
@@ -593,7 +599,7 @@ CLI
 | `audit --client <domain>\|--all [--dry-run] [--include-tag-manager]` | Scheduled audits |
 | `check-traffic --client <domain>\|--all [--dry-run]` | Scheduled traffic check |
 | `check-ranks --client <domain>\|--all [--live] [--dry-run]` | Save tracked keyword positions (free); `--live` adds paid live ranks |
-| `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format md,html,pdf,docx] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only). Exit 0 written, 2 written with a failed section or format, 1 error |
+| `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format pdf,docx,html,md] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
 | `crawl --client <domain> [--max-pages <n>] [--max-depth <n>] [--concurrency <n>] [--user-agent crawlmark\|googlebot] [--include-subdomains] [--start-url <url,url>]` | Free local crawl of a client's site, saved like `local_crawl`. Exit 0 saved, 1 error |
 | `logs --client <domain> <file>... [--since <date>] [--until <date>] [--bots <name,name>] [--no-verify]` | Crawler hits in access logs you name (local only, aggregates only). Exit 0 done, 1 error |

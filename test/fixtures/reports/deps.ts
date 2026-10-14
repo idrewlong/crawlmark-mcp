@@ -43,6 +43,7 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
     gscTotals: async (c, r) => d.gscTotals(c, r),
     ga4OrganicSummary: async (c, r) => d.ga4OrganicSummary(c, r),
     ga4TopLandingPages: async (c, r, n) => d.ga4TopLandingPages(c, r, n),
+    ga4OrganicDaily: async (c, r) => d.ga4OrganicDaily(c, r),
     opportunitiesForMonth: async (_c, r, n) => ({
       window: r,
       method: "Fixture method.",

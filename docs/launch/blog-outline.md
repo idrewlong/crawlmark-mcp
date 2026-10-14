@@ -114,6 +114,8 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - New tools: `list_report_templates`, `get_report_template`, `validate_report_template`, `run_report_template`, `export_report`.
 - New prompt: `template-report`; `monthly-report-writeup` now offers to save files and a Google Doc.
 - New commands: `crawlmark-cli report --client example.com|--all [--format md,html,pdf,docx]` and `crawlmark-cli report templates list|validate|init`.
+- Agency-dashboard layout: cover band, key-figure cards, charts, clean tables; builtin `quarterly`, `executive` (one page), `technical` and `local` templates; white label.
+- One PDF by default; pick other formats from a list on the terminal, and Claude asks which format(s) you want.
 
 **Core Web Vitals history** (Shipped)
 
@@ -159,13 +161,13 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 
 - A client's Google Business Profile (rating, reviews, categories, hours, claimed or not), where it ranks in the Google Maps pack for its keywords in its town, and a summary of its latest Google reviews, from your own DataForSEO account. _"How does example.com look on Google Maps for its main keywords, and what are recent reviews saying?"_
 - crawlmark finds the listing and you confirm it before it's saved; reviews never include reviewer names. Estimate first, checked against your monthly caps.
-- New tools: `local_profile`, `local_pack`, `local_reviews` (Coming). New option: `crawlmark-cli clients set example.com --place-id <id>` and `gbpPlaceId` in `set_client_profile` (Coming). New report section `local_profile` (paid, Coming).
+- New tools: `local_profile`, `local_pack`, `local_reviews`. New option: `crawlmark-cli clients set example.com --place-id <id>` and `gbpPlaceId` in `set_client_profile`. New report section `local_profile` (paid).
 
 **AI-search visibility** (Shipped, paid and off by default)
 
 - Which questions in Google AI Overviews (and ChatGPT in the US) cite your client's site, with the cited page and how often people ask, or the total mentions, from your own DataForSEO account. _"Which AI Overview answers cite example.com, and for what questions?"_
 - Off until you set `AI_VISIBILITY_ENABLED=true`, with its own $2 monthly cap on top of your other caps and an estimate first. At least $0.10 per request, and DataForSEO may require a $100 monthly top-up for this API, so check your account.
-- New tool: `ai_visibility` (Coming). New report section `ai_visibility` (paid, Coming). New settings `AI_VISIBILITY_ENABLED`, `AI_VISIBILITY_MONTHLY_BUDGET_USD` and a `setup_status` row (Coming).
+- New tool: `ai_visibility`. New report section `ai_visibility` (paid). New settings `AI_VISIBILITY_ENABLED`, `AI_VISIBILITY_MONTHLY_BUDGET_USD` and a `setup_status` row.
 
 **Audits: AI search readiness** (Shipped)
 

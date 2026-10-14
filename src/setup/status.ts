@@ -5,6 +5,7 @@
  * The real providers are in ./status-providers.ts.
  */
 import type { AhrefsKeyCheck } from "../providers/ahrefs.js";
+import { stripControl } from "../lib/terminal-text.js";
 import type { SemrushKeyCheck } from "../providers/semrush.js";
 import { describeAhrefsAccount } from "../providers/ahrefs-shape.js";
 import type { DataForSeoStatusResult } from "../providers/dataforseo.js";
@@ -15,7 +16,7 @@ import { displayProviderValue, invalidProviderMessage, PROVIDER_LABELS, type Def
 
 export type IntegrationState = "configured" | "working" | "missing" | "error";
 
-export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "bing", "aivisibility", "chrome", "clients"] as const;
+export const INTEGRATIONS = ["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "bing", "aivisibility", "branding", "chrome", "clients"] as const;
 export type IntegrationId = (typeof INTEGRATIONS)[number];
 
 export interface IntegrationStatus {
@@ -117,6 +118,8 @@ export interface StatusProviders {
   bing?(): Promise<{ keySet: boolean; check: { ok: true; sites: number; verified: number } | { ok: false; kind?: "refused" | "network" | "throttled" | "other"; problem: string } | null }>;
   /** Phase 12 C5: the AI_VISIBILITY_ENABLED switch (raw value too, to flag a typo) and this month's AI spend against its sub-cap; no network. */
   aiVisibility?(): { enabled: boolean; raw: string | null; dataForSeo: boolean; capUsd: number; spentUsd: number };
+  /** Report branding in the global templates file (local, no network); absent means no row data. */
+  branding?(): { configured: boolean; agencyName?: string | undefined; clientOverrides: number };
   /** `binary` says which browser ran (headless shell, Chrome, system Chrome or CHROME_PATH); absent in stubs. */
   chrome(): Promise<{ ok: true; version: string; binary?: { kind: string; label: string; path: string } } | { ok: false; error: string }>;
   clients(): { count: number; ignored: number; file: string; exists: boolean };
@@ -542,6 +545,17 @@ export async function collectSetupStatus(
     } else {
       out.push({ id: "aivisibility", label, state: "configured", detail: `On: $${a.spentUsd.toFixed(2)} of $${a.capUsd} spent this month. ${cost}`.slice(0, 500), next: null, data });
     }
+  }
+
+  if (want("branding")) {
+    // Report branding: always in --json; human output shows it only once it's set.
+    const b = p.branding?.() ?? { configured: false, clientOverrides: 0 };
+    const overrides = b.clientOverrides ? ` ${b.clientOverrides} client override file(s).` : "";
+    out.push(
+      b.configured
+        ? { id: "branding", label: "Report branding", state: "configured", detail: `${b.agencyName ? `Agency: ${stripControl(b.agencyName).slice(0, 80)}.` : "Set."}${overrides} Preview it with ${cli} report preview-branding.`.slice(0, 300), next: null, data: { configured: true, clientOverrides: b.clientOverrides } }
+        : { id: "branding", label: "Report branding", state: "missing", detail: "Optional. Your agency name, logo, colours and footer on report files.", next: step("branding"), data: { configured: false, clientOverrides: b.clientOverrides } },
+    );
   }
 
   if (chrome) {

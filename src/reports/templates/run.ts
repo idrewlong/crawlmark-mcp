@@ -10,7 +10,7 @@ import type { Client } from "../../config.js";
 import { markBranded } from "../../analysis/branded.js";
 import { isBranded } from "../../lib/brand.js";
 import { cacheKey, peekCache, putCache, TTL } from "../../lib/cache.js";
-import type { DateRange } from "../../lib/dates.js";
+import { fillDays, type DateRange } from "../../lib/dates.js";
 import { GoogleNotConfiguredError } from "../../lib/google-auth.js";
 import { ProviderUnavailableError } from "../../lib/provider-ids.js";
 import { BudgetExceededError } from "../../lib/budget.js";
@@ -29,6 +29,7 @@ import type {
   BingOverviewData,
   BrandedSplitData,
   Comparison,
+  DailySearchPoint,
   CruxHistoryResult,
   DataSpendData,
   KeywordGapData,
@@ -54,6 +55,27 @@ import type { EstimateResult, KeywordGapRequest, KeywordGapRouted } from "../../
 import { analyzeCrawl, topFindings } from "../../analysis/crawl.js";
 import type { StoredCrawl } from "../../lib/crawls.js";
 
+/** At most this many stored points per keyword and source go into a report (evenly thinned). */
+export const RANK_SERIES_MAX = 120;
+
+/** Keep at most `max` points, evenly spaced, always including the first and the last. */
+export function thin<T>(points: T[], max: number): T[] {
+  if (points.length <= max) return points;
+  const step = (points.length - 1) / (max - 1);
+  return Array.from({ length: max }, (_, i) => points[Math.round(i * step)]!);
+}
+
+/** Words that mark a search as local ("near me", "open now"), plus the client's town and region from its area. */
+const LOCAL_WORDS = /\b(near me|nearby|near by|close to me|closest|open now|open today|open late|24 ?hours?|24\/7|in my area|local)\b/i;
+export function isLocalIntent(query: string, area: string | undefined): boolean {
+  const q = query.toLowerCase();
+  if (LOCAL_WORDS.test(q)) return true;
+  // A DataForSEO location name is "Town,Region,Country": the country is too broad to mean local, so it's dropped.
+  const parts = (area ?? "").split(",").map((p) => p.trim().toLowerCase());
+  const places = (parts.length > 1 ? parts.slice(0, -1) : parts).filter((p) => p.length >= 3);
+  return places.some((p) => new RegExp(`(^|[^\\p{L}])${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}])`, "u").test(q));
+}
+
 /** Rough ceiling per live SERP check (DataForSEO's own estimate for a SERP task). */
 export const LIVE_RANK_ESTIMATE_USD = 0.002;
 
@@ -63,6 +85,8 @@ export interface RunDeps {
   gscTotals(client: Client, range: DateRange): Promise<PeriodTotals>;
   ga4OrganicSummary(client: Client, range: DateRange): Promise<Ga4Summary>;
   ga4TopLandingPages(client: Client, range: DateRange, limit: number): Promise<Record<string, string | number>[]>;
+  /** Organic sessions per day, for the report files' trend chart (optional: without it the chart is left out). */
+  ga4OrganicDaily?(client: Client, range: DateRange): Promise<{ date: string; sessions: number }[]>;
   opportunitiesForMonth(client: Client, range: DateRange, n: number): Promise<OpportunityLists>;
   latestAudit(client: string): StoredAudit | undefined;
   latestAuditBefore(client: string, beforeMs: number): StoredAudit | undefined;
@@ -131,6 +155,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     gscTotals: gsc.gscTotals,
     ga4OrganicSummary: ga4.ga4OrganicSummary,
     ga4TopLandingPages: ga4.ga4TopLandingPages,
+    ga4OrganicDaily: ga4.ga4OrganicDaily,
     opportunitiesForMonth: opp.opportunitiesForMonth,
     latestAudit: audits.latestAudit,
     latestAuditBefore: audits.latestAuditBefore,
@@ -325,6 +350,38 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
     if (!notes.includes(n)) notes.push(n);
   };
 
+  // Daily series for the report files' charts (free). Extra data only: a failure leaves the chart out, never the section.
+  // Search Console and GA4 leave out days with nothing: every day between the first and last reported day gets a
+  // row (0 when missing), so the x-axis isn't compressed and a "week" is 7 days. Trailing days not reported yet
+  // (Search Console lags 2-3 days) are left out, not shown as a drop to 0.
+  const byDate = (rows: GscRow[], range: DateRange): DailySearchPoint[] => {
+    const days = rows.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.keys[0] ?? "")).map((r) => ({ date: r.keys[0]!, clicks: r.clicks, impressions: r.impressions }));
+    return days.length ? fillDays(range, days, (date) => ({ date, clicks: 0, impressions: 0 })) : [];
+  };
+  const daysOf = (r: DateRange) => once(`d:${r.startDate}:${r.endDate}`, () => deps.gscQuery(client, { ...r, dimensions: ["date"], rowLimit: 500 }));
+  const searchDaily = async (): Promise<SearchOverviewData["daily"]> => {
+    try {
+      const current = byDate(await daysOf(cur), cur);
+      if (current.length < 2) return undefined;
+      const previous = prim ? byDate(await daysOf(prim.range).catch(() => []), prim.range) : [];
+      return { current, previous: previous.length ? previous : null, comparedWith: previous.length && prim ? prim.which : null };
+    } catch {
+      return undefined;
+    }
+  };
+  const sessionsDaily = async (): Promise<OrganicTrafficData["daily"]> => {
+    if (!deps.ga4OrganicDaily) return undefined;
+    try {
+      const sessions = (rows: { date: string; sessions: number }[], range: DateRange) => (rows.length ? fillDays(range, rows, (date) => ({ date, sessions: 0 })) : []);
+      const current = sessions(await deps.ga4OrganicDaily(client, cur), cur);
+      if (current.length < 2) return undefined;
+      const previous = prim ? sessions(await deps.ga4OrganicDaily(client, prim.range).catch(() => []), prim.range) : [];
+      return { current, previous: previous.length ? previous : null, comparedWith: previous.length && prim ? prim.which : null };
+    } catch {
+      return undefined;
+    }
+  };
+
   const fetchers: Record<SectionSpec["type"], (s: never) => Promise<unknown>> = {
     search_overview: async (s: Extract<SectionSpec, { type: "search_overview" }>): Promise<SearchOverviewData> => {
       const c = await totals(cur);
@@ -342,12 +399,14 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
         }
       };
       const [vsPreviousPeriod, vsPreviousYear] = [await vs("previous_period"), await vs("previous_year")];
+      const daily = await searchDaily();
       return {
         metrics: s.metrics ?? ["clicks", "impressions", "ctr", "position"],
         current: c,
         vsPreviousPeriod,
         vsPreviousYear,
         ...(Object.keys(comparisonErrors).length ? { comparisonErrors } : {}),
+        ...(daily ? { daily } : {}),
       };
     },
     branded_split: async (): Promise<BrandedSplitData> => {
@@ -359,14 +418,20 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       const c = await ga4(cur);
       const p = prim ? await ga4(prim.range) : undefined;
       const metrics = s.metrics ?? ["sessions", "users", "engagementRate", "keyEvents"];
+      const daily = await sessionsDaily();
+      const extra = daily ? { daily } : {};
       if (!p) {
-        return { metrics, comparedWith: null, previous: null, sessions: { value: c.sessions, change: null }, users: { value: c.users, change: null }, engagementRate: { value: c.engagementRate, change: null }, keyEvents: { value: c.keyEvents, change: null } };
+        return { metrics, comparedWith: null, previous: null, sessions: { value: c.sessions, change: null }, users: { value: c.users, change: null }, engagementRate: { value: c.engagementRate, change: null }, keyEvents: { value: c.keyEvents, change: null }, ...extra };
       }
-      return { metrics, comparedWith: prim!.which, ...organicTrafficCompare(c, p), previous: { sessions: p.sessions, users: p.users, engagementRate: p.engagementRate, keyEvents: p.keyEvents } };
+      return { metrics, comparedWith: prim!.which, ...organicTrafficCompare(c, p), previous: { sessions: p.sessions, users: p.users, engagementRate: p.engagementRate, keyEvents: p.keyEvents }, ...extra };
     },
     top_queries: async (s: Extract<SectionSpec, { type: "top_queries" }>): Promise<TopRowsData> => {
       const rows = markBranded(await queries(cur), client);
       const kept = s.includeBranded === false ? rows.filter((r) => !r.branded) : rows;
+      if (s.intent === "local") {
+        const local = kept.filter((r) => isLocalIntent(r.keys[0] ?? "", client.area));
+        return local.length ? { rows: local.slice(0, s.limit ?? 20), intent: "local" } : { rows: kept.slice(0, s.limit ?? 20), intent: "local", intentFallback: true };
+      }
       return { rows: kept.slice(0, s.limit ?? 20) };
     },
     query_movers: async (s: Extract<SectionSpec, { type: "query_movers" }>): Promise<MoversData> => {
@@ -430,7 +495,13 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       const h = deps.rankHistory(client, { since, until, source: s.source ?? "both" });
       const keywords = h.keywords
         .filter((k) => k.tracked || (k.summary.gsc?.checks ?? 0) + (k.summary.serp?.checks ?? 0) > 0)
-        .map((k) => ({ keyword: k.keyword, ...(k.summary.gsc ? { gsc: k.summary.gsc } : {}), ...(k.summary.serp ? { serp: k.summary.serp } : {}) }));
+        .map((k) => {
+          const pts = (list: { day: string; rank: number | null }[] | undefined) => (list?.length ? thin(list.map((p) => ({ day: p.day, rank: p.rank })), RANK_SERIES_MAX) : undefined);
+          const gscPts = pts(k.series?.gsc);
+          const serpPts = pts(k.series?.serp);
+          const series = { ...(gscPts ? { gsc: gscPts } : {}), ...(serpPts ? { serp: serpPts } : {}) };
+          return { keyword: k.keyword, ...(k.summary.gsc ? { gsc: k.summary.gsc } : {}), ...(k.summary.serp ? { serp: k.summary.serp } : {}), ...(gscPts || serpPts ? { series } : {}) };
+        });
       if (!keywords.some((k) => (k.gsc?.checks ?? 0) + (k.serp?.checks ?? 0) > 0)) {
         throw new SectionUnavailableError(client.trackedKeywords.length ? "no stored rank history for this period yet (run crawlmark-cli check-ranks, free, to start it)" : `no tracked keywords for ${client.domain}`);
       }
@@ -545,7 +616,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   const report: TemplateReport = {
     reportId: `rpt_${ulid()}`,
     client: { slug: client.slug, name: client.name, domain: client.domain },
-    template: { id: template.id, title: template.spec.title, source: template.source },
+    template: { id: template.id, title: template.spec.title, source: template.source, ...(template.spec.layout === "onepage" ? { layout: "onepage" as const } : {}) },
     period: { current: period.current, label: period.label, folderMonth: period.folderMonth, comparisons: period.comparisons },
     generatedAt: new Date().toISOString(),
     sections,

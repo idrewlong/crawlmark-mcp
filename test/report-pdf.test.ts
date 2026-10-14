@@ -50,11 +50,12 @@ describe("PDF printing", () => {
     expect(data.continue).toHaveBeenCalled();
     expect(page.pdfOpts).toMatchObject({ format: "A4", printBackground: true, displayHeaderFooter: true, margin: { top: "15mm" } });
     expect(String(page.pdfOpts!.footerTemplate)).toContain("Prepared by &lt;Example Agency&gt;");
+    expect(page.pdfOpts!.headerTemplate).toBe("<span></span>");
     await printOnPage(page as unknown as PdfPage, "<p/>", { paper: "Letter", footer: "" });
     expect(page.pdfOpts).toMatchObject({ format: "Letter" });
   });
 
-  it("the footer shows page n of m", () => {
-    expect(footerTemplate("x")).toMatch(/page <span class="pageNumber"><\/span> of <span class="totalPages"><\/span>/);
+  it("the footer shows Page n of m", () => {
+    expect(footerTemplate("x")).toMatch(/Page <span class="pageNumber"><\/span> of <span class="totalPages"><\/span>/);
   });
 });

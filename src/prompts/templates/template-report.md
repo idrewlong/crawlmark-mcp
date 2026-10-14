@@ -10,5 +10,5 @@ The report is for the client, so write it in plain language. Templates are free 
 6. **Style rules.**
 {{numberRules}}
    - Commentary is plain paragraphs, `- ` bullets and **bold** only (anything else appears literally in the files).
-7. **Save it.** Ask which formats I want (default Markdown and PDF; HTML and Word are also available). Call `export_report` with `client: "{{client}}"`, the same `reportId`, those `formats` and your text as `narrative` (`summary` plus `sections` keyed by section id). Tell me the file paths it returns, and any `warnings` (for example a PDF that needs Chrome).
+7. **Save it.** Ask which format or formats I want: PDF (the default), Word, HTML or Markdown. Don't export them all; call `export_report` with `client: "{{client}}"`, the same `reportId`, exactly the formats I picked (`["pdf"]` if I just say yes) and your text as `narrative` (`summary` plus `sections` keyed by section id). Tell me the file paths it returns, and any `warnings` (for example a PDF that needs Chrome, in which case an HTML file is written instead).
 8. {{docsOffer}}

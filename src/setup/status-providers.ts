@@ -18,6 +18,7 @@ import { dataForSeoStatus } from "../providers/dataforseo.js";
 import { listGa4Properties, listGscSites } from "../providers/discovery.js";
 import { checkGoogleAuthLive, googleAuthStatus } from "../providers/google.js";
 import { listGtmContainers } from "../providers/gtm.js";
+import { brandingConfigured } from "../reports/branding-settings.js";
 import { cachedStatus, type StatusProviders } from "./status.js";
 
 /** True when `name` is an executable on PATH (no shell, no exec). */
@@ -172,6 +173,7 @@ export const realStatusProviders: StatusProviders = {
     const ai = remainingAiUsd();
     return { enabled: env.AI_VISIBILITY_ON, raw: env.AI_VISIBILITY_ENABLED ?? null, dataForSeo: Boolean(env.DATAFORSEO_LOGIN && env.DATAFORSEO_PASSWORD), capUsd: ai.capUsd, spentUsd: ai.spentUsd };
   },
+  branding: () => brandingConfigured(HOME.dir),
   chrome: async () => {
     try {
       const choice = await resolveChrome();

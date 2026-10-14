@@ -6,6 +6,7 @@
  */
 import { parseDocument } from "yaml";
 import { z } from "zod";
+import { stripControl } from "../../lib/terminal-text.js";
 
 export const FORMATS = ["md", "html", "pdf", "docx"] as const;
 export type Format = (typeof FORMATS)[number];
@@ -31,12 +32,15 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").refin
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a #rrggbb colour");
 
 export const BrandingSchema = z.strictObject({
-  agencyName: z.string().min(1).max(80).optional(),
+  // Shown on the cover and in terminal output: no control, bidi or invisible characters.
+  agencyName: z.string().min(1).max(80).refine((s) => stripControl(s) === s, "must not contain control or invisible characters").optional(),
   logo: z.string().min(1).max(500).optional(),
   primaryColor: color.optional(),
   accentColor: color.optional(),
-  footer: z.string().max(200).optional(),
+  footer: z.string().max(200).refine((s) => stripControl(s) === s, "must not contain control or invisible characters").optional(),
   paper: z.enum(["Letter", "A4"]).optional(),
+  /** White label: leave crawlmark's name and version out of client files (neutral wording instead). */
+  hideCrawlmark: z.boolean().optional(),
 });
 export type Branding = z.infer<typeof BrandingSchema>;
 
@@ -63,7 +67,8 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("search_overview"), metrics: z.array(z.enum(["clicks", "impressions", "ctr", "position"])).min(1).optional() }),
   z.strictObject({ ...common, type: z.literal("branded_split") }),
   z.strictObject({ ...common, type: z.literal("organic_traffic"), metrics: z.array(z.enum(["sessions", "users", "engagementRate", "keyEvents"])).min(1).optional() }),
-  z.strictObject({ ...common, type: z.literal("top_queries"), limit: limit(100), includeBranded: z.boolean().optional() }),
+  // intent: local keeps local-intent searches ("near me", "open now", the client's town); with none, the top queries overall.
+  z.strictObject({ ...common, type: z.literal("top_queries"), limit: limit(100), includeBranded: z.boolean().optional(), intent: z.enum(["local"]).optional() }),
   z.strictObject({ ...common, type: z.literal("query_movers"), limit: limit(50) }),
   z.strictObject({ ...common, type: z.literal("page_movers"), limit: limit(50) }),
   z.strictObject({ ...common, type: z.literal("top_pages"), limit: limit(100) }),
@@ -150,6 +155,8 @@ export const TemplateSchema = z.strictObject({
   description: z.string().max(300).optional(),
   period: PeriodSchema.optional(),
   compare: z.array(z.enum(COMPARISONS)).max(2).optional(),
+  /** `onepage`: the compact executive layout (key figures, one chart, short lists) sized for one page. */
+  layout: z.enum(["standard", "onepage"]).optional(),
   sections: z.array(SectionSchema).min(1).max(40),
 });
 export type TemplateSpec = z.infer<typeof TemplateSchema>;
@@ -158,7 +165,8 @@ export const TemplateFileSchema = z.strictObject({
   version: z.literal(1),
   branding: BrandingSchema.optional(),
   defaults: z.strictObject({ template: id.optional(), formats: z.array(z.enum(FORMATS)).min(1).max(4).optional() }).optional(),
-  templates: z.record(id, TemplateSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 templates"),
+  // Optional: a file can hold only branding and defaults (a per-client branding override, say).
+  templates: z.record(id, TemplateSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 templates").optional(),
 });
 export type TemplateFile = z.infer<typeof TemplateFileSchema>;
 
@@ -216,10 +224,11 @@ export function customRangeProblems(start: string, end: string, today: Date): st
 export function semanticIssues(file: TemplateFile, today: Date): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const push = (path: PropertyKey[], message: string) => issues.push({ path: formatPath(path), message });
-  if (file.defaults?.template && !Object.hasOwn(file.templates, file.defaults.template) && file.defaults.template !== "monthly") {
+  const templates = file.templates ?? {};
+  if (file.defaults?.template && file.templates && !Object.hasOwn(templates, file.defaults.template) && file.defaults.template !== "monthly") {
     push(["defaults", "template"], `no template "${file.defaults.template}" in this file (and it isn't the builtin "monthly")`);
   }
-  for (const [tid, t] of Object.entries(file.templates)) {
+  for (const [tid, t] of Object.entries(templates)) {
     const base = ["templates", tid];
     if (t.compare && new Set(t.compare).size !== t.compare.length) push([...base, "compare"], "entries must be unique");
     if (t.period?.range === "custom") {

@@ -37,17 +37,18 @@ function ctxFor(opts: { fancy?: boolean; status?: () => Promise<SetupStatusRepor
 }
 
 describe("returning-user menu", () => {
-  it("lists the seven choices, mapping four to --step", () => {
+  it("lists the eight choices, mapping five to --step", () => {
     expect(MENU_CHOICES.map((c) => c.label)).toEqual([
       "Add or change a data provider",
       "Change Google sign-in",
       "Re-register AI apps",
       "Refresh clients",
+      "Set up report branding",
       "Check status",
       "Run full setup again",
       "Exit",
     ]);
-    expect(MENU_CHOICES.map((c) => menuStep(c.value))).toEqual(["provider", "google", "register", "discovery", undefined, undefined, undefined]);
+    expect(MENU_CHOICES.map((c) => menuStep(c.value))).toEqual(["provider", "google", "register", "discovery", "branding", undefined, undefined, undefined]);
   });
 
   it("is complete with a .env and at least one working data source", () => {

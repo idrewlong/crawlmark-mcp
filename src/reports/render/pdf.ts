@@ -12,7 +12,7 @@ import { escapeHtml } from "./escape.js";
 export type Paper = "Letter" | "A4";
 export interface PdfOptions {
   paper: Paper;
-  /** Footer text left of "page n of m". */
+  /** Footer text left of "Page n of m". */
   footer: string;
   signal?: AbortSignal | undefined;
 }
@@ -36,8 +36,10 @@ export interface PdfRequest {
 const MARGIN = "15mm";
 const CONTENT_TIMEOUT_MS = 30_000;
 
+const TEMPLATE_STYLE = "font-size:8px;width:100%;padding:0 15mm;color:#7b8794;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;justify-content:space-between;gap:12px";
+
 export function footerTemplate(footer: string): string {
-  return `<div style="font-size:8px;width:100%;padding:0 15mm;color:#555;font-family:Helvetica,Arial,sans-serif;display:flex;justify-content:space-between"><span>${escapeHtml(footer)}</span><span>page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
+  return `<div style="${TEMPLATE_STYLE}"><span>${escapeHtml(footer)}</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
 }
 
 /** Print `html` on an open page: no JavaScript, no network (only data: URLs load). */
@@ -55,6 +57,7 @@ export async function printOnPage(page: PdfPage, html: string, opts: Omit<PdfOpt
     printBackground: true,
     margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
     displayHeaderFooter: true,
+    // The running header is a CSS page-margin box in the HTML (so it can skip the first page).
     headerTemplate: "<span></span>",
     footerTemplate: footerTemplate(opts.footer),
   });

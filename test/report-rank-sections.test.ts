@@ -153,6 +153,11 @@ describe("rendering the rank sections", () => {
     }
     expect(md).toContain("Tracked keyword rank trends");
     expect(md).toContain("Rank trends: crawlmark's stored rank checks");
+    // White label: the same line without crawlmark's name.
+    const wl = await exportReport(report, { formats: ["md"], reportsDir: join(mkdtempSync(join(tmpdir(), "crawlmark-b5-wl-")), "reports"), branding: { hideCrawlmark: true }, version: "0.1.0", printer });
+    const wlMd = readFileSync(wl.files[0]!.path, "utf8");
+    expect(wlMd).toContain("Rank trends: stored rank checks");
+    expect(wlMd).not.toMatch(/crawlmark/i);
     // Markdown: no raw HTML, and the | escaped inside the table cell (a # inside a cell can't start a heading).
     expect(md).not.toMatch(/(?<!\\)<img/);
     expect(md).toContain("| # \\<img src=x onerror=alert(1)\\> \\| pipes | 1,900 | 41 | competitor-a.example (3) |");

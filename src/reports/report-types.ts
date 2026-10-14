@@ -23,6 +23,21 @@ export interface ComparedTotals {
   previous: PeriodTotals | null;
 }
 
+/** One day of Search Console totals (the `date` dimension). */
+export interface DailySearchPoint {
+  date: string;
+  clicks: number;
+  impressions: number;
+}
+
+/** A daily series for the period and its first comparison (charts in the report files). */
+export interface DailySeries<T> {
+  current: T[];
+  /** The first comparison's days, or null when there is no comparison or it couldn't be fetched. */
+  previous: T[] | null;
+  comparedWith: Comparison | null;
+}
+
 export interface SearchOverviewData {
   metrics: ("clicks" | "impressions" | "ctr" | "position")[];
   current: PeriodTotals;
@@ -30,6 +45,8 @@ export interface SearchOverviewData {
   vsPreviousYear: ComparedTotals | null;
   /** Why a comparison is null because its fetch failed (tool result only; the files show fixed text). */
   comparisonErrors?: Partial<Record<Comparison, string>>;
+  /** Clicks and impressions per day (free; absent when the daily rows couldn't be fetched). */
+  daily?: DailySeries<DailySearchPoint>;
 }
 
 export interface SplitSide {
@@ -56,6 +73,8 @@ export interface OrganicTrafficData {
   engagementRate: { value: number; change: number | null };
   keyEvents: { value: number; change: number | null };
   previous: { sessions: number; users: number; engagementRate: number; keyEvents: number } | null;
+  /** Organic sessions per day (GA4 `date` dimension; absent when it couldn't be fetched). */
+  daily?: DailySeries<{ date: string; sessions: number }>;
 }
 
 export interface QueryRowOut {
@@ -69,6 +88,9 @@ export interface QueryRowOut {
 
 export interface TopRowsData {
   rows: QueryRowOut[];
+  /** top_queries with `intent: local`: the rows are local-intent searches, or (fallback) the top queries overall when there were none. */
+  intent?: "local";
+  intentFallback?: boolean;
 }
 
 export interface Mover {
@@ -204,7 +226,13 @@ export interface RankTrendData {
   since: string;
   until: string;
   source: "gsc" | "serp" | "both";
-  keywords: { keyword: string; gsc?: RankTrendSummary; serp?: RankTrendSummary }[];
+  keywords: {
+    keyword: string;
+    gsc?: RankTrendSummary;
+    serp?: RankTrendSummary;
+    /** The stored points (at most RANK_SERIES_MAX per source, evenly thinned), for the trend chart. */
+    series?: { gsc?: { day: string; rank: number | null }[]; serp?: { day: string; rank: number | null }[] };
+  }[];
 }
 
 export interface KeywordGapData {
@@ -318,7 +346,7 @@ export interface Highlight {
 export interface TemplateReport {
   reportId: string;
   client: { slug: string; name: string; domain: string };
-  template: { id: string; title: string; source: TemplateSource };
+  template: { id: string; title: string; source: TemplateSource; layout?: "onepage" };
   period: { current: DateRange; label: string; folderMonth: string; comparisons: { previous_period?: DateRange; previous_year?: DateRange } };
   generatedAt: string;
   sections: SectionResult[];

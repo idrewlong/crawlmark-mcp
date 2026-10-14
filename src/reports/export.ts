@@ -54,6 +54,8 @@ export interface ExportResult {
   files: ExportedFile[];
   inline?: { mimeType: "text/html" | "text/markdown"; title: string; content: string };
   sectionErrors: { id: string; error: string }[];
+  /** Paid data this report's run used (operator-only: never rendered into the files). Present when anything was spent. */
+  spend?: TemplateReport["spend"];
   warnings: string[];
 }
 
@@ -170,6 +172,13 @@ export async function exportReport(report: TemplateReport, opts: ExportOptions):
     }
     files.push(writeReportFile(opts.reportsDir, report, format, data));
   }
+  // No PDF (usually no Chrome) and no HTML asked for: write the HTML the PDF would have been printed from, so
+  // there is still a file to open. The warning is in the result, never in the file.
+  if (failed.includes("pdf") && !opts.formats.includes("html")) {
+    files.push(writeReportFile(opts.reportsDir, report, "html", toHtml(doc)));
+    failed.splice(failed.indexOf("pdf"), 1);
+    warnings.push("Wrote HTML instead of the PDF; open it in a browser, or print it to PDF from there.");
+  }
   if (opts.formats.length && failed.length === new Set(opts.formats).size && !opts.inline) {
     throw new ReportRenderError(`No report file was written. ${warnings.join(" ")}`);
   }
@@ -191,6 +200,7 @@ export async function exportReport(report: TemplateReport, opts: ExportOptions):
     files,
     ...(inline ? { inline } : {}),
     sectionErrors: report.sections.flatMap((s) => (s.status === "error" ? [{ id: s.id, error: s.error }] : [])),
+    ...(report.spend.usd > 0 || report.spend.units.ahrefs > 0 || report.spend.units.semrush > 0 ? { spend: report.spend } : {}),
     warnings,
   };
 }

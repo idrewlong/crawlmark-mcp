@@ -16,7 +16,8 @@ const opts = (h = home(), extra = {}) => ({ homeDir: h, today, month: "2026-09",
 describe("runTemplate", () => {
   it("runs the builtin monthly in template order, optional sections only when included", async () => {
     const r = await runTemplate(client, opts(), fakeDeps());
-    expect(r.sections.map((s) => s.id)).toEqual(["search", "brand", "traffic", "queries", "query-movers", "pages", "page-movers", "landing", "tracked", "opportunities", "audit", "spend"]);
+    // Paid data spend is opt-in (operator information), so the default run has 11 sections.
+    expect(r.sections.map((s) => s.id)).toEqual(["search", "brand", "traffic", "queries", "query-movers", "pages", "page-movers", "landing", "tracked", "opportunities", "audit"]);
     expect(r.sections.every((s) => s.status === "ok")).toBe(true);
     expect(r.period).toMatchObject({ label: "September 2026", folderMonth: "2026-09" });
     expect(r.template).toEqual({ id: "monthly", title: "Monthly SEO report", source: "builtin" });
@@ -32,6 +33,36 @@ describe("runTemplate", () => {
       vsPreviousPeriod: { clicks: { value: 1120, change: 17.6 }, previous: { clicks: 952 } },
       vsPreviousYear: { clicks: { value: 1120, change: 66.7 }, previous: { clicks: 672 } },
     });
+  });
+
+  it("search and organic traffic carry daily series for the charts; a failed daily fetch drops only the series", async () => {
+    const r = await runTemplate(client, opts(), fakeDeps());
+    const search = r.sections.find((s) => s.id === "search") as Extract<SectionResult, { status: "ok" }>;
+    const daily = (search.data as { daily: { current: { date: string; clicks: number }[]; previous: unknown[]; comparedWith: string } }).daily;
+    expect(daily.current).toHaveLength(30);
+    expect(daily.current[0]!.date).toBe("2026-09-01");
+    expect(daily.current.reduce((a, d) => a + d.clicks, 0)).toBeGreaterThan(1100);
+    expect(daily.previous).toHaveLength(31);
+    expect(daily.comparedWith).toBe("previous_period");
+    const traffic = r.sections.find((s) => s.id === "traffic") as Extract<SectionResult, { status: "ok" }>;
+    expect((traffic.data as { daily: { current: unknown[] } }).daily.current).toHaveLength(30);
+
+    const base = fakeDeps();
+    const failing = fakeDeps({
+      gscQuery: async (c, o) => {
+        if (o.dimensions?.join() === "date") throw new Error("boom");
+        return base.gscQuery(c, o);
+      },
+      ga4OrganicDaily: async () => {
+        throw new Error("boom");
+      },
+    });
+    const r2 = await runTemplate(client, opts(), failing);
+    for (const id of ["search", "traffic"]) {
+      const s = r2.sections.find((x) => x.id === id)!;
+      expect(s.status).toBe("ok");
+      expect((s as { data: { daily?: unknown } }).data.daily).toBeUndefined();
+    }
   });
 
   it("rejects unknown or non-optional include ids", async () => {

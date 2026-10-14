@@ -65,3 +65,24 @@ export function previousRange(r: DateRange): DateRange {
   const end = parseDay(r.startDate) - MS_DAY;
   return { startDate: iso(new Date(end - (days - 1) * MS_DAY)), endDate: iso(new Date(end)) };
 }
+
+/** Every date from start to end, inclusive (YYYY-MM-DD, UTC), at most `max` of them. */
+export function eachDay(r: DateRange, max = 500): string[] {
+  const out: string[] = [];
+  const end = Date.parse(`${r.endDate}T00:00:00Z`);
+  for (let t = Date.parse(`${r.startDate}T00:00:00Z`); t <= end && out.length < max; t += 86_400_000) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+
+/**
+ * One row per day from the first to the last day that has data (within the range), in order: a gap in between
+ * gets `zero(date)`, so a chart's x-axis and weeks stay true. Days before the first or after the last row are
+ * left out, not zeroed: Search Console and GA4 lag a few days, and unreported days aren't days with no traffic.
+ */
+export function fillDays<T extends { date: string }>(r: DateRange, rows: T[], zero: (date: string) => T): T[] {
+  const inRange = rows.filter((x) => x.date >= r.startDate && x.date <= r.endDate);
+  if (!inRange.length) return [];
+  const dates = inRange.map((x) => x.date).sort();
+  const byDay = new Map(inRange.map((x) => [x.date, x]));
+  return eachDay({ startDate: dates[0]!, endDate: dates.at(-1)! }).map((d) => byDay.get(d) ?? zero(d));
+}

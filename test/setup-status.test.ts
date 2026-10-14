@@ -36,7 +36,7 @@ describe("setup_status", () => {
     const r = await collectSetupStatus(providers());
     const s = Object.fromEntries(r.integrations.map((i) => [i.id, i]));
     // Phase 12 adds the crux, bing and aivisibility rows (missing here: no CrUX or Bing key, AI visibility off).
-    expect(r.integrations.map((i) => i.id)).toEqual(["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "bing", "aivisibility", "chrome", "clients"]);
+    expect(r.integrations.map((i) => i.id)).toEqual(["home", "dataforseo", "seoprovider", "ahrefs", "semrush", "google", "gsc", "ga4", "tagmanager", "psi", "crux", "bing", "aivisibility", "branding", "chrome", "clients"]);
     expect(s.dataforseo).toMatchObject({ state: "working", next: null, data: { mode: "sandbox", balanceUsd: 12.5 } });
     expect(s.dataforseo!.detail).toContain("$12.50");
     expect(s.google).toMatchObject({ state: "working", data: { mode: "service_account", email: "svc@proj.iam.gserviceaccount.com" } });
@@ -46,8 +46,8 @@ describe("setup_status", () => {
     expect(s.psi).toMatchObject({ state: "missing", next: `${CLI} setup --step psi` });
     expect(s.chrome!.state).toBe("working");
     expect(s.clients).toMatchObject({ state: "working", data: { count: 2, ignored: 1 } });
-    // Phase 9: the data-provider row works (DataForSEO by default); the optional Ahrefs and Semrush rows are "missing".
-    expect(r.summary).toEqual({ working: 9, configured: 0, missing: 6, error: 0 });
+    // Phase 9: the data-provider row works (DataForSEO by default); the optional Ahrefs and Semrush rows are "missing", and so is report branding (not set).
+    expect(r.summary).toEqual({ working: 9, configured: 0, missing: 7, error: 0 });
     expect(r.costUsd).toBe(0);
     expect(JSON.stringify(r)).not.toMatch(/password|secret/i);
   });

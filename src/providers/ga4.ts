@@ -86,6 +86,16 @@ export async function ga4OrganicSummary(client: Client, range: DateRange) {
   };
 }
 
+/** Organic sessions per day (GA4 `date` dimension, YYYYMMDD to YYYY-MM-DD), oldest first. */
+export async function ga4OrganicDaily(client: Client, range: DateRange): Promise<{ date: string; sessions: number }[]> {
+  const rows = await ga4Report(client, { ...range, organicOnly: true, dimensions: ["date"], metrics: ["sessions"], limit: 1000 });
+  // GA4 leaves out days with no sessions; the report fills the gaps between reported days (src/reports/templates/run.ts).
+  return rows
+    .map((r) => ({ date: String(r.date ?? "").replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3"), sessions: Number(r.sessions ?? 0) }))
+    .filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** Top organic landing pages for a date range. */
 export function ga4TopLandingPages(client: Client, range: DateRange, limit = 20) {
   return ga4Report(client, {

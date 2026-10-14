@@ -93,7 +93,7 @@ describe("bing_overview section", () => {
     expect(html).not.toContain('href="https://www.example.com/');
   });
 
-  it("a comparison Bing has no data for renders n/a, not zeros (R-1)", async () => {
+  it("a comparison Bing has no data for is left out (no zeros, no n/a column), with the note (R-1)", async () => {
     const yearly = TEMPLATE.replace("period: { range: last_month }", "period: { range: last_month }\n    compare: [previous_year]");
     const report = await fixtureReport({ homeDir: homeWith(yearly), template: "bing", include: [] }, fakeDeps({ bingOverview: (c, req) => bingOverview(c, req, { key: KEY, fetchImpl, refresh: true }) }));
     const s = report.sections.find((x) => x.id === "bing") as { status: string; data: { previous: unknown; comparedWith: { which: string }; totals: { change: unknown } } };
@@ -104,8 +104,11 @@ describe("bing_overview section", () => {
     const dir = join(mkdtempSync(join(tmpdir(), "crawlmark-c3-na-")), "reports");
     const out = await exportReport(report, { formats: ["md"], reportsDir: dir, branding: {}, version: "0.1.0", printer: async () => Buffer.from("") });
     const md = readFileSync(out.files[0]!.path, "utf8");
-    expect(md).toContain("| Clicks | 390 | n/a | n/a |");
-    expect(md).toContain("| CTR | 11.61% | n/a | n/a |");
+    // Redesign: a comparison column without data is dropped; Bing's own note says why.
+    expect(md).toContain("| Metric | This period |");
+    expect(md).toContain("| Clicks | 390 |");
+    expect(md).toContain("| CTR | 11.61% |");
+    expect(md).not.toContain("| Clicks | 390 | n/a");
     expect(md).not.toMatch(/\| Clicks \| 390 \| 0 \|/);
     expect(md).toMatch(/Bing returned no traffic for the previous year/);
   });
