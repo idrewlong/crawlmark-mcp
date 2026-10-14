@@ -112,7 +112,11 @@
     },
     {
       "name": "inspect_index_coverage",
-      "description": "Inspect key pages, top Search Console pages and a rotating sample of sitemap URLs with Google's URL Inspection API (free, read-only) within a daily per-property budget, and store the results."
+      "description": "Inspect key pages, top Search Console pages and a rotating sample of sitemap URLs with Google's URL Inspection API (free, read-only) within a daily per-property budget, and store the results. all: true checks every page when the budget allows."
+    },
+    {
+      "name": "import_index_report",
+      "description": "Import an export of Search Console's Pages report (zip of CSVs, .xlsx or CSV) from an allowed folder, so index_coverage and the indexing report show Google's counts per reason. Parsed locally, free."
     },
     {
       "name": "local_crawl_pages",

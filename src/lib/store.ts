@@ -275,3 +275,52 @@ export function migrateHistoryPurchases(database: DatabaseSync): boolean {
 }
 
 migrateHistoryPurchases(db);
+
+/**
+ * Indexing "check all pages" (2026-10-14): the newest sitemap URL set seen per client and Search Console property
+ * (normalised, in-property, capped), so index_coverage can say how many sitemap URLs have been checked recently and
+ * when the check is complete. One row per client and property, replaced on every inspection run. Additive and idempotent.
+ */
+export function migrateInspectionUrlSets(database: DatabaseSync): boolean {
+  const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'inspection_url_sets'").get() !== undefined;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS inspection_url_sets (
+      client      TEXT NOT NULL,
+      property    TEXT NOT NULL,
+      captured_at INTEGER NOT NULL,
+      urls        TEXT NOT NULL,
+      PRIMARY KEY (client, property)
+    );
+  `);
+  return !existed;
+}
+
+migrateInspectionUrlSets(db);
+
+/**
+ * Search Console Pages report imports (2026-10-14, docs/research/2026-10-14-gsc-pages-export.md): one row per
+ * imported export (a summary with per-reason counts, or one reason's drilldown with example URLs), keyed so that
+ * importing the same export again replaces it. pages-exports.ts deletes rows older than 400 days on insert.
+ * Additive and idempotent.
+ */
+export function migratePagesExports(database: DatabaseSync): boolean {
+  const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'gsc_pages_exports'").get() !== undefined;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS gsc_pages_exports (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      client      TEXT NOT NULL,
+      property    TEXT NOT NULL,
+      kind        TEXT NOT NULL,
+      reason      TEXT NOT NULL DEFAULT '',
+      exported_on TEXT NOT NULL,
+      imported_at INTEGER NOT NULL,
+      source_name TEXT NOT NULL,
+      data        TEXT NOT NULL,
+      UNIQUE (client, property, kind, reason, exported_on)
+    );
+    CREATE INDEX IF NOT EXISTS gsc_pages_exports_latest ON gsc_pages_exports (client, property, kind, exported_on DESC);
+  `);
+  return !existed;
+}
+
+migratePagesExports(db);

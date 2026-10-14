@@ -5,7 +5,9 @@
  * usage error or when every client failed. Clients without a Search Console property are skipped.
  */
 import type { Client } from "./config.js";
+import { stripControl } from "./lib/terminal-text.js";
 import type { InspectOptions, InspectResult } from "./reports/indexing.js";
+import type { ImportResult } from "./reports/pages-import.js";
 
 export interface IndexCoverageFlags {
   client?: string | undefined;
@@ -13,6 +15,8 @@ export interface IndexCoverageFlags {
   max?: string | undefined;
   "stale-days"?: string | undefined;
   "dry-run": boolean;
+  /** Check every key, top and sitemap page when today's budget allows; else continue the rotation and say how many runs a full pass needs. */
+  "all-pages"?: boolean | undefined;
 }
 
 export interface IndexCoverageCliDeps {
@@ -33,6 +37,8 @@ export interface IndexCoverageOutput {
 
 /** The CLI's run cap (spec 13.13: 200 per run; the tool's default is 100). */
 export const CLI_DEFAULT_MAX = 200;
+/** --all-pages runs from a terminal or cron, not the MCP tool's 10-minute call, so it may run longer (1,000 inspections at 60 a minute is about 17 minutes). */
+export const CLI_ALL_PAGES_TIME_LIMIT_MS = 45 * 60_000;
 
 const int = (v: string | undefined, min: number, max: number): number | null | undefined => {
   if (v === undefined) return undefined;
@@ -47,6 +53,8 @@ export async function indexCoverageCommand(args: string[], flags: IndexCoverageF
   if (max === null) return io.usage("--max must be a whole number from 1 to 500.");
   const staleDays = int(flags["stale-days"], 1, 90);
   if (staleDays === null) return io.usage("--stale-days must be a whole number from 1 to 90.");
+  const allPages = flags["all-pages"] === true;
+  if (allPages && max !== undefined) return io.usage("--all-pages checks every page the budget allows; leave out --max.");
 
   let sel: Awaited<ReturnType<IndexCoverageCliDeps["loadClients"]>>;
   try {
@@ -69,7 +77,7 @@ export async function indexCoverageCommand(args: string[], flags: IndexCoverageF
     }
     attempted++;
     try {
-      const r = await deps.run(client, { maxInspections: max ?? CLI_DEFAULT_MAX, ...(staleDays ? { staleDays } : {}), dryRun: flags["dry-run"] });
+      const r = await deps.run(client, { ...(allPages ? { all: true, timeLimitMs: CLI_ALL_PAGES_TIME_LIMIT_MS } : { maxInspections: max ?? CLI_DEFAULT_MAX }), ...(staleDays ? { staleDays } : {}), dryRun: flags["dry-run"] });
       const { notes, ...rest } = r;
       results.push({ client: client.slug, ...rest, ...(notes.length ? { notes } : {}) });
       if (!flags["dry-run"] && (r.stoppedBy === "quota" || r.stoppedBy === "errors" || r.failed > 0)) attention = true;
@@ -85,4 +93,42 @@ export async function indexCoverageCommand(args: string[], flags: IndexCoverageF
   io.out(JSON.stringify(output, null, 2));
   for (const e of errors) io.warn(`Error: ${e}`);
   return exitCode;
+}
+
+export interface IndexImportFlags {
+  client?: string | undefined;
+  all: boolean;
+  reason?: string | undefined;
+  "confirm-property"?: boolean | undefined;
+  max?: string | undefined;
+  "all-pages"?: boolean | undefined;
+  "dry-run": boolean;
+}
+
+export interface IndexImportDeps {
+  resolveClient(c: string): Promise<Client>;
+  /** Resolve the typed path (a regular file; the user typed it, so no folder restriction), parse and store it. */
+  importFile(client: Client, path: string, opts: { reason?: string | undefined; confirmProperty?: boolean | undefined }): Promise<ImportResult>;
+}
+
+/**
+ * `crawlmark-cli index-coverage import --client <domain|slug> <file> [--reason <text>] [--confirm-property]`: store an export of Search
+ * Console's Pages report (a zip of CSV files, an .xlsx workbook or one CSV) for index_coverage and the
+ * indexing_issues section. Local only. JSON on stdout; exit 0 imported, 1 error (bad usage, unreadable file, not a
+ * Pages export, or an export for another site).
+ */
+export async function indexImportCommand(args: string[], flags: IndexImportFlags, io: { out(l: string): void; warn(l: string): void; usage(problem: string): number }, deps: IndexImportDeps): Promise<number> {
+  if (flags.all || !flags.client) return io.usage("index-coverage import takes --client <domain|slug> and one export file.");
+  if (flags.max !== undefined || flags["all-pages"] || flags["dry-run"]) return io.usage("index-coverage import takes only --client, --reason and one export file.");
+  if (args.length !== 1) return io.usage(`index-coverage import takes one export file${args.length ? `, got ${args.length}` : ""}.`);
+  if (flags.reason !== undefined && !flags.reason.trim()) return io.usage("--reason needs the reason's name, e.g. \"Crawled - currently not indexed\".");
+  try {
+    const client = await deps.resolveClient(flags.client);
+    const r = await deps.importFile(client, args[0]!, { reason: flags.reason, confirmProperty: flags["confirm-property"] === true });
+    io.out(JSON.stringify({ command: "index-coverage import", importedAt: new Date().toISOString(), ...r }, null, 2));
+    return 0;
+  } catch (err) {
+    io.warn(`Error: ${stripControl((err as Error).message)}`);
+    return 1;
+  }
 }

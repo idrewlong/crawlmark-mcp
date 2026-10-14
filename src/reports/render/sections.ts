@@ -451,6 +451,8 @@ function competitorBlocks(data: CompetitorOverviewData, _report: TemplateReport,
   return blocks;
 }
 
+/** The most Search Console reasons listed per table in the indexing section. */
+export const REASON_ROWS_MAX = 50;
 /** The most coverage states shown in the indexing share chart before the rest are grouped as "Other". */
 export const COVERAGE_PARTS = 6;
 
@@ -978,9 +980,45 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
   // as data). The property and today's inspection count are operator detail and never shown.
   indexing_issues: (data: IndexingIssuesData, _r, ctx) => {
     const n = data.sample.inspected;
-    if (!n) return [];
+    const pr = data.pagesReport;
+    if (!n && !pr) return [];
     const notIndexed = n - data.indexed.count;
-    const blocks: Block[] = [
+    const blocks: Block[] = [];
+    // An imported Search Console Pages report: Google's complete counts per reason as of its export date, with
+    // example pages (marked when URL Inspection found them indexed after the export). Reasons and URLs are Google's.
+    if (pr) {
+      const examples = (r: (typeof pr.reasons)[number]): Text => {
+        if (!r.examples.length) return cell("");
+        const shown = r.examples.slice(0, 3);
+        const out: Text = [];
+        shown.forEach((e, i) => {
+          if (i) out.push(t(", "));
+          out.push(...pagePath(e.url, ctx.domain), ...(e.indexedNow ? [t(" (indexed now)")] : []));
+        });
+        const more = (r.examplesTotal ?? r.examples.length) - shown.length;
+        if (more > 0) out.push(t(` and ${fmtInt(more)} more`));
+        return out;
+      };
+      const reasonRows = (group: "not_indexed" | "improve") =>
+        pr.reasons
+          // A reason at 0 pages (Search Console's "~" or "-") isn't a problem to list; index_coverage keeps it.
+          .filter((r) => r.group === group && r.pages !== 0)
+          .slice(0, REASON_ROWS_MAX)
+          .map((r) => [[...severity(r.severity), t(" "), ...d(r.reason)], cell(r.pages === null ? "n/a" : fmtInt(r.pages)), examples(r)]);
+      const when = pr.exportedOn ? `Search Console's Pages report exported on ${fullDay(pr.exportedOn)}` : "Search Console's Pages report (example pages only)";
+      blocks.push({
+        kind: "paragraph",
+        text: [t(`From ${when}${pr.notIndexed !== null ? `: ${fmtInt(pr.notIndexed)} page${pr.notIndexed === 1 ? "" : "s"} not indexed${pr.indexed !== null ? ` and ${fmtInt(pr.indexed)} indexed` : ""}` : ""}.${pr.exportedOn ? " These are Google's own counts for every page it knows, by reason." : " Only example pages were imported, so there are no counts."}`)],
+      });
+      const notIdx = reasonRows("not_indexed");
+      if (notIdx.length) blocks.push({ kind: "table", title: "Why pages aren't indexed (Search Console)", header: ["Reason", "Pages", "Example pages"], rows: notIdx, numeric: [false, true, false] });
+      const improve = reasonRows("improve");
+      if (improve.length) blocks.push({ kind: "table", title: "Indexed, with a problem (Search Console)", header: ["Reason", "Pages", "Example pages"], rows: improve, numeric: [false, true, false] });
+      const since = pr.reasons.reduce((a, r) => a + r.indexedSince, 0);
+      if (since) blocks.push({ kind: "note", text: [t(`${fmtInt(since)} example page${since === 1 ? " was" : "s were"} indexed when URL Inspection checked ${since === 1 ? "it" : "them"} after the export ("indexed now").`)] });
+    }
+    if (!n) return blocks;
+    blocks.push(
       {
         kind: "kpiRow",
         items: [
@@ -990,7 +1028,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
           { label: "Canonical chosen differently", value: fmtInt(data.canonicalMismatches) },
         ],
       },
-    ];
+    );
     if (data.byCoverage.length) {
       const top = data.byCoverage.slice(0, COVERAGE_PARTS);
       const rest = data.byCoverage.slice(COVERAGE_PARTS).reduce((a, x) => a + x.count, 0);
@@ -1047,12 +1085,19 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
       });
     }
     const s = data.sample;
+    const cov = data.coverage;
+    const covDays = cov?.windowDays ? ` in the last ${fmtInt(cov.windowDays)} day${cov.windowDays === 1 ? "" : "s"}` : "";
     blocks.push({
       kind: "note",
       text: [
         t(
-          `Based on Google's URL Inspection of ${fmtInt(n)} pages (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's full Page indexing report. ` +
-            `${fmtInt(s.keyPages)} key page${s.keyPages === 1 ? "" : "s"} and ${fmtInt(s.sitemapUrls)} sitemap URL${s.sitemapUrls === 1 ? "" : "s"}${s.sitemapUrlsKnown ? ` (of about ${fmtInt(s.sitemapUrlsKnown)} submitted)` : ""} were checked${s.oldestDays !== null ? `; the oldest result is ${fmtInt(s.oldestDays)} day${s.oldestDays === 1 ? "" : "s"} old` : ""}.`,
+          cov?.complete
+            ? // Every URL in the site's sitemaps has a recent result: say so instead of calling it a sample.
+              `Based on Google's URL Inspection of all ${fmtInt(cov.sitemapUrls)} sitemap page${cov.sitemapUrls === 1 ? "" : "s"} (checked${covDays}) plus key pages and top Search Console pages, ${fmtInt(n)} pages in all.` +
+                `${s.oldestDays !== null ? ` The oldest result is ${fmtInt(s.oldestDays)} day${s.oldestDays === 1 ? "" : "s"} old.` : ""}`
+            : `Based on Google's URL Inspection of ${fmtInt(n)} pages (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's full Page indexing report. ` +
+                `${fmtInt(s.keyPages)} key page${s.keyPages === 1 ? "" : "s"} and ${fmtInt(s.sitemapUrls)} sitemap URL${s.sitemapUrls === 1 ? "" : "s"}${s.sitemapUrlsKnown ? ` (of about ${fmtInt(s.sitemapUrlsKnown)} submitted)` : ""} were checked${s.oldestDays !== null ? `; the oldest result is ${fmtInt(s.oldestDays)} day${s.oldestDays === 1 ? "" : "s"} old` : ""}.` +
+                (cov && cov.sitemapUrls ? ` ${fmtInt(cov.checked)} of the ${fmtInt(cov.sitemapUrls)} URLs in the site's sitemaps were checked${covDays || " in the last 30 days"}.` : ""),
         ),
       ],
     });

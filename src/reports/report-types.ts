@@ -472,7 +472,44 @@ export interface IndexingIssuesData {
   trend: { month: string; inspected: number; indexedShare: number | null }[];
   /** Operator-only (tool result; never rendered). */
   quota: { day: string; used: number; budget: number; exhausted: boolean };
+  /**
+   * The newest stored sitemap URL set (from the last inspection run that read the sitemaps): how many had a
+   * successful inspection in the last 30 days, and whether that's all of them. Absent before the first such run.
+   */
+  coverage?: { sitemapUrls: number; checked: number; windowDays: number | null; complete: boolean; listedAt: string } | undefined;
+  /** Search Console's Pages report, from the newest imported export (import_index_report). Absent when none was imported. */
+  pagesReport?: PagesReportData | undefined;
   notes: string[];
+}
+
+/**
+ * An imported Search Console Pages report: complete per reason (Google's own counts) as of its export date, with
+ * example URLs from imported drilldowns. URL Inspection is fresher per URL: an example inspected after the export
+ * says whether Google indexes it now.
+ */
+export interface PagesReportData {
+  /** The summary's export date (YYYY-MM-DD), or null when only drilldowns were imported. */
+  exportedOn: string | null;
+  importedAt: string;
+  indexed: number | null;
+  notIndexed: number | null;
+  reasons: {
+    reason: string;
+    /** not_indexed: "Why pages aren't indexed"; improve: indexed, with a problem. */
+    group: "not_indexed" | "improve";
+    severity: IssueSeverity;
+    /** Google's count from the summary; null when only a drilldown names the reason. */
+    pages: number | null;
+    source: string | null;
+    validation: string | null;
+    /** Up to 10 example URLs from the newest drilldown for the reason. */
+    examples: { url: string; lastCrawled: string | null; inspectedAt: string | null; indexedNow: boolean | null }[];
+    /** URLs in that drilldown (Search Console exports at most 1,000). */
+    examplesTotal: number | null;
+    examplesExportedOn: string | null;
+    /** Of the drilldown's stored URLs, how many URL Inspection found indexed after the export. */
+    indexedSince: number;
+  }[];
 }
 
 // ---------------------------------------------------------------- Phase 13 B (spec 13.6.2)

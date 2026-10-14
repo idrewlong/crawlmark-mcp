@@ -19,10 +19,22 @@ export class LogAccessError extends Error {
 
 /** LOG_DIRS (comma-separated absolute directories) plus <home>/logs. Relative entries are ignored and reported. */
 export function logDirsFrom(raw: string | undefined, homeDir: string): { dirs: string[]; ignored: string[] } {
+  return allowedDirsFrom(raw, homeDir, "logs");
+}
+
+/** Comma-separated absolute directories (LOG_DIRS, IMPORT_DIRS) plus <home>/<sub>. Relative entries are ignored and reported. */
+export function allowedDirsFrom(raw: string | undefined, homeDir: string, sub: string): { dirs: string[]; ignored: string[] } {
   const entries = (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const ignored = entries.filter((d) => !isAbsolute(d));
-  return { dirs: [...new Set([...entries.filter((d) => isAbsolute(d)), join(homeDir, "logs")])], ignored };
+  return { dirs: [...new Set([...entries.filter((d) => isAbsolute(d)), join(homeDir, sub)])], ignored };
 }
+
+/** What a refusal calls the files and the folders: log files by default; Search Console exports for import_index_report. */
+export interface AccessLabel {
+  file: string;
+  dirs: string;
+}
+export const LOG_LABEL: AccessLabel = { file: "log file", dirs: "log directories" };
 
 /** The allowed directories that exist, resolved (realpath). */
 export async function existingDirs(dirs: string[]): Promise<{ dir: string; real: string }[]> {
@@ -82,26 +94,28 @@ export interface ResolvedLogFile {
  * Expand names or globs (`*`, `?` in the last segment) relative to the allowed directories.
  * An explicit name that is outside, a symlink out, or not a regular file throws; a glob match like that is skipped and noted.
  */
-export async function resolveAllowedLogFiles(patterns: string[], allowed: { dir: string; real: string }[], maxFiles = 50): Promise<{ files: ResolvedLogFile[]; notes: string[] }> {
+export async function resolveAllowedLogFiles(patterns: string[], allowed: { dir: string; real: string }[], maxFiles = 50, label: AccessLabel = LOG_LABEL): Promise<{ files: ResolvedLogFile[]; notes: string[] }> {
+  const L = label;
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const files: ResolvedLogFile[] = [];
   const seen = new Set<string>();
   const notes: string[] = [];
   const shown = (p: string) => stripControl(p).slice(0, 300);
   for (const pattern of patterns) {
-    if (pattern.includes("\0")) throw new LogAccessError("A log file name contains a NUL character.");
+    if (pattern.includes("\0")) throw new LogAccessError(`A ${L.file} name contains a NUL character.`);
     const isGlob = /[*?]/.test(basename(pattern));
     if (/[*?]/.test(dirname(pattern))) throw new LogAccessError(`Wildcards are allowed only in the file name, not in directories: ${shown(pattern)}`);
-    if ((basename(pattern).match(/[*?]/g) ?? []).length > MAX_GLOB_WILDCARDS) throw new LogAccessError(`A log file pattern can have at most ${MAX_GLOB_WILDCARDS} wildcards: ${shown(pattern)}`);
-    if (!isAbsolute(pattern) && pattern.split(/[\\/]/).includes("..")) throw new LogAccessError(`Log file names can't contain "..": ${shown(pattern)}`);
+    if ((basename(pattern).match(/[*?]/g) ?? []).length > MAX_GLOB_WILDCARDS) throw new LogAccessError(`A ${L.file} pattern can have at most ${MAX_GLOB_WILDCARDS} wildcards: ${shown(pattern)}`);
+    if (!isAbsolute(pattern) && pattern.split(/[\\/]/).includes("..")) throw new LogAccessError(`${cap(L.file)} names can't contain "..": ${shown(pattern)}`);
     // An absolute path is checked lexically before the filesystem is touched, so a refusal never says whether a file exists elsewhere.
     if (isAbsolute(pattern) && !allowed.some((a) => inside(resolve(pattern), a.dir) || inside(resolve(pattern), a.real))) {
-      throw new LogAccessError(`Refusing ${shown(pattern)}: it is outside the allowed log directories.`);
+      throw new LogAccessError(`Refusing ${shown(pattern)}: it is outside the allowed ${L.dirs}.`);
     }
     // Absolute: only when inside an allowed directory (checked below). Relative: under each allowed directory.
     const bases = isAbsolute(pattern) ? [{ dir: dirname(pattern), root: null as { dir: string; real: string } | null }] : allowed.map((a) => ({ dir: join(a.dir, dirname(pattern)), root: a }));
     let matched = 0;
     // One message for "not there", "outside", "symlink out" and "not a regular file", so a refusal is no existence oracle.
-    const unreadable = `No readable log file ${shown(pattern)} inside the allowed log directories (it must be a regular file there; symlinks pointing elsewhere are refused).`;
+    const unreadable = `No readable ${L.file} ${shown(pattern)} inside the allowed ${L.dirs} (it must be a regular file there; symlinks pointing elsewhere are refused).`;
     for (const b of bases) {
       // The base directory is resolved and checked before anything in it is listed or looked up (SEC-5).
       let realBase: string;
@@ -137,14 +151,14 @@ export async function resolveAllowedLogFiles(patterns: string[], allowed: { dir:
           /* missing or dangling: unreadable */
         }
         if (!real || !root || !isFile) {
-          if (isGlob) notes.push(`Skipped ${shown(name)}: not a regular file inside the allowed log directories.`);
+          if (isGlob) notes.push(`Skipped ${shown(name)}: not a regular file inside the allowed ${L.dirs}.`);
           continue;
         }
         matched++;
         if (seen.has(real)) continue;
         seen.add(real);
         if (files.length >= maxFiles) {
-          notes.push(`Only the first ${maxFiles} log files were read.`);
+          notes.push(`Only the first ${maxFiles} ${L.file}s were read.`);
           continue;
         }
         files.push({ name: shown(relative(root.real, candidate) || name), path: real, identity, strict: true });
@@ -152,21 +166,21 @@ export async function resolveAllowedLogFiles(patterns: string[], allowed: { dir:
     }
     if (!matched) {
       if (!isGlob) throw new LogAccessError(unreadable);
-      notes.push(`No log file matched ${shown(pattern)}.`);
+      notes.push(`No ${L.file} matched ${shown(pattern)}.`);
     }
   }
   return { files, notes: [...new Set(notes)] };
 }
 
 /** CLI paths (the user typed them): each must be an existing regular file. */
-export async function resolveCliLogFiles(paths: string[]): Promise<ResolvedLogFile[]> {
+export async function resolveCliLogFiles(paths: string[], label: AccessLabel = LOG_LABEL): Promise<ResolvedLogFile[]> {
   const out: ResolvedLogFile[] = [];
   for (const p of paths) {
     let st;
     try {
       st = await stat(p);
     } catch {
-      throw new LogAccessError(`No such log file: ${stripControl(p)}`);
+      throw new LogAccessError(`No such ${label.file}: ${stripControl(p)}`);
     }
     if (!st.isFile()) throw new LogAccessError(`Not a regular file: ${stripControl(p)}`);
     out.push({ name: stripControl(p).slice(0, 300), path: p, identity: { dev: st.dev, ino: st.ino } });

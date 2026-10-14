@@ -74,7 +74,7 @@ export function seededOrder(urls: string[], seed: string): string[] {
  * (also only those older than staleDays, so a small site isn't re-inspected the same day). Deduplicated
  * and cut to `max`. URLs outside the Search Console property are never planned.
  */
-export function planPool(o: { property: string; keyPages: readonly string[]; gscTop: readonly string[]; sitemapUrls: readonly string[]; sitemapKnown?: boolean; lastInspected: ReadonlyMap<string, number>; now: number; staleDays: number; seed: string; max: number }): PoolEntry[] {
+export function planPool(o: { property: string; keyPages: readonly string[]; gscTop: readonly string[]; sitemapUrls: readonly string[]; sitemapKnown?: boolean; lastInspected: ReadonlyMap<string, number>; now: number; staleDays: number; seed: string; max: number; onlyListed?: boolean }): PoolEntry[] {
   const sitemap = new Set(o.sitemapUrls.map(normalizeUrl));
   const fresh = (u: string) => {
     const at = o.lastInspected.get(u);
@@ -93,8 +93,58 @@ export function planPool(o: { property: string; keyPages: readonly string[]; gsc
   for (const u of o.keyPages) add(u, "key");
   for (const u of o.gscTop) add(u, "gsc_top");
   for (const u of seededOrder([...sitemap].filter((u) => !o.lastInspected.has(u)), o.seed)) add(u, "sitemap");
-  for (const [u] of [...o.lastInspected.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))) add(u, "oldest");
+  // "Check all pages" (onlyListed): the oldest checks only among the key pages, top pages and sitemap URLs, so a full
+  // pass covers exactly that set and nothing that has dropped out of it.
+  const listed = o.onlyListed ? new Set([...o.keyPages, ...o.gscTop].map(normalizeUrl).concat([...sitemap])) : null;
+  for (const [u] of [...o.lastInspected.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))) if (!listed || listed.has(u)) add(u, "oldest");
   return out;
+}
+
+/** The unique in-property http(s) URLs among key pages, top Search Console pages and sitemap URLs: what "check all pages" covers. */
+export function fullPassSet(o: { property: string; keyPages: readonly string[]; gscTop: readonly string[]; sitemapUrls: readonly string[] }): Set<string> {
+  const out = new Set<string>();
+  for (const raw of [...o.keyPages, ...o.gscTop, ...o.sitemapUrls]) {
+    const u = normalizeUrl(raw);
+    if (/^https?:\/\//i.test(u) && inProperty(u, o.property)) out.add(u);
+  }
+  return out;
+}
+
+/** A sitemap URL counts as checked when it had a successful inspection within this many days. */
+export const COVERAGE_WINDOW_DAYS = 30;
+
+export interface SitemapProgress {
+  /** Sitemap URLs in the property (the newest stored set). */
+  sitemapUrls: number;
+  /** Of those, how many had a successful inspection within COVERAGE_WINDOW_DAYS. */
+  checked: number;
+  /** Days since the oldest of those checks (at least 1), or null when none. */
+  windowDays: number | null;
+  /** Every sitemap URL checked within the window. */
+  complete: boolean;
+}
+
+/** "N of M sitemap URLs inspected in the last K days" over a sitemap URL set and the latest successful inspection per URL. */
+export function sitemapProgress(urls: readonly string[], lastOk: ReadonlyMap<string, number>, now: number): SitemapProgress {
+  const set = new Set(urls.map(normalizeUrl));
+  let checked = 0;
+  let oldest: number | null = null;
+  for (const u of set) {
+    const at = lastOk.get(u);
+    if (at === undefined || now - at > COVERAGE_WINDOW_DAYS * DAY_MS) continue;
+    checked++;
+    oldest = oldest === null ? at : Math.min(oldest, at);
+  }
+  return { sitemapUrls: set.size, checked, windowDays: oldest === null ? null : Math.max(1, Math.ceil((now - oldest) / DAY_MS)), complete: set.size > 0 && checked === set.size };
+}
+
+/** One line for the tool and the CLI: "all 23 sitemap pages checked (in the last 2 days)" or "120 of 4,000 sitemap URLs checked in the last 30 days". */
+export function progressText(p: SitemapProgress): string {
+  const n = (x: number) => x.toLocaleString("en-US");
+  const days = p.windowDays === null ? "" : ` in the last ${n(p.windowDays)} day${p.windowDays === 1 ? "" : "s"}`;
+  if (!p.sitemapUrls) return "No sitemap URLs in this property are known yet.";
+  if (p.complete) return `Complete: all ${n(p.sitemapUrls)} sitemap page${p.sitemapUrls === 1 ? "" : "s"} checked${days}.`;
+  return `A sample: ${n(p.checked)} of ${n(p.sitemapUrls)} sitemap URLs checked${days || ` in the last ${COVERAGE_WINDOW_DAYS} days`}.`;
 }
 
 const FETCH_LABEL: Record<string, string> = { NOT_FOUND: "Not found (404)", BLOCKED_4XX: "Blocked (4xx)", ACCESS_DENIED: "Access denied (401)", ACCESS_FORBIDDEN: "Access forbidden (403)" };

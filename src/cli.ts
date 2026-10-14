@@ -45,7 +45,7 @@ import { chooseRenderer } from "./setup/ui.js";
 import { closeEgressProxy } from "./lib/egress-proxy.js";
 import { crawlCommand } from "./crawl-cli.js";
 import { logsCommand } from "./logs-cli.js";
-import { indexCoverageCommand } from "./index-coverage-cli.js";
+import { indexCoverageCommand, indexImportCommand } from "./index-coverage-cli.js";
 import { dataCommand } from "./data-cli.js";
 import { seoSnapshotCommand } from "./seo-snapshot-cli.js";
 
@@ -596,6 +596,9 @@ async function main(argv: string[]): Promise<number> {
       "no-verify": { type: "boolean", default: false },
       max: { type: "string" },
       "stale-days": { type: "string" },
+      "all-pages": { type: "boolean", default: false },
+      reason: { type: "string" },
+      "confirm-property": { type: "boolean", default: false },
       kinds: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -614,6 +617,16 @@ async function main(argv: string[]): Promise<number> {
       run: async (client, opts) => {
         const { runLocalCrawl, loadLocalCrawlDeps } = await import("./reports/local-crawl.js");
         return (await runLocalCrawl(client, opts, await loadLocalCrawlDeps())).result;
+      },
+    });
+  }
+  if (group === "index-coverage" && command === "import") {
+    return indexImportCommand(args, values, { out, warn, usage: scheduledUsage }, {
+      resolveClient,
+      importFile: async (client, path, opts) => {
+        const [{ resolveCliLogFiles }, { importPagesExport }] = await Promise.all([import("./lib/log-files.js"), import("./reports/pages-import.js")]);
+        const [file] = await resolveCliLogFiles([path], { file: "export file", dirs: "" });
+        return importPagesExport(client, file!, { reason: opts.reason, confirmProperty: opts.confirmProperty, now: Date.now() });
       },
     });
   }

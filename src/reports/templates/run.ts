@@ -705,7 +705,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
     // Phase 13 A: a sample, labelled as one in the file; never Search Console's full Page indexing report.
     indexing_issues: async (s: Extract<SectionSpec, { type: "indexing_issues" }>): Promise<IndexingIssuesData> => {
       const r = await deps.indexingSection(client, { maxInspections: s.maxInspections ?? 25, staleDays: s.staleDays ?? 7, limit: s.limit ?? 10, trendMonths: s.trendMonths ?? 6 });
-      if (r.sample.inspected === 0) throw new SectionUnavailableError(`no URL Inspection results for ${client.domain} yet (run crawlmark-cli index-coverage, free)`);
+      if (r.sample.inspected === 0 && !r.pagesReport) throw new SectionUnavailableError(`no URL Inspection results for ${client.domain} yet (run crawlmark-cli index-coverage, free)`);
       return r;
     },
     rank_trend: async (s: Extract<SectionSpec, { type: "rank_trend" }>): Promise<RankTrendData> => {

@@ -84,6 +84,8 @@ const EnvSchema = z.object({
   DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS: z.coerce.number().int().positive().default(5_000),
   // Phase 12 C2: directories log_analysis may read (comma-separated absolute paths); <home>/logs is always allowed.
   LOG_DIRS: z.string().optional(),
+  // Directories import_index_report may read Search Console exports from (comma-separated absolute paths); <home>/imports is always allowed.
+  IMPORT_DIRS: z.string().optional(),
   // Phase 12 C5: AI-search visibility (ai_visibility, DataForSEO LLM Mentions). Off unless exactly "true" (any case).
   AI_VISIBILITY_ENABLED: z.string().optional(),
   // Its own monthly USD sub-cap across all clients, on top of the client and global caps.

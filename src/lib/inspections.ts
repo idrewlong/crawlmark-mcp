@@ -208,3 +208,30 @@ export function markQuotaExhausted(property: string, day: string): void {
   pruneQuota(day);
   db.prepare("INSERT INTO gsc_inspection_quota (property, day, exhausted) VALUES (?, ?, 1) ON CONFLICT (property, day) DO UPDATE SET exhausted = 1").run(property, day);
 }
+
+/** The most sitemap URLs kept in a stored set (the sitemap reader's own URL cap is the same order). */
+export const URL_SET_MAX = 50_000;
+
+/** Replace the client's stored sitemap URL set for a property (normalised, deduplicated, capped). */
+export function saveSitemapSet(client: string, property: string, urls: readonly string[], at: number): void {
+  const list = [...new Set(urls.map((u) => normalizeUrl(u)))].slice(0, URL_SET_MAX);
+  db.prepare("INSERT INTO inspection_url_sets (client, property, captured_at, urls) VALUES (?, ?, ?, ?) ON CONFLICT (client, property) DO UPDATE SET captured_at = excluded.captured_at, urls = excluded.urls").run(client, property, at, JSON.stringify(list));
+}
+
+/** The newest stored sitemap URL set for a client and property, or null. */
+export function storedSitemapSet(client: string, property: string): { urls: string[]; capturedAt: number } | null {
+  const row = db.prepare("SELECT captured_at, urls FROM inspection_url_sets WHERE client = ? AND property = ?").get(client, property) as { captured_at: number; urls: string } | undefined;
+  if (!row) return null;
+  try {
+    const urls = JSON.parse(row.urls) as unknown;
+    return Array.isArray(urls) ? { urls: urls.filter((u): u is string => typeof u === "string"), capturedAt: Number(row.captured_at) } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** When each URL last had a successful inspection for a client and property (normalised URL → ms). */
+export function lastSuccessfulAt(client: string, property: string): Map<string, number> {
+  const rows = db.prepare("SELECT url, MAX(inspected_at) AS at FROM url_inspections WHERE client = ? AND property = ? AND failed = 0 GROUP BY url").all(client, property) as unknown as { url: string; at: number }[];
+  return new Map(rows.map((r) => [r.url, Number(r.at)]));
+}

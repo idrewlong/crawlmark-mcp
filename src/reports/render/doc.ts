@@ -268,7 +268,13 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
     .filter(Boolean);
   if (providers.length) about.push([txt(`Backlinks, organic visibility and competitors: ${providers.join(" and ")} (paid), stored month by month; each figure and its comparison come from the same provider.`)]);
   if (ok("technical_issues")) about.push([txt(`Technical SEO issues: ${whiteLabel ? "saved site audits and crawls" : "crawlmark's saved audits and crawls"}, a stored DataForSEO crawl and Google URL Inspection when available, merged into one list and compared with the previous report.`)]);
-  if (ok("indexing_issues")) about.push([txt("Google indexing: Search Console's URL Inspection of a sample of pages and its sitemap report (free, read-only).")]);
+  if (ok("indexing_issues")) {
+    const ix = report.sections.find((s) => s.type === "indexing_issues" && s.status === "ok") as { data?: { pagesReport?: unknown; coverage?: { complete?: boolean }; sample?: { inspected?: number } } } | undefined;
+    const what = ix?.data?.coverage?.complete ? "of every sitemap page" : "of a sample of pages";
+    // With only an imported export (no inspections yet), the section shows the export alone.
+    if (ix?.data?.pagesReport && ix.data.sample?.inspected === 0) about.push([txt("Google indexing: an export of Search Console's Pages report (imported, read on this machine).")]);
+    else about.push([txt(`Google indexing: Search Console's URL Inspection ${what} and its sitemap report (free, read-only)${ix?.data?.pagesReport ? ", and an export of its Pages report" : ""}.`)]);
+  }
   for (const n of [...ctx.notes, ...report.notes]) about.push([txt(n)]);
   for (const s of report.sections) if (s.status === "error") about.push([txt(statusLine(s))]);
   if (notIncluded.length) about.push([txt(`Not included this time (no data for this period): ${notIncluded.join(", ")}.`)]);

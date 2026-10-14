@@ -362,6 +362,7 @@ export function registerReportTools(server: McpServer) {
         "Google's indexing of a client's site from stored URL Inspection results (the latest per URL): how many checked URLs are indexed, coverage states, the worst URLs (not found, soft 404, " +
         "crawled or discovered but not indexed, duplicates, noindex, blocked by robots.txt), Google's canonical choices, Search Console sitemap errors and warnings, and the share indexed by month. " +
         "It's a sample (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's Page indexing report, which the API doesn't offer; fill it with inspect_index_coverage or crawlmark-cli index-coverage. " +
+        "`coverage` says how many of the sitemap URLs had a check in the last 30 days and whether that's all of them (complete) or a sample. " +
         "Free and local apart from Search Console's sitemap list (cached a day). `quota` is today's URL Inspection use for the property (Pacific-time day).",
       inputSchema: {
         client: clientArg,
@@ -385,10 +386,13 @@ export function registerReportTools(server: McpServer) {
         "Check how Google indexes a client's URLs with Search Console's URL Inspection API (free, read-only; it never asks Google to index anything) and store the results for index_coverage and the indexing_issues report section. " +
         "Order: key pages not checked in `staleDays`, then the top 50 Search Console pages, then sitemap URLs never checked (a sample that rotates weekly), then the oldest checks. " +
         "Stays within GSC_INSPECTION_DAILY_BUDGET per property per Pacific-time day (default 1,000 of Google's 2,000, so other tools keep headroom) and GSC_INSPECTION_PER_MINUTE (default 60); " +
-        "a quota error from Google stops the run and marks the day used up. `dryRun` counts what it would check per origin and inspects nothing. Takes about a second per URL.",
+        "a quota error from Google stops the run and marks the day used up. `dryRun` counts what it would check per origin and inspects nothing. Takes about a second per URL. " +
+        "`all: true` checks every key page, top page and sitemap URL in the property not checked in `staleDays` when they fit in what's left of today's budget and this call's time (at most about 540 at 60 a minute, fewer when Google answers slower than one a second); " +
+        "otherwise it checks as many as fit and `fullPass` says how many daily runs a full pass needs (each run continues where the last stopped). `sitemapCoverage` says how many sitemap URLs have been checked in the last 30 days, and whether that's all of them.",
       inputSchema: {
         client: clientArg,
-        maxInspections: z.number().int().min(1).max(500).optional().describe("URLs to inspect in this run. Default 100."),
+        maxInspections: z.number().int().min(1).max(500).optional().describe("URLs to inspect in this run. Default 100. Leave out with all."),
+        all: z.boolean().optional().describe("Check all pages (key, top Search Console and sitemap URLs) when today's budget allows; else continue the rotation and report how many runs a full pass needs."),
         staleDays: z.number().int().min(1).max(90).optional().describe("A URL checked more recently than this is skipped. Default 7."),
         dryRun: z.boolean().optional().describe("Plan only: counts per origin, no inspection."),
       },
@@ -396,10 +400,10 @@ export function registerReportTools(server: McpServer) {
     },
     handler(
       "inspect_index_coverage",
-      async ({ client, maxInspections, staleDays, dryRun }, { signal }) => {
+      async ({ client, maxInspections, all, staleDays, dryRun }, { signal }) => {
         const c = await resolveClient(client);
         const ix = await import("../reports/indexing.js");
-        return { client: c.slug, ...(await ix.inspectIndexCoverage(c, { maxInspections, staleDays, dryRun, signal }, await ix.loadIndexingDeps())) };
+        return { client: c.slug, ...(await ix.inspectIndexCoverage(c, { maxInspections, all, staleDays, dryRun, signal }, await ix.loadIndexingDeps())) };
       },
       { timeoutMs: TIMEOUTS.auditMs },
     ),

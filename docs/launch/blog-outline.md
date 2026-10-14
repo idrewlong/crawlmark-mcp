@@ -185,6 +185,13 @@ Grouped by job, each with one example question a reader could ask. Mark every li
 - How Google indexes a client's key pages, top Search Console pages and a weekly-rotating sample of sitemap URLs, with Search Console's sitemap errors, from the free URL Inspection API within a daily budget, labelled as a sample in the report. _"Which of example.com's pages aren't indexed, and why?"_
 - New tools `index_coverage` and `inspect_index_coverage`, new command `crawlmark-cli index-coverage --client example.com|--all` for a daily cron, and an optional `indexing` report section.
 
+**Check every page's indexing, and import Search Console's Pages report** (Shipped)
+
+- "Check all pages" for Google indexing: every key, top and sitemap page in one run when today's URL Inspection budget allows, otherwise spread over a few daily runs with progress ("120 of 4,000 sitemap URLs checked in the last 30 days"), and the report says "all 23 sitemap pages checked" once it's complete. _"Check every page on example.com for indexing problems."_
+- `inspect_index_coverage { all: true }` and `crawlmark-cli index-coverage --client example.com --all-pages`.
+- Import Search Console's own Pages report: export it (zip of CSVs, Excel or CSV), and crawlmark shows Google's complete counts per reason in `index_coverage` and the report, with example URLs from each reason's export, marked "indexed now" when a later URL Inspection found them indexed. Parsed on your machine. _"Import the Pages report I downloaded for example.com and tell me what changed."_
+- New tool `import_index_report` and command `crawlmark-cli index-coverage import --client example.com <file>`.
+
 **Backlinks, keyword visibility and competitors in the report** (Shipped)
 
 - Referring domains, backlinks and the provider's own authority metric (labelled, never mixed), ranking keywords by position band with estimated traffic, and top organic competitors (saved ones first) with shared keywords, from the client's own DataForSEO, Ahrefs or Semrush account. Month-over-month comes from figures crawlmark stores locally each month, so re-running a report costs nothing and provider history is bought at most once, only for report templates, with the cost shown before anything is spent. _"Add backlinks and keyword visibility to example.com's September report."_
