@@ -1,0 +1,12 @@
+# Known false positives: fake test keys and a WebSocket handshake sample. One fingerprint per line.
+8424dc67fae12e3b9a7422258161c5d9b03ffd72:test/p13b-storage.test.ts:generic-api-key:173
+8424dc67fae12e3b9a7422258161c5d9b03ffd72:test/p13b-provider-sections.test.ts:generic-api-key:12
+d0b52e3ce0f6f1f140d9f51a6e09a19be88628fa:test/bing.test.ts:generic-api-key:27
+3ab7310f5eff53d19ab27f28bd14794e65827f8f:test/keyword-research-units.test.ts:generic-api-key:12
+3ab7310f5eff53d19ab27f28bd14794e65827f8f:test/keyword-research-units.test.ts:generic-api-key:13
+70e32ed76eac4c6c1686946721c9e3fa4f7db027:test/crux.test.ts:generic-api-key:14
+d31b616c7d99e3481693fe8afdad26003c3e5ec7:src/providers/semrush.ts:generic-api-key:372
+d31b616c7d99e3481693fe8afdad26003c3e5ec7:test/semrush.test.ts:generic-api-key:10
+d31b616c7d99e3481693fe8afdad26003c3e5ec7:test/semrush.test.ts:generic-api-key:11
+d31b616c7d99e3481693fe8afdad26003c3e5ec7:test/setup-providers.test.ts:generic-api-key:545
+b06ea947c9e1c2120878597e4c140ea3d182fe1b:test/url-safety.test.ts:generic-api-key:194

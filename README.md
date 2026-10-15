@@ -662,6 +662,11 @@ npm run inspect      # MCP Inspector
 
 **Known limits:** the Ahrefs, Semrush and Bing Webmaster Tools integrations are in beta (built to the official docs, not yet verified against a live account). Windows is untested, OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
 
+Security
+--------
+
+Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+
 License
 -------
 
