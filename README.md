@@ -34,8 +34,6 @@ That one command sets up crawlmark and adds it to your AI apps: **Claude Code, C
 | Claude Desktop | [Claude Desktop bundle (MCPB)](#claude-desktop-bundle-mcpb) |
 | Scheduled jobs, development, or before the first release | [From source](#from-source) |
 
-> crawlmark is not on npm yet, and there's no published bundle. Until the first release, install [from source](#from-source).
-
 ### npx and the setup wizard
 
 ```bash
