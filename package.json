@@ -48,6 +48,7 @@
     "cli": "node --disable-warning=ExperimentalWarning dist/cli.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
+    "test:live": "vitest run -c test/live/vitest.config.ts",
     "inspect": "npx @modelcontextprotocol/inspector tsx src/index.ts",
     "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
     "prepublishOnly": "node scripts/prepublish-guard.mjs && node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && npm run build && npm run typecheck && npm test"

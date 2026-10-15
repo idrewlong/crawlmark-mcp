@@ -41,7 +41,7 @@ import {
   sameCodexEntry,
   type CodexRegistration,
 } from "../lib/codex-config.js";
-import type { Choice } from "./prompter.js";
+import { PromptAbortedError, type Choice } from "./prompter.js";
 import { uiFor } from "./ui.js";
 import type { ExecResult, StepResult, WizardContext } from "./wizard.js";
 
@@ -280,6 +280,8 @@ async function registerJsonApp(ctx: WizardContext, id: "claude-desktop" | "curso
     notes.push({ kind: "success", text: `Updated ${app}'s config${backup ? ` (backup: ${backup})` : ""}. ${RESTART[id]}` });
     return "registered";
   } catch (err) {
+    // Ctrl-C at the confirm cancels the whole run, like every other prompt; it isn't this app failing.
+    if (err instanceof PromptAbortedError) throw err;
     notes.push({ kind: "fail", text: `Couldn't update ${app}'s config: ${(err as Error).message}` });
     return "failed";
   }

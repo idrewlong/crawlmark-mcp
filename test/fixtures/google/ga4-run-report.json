@@ -1,0 +1,14 @@
+{
+  "dimensionHeaders": [{ "name": "landingPage" }],
+  "metricHeaders": [
+    { "name": "sessions", "type": "TYPE_INTEGER" },
+    { "name": "engagementRate", "type": "TYPE_FLOAT" }
+  ],
+  "rows": [
+    { "dimensionValues": [{ "value": "/widgets" }], "metricValues": [{ "value": "310" }, { "value": "0.62" }] },
+    { "dimensionValues": [{ "value": "/repair" }], "metricValues": [{ "value": "45" }, { "value": "0.4" }] }
+  ],
+  "rowCount": 2,
+  "metadata": { "currencyCode": "USD", "timeZone": "America/New_York" },
+  "kind": "analyticsData#runReport"
+}

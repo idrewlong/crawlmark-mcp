@@ -12,10 +12,11 @@ Notes for working on crawlmark itself. Users don't need any of this; see the [RE
 | `npm run cli -- <command>` | The `crawlmark-cli` admin CLI from `dist/` |
 | `npm run typecheck` | Type-checks source and tests |
 | `npm test` | vitest unit tests |
+| `npm run test:live` | Opt-in live smoke checks against free vendor endpoints, with your own credentials (see below) |
 | `npm run inspect` | Opens the MCP Inspector against the source server |
 | `npm run build:mcpb` | Builds `build/crawlmark.mcpb` for Claude Desktop |
 
-CI (`.github/workflows/ci.yml`) runs `npm ci`, typecheck, build and the tests on Node 22 and 24 for every push to `main` and every pull request.
+CI (`.github/workflows/ci.yml`) runs on every push to `main` and every pull request: `npm ci`, typecheck, build and the tests on Ubuntu (Node 22 and 24), macOS and Windows (Node 22); then `scripts/smoke-pack.mjs` packs the package, installs the tarball into an empty folder and starts the installed server and CLI. A separate job writes one DOCX per builtin template and opens each with LibreOffice. The Security workflow (`.github/workflows/security.yml`) runs `npm audit` on production dependencies, gitleaks over the full history (known fake test keys are listed in `.gitleaksignore`) and CodeQL, on pushes, pull requests and weekly. Dependabot (`.github/dependabot.yml`) opens weekly update pull requests for npm packages and the workflow actions.
 
 `scripts/mcp-list.mjs` starts any install over stdio and prints its tools and prompts, which is a quick smoke test:
 
@@ -84,6 +85,12 @@ test/               vitest tests and fixtures
 Paid SEO data (keyword volume, ranked keywords, competitors, backlinks) goes through `src/providers/seo-data.ts`, never a provider file directly: it picks the client's provider (`resolveProvider`, a pure truth table), gates DataForSEO-only capabilities (`requireDataForSeo`), and adds `provider` and `units` to every result. Unit-billed providers (Ahrefs, Semrush) use `unitsCall()` from `units-billing.ts` (cache, `assertUnits()` before, `recordUnits()` per request) and a `createLimiter()` from `src/lib/rate.ts`. Keys never go into an error, log, cache key or ledger row: run vendor text through `redact()`.
 
 Tests point the provider base URLs at a closed local port (`test/setup.ts`) and use a temp `CRAWLMARK_HOME`, so a developer's `.env` is never read and no unstubbed call can reach a real API. For a manual check against a fake server, set `AHREFS_BASE_URL`, `SEMRUSH_BASE_URL` and `SEMRUSH_BALANCE_URL` in your shell (they're ignored in `.env`).
+
+## Live smoke checks
+
+`npm run test:live` is opt-in and never part of `npm test` or CI. It uses your own credentials from the normal config (`CRAWLMARK_HOME/.env` or the shell) and calls only free endpoints: the Search Console sites list, GA4 account summaries, DataForSEO `/appendix/user_data`, Ahrefs limits-and-usage, the Semrush balance, Bing `GetUserSites`, and one CrUX history query for a public origin. Each check runs the response through the production code, skips with a reason when its credential isn't set, and the run ends with a summary table.
+
+`test/live/guard.ts` wraps `fetch` and throws on any request that isn't on its allowlist, so a paid endpoint can't be reached by mistake. Cache, spend ledger and reports go to a temp folder, not your data. To add an endpoint, it needs vendor documentation saying the call is free.
 
 ## Releasing
 

@@ -57,7 +57,7 @@ The starter file has copies of the builtin `monthly` and `quarterly` to edit:
 version: 1
 branding:
   agencyName: Example Agency
-  # logo: branding/logo.png              # relative to the config home; PNG or JPEG, at most 512 KB
+  # logo: branding/logo.png              # relative to the config home; PNG or JPEG, at most 512 KB, a regular file (not a symlink)
   primaryColor: "#1f4e79"
   accentColor: "#2e8540"
   footer: "Prepared by Example Agency"

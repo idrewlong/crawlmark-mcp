@@ -22,3 +22,8 @@ Phase 13 (indexing, research G3 and G4):
 
 - `p13/url-inspection-indexed.json`, `p13/url-inspection-not-indexed.json`: `urlInspection.index.inspect` (v1) responses built from the documented `IndexStatusInspectionResult` fields (verdict, coverageState, robotsTxtState, indexingState, lastCrawlTime, pageFetchState, googleCanonical, userCanonical, sitemap, referringUrls, crawledAs). The second has Google choosing a different canonical.
 - `p13/sitemaps-list.json`: `sitemaps.list` (v1) with errors, warnings and `contents[].submitted` (`indexed` is deprecated and never read).
+
+Contract fixtures (hand-built from the documented response shapes, example.com only):
+
+- `search-analytics-query.json`: `searchanalytics.query` (v1), dimensions query and page
+- `ga4-run-report.json`: `analyticsdata.properties.runReport` (v1beta), landingPage by sessions and engagementRate

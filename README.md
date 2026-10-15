@@ -134,7 +134,7 @@ crawlmark status   home ~/.crawlmark (installed package)
 5 working · 0 needs attention · 2 errors · 2 not set up
 ```
 
-Secrets are typed into the terminal without echo and saved to `.env` with mode `0600`. Never paste them into a chat.
+Secrets are typed into the terminal without echo and saved to `.env` with mode `0600` (Windows has no file modes, so there the file relies on your user profile's permissions). Never paste them into a chat.
 
 ### DataForSEO
 
@@ -660,7 +660,7 @@ npm run inspect      # MCP Inspector
 
 [docs/development.md](docs/development.md) covers the code layout, adding a data source and releasing. [docs/audits.md](docs/audits.md) lists every audit and site-hygiene check.
 
-**Known limits:** the Ahrefs, Semrush and Bing Webmaster Tools integrations are in beta (built to the official docs, not yet verified against a live account). Windows is untested, OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
+**Known limits:** the Ahrefs, Semrush and Bing Webmaster Tools integrations are in beta (built to the official docs, not yet verified against a live account). CI runs the test suite and a packaged-install check on Linux, macOS and Windows, but the AI apps haven't been tried by hand on Windows. OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
 
 Security
 --------
