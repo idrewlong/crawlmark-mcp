@@ -15,7 +15,7 @@ It combines:
 | PageSpeed Insights | Real-user field data (CrUX) | Free with an API key (optional) |
 | Chrome UX Report History | Real-user Core Web Vitals week by week: 25 weeks by default, up to 40 | Free with an API key (optional) |
 | Bing Webmaster Tools (beta) | Bing clicks, impressions, top queries and pages, crawl stats and crawl issues (read-only) | Free with an API key (optional) |
-| axe-core | Automated WCAG A/AA/AAA checks | Free (runs locally) |
+| axe-core | Automated WCAG checks at level A, AA (default) or AAA (axe has only a few AAA rules) | Free (runs locally) |
 
 Every source is optional. Your client list fills itself from the Search Console sites and GA4 properties your Google account can see, and you can add clients by hand, so the paid data tools, Lighthouse and axe work without Google. Responses are cached in SQLite, and paid calls stop at a per-client and a global monthly cap (dollars for DataForSEO, API units for Ahrefs and Semrush). See [Data providers](#data-providers) for choosing between them.
 
