@@ -233,7 +233,7 @@ describe("siteHygiene against a local site", () => {
     expect(r.sitemaps).toMatchObject({ totalUrls: 6, complete: true });
     expect(r.orphans).toEqual({ available: false, reason: "not available: no full crawl" });
     expect(r.checked).toEqual(expect.arrayContaining(["site:robots", "site:sitemap-urls", `${base}/gone`]));
-  });
+  }, 30_000); // Renders pages in headless Chrome: about 5 s on a shared CI runner.
 
   it("feeds the audit diff: fixed findings resolve, unchecked ones stay unverified", async () => {
     const mk = (id: string, ranAt: number, hygiene: unknown): StoredAudit => {
