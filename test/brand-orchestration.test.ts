@@ -75,7 +75,11 @@ beforeEach(() => {
   );
 });
 
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+afterAll(async () => {
+  // Close the SQLite file first: Windows can't delete a file that is still open.
+  (await import("../src/lib/store.js")).db.close();
+  rmSync(dir, { recursive: true, force: true });
+});
 
 describe("add_brand_terms / remove_brand_terms", () => {
   it("adds object entries to that client only, and removes them in any form", async () => {

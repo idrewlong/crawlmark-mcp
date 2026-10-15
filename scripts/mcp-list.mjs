@@ -7,6 +7,7 @@
 //
 // The server inherits this process's environment (set CRAWLMARK_HOME etc. before calling).
 // MCP_LIST_CALL=<tool> also calls that tool (no arguments) and prints its text result under "call".
+// MCP_LIST_TIMEOUT_MS sets the per-request timeout (default 30000).
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
@@ -37,7 +38,7 @@ createInterface({ input: child.stdout }).on("line", (line) => {
 function request(method, params = {}) {
   const id = nextId++;
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timeout waiting for ${method}`)), 30_000);
+    const timer = setTimeout(() => reject(new Error(`timeout waiting for ${method}`)), Number(process.env.MCP_LIST_TIMEOUT_MS) || 30_000);
     pending.set(id, {
       resolve: (v) => (clearTimeout(timer), resolve(v)),
       reject: (e) => (clearTimeout(timer), reject(e)),

@@ -10,6 +10,7 @@ import { MAX_TEMPLATE_BYTES, validateTemplateText } from "../src/reports/templat
 import { getReportTemplate, initStarterFile, listReportTemplates, validateReportTemplate } from "../src/reports/templates/service.js";
 import { templatesCommand } from "../src/report-cli.js";
 import { safeSegment } from "../src/reports/paths.js";
+import { POSIX_MODES } from "./platform.js";
 
 const today = new Date("2026-10-13T12:00:00Z");
 const home = () => mkdtempSync(join(tmpdir(), "crawlmark-tpl-"));
@@ -233,7 +234,7 @@ describe("crawlmark-cli report templates", () => {
     expect(templatesCommand("init", [], a.io)).toBe(0);
     const path = join(h, "config", "report-templates.yaml");
     expect(readFileSync(path, "utf8")).toBe(STARTER_YAML);
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o600);
     writeFileSync(path, "# edited\n" + STARTER_YAML);
     const b = io(h);
     expect(templatesCommand("init", [], b.io)).toBe(0);

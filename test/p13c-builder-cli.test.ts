@@ -14,6 +14,7 @@ import type { RunDeps } from "../src/reports/templates/run.js";
 import { validateTemplateText } from "../src/reports/templates/schema.js";
 import { createPrompter, PromptAbortedError, type Choice, type ChoiceGroup, type LineSource, type Prompter } from "../src/setup/prompter.js";
 import { recordingUi } from "../src/setup/ui.js";
+import { POSIX_MODES } from "./platform.js";
 
 const today = new Date("2026-10-13T12:00:00Z");
 const newHome = () => mkdtempSync(join(tmpdir(), "crawlmark-p13c-cli-"));
@@ -132,7 +133,7 @@ describe("report templates new", () => {
     expect(text.slice(EXISTING.length)).toBe(
       "  board:\n    title: Quarterly board pack\n    period: { range: last_quarter }\n    compare: [ previous_period, previous_year ]\n    sections:\n      - { id: search, type: search_overview }\n      - { id: issues, type: technical_issues }\n      - { id: indexing, type: indexing_issues }\n",
     );
-    expect(statSync(globalFile(t.home)).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(globalFile(t.home)).mode & 0o777).toBe(0o600);
     expect(readFileSync(`${globalFile(t.home)}.bak`, "utf8")).toBe(EXISTING);
     // `report templates validate` accepts it.
     const lines: string[] = [];
@@ -140,8 +141,8 @@ describe("report templates new", () => {
     expect(lines.join("\n")).toContain("is valid");
     // The preview (sample data) was written under .preview with 0600 in 0700 folders, and the diff shown.
     const preview = join(t.reportsDir, ".preview", "example.com", "board.html");
-    expect(statSync(preview).mode & 0o777).toBe(0o600);
-    expect(statSync(join(t.reportsDir, ".preview")).mode & 0o777).toBe(0o700);
+    if (POSIX_MODES) expect(statSync(preview).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(join(t.reportsDir, ".preview")).mode & 0o777).toBe(0o700);
     expect(readFileSync(preview, "utf8")).toContain("Sample data");
     expect(t.ui.events.some((e) => e.startsWith("preview: Changes to ") && e.includes("+  board:"))).toBe(true);
     expect(t.ui.events.some((e) => e.includes('Saved template "board" (validated)'))).toBe(true);

@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../src/lib/clients.js";
 import { argumentsHash, canonicalJson, newToken, TOKEN_RE } from "../src/reports/templates/proposals.js";
 import { registerTemplateWriteTools, templateWriteCall, type TemplateWriteArgs, type TemplateWriteDeps } from "../src/tools/report-template-write.js";
+import { POSIX_MODES } from "./platform.js";
 
 const today = new Date("2026-10-13T12:00:00Z");
 const newHome = () => mkdtempSync(join(tmpdir(), "crawlmark-p13c-tool-"));
@@ -88,7 +89,7 @@ describe("create_report_template", () => {
     const text = readFileSync(globalFile(home), "utf8");
     expect(text.startsWith(EXISTING)).toBe(true);
     expect(text).toContain("  board:\n    title: Board pack\n");
-    expect(statSync(globalFile(home)).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(globalFile(home)).mode & 0o777).toBe(0o600);
 
     await expect(templateWriteCall("create_report_template", { id: "board", template: free, confirmToken: p.confirmToken, replace: true }, d)).rejects.toThrow(/already used/);
     await expect(templateWriteCall("create_report_template", { id: "board", template: free, confirmToken: p.confirmToken }, d)).rejects.toThrow(/already in the global template file/);

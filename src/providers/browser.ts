@@ -145,7 +145,8 @@ export async function launchGuardedBrowser(): Promise<{ browser: Browser; close:
   const args = await guardedChromeFlags();
   const choice = await resolveChrome();
   const userDataDir = await mkdtemp(join(tmpdir(), "crawlmark-chrome-"));
-  const removeProfile = () => rm(userDataDir, { recursive: true, force: true, maxRetries: 3 });
+  // Windows keeps the profile's files locked for a moment after Chrome exits (EBUSY), so retry for a few seconds.
+  const removeProfile = () => rm(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   try {
     await mkdir(join(userDataDir, "Default"));
     await writeFile(join(userDataDir, "Default", "Preferences"), JSON.stringify(CHROME_PREFS));
@@ -161,7 +162,8 @@ export async function launchGuardedBrowser(): Promise<{ browser: Browser; close:
       },
     };
   } catch (err) {
-    await removeProfile();
+    // Report why the launch failed, not a cleanup error: a Chrome that failed to start can still hold the profile open on Windows.
+    await removeProfile().catch((rmErr: Error) => console.error(`crawlmark: couldn't remove the Chrome profile ${userDataDir}: ${rmErr.message}`));
     throw err;
   }
 }

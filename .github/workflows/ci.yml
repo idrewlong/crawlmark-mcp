@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ci/**"]
   pull_request:
 
 permissions:
@@ -14,12 +14,19 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    name: test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-24.04]
         node: ["22.x", "24.x"]
+        include:
+          - os: macos-latest
+            node: "22.x"
+          - os: windows-latest
+            node: "22.x"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -29,8 +36,49 @@ jobs:
       # Ubuntu 24.04 blocks unprivileged user namespaces, which Chrome's sandbox needs.
       # Allow them on the runner so the browser tests keep the sandbox on.
       - name: Allow Chrome's sandbox
+        if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      # Pack, install the tarball into an empty folder, start the installed server and CLI.
+      - name: Packaged install smoke test
+        run: node scripts/smoke-pack.mjs
+
+  docx:
+    name: DOCX opens in LibreOffice
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.x"
+          cache: npm
+      - run: npm ci
+      - name: Install LibreOffice and poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer poppler-utils
+      - name: Write one DOCX per builtin template
+        run: npx vitest run test/docx-samples.test.ts
+        env:
+          DOCX_SAMPLES_DIR: ${{ runner.temp }}/docx
+      - name: Convert each DOCX to PDF and check it has pages and text
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/docx"
+          ls *.docx
+          soffice --headless --convert-to pdf --outdir pdf *.docx
+          for f in *.docx; do
+            pdf="pdf/${f%.docx}.pdf"
+            test -s "$pdf" || { echo "::error::$f did not convert"; exit 1; }
+            pages=$(pdfinfo "$pdf" | awk '/^Pages:/ {print $2}')
+            words=$(pdftotext "$pdf" - | wc -w)
+            echo "$f: $pages page(s), $words words"
+            [ "$pages" -ge 1 ] || { echo "::error::$f has no pages"; exit 1; }
+            [ "$words" -ge 30 ] || { echo "::error::$f came out nearly empty"; exit 1; }
+            pdftotext "$pdf" - | grep -q "example.com" || { echo "::error::$f is missing the client name"; exit 1; }
+          done

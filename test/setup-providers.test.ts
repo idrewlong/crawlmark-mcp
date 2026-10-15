@@ -18,6 +18,7 @@ import { spawnSync } from "node:child_process";
 import { semrushRow } from "../src/setup/status.js";
 import { runWizard, summarize, stepAhrefs, stepDataForSeo, stepSemrush, stepProviderDefault, stepProviderPick, type WizardContext } from "../src/setup/wizard.js";
 import { writeFileSync } from "node:fs";
+import { POSIX_MODES } from "./platform.js";
 
 const SENTINEL = "SENTINEL-provider-key-7d41";
 const LIMITS = readFileSync(new URL("./fixtures/ahrefs/limits-and-usage.json", import.meta.url), "utf8");
@@ -117,7 +118,7 @@ describe("stepAhrefs", () => {
     expect(h.ui.events).toContain("spin: Checking with Ahrefs (free limits-and-usage call)...");
     expect(h.ui.events).toContain("success: Ahrefs works  plan Standard, key 1,200 of 50,000 units used (resets 2026-11-01)");
     expect(h.env()).toEqual({ AHREFS_API_KEY: SENTINEL });
-    expect((await import("node:fs")).statSync(join(h.home, ".env")).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect((await import("node:fs")).statSync(join(h.home, ".env")).mode & 0o777).toBe(0o600);
     expect(h.ctx.providers?.working.has("ahrefs")).toBe(true);
     expect(transcript(h)).not.toContain(SENTINEL);
   });

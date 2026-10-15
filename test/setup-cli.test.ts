@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { appConfigPaths, buildChildEnv, shellOnlyEnv } from "../src/setup/cli-setup.js";
 
@@ -28,8 +29,8 @@ describe("SEC-2: app config paths come from the shell env only", () => {
     expect(shell).toEqual({ PATH: "/bin" });
     expect(appConfigPaths(shell, "/home/u", "linux")).toEqual({
       desktopConfig: "/home/u/.config/Claude/claude_desktop_config.json",
-      cursorConfig: "/home/u/.cursor/mcp.json",
-      codexConfig: "/home/u/.codex/config.toml",
+      cursorConfig: join("/home/u", ".cursor", "mcp.json"),
+      codexConfig: join("/home/u", ".codex", "config.toml"),
     });
   });
 
@@ -38,7 +39,7 @@ describe("SEC-2: app config paths come from the shell env only", () => {
     expect(appConfigPaths(shell, "/home/u", "linux")).toEqual({
       desktopConfig: "/from-dotenv/xdg/Claude/claude_desktop_config.json",
       cursorConfig: "/from-dotenv/mcp.json",
-      codexConfig: "/from-dotenv/codex/config.toml",
+      codexConfig: join("/from-dotenv/codex", "config.toml"),
     });
   });
 });

@@ -60,7 +60,11 @@ beforeEach(() => {
   writeFileSync(FILE, "# keep me\nclients:\n  example.com:\n    domain: example.com # inline\n");
 });
 
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+afterAll(async () => {
+  // Close the SQLite file first: Windows can't delete a file that is still open.
+  (await import("../src/lib/store.js")).db.close();
+  rmSync(dir, { recursive: true, force: true });
+});
 
 describe("list edits on clients.yaml", () => {
   it("creates a domain-only entry for a discovered client that isn't in clients.yaml yet", async () => {

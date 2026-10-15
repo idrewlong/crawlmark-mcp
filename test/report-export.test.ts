@@ -8,6 +8,7 @@ import { reportCommand, type ReportCliDeps, type ReportFlags } from "../src/repo
 import { PromptAbortedError } from "../src/setup/prompter.js";
 import { client, fakeDeps } from "./fixtures/reports/deps.js";
 import { fixtureReport, TINY_PNG } from "./fixtures/reports/report.js";
+import { POSIX_MODES } from "./platform.js";
 
 const tmp = (p = "crawlmark-export-") => mkdtempSync(join(tmpdir(), p));
 const fakePdf = vi.fn(async () => Buffer.from("%PDF-1.7 fake"));
@@ -36,8 +37,8 @@ describe("report paths", () => {
     const dir = join(tmp(), "reports");
     const a = writeReportFile(dir, report, "md", "one");
     expect(a).toMatchObject({ path: join(dir, "example.com", "2026-09", "monthly-2026-09.md"), bytes: 3, overwritten: false });
-    expect(mode(a.path)).toBe(0o600);
-    for (const d of [dir, join(dir, "example.com"), join(dir, "example.com", "2026-09")]) expect(mode(d)).toBe(0o700);
+    if (POSIX_MODES) expect(mode(a.path)).toBe(0o600);
+    if (POSIX_MODES) for (const d of [dir, join(dir, "example.com"), join(dir, "example.com", "2026-09")]) expect(mode(d)).toBe(0o700);
     expect(writeReportFile(dir, report, "md", "two").overwritten).toBe(true);
     expect(readFileSync(a.path, "utf8")).toBe("two");
 
@@ -63,7 +64,7 @@ describe("exportReport", () => {
   it("writes every requested format; PDF via the injected printer", async () => {
     const dir = join(tmp(), "reports");
     const out = await exportReport(await fixtureReport(), base(dir, { formats: ["md", "html", "pdf", "docx"] }));
-    expect(out.files.map((f) => [f.format, f.path.split("/").slice(-3).join("/")])).toEqual([
+    expect(out.files.map((f) => [f.format, f.path.split(/[\\/]/).slice(-3).join("/")])).toEqual([
       ["md", "example.com/2026-09/monthly-2026-09.md"],
       ["html", "example.com/2026-09/monthly-2026-09.html"],
       ["pdf", "example.com/2026-09/monthly-2026-09.pdf"],

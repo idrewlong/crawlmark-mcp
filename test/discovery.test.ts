@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { POSIX_MODES } from "./platform.js";
 
 /**
  * src/providers/discovery.ts and src/clients.ts against a mocked googleapis
@@ -438,7 +439,7 @@ describe("review follow-ups", () => {
     symlinkSync(target, clientsFile);
     await addClient("example.com");
     expect(lstatSync(clientsFile).isSymbolicLink()).toBe(true);
-    expect(statSync(target).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(target).mode & 0o777).toBe(0o600);
     expect(readFileSync(target, "utf8")).toContain("# shared\nclients:\n  example.com:\n    domain: example.com\n");
     rmSync(target);
   });

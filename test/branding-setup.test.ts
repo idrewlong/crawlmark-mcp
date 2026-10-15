@@ -5,7 +5,7 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { resolveClientOffline } from "../src/clients.js";
 import { openPath } from "../src/lib/terminal-links.js";
@@ -21,6 +21,7 @@ import { PromptAbortedError, type Choice, type Prompter } from "../src/setup/pro
 import { collectSetupStatus, type StatusProviders } from "../src/setup/status.js";
 import { recordingUi } from "../src/setup/ui.js";
 import type { WizardContext } from "../src/setup/wizard.js";
+import { POSIX_MODES } from "./platform.js";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGP4z8DAwMDAwAAAD/0B/0JgTmQAAAAASUVORK5CYII=", "base64");
 const home = () => realpathSync(mkdtempSync(join(tmpdir(), "crawlmark-branding-")));
@@ -44,7 +45,7 @@ describe("branding settings", () => {
   it("writeBranding: 0600 file in a 0700 folder; loadTemplates reads it back; a client override merges over the global one", () => {
     const h = home();
     const file = writeBranding(h, { agencyName: "Acme Agency", primaryColor: "#123456", paper: "A4", formats: ["docx"] });
-    expect(mode(file)).toBe(0o600);
+    if (POSIX_MODES) expect(mode(file)).toBe(0o600);
     expect(loadTemplates({ homeDir: h }).branding).toMatchObject({ agencyName: "Acme Agency", primaryColor: "#123456", paper: "A4" });
     expect(loadTemplates({ homeDir: h }).defaults.formats).toEqual(["docx"]);
     writeBranding(h, { footer: "Prepared for Example Co" }, "example.com");
@@ -80,8 +81,8 @@ describe("branding settings", () => {
     expect(importLogo(h, readFileSync(good), "image/png", { dryRun: true })).toBe("branding/logo.png");
     expect(existsSync(join(h, "branding"))).toBe(false);
     expect(importLogo(h, readFileSync(good), "image/png", { clientSlug: "example.com" })).toBe("branding/logo-example.com.png");
-    expect(mode(join(h, "branding"))).toBe(0o700);
-    expect(mode(join(h, "branding", "logo-example.com.png"))).toBe(0o600);
+    if (POSIX_MODES) expect(mode(join(h, "branding"))).toBe(0o700);
+    if (POSIX_MODES) expect(mode(join(h, "branding", "logo-example.com.png"))).toBe(0o600);
   });
 });
 
@@ -111,7 +112,7 @@ describe("SEC-1: logo import never follows a symlink and writes the bytes it che
     writeFileSync(src, "swapped after the check");
     const rel = importLogo(h, check.data, check.mime);
     expect(readFileSync(join(h, rel))).toEqual(PNG);
-    expect(mode(join(h, rel))).toBe(0o600);
+    if (POSIX_MODES) expect(mode(join(h, rel))).toBe(0o600);
     expect(() => importLogo(h, Buffer.from("<svg/>"), "image/png")).toThrow(/PNG or JPEG/);
   });
 });
@@ -209,7 +210,7 @@ describe("branding preview", () => {
     const printed: string[] = [];
     const r = await renderBrandingPreview(h, { agencyName: "Acme Agency", primaryColor: "#123456", hideCrawlmark: true }, { printer: async (html) => (printed.push(html), Buffer.from("%PDF-1.7")), version: "0.1.0" });
     expect(r).toMatchObject({ format: "pdf", path: join(h, "branding", "preview.pdf") });
-    expect(mode(r.path)).toBe(0o600);
+    if (POSIX_MODES) expect(mode(r.path)).toBe(0o600);
     const html = printed[0]!;
     expect(html).toContain("Sample data");
     expect(html).toContain("example.com");
@@ -324,7 +325,7 @@ describe("setup --step branding", () => {
     const loaded = loadTemplates({ homeDir: h });
     expect(loaded.branding).toMatchObject({ agencyName: "Acme Agency", primaryColor: "#123456", footer: "Prepared by Acme Agency", hideCrawlmark: true, paper: "A4", logo: { path: "branding/logo.png", exists: true } });
     expect(loaded.defaults.formats).toEqual(["pdf", "docx"]);
-    expect(mode(join(h, "branding", "logo.png"))).toBe(0o600);
+    if (POSIX_MODES) expect(mode(join(h, "branding", "logo.png"))).toBe(0o600);
   });
 
   it("cancel writes nothing (not the templates file, not the logo)", async () => {
@@ -388,6 +389,6 @@ describe("setup --step branding", () => {
 
   it("the starter file stays valid YAML for the step to edit", () => {
     expect(validateTemplateText(STARTER_YAML).valid).toBe(true);
-    expect(asResolvedBranding("/h", { logo: "branding/logo.png" }).logo).toMatchObject({ path: "branding/logo.png", resolved: "/h/branding/logo.png" });
+    expect(asResolvedBranding("/h", { logo: "branding/logo.png" }).logo).toMatchObject({ path: "branding/logo.png", resolved: resolve("/h", "branding", "logo.png") });
   });
 });

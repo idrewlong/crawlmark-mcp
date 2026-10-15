@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "smol-toml";
 import {
@@ -37,8 +38,8 @@ const ok = (p: ReturnType<typeof planCodexTomlEdit>) => {
 
 describe("Codex config paths and CLI", () => {
   it("uses CODEX_HOME, else ~/.codex", () => {
-    expect(codexConfigPath({ CODEX_HOME: "/x/codex" }, "/home/u")).toBe("/x/codex/config.toml");
-    expect(codexConfigPath({}, "/home/u")).toBe("/home/u/.codex/config.toml");
+    expect(codexConfigPath({ CODEX_HOME: "/x/codex" }, "/home/u")).toBe(join("/x/codex", "config.toml"));
+    expect(codexConfigPath({}, "/home/u")).toBe(join("/home/u", ".codex", "config.toml"));
   });
 
   it("codexAddArgs puts the name first, then --env pairs, then --", () => {

@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -15,6 +15,7 @@ import {
   updateCheckAllowed,
   updateNotice,
 } from "../src/lib/update-check.js";
+import { POSIX_MODES } from "./platform.js";
 
 const DAY = UPDATE_CHECK_INTERVAL_MS;
 
@@ -74,7 +75,7 @@ describe("checkForUpdate", () => {
     expect(init.body).toBeUndefined();
     expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ checkedAt: 1_000_000, latest: "0.2.0" });
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(file).mode & 0o777).toBe(0o600);
 
     now += DAY - 1;
     expect(await checkForUpdate({ current: "0.1.0", cacheFile: file, fetch, now: () => now })).toBe("0.2.0");
@@ -171,7 +172,7 @@ describe("checkForUpdate", () => {
     // With a fresh (random) name the write goes through, mode 0600.
     writeCache(file, { checkedAt: 1, latest: "0.2.0" });
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ checkedAt: 1, latest: "0.2.0" });
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
   it("a corrupt cache is treated as no cache", async () => {
@@ -233,7 +234,7 @@ describe("the MCP server never makes the update request", () => {
         if (existsSync(target)) queue.push(target);
       }
     }
-    return [...seen].map((f) => relative(root, f));
+    return [...seen].map((f) => relative(root, f).split(sep).join("/"));
   };
 
   it("no module the server imports (statically or dynamically) reaches update-check", () => {

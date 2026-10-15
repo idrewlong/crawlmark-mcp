@@ -137,14 +137,14 @@ describe("log file access", () => {
   mkdirSync(join(allowedDir, "dir.log"));
 
   it("LOG_DIRS takes absolute directories only, plus <home>/logs", () => {
-    expect(logDirsFrom(` ${allowedDir}, relative/dir ,,`, "/home/x")).toEqual({ dirs: [allowedDir, "/home/x/logs"], ignored: ["relative/dir"] });
+    expect(logDirsFrom(` ${allowedDir}, relative/dir ,,`, "/home/x")).toEqual({ dirs: [allowedDir, join("/home/x", "logs")], ignored: ["relative/dir"] });
   });
 
   it("expands globs and names inside the allowed directories, de-duplicating symlinks inside", async () => {
     const allowed = await existingDirs([allowedDir, join(root, "missing")]);
     expect(allowed).toHaveLength(1);
     const r = await resolveAllowedLogFiles(["access.log*", "nginx/site.log", "alias.log"], allowed);
-    expect(r.files.map((f) => f.name)).toEqual(["access.log", "access.log.1", "nginx/site.log"]);
+    expect(r.files.map((f) => f.name)).toEqual(["access.log", "access.log.1", join("nginx", "site.log")]);
     expect(r.notes.join(" ")).toMatch(/Skipped access\.log\.evil: not a regular file inside the allowed log directories/);
   });
 
@@ -206,11 +206,14 @@ describe("log file access", () => {
     const allowed = await existingDirs([ok]);
     const st: () => ReadState = () => ({ bytes: 0, lines: 0, capped: null });
 
-    // Symlink swapped in after the check: O_NOFOLLOW refuses it.
+    // Symlink swapped in after the check: O_NOFOLLOW refuses it. Windows has no O_NOFOLLOW, so there the open
+    // follows the link and the handle's identity check refuses it instead.
     const [swap] = (await resolveAllowedLogFiles(["a.log"], allowed)).files;
     renameSync(swap!.path, join(ok, "a.real"));
     symlinkSync(join(d, "outside.log"), swap!.path);
-    await expect(readLogLines(swap!, () => undefined, st())).rejects.toThrow(/couldn't be opened as a regular file/);
+    await expect(readLogLines(swap!, () => undefined, st())).rejects.toThrow(
+      process.platform === "win32" ? /couldn't be opened as a regular file|replaced after it was checked/ : /couldn't be opened as a regular file/,
+    );
     rmSync(swap!.path);
 
     // Another regular file swapped in: different inode. The old file is moved aside, not deleted,
@@ -229,13 +232,16 @@ describe("log file access", () => {
     await expect(resolveAllowedLogFiles(["c.log"], allowed)).rejects.toThrow(/No readable log file c\.log/);
 
     // A FIFO is not a regular file: refused at resolve time; one swapped in later doesn't block the open.
-    execFileSync("mkfifo", [join(ok, "pipe.log")]);
-    await expect(resolveAllowedLogFiles(["pipe.log"], allowed)).rejects.toThrow(/No readable log file pipe\.log/);
-    writeFileSync(join(ok, "e.log"), LOG);
-    const [e] = (await resolveAllowedLogFiles(["e.log"], allowed)).files;
-    rmSync(e!.path);
-    execFileSync("mkfifo", [e!.path]);
-    await expect(readLogLines(e!, () => undefined, st())).rejects.toThrow(/isn't a regular file|replaced/);
+    // Not on Windows: it has no mkfifo (its named pipes never appear in a directory).
+    if (process.platform !== "win32") {
+      execFileSync("mkfifo", [join(ok, "pipe.log")]);
+      await expect(resolveAllowedLogFiles(["pipe.log"], allowed)).rejects.toThrow(/No readable log file pipe\.log/);
+      writeFileSync(join(ok, "e.log"), LOG);
+      const [e] = (await resolveAllowedLogFiles(["e.log"], allowed)).files;
+      rmSync(e!.path);
+      execFileSync("mkfifo", [e!.path]);
+      await expect(readLogLines(e!, () => undefined, st())).rejects.toThrow(/isn't a regular file|replaced/);
+    }
 
     // analyzeLogs reports a refused file in notes, with no counts from it.
     const r = await analyzeLogs("example.com", [c!], { verify: false }, deps());

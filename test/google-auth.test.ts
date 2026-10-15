@@ -33,6 +33,7 @@ import {
 } from "../src/lib/google-auth.js";
 import { deleteTokenFile, readTokenFile, writeTokenFile } from "../src/lib/token-store.js";
 import { createOAuthClientLoader, CrawlmarkOAuth2Client } from "../src/providers/google-oauth-client.js";
+import { POSIX_MODES } from "./platform.js";
 
 const idToken = (claims: object) =>
   ["e30", Buffer.from(JSON.stringify(claims)).toString("base64url"), "sig"].join(".");
@@ -208,12 +209,12 @@ describe("token file", () => {
       expect(readTokenFile(path)).toBeUndefined();
 
       writeTokenFile(path, stored);
-      expect(statSync(path).mode & 0o777).toBe(0o600);
+      if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o600);
       expect(readTokenFile(path)).toEqual(stored);
 
       writeTokenFile(path, { ...stored, access_token: "a2" });
       expect(readTokenFile(path)?.access_token).toBe("a2");
-      expect(statSync(path).mode & 0o777).toBe(0o600);
+      if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o600);
       expect(readdirSync(join(dir, "nested"))).toEqual(["google-token.json"]); // no temp files left
 
       expect(deleteTokenFile(path)).toBe(true);
@@ -225,7 +226,7 @@ describe("token file", () => {
       const path = join(dir, "google-token.json");
       writeFileSync(path, "{}", { mode: 0o644 });
       writeTokenFile(path, stored);
-      expect(statSync(path).mode & 0o777).toBe(0o600);
+      if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o600);
       expect(JSON.parse(readFileSync(path, "utf8")).refresh_token).toBe("r1");
     });
   });
@@ -343,7 +344,7 @@ describe("CrawlmarkOAuth2Client", () => {
       const saved = readTokenFile(tokenFile)!;
       expect(saved).toMatchObject({ refresh_token: "r1", access_token: "new", email: "a@example.com" });
       expect(saved.expiry_date).toBeGreaterThan(Date.now());
-      expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
+      if (POSIX_MODES) expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
       expect(get()).toBe(c); // its own write doesn't force a rebuild
       expect(saveErrors).toEqual([]);
     });

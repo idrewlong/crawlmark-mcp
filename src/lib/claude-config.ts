@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 import { writeFileAtomic } from "./atomic-file.js";
 
 /**
@@ -19,12 +19,13 @@ export interface ServerLaunch {
 
 /** Claude Desktop's config file for this OS, or undefined when the OS has none. */
 export function claudeDesktopConfigPath(platform: NodeJS.Platform, userHome: string, env: Record<string, string | undefined>): string | undefined {
-  if (platform === "darwin") return join(userHome, "Library", "Application Support", "Claude", "claude_desktop_config.json");
+  // Join with the target platform's separator, not the host's, so the answer for each OS is the same wherever it runs.
+  if (platform === "darwin") return posix.join(userHome, "Library", "Application Support", "Claude", "claude_desktop_config.json");
   if (platform === "win32") {
-    const appData = env.APPDATA ?? join(userHome, "AppData", "Roaming");
-    return join(appData, "Claude", "claude_desktop_config.json");
+    const appData = env.APPDATA ?? win32.join(userHome, "AppData", "Roaming");
+    return win32.join(appData, "Claude", "claude_desktop_config.json");
   }
-  if (platform === "linux") return join(env.XDG_CONFIG_HOME ?? join(userHome, ".config"), "Claude", "claude_desktop_config.json");
+  if (platform === "linux") return posix.join(env.XDG_CONFIG_HOME ?? posix.join(userHome, ".config"), "Claude", "claude_desktop_config.json");
   return undefined;
 }
 

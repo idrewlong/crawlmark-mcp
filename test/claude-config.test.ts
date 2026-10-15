@@ -1,15 +1,17 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
 import { backupFile, claudeCodeAddArgs, claudeDesktopConfigPath, cursorConfigPath, cursorEntry, describeDesktopChange, mergeMcpServersJson, writeConfigWithBackup, describeRegistration, desktopEntry, maskEntry, mergeDesktopConfig, parseClaudeMcpGet, sameRegistration, shellQuote, writeDesktopConfig } from "../src/lib/claude-config.js";
+import { POSIX_MODES } from "./platform.js";
 
 const launch = { command: "/usr/bin/node", args: ["--disable-warning=ExperimentalWarning", "/opt/cm/dist/index.js"], env: { CRAWLMARK_HOME: "/home/u/.crawlmark" } };
 
 describe("Claude config", () => {
   it("finds Claude Desktop's config on each OS", () => {
     expect(claudeDesktopConfigPath("darwin", "/Users/u", {})).toBe("/Users/u/Library/Application Support/Claude/claude_desktop_config.json");
-    expect(claudeDesktopConfigPath("win32", "C:/Users/u", { APPDATA: "C:/Users/u/AppData/Roaming" })).toBe(join("C:/Users/u/AppData/Roaming", "Claude", "claude_desktop_config.json"));
+    expect(claudeDesktopConfigPath("win32", "C:/Users/u", { APPDATA: "C:/Users/u/AppData/Roaming" })).toBe("C:\\Users\\u\\AppData\\Roaming\\Claude\\claude_desktop_config.json");
+    expect(claudeDesktopConfigPath("win32", "C:\\Users\\u", {})).toBe(win32.join("C:\\Users\\u", "AppData", "Roaming", "Claude", "claude_desktop_config.json"));
     expect(claudeDesktopConfigPath("linux", "/home/u", {})).toBe("/home/u/.config/Claude/claude_desktop_config.json");
     expect(claudeDesktopConfigPath("linux", "/home/u", { XDG_CONFIG_HOME: "/x" })).toBe("/x/Claude/claude_desktop_config.json");
     expect(claudeDesktopConfigPath("aix", "/home/u", {})).toBeUndefined();
@@ -103,15 +105,15 @@ To remove this server, run: claude mcp remove "crawlmark" -s user
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "crawlmark-claude-")));
     const path = join(dir, "Claude", "claude_desktop_config.json");
     expect(writeDesktopConfig(path, '{"a":1}\n')).toBeUndefined();
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o600);
     writeFileSync(path, '{"old":true}\n');
     chmodSync(path, 0o644);
     const backup = writeDesktopConfig(path, '{"new":true}\n');
     expect(backup).toBe(`${path}.bak`);
     expect(readFileSync(backup!, "utf8")).toBe('{"old":true}\n');
-    expect(statSync(backup!).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(backup!).mode & 0o777).toBe(0o600);
     expect(readFileSync(path, "utf8")).toBe('{"new":true}\n');
-    expect(statSync(path).mode & 0o777).toBe(0o644);
+    if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o644);
     expect(readdirSync(join(dir, "Claude")).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 });
@@ -155,7 +157,7 @@ describe("Cursor config (shared mcpServers JSON merge)", () => {
     const path = join(dir, ".cursor", "mcp.json");
     expect(writeConfigWithBackup(path, existing)).toBeUndefined();
     const backup = writeConfigWithBackup(path, "{}\n");
-    expect(statSync(backup!).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(backup!).mode & 0o777).toBe(0o600);
     expect(readFileSync(backup!, "utf8")).toBe(existing);
   });
 });
@@ -188,7 +190,7 @@ describe("SEC-4: a symlinked config keeps its .bak next to the link", () => {
     const backup = writeConfigWithBackup(link, '{"new":true}\n');
     expect(backup).toBe(`${link}.bak`);
     expect(readFileSync(backup!, "utf8")).toContain('"secret"');
-    expect(statSync(backup!).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(backup!).mode & 0o777).toBe(0o600);
     expect(existsSync(`${target}.bak`)).toBe(false);
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(readFileSync(target, "utf8")).toBe('{"new":true}\n');

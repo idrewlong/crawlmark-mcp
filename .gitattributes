@@ -1,0 +1,4 @@
+# Check out text files with LF on every OS: fixtures and golden files are compared byte for byte.
+* text=auto eol=lf
+# Semrush answers with CRLF lines; these fixtures keep them on purpose.
+test/fixtures/semrush/**/*.csv -text

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { describe, expect, it } from "vitest";
 import { formatEnvValue, parseEnvText, readEnvFile, setEnvValues, writeEnvFile } from "../src/lib/env-file.js";
+import { POSIX_MODES } from "./platform.js";
 
 const SAMPLE = `# DataForSEO
 DATAFORSEO_LOGIN=old@example.com
@@ -70,11 +71,11 @@ describe("writeEnvFile", () => {
     const dir = mkdtempSync(join(tmpdir(), "crawlmark-envfile-"));
     const path = join(dir, "home", ".env");
     writeEnvFile(path, { DATAFORSEO_LOGIN: "a@example.com" });
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o600);
     writeFileSync(path, SAMPLE);
     chmodSync(path, 0o644);
     writeEnvFile(path, { DATAFORSEO_PASSWORD: "secret value" });
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(readFileSync(path, "utf8")).toContain("# DataForSEO\n");
     expect(readEnvFile(path).DATAFORSEO_PASSWORD).toBe("secret value");
     expect(readdirSync(join(dir, "home")).filter((f) => f.endsWith(".tmp"))).toEqual([]);

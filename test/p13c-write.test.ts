@@ -8,6 +8,7 @@ import { loadTemplates } from "../src/reports/templates/load.js";
 import { defaultSection, templateCatalogue, costLabel } from "../src/reports/templates/builder.js";
 import { SECTION_TYPES, validateTemplateText } from "../src/reports/templates/schema.js";
 import { applyTemplateWrite, assertSafeTarget, planTemplateWrite, TemplateFileChangedError, TemplateWriteError, unifiedDiff } from "../src/reports/templates/write.js";
+import { POSIX_MODES } from "./platform.js";
 
 const today = new Date("2026-10-13T12:00:00Z");
 const newHome = () => mkdtempSync(join(tmpdir(), "crawlmark-p13c-"));
@@ -57,8 +58,8 @@ describe("planTemplateWrite / applyTemplateWrite", () => {
     expect(r.backup).toBe(`${globalFile(home)}.bak`);
     expect(readFileSync(r.backup!, "utf8")).toBe(COMMENTED);
     expect(readFileSync(globalFile(home), "utf8")).toBe(plan.after);
-    expect(statSync(globalFile(home)).mode & 0o777).toBe(0o600);
-    expect(statSync(r.backup!).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(globalFile(home)).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(r.backup!).mode & 0o777).toBe(0o600);
     expect(validateTemplateText(plan.after, { today }).valid).toBe(true);
   });
 
@@ -77,8 +78,8 @@ describe("planTemplateWrite / applyTemplateWrite", () => {
     expect(plan.diff.startsWith("--- /dev/null\n+++ b/report-templates.yaml\n@@ -0,0 +1,")).toBe(true);
     const r = applyTemplateWrite(plan, home, today);
     expect(r.backup).toBeNull();
-    expect(statSync(join(home, "config")).mode & 0o777).toBe(0o700);
-    expect(statSync(globalFile(home)).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(join(home, "config")).mode & 0o777).toBe(0o700);
+    if (POSIX_MODES) expect(statSync(globalFile(home)).mode & 0o777).toBe(0o600);
   });
 
   it("writes a client's file under config/report-templates/", () => {
@@ -86,7 +87,7 @@ describe("planTemplateWrite / applyTemplateWrite", () => {
     const plan = planTemplateWrite({ homeDir: home, file: "client", clientSlug: "example.com", id: "board", mode: "create", template: board, today });
     expect(plan.path).toBe(join(home, "config", "report-templates", "example.com.yaml"));
     applyTemplateWrite(plan, home, today);
-    expect(statSync(join(home, "config", "report-templates")).mode & 0o777).toBe(0o700);
+    if (POSIX_MODES) expect(statSync(join(home, "config", "report-templates")).mode & 0o777).toBe(0o700);
     expect(() => planTemplateWrite({ homeDir: home, file: "client", id: "board", mode: "create", template: board, today })).toThrow(/needs a client/);
   });
 

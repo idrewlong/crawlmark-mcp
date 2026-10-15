@@ -1,5 +1,5 @@
 import { isUnsetValue } from "./env.js";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 /**
  * Where crawlmark keeps its per-user files (`.env`, `config/clients.yaml`,
@@ -45,7 +45,8 @@ export function expandPath(p: string, userHome: string, cwd: string): string {
 
 /** The project-root markers that make it a source checkout, or undefined. */
 export function sourceCheckoutMarker(root: string, exists: (p: string) => boolean): string | undefined {
-  if (root.split(sep).includes("node_modules")) return undefined;
+  // Windows accepts both separators, so a root like C:/app/node_modules/crawlmark-mcp must count too.
+  if (root.split(/[\\/]/).includes("node_modules")) return undefined;
   if (exists(join(root, ".git"))) return ".git";
   if (exists(join(root, "src")) && exists(join(root, "dist"))) return "src/ next to dist/";
   if (exists(join(root, ".env"))) return ".env";

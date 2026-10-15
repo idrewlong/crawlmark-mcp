@@ -6,6 +6,7 @@ import { detectApps, registerApps, type AppId } from "../src/setup/apps.js";
 import { autoPrompter, type Choice, type Prompter } from "../src/setup/prompter.js";
 import { recordingUi } from "../src/setup/ui.js";
 import type { ExecResult, WizardContext } from "../src/setup/wizard.js";
+import { POSIX_MODES } from "./platform.js";
 
 const SENTINEL = "sk-SENTINEL-other-server-9999";
 
@@ -163,7 +164,7 @@ describe("register: Cursor and Claude Desktop (JSON)", () => {
     expect(JSON.parse(readFileSync(h.desktop, "utf8")).mcpServers.crawlmark.type).toBeUndefined();
     for (const f of [h.cursor, h.desktop]) {
       expect(readFileSync(`${f}.bak`, "utf8")).toBe(otherServers);
-      expect(mode(`${f}.bak`)).toBe(0o600);
+      if (POSIX_MODES) expect(mode(`${f}.bak`)).toBe(0o600);
     }
     expect(h.all()).toContain("Other servers kept unchanged: other");
     expect(h.all()).toContain('"CRAWLMARK_HOME": "<hidden>"');
@@ -200,9 +201,10 @@ describe("register: Codex text edit (no working CLI)", () => {
     expect(r.apps).toEqual([{ id: "codex", status: "registered" }]);
     const text = readFileSync(h.codexConfig, "utf8");
     expect(text.startsWith(tomlFixture)).toBe(true);
-    expect(text).toContain(`[mcp_servers.crawlmark.env]\nCRAWLMARK_HOME = "${h.home}"`);
+    // TOML basic strings escape backslashes like JSON does (Windows paths).
+    expect(text).toContain(`[mcp_servers.crawlmark.env]\nCRAWLMARK_HOME = ${JSON.stringify(h.home)}`);
     expect(readFileSync(`${h.codexConfig}.bak`, "utf8")).toBe(tomlFixture);
-    expect(mode(`${h.codexConfig}.bak`)).toBe(0o600);
+    if (POSIX_MODES) expect(mode(`${h.codexConfig}.bak`)).toBe(0o600);
     expect(h.all()).toContain("CRAWLMARK_HOME = <hidden>");
     expect(h.all()).not.toContain(SENTINEL);
     expect(h.all()).not.toContain(h.home);
@@ -239,7 +241,7 @@ describe("register: Codex CLI", () => {
     expect(h.order).toEqual(["claude --version", "codex --version", "codex mcp get crawlmark", "codex mcp add crawlmark", "bak-exists=true"]);
     const add = h.exec.mock.calls.find((c) => c[1][1] === "add")!;
     expect(add[1]).toEqual(["mcp", "add", "crawlmark", "--env", `CRAWLMARK_HOME=${h.home}`, "--", "/usr/local/bin/node", ...launchArgs(h)]);
-    expect(mode(`${h.codexConfig}.bak`)).toBe(0o600);
+    if (POSIX_MODES) expect(mode(`${h.codexConfig}.bak`)).toBe(0o600);
   });
 
   it("identical, different (default no, then remove+add after yes) and unreadable", async () => {
@@ -352,7 +354,7 @@ describe("R-4: a failed `codex mcp get` is not proof that crawlmark is absent", 
     return h;
   }
   const entryToml = (h: ReturnType<typeof harness>) =>
-    `[mcp_servers.crawlmark]\ncommand = "/usr/local/bin/node"\nargs = ["--disable-warning=ExperimentalWarning", "${join(h.root, "dist", "index.js")}"]\n\n[mcp_servers.crawlmark.env]\nCRAWLMARK_HOME = "${h.home}"\n`;
+    `[mcp_servers.crawlmark]\ncommand = "/usr/local/bin/node"\nargs = ["--disable-warning=ExperimentalWarning", ${JSON.stringify(join(h.root, "dist", "index.js"))}]\n\n[mcp_servers.crawlmark.env]\nCRAWLMARK_HOME = ${JSON.stringify(h.home)}\n`;
 
   it("--yes never adds over an existing (different) entry found in config.toml", async () => {
     const h = oldCodex([], { prompt: autoPrompter(() => {}) });

@@ -335,7 +335,16 @@ describeEachChrome("headless Chrome behind the egress proxy", () => {
     open.add(browser);
     try {
       const page = await browser.newPage();
-      await page.goto(`http://allowed.test:${allowedPort}/`, { waitUntil: "load" });
+      // Full Chrome on GitHub's Windows runners sometimes aborts the first navigation of a fresh profile
+      // (net::ERR_ABORTED) before any request reaches the proxy. Retry that one error; the checks below are unchanged.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await page.goto(`http://allowed.test:${allowedPort}/`, { waitUntil: "load" });
+          break;
+        } catch (err) {
+          if (attempt >= 3 || !/net::ERR_ABORTED/.test(String(err))) throw err;
+        }
+      }
       expect(await page.title()).toBe("allowed");
       const results = (await page.evaluate("window.attempts")) as unknown[];
       await new Promise((r) => setTimeout(r, 1000)); // let the popup try to load
@@ -508,7 +517,8 @@ describe("CONNECT authority parsing", () => {
     let allow = false;
     const proxy = await startEgressProxy({ lookup: fakeDns({ "ws80.example": [v4("127.0.0.1")] }), allowPrivate: () => allow });
     // Binding port 80 needs privileges on some systems; when it can't, an allowed CONNECT must at least
-    // get past parsing (502 from the failed dial rather than 400).
+    // get past parsing (502 from the failed dial rather than 400). Port 80 may also belong to another server
+    // (IIS on GitHub's Windows runners): then the tunnel opens and that server answers instead.
     const ws80 = createServer();
     let upgrades = 0;
     ws80.on("upgrade", (_req, socket) => {
@@ -524,13 +534,14 @@ describe("CONNECT authority parsing", () => {
       const refused = await rawExchange(proxy.port, `CONNECT ws80.example:80 HTTP/1.1\r\n\r\n${upgrade}`);
       expect(refused).toMatch(/^HTTP\/1\.1 403/);
       allow = true;
-      const reply = await rawExchange(proxy.port, `CONNECT ws80.example:80 HTTP/1.1\r\n\r\n${upgrade}`, /101 Switching|^HTTP\/1\.1 502/);
+      const reply = await rawExchange(proxy.port, `CONNECT ws80.example:80 HTTP/1.1\r\n\r\n${upgrade}`, /101 Switching|^HTTP\/1\.1 502|Established\r\n\r\nHTTP\/1\.1 \d{3} /);
       if (bound) {
         expect(reply).toMatch(/^HTTP\/1\.1 200 Connection Established/);
         expect(reply).toContain("101 Switching");
         expect(upgrades).toBe(1);
       } else {
-        expect(reply).toMatch(/^HTTP\/1\.1 502/);
+        expect(reply).toMatch(/^HTTP\/1\.1 (502|200 Connection Established)/);
+        expect(upgrades).toBe(0);
       }
     } finally {
       await proxy.close();
@@ -609,14 +620,14 @@ describeEachChrome("WebRTC cannot send UDP around the proxy (SEC-1)", () => {
   }
 
   /** Make the page gather ICE candidates against the STUN listener, then give it time to send. */
-  async function tryStun(page: import("puppeteer").Page, port: number) {
-    await page.evaluate(async (p: number) => {
+  async function tryStun(page: import("puppeteer").Page, port: number, waitMs = 2500) {
+    await page.evaluate(async (p: number, ms: number) => {
       const pc = new RTCPeerConnection({ iceServers: [{ urls: `stun:127.0.0.1:${p}` }] });
       pc.createDataChannel("x");
       await pc.setLocalDescription(await pc.createOffer());
-      await new Promise((r) => setTimeout(r, 2500));
+      await new Promise((r) => setTimeout(r, ms));
       pc.close();
-    }, port);
+    }, port, waitMs);
   }
 
   // Both are required: full Chrome ignores --force-webrtc-ip-handling-policy and honours only the profile pref; chrome-headless-shell
@@ -628,7 +639,8 @@ describeEachChrome("WebRTC cannot send UDP around the proxy (SEC-1)", () => {
     const stun = await stunListener();
     const browser = await puppeteer.launch({ ...puppeteerBinaryOptions(await resolveChrome()), args: [...CHROME_FLAGS, ...proxyChromeFlags(1)].filter((f) => !f.startsWith("--force-webrtc-ip-handling-policy")) });
     try {
-      await tryStun(await browser.newPage(), stun.port);
+      // A longer wait than the blocked cases: a loaded Windows runner sometimes sent nothing within 2.5 s.
+      await tryStun(await browser.newPage(), stun.port, 8000);
       expect(stun.packets()).toBeGreaterThan(0);
     } finally {
       await browser.close();

@@ -21,6 +21,7 @@ import {
   type ExecResult,
   type WizardContext,
 } from "../src/setup/wizard.js";
+import { POSIX_MODES } from "./platform.js";
 
 type Answer = string | boolean;
 
@@ -167,7 +168,7 @@ describe("wizard: DataForSEO step", () => {
     expect(r).toMatchObject({ outcome: "done", message: expect.stringContaining("$7.50") });
     const env = readEnvFile(join(f.home, ".env"));
     expect(env).toEqual({ DATAFORSEO_LOGIN: "me@example.com", DATAFORSEO_PASSWORD: "api-pass", DATAFORSEO_BASE_URL: "https://sandbox.dataforseo.com/v3" });
-    expect(mode(join(f.home, ".env"))).toBe(0o600);
+    if (POSIX_MODES) expect(mode(join(f.home, ".env"))).toBe(0o600);
     expect(f.lines.join("\n")).toContain("NOT the password you use to log in");
     expect(f.lines.join("\n")).not.toContain("api-pass");
   });
@@ -230,7 +231,7 @@ describe("wizard: Google step", () => {
     const r = await stepGoogle(f.ctx);
     expect(r).toMatchObject({ outcome: "done", message: expect.stringContaining("svc@proj.iam.gserviceaccount.com") });
     const dest = join(f.home, "secrets", "google-service-account.json");
-    expect(mode(dest)).toBe(0o600);
+    if (POSIX_MODES) expect(mode(dest)).toBe(0o600);
     expect(readEnvFile(join(f.home, ".env"))).toEqual({ GOOGLE_AUTH_MODE: "service_account", GOOGLE_APPLICATION_CREDENTIALS: "./secrets/google-service-account.json" });
     const out = f.lines.join("\n");
     expect(out).toContain("No file at");
@@ -320,7 +321,7 @@ describe("wizard: register step", () => {
     expect(written.mcpServers.other).toEqual({ command: "other" });
     expect(written.mcpServers.crawlmark).toEqual({ command: "/usr/local/bin/node", args: ["--disable-warning=ExperimentalWarning", join(f.root, "dist", "index.js")], env: { CRAWLMARK_HOME: f.home } });
     expect(JSON.parse(readFileSync(`${desktop}.bak`, "utf8"))).toEqual({ mcpServers: { other: { command: "other" } } });
-    expect(statSync(`${desktop}.bak`).mode & 0o777).toBe(0o600);
+    if (POSIX_MODES) expect(statSync(`${desktop}.bak`).mode & 0o777).toBe(0o600);
     const out = f.lines.join("\n");
     expect(out).toContain("Other servers kept unchanged: other");
     expect(out).toContain('"CRAWLMARK_HOME": "<hidden>"');
@@ -475,7 +476,7 @@ describe("wizard: crux step (Phase 12, --step crux only)", () => {
     expect(url).toContain("records:queryHistoryRecord");
     expect(JSON.parse(String(init.body))).toMatchObject({ origin: "https://developer.chrome.com" });
     expect(readEnvFile(join(f.home, ".env")).CRUX_API_KEY).toBe("AIza-new-crux-key");
-    expect(mode(join(f.home, ".env"))).toBe(0o600);
+    if (POSIX_MODES) expect(mode(join(f.home, ".env"))).toBe(0o600);
     expect(f.lines.join("\n")).not.toContain("AIza-new-crux-key");
   });
 
@@ -508,7 +509,7 @@ describe("wizard: bing step (Phase 12 C3, --step bing only)", () => {
     expect(new URL(url).pathname).toMatch(/\/GetUserSites$/);
     expect(new URL(url).searchParams.has("siteUrl")).toBe(false);
     expect(readEnvFile(join(f.home, ".env")).BING_WEBMASTER_API_KEY).toBe("SENTINEL-bing-wizard-key-123");
-    expect(mode(join(f.home, ".env"))).toBe(0o600);
+    if (POSIX_MODES) expect(mode(join(f.home, ".env"))).toBe(0o600);
     expect(f.lines.join("\n")).not.toContain("SENTINEL-bing-wizard-key-123");
     expect(f.lines.join("\n")).toMatch(/Settings \(top right\) > API Access/);
   });

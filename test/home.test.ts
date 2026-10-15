@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { expandPath, InvalidHomeError, isAnchoredPath, resolveHome, sourceCheckoutMarker } from "../src/lib/home.js";
 
@@ -9,8 +9,8 @@ const existing = (...paths: string[]) => (p: string) => paths.map((x) => join(RO
 describe("resolveHome", () => {
   it("CRAWLMARK_HOME wins over everything, with ~ and relative paths expanded", () => {
     const all = existing(".git", "src", "dist", ".env", "config/clients.yaml");
-    expect(resolveHome({ ...base, crawlmarkHome: "/srv/cm", exists: all })).toMatchObject({ dir: "/srv/cm", source: "env" });
-    expect(resolveHome({ ...base, crawlmarkHome: "~/cm", exists: all }).dir).toBe("/home/u/cm");
+    expect(resolveHome({ ...base, crawlmarkHome: "/srv/cm", exists: all })).toMatchObject({ dir: resolve("/srv/cm"), source: "env" });
+    expect(resolveHome({ ...base, crawlmarkHome: "~/cm", exists: all }).dir).toBe(resolve("/home/u/cm"));
   });
 
   it("refuses a relative CRAWLMARK_HOME (it would load the .env of whatever directory you're in)", () => {
@@ -38,7 +38,7 @@ describe("resolveHome", () => {
   });
 
   it("falls back to ~/.crawlmark for an installed package", () => {
-    expect(resolveHome({ ...base, crawlmarkHome: undefined, exists: existing("dist") })).toMatchObject({ dir: "/home/u/.crawlmark", source: "user" });
+    expect(resolveHome({ ...base, crawlmarkHome: undefined, exists: existing("dist") })).toMatchObject({ dir: join("/home/u", ".crawlmark"), source: "user" });
     // src/ alone (without dist/) is not a checkout marker.
     expect(resolveHome({ ...base, crawlmarkHome: undefined, exists: existing("src") }).source).toBe("user");
   });
@@ -46,12 +46,13 @@ describe("resolveHome", () => {
   it("never treats a package inside node_modules as a checkout", () => {
     const root = "/app/node_modules/crawlmark-mcp";
     expect(sourceCheckoutMarker(root, () => true)).toBeUndefined();
+    expect(sourceCheckoutMarker("C:\\app\\node_modules\\crawlmark-mcp", () => true)).toBeUndefined();
     expect(resolveHome({ projectRoot: root, userHome: "/home/u", cwd: "/", crawlmarkHome: undefined, exists: () => true }).source).toBe("user");
   });
 
   it("expandPath handles ~, absolute and relative", () => {
-    expect(expandPath("~", "/home/u", "/w")).toBe("/home/u");
-    expect(expandPath("/a/../b", "/home/u", "/w")).toBe("/b");
-    expect(expandPath("x", "/home/u", "/w")).toBe("/w/x");
+    expect(expandPath("~", "/home/u", "/w")).toBe(resolve("/home/u"));
+    expect(expandPath("/a/../b", "/home/u", "/w")).toBe(resolve("/b"));
+    expect(expandPath("x", "/home/u", "/w")).toBe(resolve("/w/x"));
   });
 });
