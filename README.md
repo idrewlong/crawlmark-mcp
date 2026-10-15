@@ -32,7 +32,7 @@ That one command sets up crawlmark and adds it to your AI apps: **Claude Code, C
 |---|---|
 | Claude Code, Claude Desktop, Cursor, Codex, or any MCP client | [npx and the setup wizard](#npx-and-the-setup-wizard) |
 | Claude Desktop | [Claude Desktop bundle (MCPB)](#claude-desktop-bundle-mcpb) |
-| Scheduled jobs, development, or before the first release | [From source](#from-source) |
+| Scheduled jobs from a checkout, or development | [From source](#from-source) |
 
 ### npx and the setup wizard
 
