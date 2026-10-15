@@ -18,3 +18,15 @@ build/
 
 # Local Claude Code state (agent worktrees, settings)
 .claude/
+
+# Personal files crawlmark writes into its config home (the repo root in a source checkout)
+config/report-templates.yaml
+config/report-templates/
+/branding/
+/imports/
+/logs/
+*.bak
+
+# Build and test leftovers
+*.tgz
+coverage/
