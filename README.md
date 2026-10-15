@@ -224,7 +224,7 @@ In the [Google Cloud console](https://console.cloud.google.com/), create or pick
 - **Google Search Console API**
 - **Google Analytics Data API**
 - **Google Analytics Admin API** (lists your GA4 properties so clients can be discovered)
-- **Tag Manager API** (only for `gtm_audit`)
+- **Tag Manager API** (only for the Tag Manager checks: `gtm_audit`, `run_audit` with `includeTagManager` and the `gtm` report section)
 - **PageSpeed Insights API** (only for a PageSpeed key)
 
 #### Option C: service account
@@ -270,7 +270,7 @@ Core Web Vitals history (`crux_history`, the `cwv` report section and `run_audit
 
 ### Bing Webmaster Tools (optional)
 
-> **Beta.** The Bing Webmaster Tools integration is built to the official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps and key handling are fully tested. If anything looks wrong (an error you don't expect, a missing field, units that don't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
+> **Beta.** The Bing Webmaster Tools integration is built to the official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Key handling and the read-only method list are fully tested. If anything looks wrong (an error you don't expect, a missing field, numbers that don't match Bing's dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
 
 `bing_report` and the `bing_overview` report section read Bing search data with your own Bing Webmaster Tools API key. It's free:
 
@@ -393,7 +393,7 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | `render_check` | Compares a page's raw HTML with what Chrome renders and flags SEO elements that only appear after JavaScript. Free |
 | `gtm_audit` | Audits the live Tag Manager container: paused, unfired and legacy tags, duplicate GA4 tags, unused variables, custom HTML, consent gaps and unpublished changes. Free |
 | `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |
-| `accessibility_check` | axe-core WCAG checks on one page |
+| `accessibility_check` | axe-core WCAG checks on one page, at level A, AA (default) or AAA. Free |
 | `crux_history` | Real-user Core Web Vitals (LCP, INP, CLS, FCP, TTFB) per week for up to 40 weeks, with ratings and a trend, for a client, an origin or a URL. Free with a key ([CrUX History](#crux-history-optional)) |
 | `bing_report` | Bing Webmaster Tools for a client: clicks, impressions and CTR for the last 28 days (7 to 180) vs the period before, by day, the top 25 queries and pages, crawl stats for the latest 30 days and up to 50 URLs with crawl issues. Read-only; free with a key ([Bing Webmaster Tools](#bing-webmaster-tools-optional)) |
 | `log_analysis` | Crawler hits from your server's access logs (Apache/Nginx, `.gz` too): Googlebot (checked against Google's published IP ranges), Bingbot and AI crawlers such as GPTBot, ClaudeBot and PerplexityBot, with statuses, top paths, 404s and 5xx, hits per day and parameter URLs. Reads only `LOG_DIRS` or `<home>/logs`; logs never leave your machine and no IP addresses or user agents are returned. Free |
@@ -409,7 +409,7 @@ Live ranks from `serp_check`, `monthly_report` with `liveRanks` and report templ
 
 ### Local SEO (paid, DataForSEO)
 
-> **Beta.** Local SEO is built to DataForSEO's official API documentation and tested against the documented example responses, but it hasn't been verified against a live account yet. Cost caps and reviewer-data stripping are fully tested. If anything looks wrong (an error you don't expect, a missing field, a cost that doesn't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
+> **Beta.** Local SEO is built to DataForSEO's official API documentation and tested against the documented example responses. `local_pack` has been run against the live API; `local_profile` and `local_reviews` haven't returned a real listing in a live check yet. Cost caps and reviewer-data stripping are fully tested. If anything looks wrong (an error you don't expect, a missing field, a cost that doesn't match your dashboard), please [open an issue](https://github.com/idrewlong/crawlmark-mcp/issues).
 
 | Tool | Description |
 |---|---|
@@ -480,6 +480,7 @@ Prompts
 | `audit-findings` | `client` | Uses a recent audit or runs one, compares it with the last, and writes findings by severity with a prioritized fix list |
 | `opportunity-review` | `client` | Runs the five opportunity tools and writes a prioritized action list with estimated click upside |
 | `client-health-check` | `client` | One cheap check per source, then a status table and fix list. Useful when onboarding a client |
+| `keyword-research` | `client`, `seeds` (optional, comma-separated) | Finds keyword ideas from seed keywords, or the keywords competitors rank for that the client doesn't, from the client's data provider. Shows the estimate and remaining cap first, runs the paid call only after you agree, then groups the results by intent and suggests a page for each |
 | `find-competitors` | `client` | Confirms the client's area and niche, suggests competitors with evidence, and adds the ones you pick |
 | `review-brand-terms` | `client` (optional; empty means every client) | Suggests brand terms and adds the ones you confirm |
 
@@ -508,7 +509,7 @@ Report files
 
 Your branding (agency name, logo, colours, footer, white label, paper size and default formats) is set up with `crawlmark-cli setup --step branding`, which shows a one-page preview with sample data before saving; `crawlmark-cli report preview-branding` shows it again later.
 
-Builtin templates: `monthly` (the same data as `monthly_report`), `quarterly` (the quarter against the one before and the same quarter last year), `executive` (one page: key figures, the clicks trend, top wins and next steps) `technical` (site crawl, Core Web Vitals, audit changes and AI readiness, for web teams) and `local` (Local SEO: the Google Business Profile and map-pack positions, paid, plus local-intent searches).
+Builtin templates: `monthly` (the same data as `monthly_report`), `quarterly` (the quarter against the one before and the same quarter last year), `executive` (one page: key figures, the clicks trend, top wins and next steps), `technical` (site crawl, Core Web Vitals, audit changes and AI readiness, for web teams) and `local` (Local SEO: the Google Business Profile and map-pack positions, paid, plus local-intent searches).
 
 ```bash
 crawlmark-cli report templates init                         # writes config/report-templates.yaml (monthly + quarterly to edit)
@@ -520,7 +521,7 @@ crawlmark-cli report templates new --client example.com    # build your own: pic
 
 To build your own template without writing YAML, run `crawlmark-cli report templates new` on a terminal, or ask Claude ("draft me a one-page monthly summary with search, traffic and technical issues"): it shows you the template and the change to your file, and saves only after you say yes. Paid sections are always named with their cost and never added without your OK.
 
-Optional sections are added with `--include` (`include` in Claude): `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history), `ai` (llms.txt and AI crawler access from the newest saved audit) and `spend` (paid data used this month; the tool and CLI results always report it, the files only with this section). A template can also have a paid `keyword_gap` section, which runs only with `--paid` (`allowPaid`) after its estimate fits the caps.
+Optional sections are added with `--include` (`include` in Claude). Free: `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history), `ai` (llms.txt and AI crawler access from the newest saved audit), `issues` (the technical-issues list), `indexing` (Google indexing coverage) and `spend` (paid data used this month; the tool and CLI results always report it, the files only with this section). Paid, through the client's data provider: `backlinks` and `visibility` in `monthly` and `quarterly`, and `competitors` in `quarterly`. Paid sections (also `keyword_gap`, `local_profile` and `ai_visibility` in your own templates) run only with `--paid` (`allowPaid`) after their estimate fits the caps.
 
 PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, branding, paths and the Docs handoff.
 
@@ -552,7 +553,7 @@ Cost controls
 - Ahrefs and Semrush calls check unit caps instead (see [Data providers](#data-providers)). Units are never converted to dollars.
 - Calls that run at the same time reserve their whole estimate until they finish, so together they can't pass a cap that their sum would cross. Reservations are per process: a cron run and the MCP server running at the same moment each see only the other's recorded spend, not its calls in progress.
 - The cost DataForSEO reports, and the units Ahrefs and Semrush calls use, are written to a ledger; `spend_summary` reads it.
-- Responses are cached (keyword volume 30 days; ranked keywords and backlinks 7 days; SERPs, Google data and client discovery 1 day), so re-running a report mostly costs nothing.
+- Responses are cached (keyword volume 30 days; ranked keywords and backlinks 7 days; SERPs, Google data and client discovery 1 day; Ahrefs keyword and competitor lists at most 1 day), so re-running a report mostly costs nothing.
 - `monthly_report` and the opportunity tools are free. Live rank checks, full crawls and backlinks are opt-in.
 - Use the DataForSEO sandbox while trying things out. Ahrefs offers free test queries against its own domains; Semrush has none.
 
@@ -660,7 +661,7 @@ npm run inspect      # MCP Inspector
 
 [docs/development.md](docs/development.md) covers the code layout, adding a data source and releasing. [docs/audits.md](docs/audits.md) lists every audit and site-hygiene check.
 
-**Known limits:** the Ahrefs, Semrush and Bing Webmaster Tools integrations are in beta (built to the official docs, not yet verified against a live account). CI runs the test suite and a packaged-install check on Linux, macOS and Windows, but the AI apps haven't been tried by hand on Windows. OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
+**Known limits:** the Ahrefs, Semrush and Bing Webmaster Tools integrations and AI-search visibility are in beta (built to the official docs, not yet verified against a live account), and so is local SEO apart from `local_pack`. CI runs the test suite and a packaged-install check on Linux, macOS and Windows, but the AI apps haven't been tried by hand on Windows. OAuth with a Workspace (Internal) app hasn't been tried (personal Gmail in Testing mode has). Tag Manager findings are in `run_audit` only when asked for (`includeTagManager`).
 
 Security
 --------
