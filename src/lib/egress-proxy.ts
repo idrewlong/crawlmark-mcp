@@ -55,14 +55,15 @@ const HOP_BY_HOP = new Set([
   "upgrade",
 ]);
 
-function stripHopByHop(headers: IncomingHttpHeaders): IncomingHttpHeaders {
+export function stripHopByHop(headers: IncomingHttpHeaders): IncomingHttpHeaders {
   const listed = new Set(
     String(headers.connection ?? "")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
   );
-  const out: IncomingHttpHeaders = {};
+  // No prototype: a header named __proto__ or constructor is just a key. http.request and writeHead only enumerate own keys.
+  const out = Object.create(null) as IncomingHttpHeaders;
   for (const [k, v] of Object.entries(headers)) {
     if (!HOP_BY_HOP.has(k) && !listed.has(k)) out[k] = v;
   }

@@ -30,13 +30,13 @@ export function escapeMarkdown(s: string, atLineStart = true): string {
     .replace(/^(\d{1,9})([.)])(?=\s|$)/, "$1\\$2");
 }
 
-/** A Markdown code span: the fence is longer than any backtick run inside, so the content can't close it. `|` is escaped for tables. */
+/** A Markdown code span: the fence is longer than any backtick run inside, so the content can't close it. `\` then `|` are escaped for tables (backslash first, so `\|` in the data can't become an escaped backslash plus a real cell separator). */
 export function markdownCode(s: string): string {
   const text = clean(s).replace(/\r?\n|\r/g, " ");
   const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
   const fence = "`".repeat(longest + 1);
   const pad = text.startsWith("`") || text.endsWith("`") || text.startsWith(" ") ? " " : "";
-  return `${fence}${pad}${text.replace(/\|/g, "\\|")}${pad}${fence}`;
+  return `${fence}${pad}${text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")}${pad}${fence}`;
 }
 
 /**

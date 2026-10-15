@@ -5,8 +5,9 @@
  * likewise. An invalid file never hides the builtin `monthly`; its errors are
  * reported instead.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { basename, isAbsolute, resolve } from "node:path";
+import { RegularFileError, readRegularFileCapped } from "../../lib/read-regular-file.js";
 import { clientTemplatesFile, globalTemplatesFile } from "../paths.js";
 import { BUILTIN_DEFAULTS, BUILTIN_TEMPLATES } from "./builtin.js";
 import {
@@ -57,11 +58,16 @@ export function readTemplateFile(path: string, homeDir: string, today?: Date): {
   if (!existsSync(path)) return { status: { path, exists: false, valid: true } };
   let result: ValidationResult;
   try {
-    const size = statSync(path).size;
-    if (size > MAX_TEMPLATE_BYTES) {
+    let text: string | undefined;
+    try {
+      text = readRegularFileCapped(path, MAX_TEMPLATE_BYTES).toString("utf8");
+    } catch (err) {
+      if (!(err instanceof RegularFileError) || err.reason !== "too-large") throw err;
+    }
+    if (text === undefined) {
       result = { valid: false, errors: [{ path: "", message: `the file is larger than ${MAX_TEMPLATE_BYTES / 1024} KB` }], warnings: [] };
     } else {
-      result = validateTemplateText(readFileSync(path, "utf8"), { ...(today ? { today } : {}), logoExists: (l) => existsSync(resolveLogo(homeDir, l)) });
+      result = validateTemplateText(text, { ...(today ? { today } : {}), logoExists: (l) => existsSync(resolveLogo(homeDir, l)) });
     }
   } catch (err) {
     result = { valid: false, errors: [{ path: "", message: `couldn't read the file: ${(err as Error).message}` }], warnings: [] };

@@ -6,9 +6,10 @@
  * client or month directory, never outside REPORTS_DIR. Re-running the same
  * template and period overwrites (`overwritten: true`).
  */
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { writeFileAtomic } from "../lib/atomic-file.js";
+import { RegularFileError, readRegularFileCapped } from "../lib/read-regular-file.js";
 import { stripControl } from "../lib/terminal-text.js";
 import { reportRelPath } from "./paths.js";
 import type { TemplateReport } from "./report-types.js";
@@ -134,10 +135,16 @@ export function loadLogo(branding: ResolvedBranding): { logo?: DocBranding["logo
   if (!l) return {};
   try {
     if (!existsSync(l.resolved)) return { warning: `Logo ${l.path} doesn't exist; rendered without it.` };
-    const st = statSync(l.resolved);
-    if (!st.isFile()) return { warning: `Logo ${l.path} isn't a file; rendered without it.` };
-    if (st.size > MAX_LOGO_BYTES) return { warning: `Logo ${l.path} is larger than 512 KB; rendered without it.` };
-    const data = readFileSync(l.resolved);
+    // One handle: no symlink, regular file, size checked before and after the read.
+    let data: Buffer;
+    try {
+      data = readRegularFileCapped(l.resolved, MAX_LOGO_BYTES);
+    } catch (err) {
+      if (err instanceof RegularFileError) {
+        return { warning: err.reason === "not-regular" ? `Logo ${l.path} isn't a file; rendered without it.` : `Logo ${l.path} is larger than 512 KB; rendered without it.` };
+      }
+      throw err;
+    }
     const mime = sniffImage(data);
     if (!mime) return { warning: `Logo ${l.path} isn't a PNG or JPEG; rendered without it.` };
     return { logo: { mime, data } };

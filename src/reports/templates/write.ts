@@ -10,9 +10,10 @@
  */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep, isAbsolute } from "node:path";
 import { Document, isMap, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq, type Node } from "yaml";
+import { RegularFileError, readRegularFileCapped } from "../../lib/read-regular-file.js";
 import { writeFileAtomic } from "../../lib/atomic-file.js";
 import { clientTemplatesFile, globalTemplatesFile } from "../paths.js";
 import { BUILTIN_TEMPLATES } from "./builtin.js";
@@ -135,12 +136,20 @@ export function assertSafeTarget(homeDir: string, path: string): void {
   }
 }
 
-function readCurrent(path: string): string | null {
+/** The current text of a template file, or null when it doesn't exist. Exported for tests. */
+export function readCurrent(path: string): string | null {
   if (!existsSync(path)) return null;
-  const st = lstatSync(path);
-  if (!st.isFile()) throw new Error(`${path} isn't a regular file.`);
-  if (st.size > MAX_TEMPLATE_BYTES) throw new TemplateWriteError(`${path} is larger than ${MAX_TEMPLATE_BYTES / 1024} KB.`, [{ path: "", message: `the file is larger than ${MAX_TEMPLATE_BYTES / 1024} KB` }]);
-  return readFileSync(path, "utf8");
+  // One handle (no symlink followed, regular file, size capped on the bytes read), so a path swapped after the
+  // existsSync can't put another file's text into a proposal diff.
+  try {
+    return readRegularFileCapped(path, MAX_TEMPLATE_BYTES).toString("utf8");
+  } catch (err) {
+    if (err instanceof RegularFileError && err.reason === "too-large") {
+      throw new TemplateWriteError(`${path} is larger than ${MAX_TEMPLATE_BYTES / 1024} KB.`, [{ path: "", message: `the file is larger than ${MAX_TEMPLATE_BYTES / 1024} KB` }]);
+    }
+    if (err instanceof RegularFileError || (err as NodeJS.ErrnoException).code === "ELOOP") throw new Error(`${path} isn't a regular file.`);
+    throw err;
+  }
 }
 
 /** Section maps and periods in flow style (`- { id: search, type: search_overview }`), like the starter file. */
@@ -300,8 +309,8 @@ function globalTemplateIds(homeDir: string, today: Date | undefined): { ids: str
   if (read.value) return { ids: Object.keys(read.value.templates ?? {}) };
   if (!read.status.exists) return { ids: [] };
   try {
-    if (statSync(path).size > MAX_TEMPLATE_BYTES) return { ids: [], unreadable: true };
-    const doc = parseDocument(readFileSync(path, "utf8"), { uniqueKeys: true });
+    // Too large, not a regular file (or a symlink): not trusted, same as unparseable.
+    const doc = parseDocument(readRegularFileCapped(path, MAX_TEMPLATE_BYTES).toString("utf8"), { uniqueKeys: true });
     // A duplicate key still parses to a map; any other YAML error may have dropped content, so it isn't trusted.
     if (doc.errors.some((e) => e.code !== "DUPLICATE_KEY")) return { ids: [], unreadable: true };
     const root = doc.toJS() as unknown;
