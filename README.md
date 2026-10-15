@@ -13,7 +13,7 @@ It combines:
 | Ahrefs or Semrush (beta) | Keyword volume, ranked keywords, competitors and backlinks, with your own API key | Your plan's API units |
 | Lighthouse | Performance, SEO and best-practice scores, lab Core Web Vitals | Free (runs locally) |
 | PageSpeed Insights | Real-user field data (CrUX) | Free with an API key (optional) |
-| Chrome UX Report History | Real-user Core Web Vitals over the last 40 weeks | Free with an API key (optional) |
+| Chrome UX Report History | Real-user Core Web Vitals week by week: 25 weeks by default, up to 40 | Free with an API key (optional) |
 | Bing Webmaster Tools (beta) | Bing clicks, impressions, top queries and pages, crawl stats and crawl issues (read-only) | Free with an API key (optional) |
 | axe-core | Automated WCAG A/AA/AAA checks | Free (runs locally) |
 
