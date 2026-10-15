@@ -62,6 +62,7 @@ export function guardedFetchFrom(real: typeof fetch): typeof fetch {
   return (async (input: FetchInput, init?: RequestInit) => {
     const { method, url } = describeRequest(input, init);
     assertFreeEndpoint(method, url);
-    return real(input, init);
+    // Only the checked URL may be fetched: a redirect to another endpoint fails instead of being followed unchecked.
+    return real(input, { ...init, redirect: "error" });
   }) as typeof fetch;
 }

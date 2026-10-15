@@ -42,7 +42,7 @@ export function stripSourceFromIssueSnapshots(source: IssueSource, o: { client?:
 }
 
 /** Semrush Site Audit items older than 31 days are removed (on every save and every read). */
-const pruneSemrush = (now: number) => stripSourceFromIssueSnapshots("semrush_site_audit", { beforeMs: now - SEMRUSH_ISSUE_RETENTION_DAYS * DAY_MS });
+export const pruneSemrushIssueSnapshots = (now: number) => stripSourceFromIssueSnapshots("semrush_site_audit", { beforeMs: now - SEMRUSH_ISSUE_RETENTION_DAYS * DAY_MS });
 /** The newest snapshot of each calendar month is also kept for this many months. */
 export const MONTHLY_KEPT = 25;
 
@@ -83,7 +83,7 @@ const fromRow = (r: Row): IssueSnapshot => ({
 export function saveIssueSnapshot(s: IssueSnapshot, now = Math.max(Date.now(), s.capturedAt)): void {
   db.exec("BEGIN");
   try {
-    pruneSemrush(now);
+    pruneSemrushIssueSnapshots(now);
     db.prepare("INSERT INTO issue_snapshots (id, client, captured_at, items, checked, settings) VALUES (?, ?, ?, ?, ?, ?)").run(
       s.id,
       s.client,
@@ -115,7 +115,7 @@ export function saveIssueSnapshot(s: IssueSnapshot, now = Math.max(Date.now(), s
 
 /** The client's newest snapshot captured strictly before `beforeMs`, leaving out `excludeIds` (the current run's own). */
 export function latestIssueSnapshotBefore(client: string, beforeMs: number, excludeIds: readonly string[] = [], now = Date.now()): IssueSnapshot | undefined {
-  pruneSemrush(now);
+  pruneSemrushIssueSnapshots(now);
   const ex = excludeIds.length ? ` AND id NOT IN (${excludeIds.map(() => "?").join(", ")})` : "";
   const row = db.prepare(`SELECT * FROM issue_snapshots WHERE client = ? AND captured_at < ?${ex} ORDER BY captured_at DESC, id DESC LIMIT 1`).get(client, beforeMs, ...excludeIds) as Row | undefined;
   return row ? fromRow(row) : undefined;

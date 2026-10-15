@@ -33,8 +33,12 @@ try {
   // The temp home keeps real config out of reach, but Puppeteer looks for its Chrome under the home folder. Point it at
   // the real cache (as test/setup.ts does): with no cached Chrome it falls back to system Chrome, which on Windows
   // won't start with a fake USERPROFILE.
+  // crawlmark's own settings from the developer's shell (keys, DATA_DIR, CLIENTS_FILE...) must not reach the
+  // installed server: it should see only the temp home.
+  const CRAWLMARK_VARS = /^(CRAWLMARK_|DATA_DIR$|REPORTS_DIR$|CLIENTS_FILE$|GOOGLE_|DATAFORSEO_|AHREFS_|SEMRUSH_|BING_|PSI_|CRUX_|SEO_DATA_PROVIDER$|ALERT_|LOG_DIRS$|IMPORT_DIRS$|COMPETITOR_|AI_VISIBILITY_|GLOBAL_MONTHLY|DEFAULT_CLIENT_|RESTRICT_TO_CLIENT_DOMAINS$|ALLOW_PRIVATE_URLS$)/;
+  const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !CRAWLMARK_VARS.test(k)));
   const env = {
-    ...process.env,
+    ...baseEnv,
     CRAWLMARK_HOME: join(home, ".crawlmark"),
     HOME: home,
     USERPROFILE: home,

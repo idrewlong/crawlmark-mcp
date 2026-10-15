@@ -12,8 +12,9 @@
  */
 import { ENV_FILE_KEYS, env } from "../config.js";
 import type { IssueSource } from "../reports/report-types.js";
-import { stripSourceFromIssueSnapshots } from "./issue-snapshots.js";
+import { pruneSemrushIssueSnapshots, stripSourceFromIssueSnapshots } from "./issue-snapshots.js";
 import { purgeExpired } from "./cache.js";
+import { pruneSnapshots } from "./snapshots.js";
 import { db } from "./store.js";
 
 export type DataProvider = "dataforseo" | "ahrefs" | "semrush";
@@ -97,14 +98,25 @@ export function reconcileRemovedKeys(entry: ProcessEntry = processEntry): PurgeR
   return purgeProviderData("ahrefs");
 }
 
+/**
+ * The storage rules applied to everything stored, not only when it's next read: expired cache rows (Ahrefs row lists
+ * after a day, Semrush responses after 30 days), Semrush figures and Site Audit items after 31 days, Ahrefs
+ * figures after 25 months. Runs at startup and, in the MCP server, every few hours.
+ */
+export function retentionSweep(now = Date.now()): void {
+  purgeExpired();
+  pruneSnapshots(now);
+  pruneSemrushIssueSnapshots(now);
+}
+
 let reconciled = false;
 /** reconcileRemovedKeys once per process; a purge is reported on stderr (never stdout: the MCP channel). */
 export function reconcileOnce(): void {
   if (reconciled) return;
   reconciled = true;
   try {
-    // Expired cache rows (including Ahrefs row lists, kept for at most a day) are deleted, not just ignored.
-    purgeExpired();
+    // Expired cache rows and provider figures past their retention are deleted, not just ignored.
+    retentionSweep();
     const r = reconcileRemovedKeys();
     if (r) console.error(`crawlmark: the Ahrefs key was removed, so stored Ahrefs data was deleted (${r.snapshots} snapshot rows, ${r.cacheEntries} cache entries).`);
   } catch (err) {
