@@ -42,7 +42,8 @@ jobs:
           curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
           tar -xzf gitleaks.tgz gitleaks
-          ./gitleaks git --no-banner --redact --exit-code 1 .
+          # Only the history of the commit being checked: other branches (work in progress) are scanned on their own runs.
+          ./gitleaks git --no-banner --redact --exit-code 1 --log-opts="HEAD" .
 
   codeql:
     name: CodeQL
