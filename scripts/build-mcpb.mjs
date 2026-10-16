@@ -8,8 +8,9 @@
 // Puppeteer's Chrome download is skipped on purpose (it is hundreds of MB); at run time crawlmark uses
 // CHROME_PATH or the Chrome installed on the machine. Needs the system `zip`. The official packer
 // (`npx @anthropic-ai/mcpb pack build/mcpb-stage build/crawlmark.mcpb`) works on the same stage directory.
-import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -86,11 +87,14 @@ function pruneGoogleapis(dir, keep) {
   for (const f of ["index.d.ts", "googleapis.d.ts"]) rmSync(join(dir, "build", "src", f), { force: true });
 }
 
-/** Keep only docx's ESM entry (dist/index.mjs); throw if the layout changed. */
+/** The docx ESM files crawlmark imports: the main entry and `docx/charts` (editable charts in reports). */
+const DOCX_KEEP = ["index.mjs", "charts.mjs"];
+
+/** Keep only the docx ESM files crawlmark imports (DOCX_KEEP); throw if the layout changed. */
 function pruneDocx(dir) {
   const dist = join(dir, "dist");
-  if (!existsSync(join(dist, "index.mjs"))) throw new Error(`docx layout changed: ${join(dist, "index.mjs")} not found`);
-  for (const name of readdirSync(dist)) if (name !== "index.mjs") rmSync(join(dist, name), { recursive: true, force: true });
+  for (const f of DOCX_KEEP) if (!existsSync(join(dist, f))) throw new Error(`docx layout changed: ${join(dist, f)} not found`);
+  for (const name of readdirSync(dist)) if (!DOCX_KEEP.includes(name)) rmSync(join(dist, name), { recursive: true, force: true });
 }
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -126,16 +130,34 @@ run(process.execPath, [
   "const { google } = require('googleapis'); for (const [api, v] of [['searchconsole','v1'],['analyticsdata','v1beta'],['analyticsadmin','v1beta'],['tagmanager','v2']]) { if (typeof google[api] !== 'function') throw new Error(api + ' missing'); google[api]({ version: v }); }",
 ], { cwd: stage });
 // docx ships the same code as ESM, CJS, UMD and IIFE builds plus four optional sub-packages and their
-// type declarations (about 9 MB). crawlmark imports only the ESM entry (dist/index.mjs), which is self-contained.
+// type declarations (about 9 MB). crawlmark imports only the ESM entry and docx/charts (DOCX_KEEP).
 pruneDocx(join(stage, "node_modules", "docx"));
 // Fail the build if the pruned docx no longer loads or can't write a document.
 run(process.execPath, [
   "--input-type=module",
   "-e",
-  "const d = await import('docx'); const b = await d.Packer.toBuffer(new d.Document({ sections: [{ children: [new d.Paragraph('ok')] }] })); if (b.subarray(0, 2).toString() !== 'PK') throw new Error('docx output is not a zip');",
+  "const d = await import('docx'); await import('docx/charts'); const b = await d.Packer.toBuffer(new d.Document({ sections: [{ children: [new d.Paragraph('ok')] }] })); if (b.subarray(0, 2).toString() !== 'PK') throw new Error('docx output is not a zip');",
 ], { cwd: stage });
 // The lockfile is only needed for npm ci.
 rmSync(join(stage, "package-lock.json"), { force: true });
+
+// Fail the build unless the staged server actually starts and lists its tools: pruning must never remove a file
+// some import needs. Runs against a throwaway home, so no real config is read.
+{
+  const home = mkdtempSync(join(tmpdir(), "crawlmark-mcpb-check-"));
+  try {
+    const out = execFileSync(process.execPath, [join(root, "scripts", "mcp-list.mjs"), process.execPath, "--disable-warning=ExperimentalWarning", join(stage, "dist", "index.js")], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, HOME: home, USERPROFILE: home, CRAWLMARK_HOME: join(home, ".crawlmark"), CRAWLMARK_NO_UPDATE_CHECK: "1" },
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const listed = JSON.parse(out);
+    if (!listed.tools?.length) throw new Error("the staged server listed no tools");
+    console.log(`Staged server starts: ${listed.tools.length} tools, ${listed.prompts.length} prompts.`);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
 
 run("zip", ["-qr", "-X", output, "."], { cwd: stage });
 
