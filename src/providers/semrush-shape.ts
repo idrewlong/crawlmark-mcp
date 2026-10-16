@@ -195,6 +195,25 @@ export function parseSemrushError(text: string): SemrushApiErrorInfo | null {
   return m ? { code: Number(m[1]), text: m[2]!.trim() } : null;
 }
 
+/**
+ * The JSON error body the balance check (countapiunits) answers with HTTP 400, e.g.
+ * `{"errors":[{"field":"key","message":"invalid api key: …"}]}`; null for anything else.
+ */
+export function parseSemrushJsonErrors(text: string): { field: string | null; message: string }[] | null {
+  let j: unknown;
+  try {
+    j = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const errors = (j as { errors?: unknown } | null)?.errors;
+  if (!Array.isArray(errors) || errors.length === 0) return null;
+  return errors.map((e: { field?: unknown; message?: unknown }) => ({
+    field: typeof e?.field === "string" ? e.field : null,
+    message: typeof e?.message === "string" ? e.message : "",
+  }));
+}
+
 /** A v4 JSON error body: `{ meta, error: { code, message, retryable } }`, else null. */
 export function parseSemrushV4Error(json: unknown): { code: number; message: string; retryable: boolean; status: number | null } | null {
   const j = json as { meta?: { status_code?: unknown }; error?: { code?: unknown; message?: unknown; retryable?: unknown } } | null;

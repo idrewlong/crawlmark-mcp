@@ -30,6 +30,7 @@ import {
   mapSemrushIdeas,
   positionHeaderFor,
   classifySemrushError,
+  parseSemrushJsonErrors,
   classifySemrushV4Error,
   estimateSemrushUnits,
   mapSemrushBacklinksV3,
@@ -637,6 +638,10 @@ export type SemrushKeyCheck =
  * the v3 key exists and shows the balance, not plan access (D4). Never throws; errors
  * never contain the key or the URL.
  */
+/** What to say when Semrush's balance check doesn't recognise the key at all. */
+export const SEMRUSH_NOT_A_V3_KEY =
+  "Semrush says this isn't a valid v3 API key. Use the key under Subscription info > API units; a key from the API keys page (v4) isn't accepted here, and the API units page only shows a key when your plan includes API access.";
+
 export async function checkSemrushKey(key: string | undefined, fetchImpl: typeof fetch = fetch): Promise<SemrushKeyCheck> {
   if (!key) return { configured: false, works: false, reachable: true, error: "SEMRUSH_API_KEY is not set.", costUsd: 0 };
   const base = env.SEMRUSH_BALANCE_URL;
@@ -654,8 +659,16 @@ export async function checkSemrushKey(key: string | undefined, fetchImpl: typeof
     if (info.kind === "auth") return { configured: true, works: false, reachable: true, errorCode: e.code, error: info.message, costUsd: 0 };
     return { configured: true, works: null, reachable: info.kind !== "rate", errorCode: e.code, error: info.message, costUsd: 0 };
   }
+  // The balance check answers a key it can't parse with HTTP 400 and a JSON body, not the "ERROR nn ::" text.
+  const jsonErrors = parseSemrushJsonErrors(text);
+  if (jsonErrors?.some((x) => x.field === "key")) {
+    return { configured: true, works: false, reachable: true, error: SEMRUSH_NOT_A_V3_KEY, costUsd: 0 };
+  }
   if (res.status === 401 || res.status === 403) return { configured: true, works: false, reachable: true, error: "Semrush rejected the API key (SEMRUSH_API_KEY).", costUsd: 0 };
-  if (!res.ok) return { configured: true, works: null, reachable: false, error: `Semrush's balance check returned HTTP ${res.status}.`, costUsd: 0 };
+  if (!res.ok) {
+    const detail = jsonErrors?.map((x) => x.message).filter(Boolean).join("; ");
+    return { configured: true, works: null, reachable: true, error: `Semrush's balance check answered HTTP ${res.status}${detail ? `: ${redact(detail, [key], 160)}` : "."}`, costUsd: 0 };
+  }
   const units = parseUnitsBalance(text);
   if (units === null) return { configured: true, works: null, reachable: true, error: `Semrush's balance check answered with an unexpected body: ${redact(text, [key], 80)}`, costUsd: 0 };
   return { configured: true, works: true, reachable: true, unitsLeft: units, error: null, costUsd: 0 };

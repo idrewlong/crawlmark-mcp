@@ -15,7 +15,7 @@ import { expandPath, sourceCheckoutMarker, type HomeSource } from "../lib/home.j
 import { checkAhrefsKey } from "../providers/ahrefs.js";
 import { describeAhrefsAccount } from "../providers/ahrefs-shape.js";
 import { checkDataForSeoCredentials } from "../providers/dataforseo.js";
-import { checkSemrushKey } from "../providers/semrush.js";
+import { checkSemrushKey, SEMRUSH_NOT_A_V3_KEY } from "../providers/semrush.js";
 import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type ProviderId } from "../lib/provider-ids.js";
 import { checkPsiKey } from "./checks.js";
 import { checkCruxKey } from "../providers/crux.js";
@@ -380,6 +380,8 @@ export async function stepSemrush(ctx: WizardContext, opts: CredentialStepOption
       }
       throw err;
     }
+    // A key pasted with its quotes from a .env line or a doc.
+    key = key.replace(/^(["'])(.*)\1$/, "$2").trim();
     if (!key && current) key = current;
     if (!key) {
       ui.fail("No key entered.");
@@ -387,7 +389,7 @@ export async function stepSemrush(ctx: WizardContext, opts: CredentialStepOption
     }
     const check = await ui.spin("Checking with Semrush (free API units balance call)...", () => checkSemrushKey(key, ctx.fetch));
     if (check.works === true) {
-      if (check.unitsLeft === 0) ui.warn("Key accepted but the balance is 0 units; Semrush API needs an SEO Business plan and a unit package.");
+      if (check.unitsLeft === 0) ui.warn("Semrush answered 0 API units. Its balance check also answers 0 for a key it doesn't know, so check the key; and the API needs an SEO Business plan with an API unit package.");
       else ui.success(`Semrush key accepted  ${check.unitsLeft.toLocaleString("en-US")} API units left`);
       saveEnv(ctx, { SEMRUSH_API_KEY: key });
       markWorking(ctx, "semrush");
@@ -395,10 +397,10 @@ export async function stepSemrush(ctx: WizardContext, opts: CredentialStepOption
       return { step, outcome: "done", message: `Semrush key accepted (${check.unitsLeft.toLocaleString("en-US")} API units left).` };
     }
     if (check.works === false) {
-      ui.fail(`Semrush rejected that key${"errorCode" in check && check.errorCode ? ` (ERROR ${check.errorCode})` : ""}. Find the v3 key under Subscription info > API units.`);
+      ui.fail(`Semrush rejected that key${"errorCode" in check && check.errorCode ? ` (ERROR ${check.errorCode})` : ""}. ${check.error === SEMRUSH_NOT_A_V3_KEY ? check.error : "Find the v3 key under Subscription info > API units."}`);
       continue;
     }
-    ui.warn(`Couldn't reach Semrush's balance check, so the key is untested: ${check.error}`);
+    ui.warn(check.reachable ? `Semrush's balance check didn't confirm the key: ${check.error}` : `Couldn't reach Semrush's balance check, so the key is untested: ${check.error}`);
     if (await ctx.prompt.confirm("Save it anyway?", false)) {
       saveEnv(ctx, { SEMRUSH_API_KEY: key });
       await semrushV4(ctx);

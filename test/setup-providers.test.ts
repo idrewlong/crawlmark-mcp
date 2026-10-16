@@ -482,7 +482,15 @@ describe("stepSemrush", () => {
   it("a zero balance is a warning, not a failure", async () => {
     const h = harness(scripted([true, SENTINEL, false]), { respond: semrushServer("0") });
     expect(await stepSemrush(h.ctx)).toMatchObject({ outcome: "done" });
-    expect(h.ui.events).toContain("warn: Key accepted but the balance is 0 units; Semrush API needs an SEO Business plan and a unit package.");
+    expect(h.ui.events).toContain("warn: Semrush answered 0 API units. Its balance check also answers 0 for a key it doesn't know, so check the key; and the API needs an SEO Business plan with an API unit package.");
+  });
+
+  it("a key Semrush can't parse (HTTP 400 JSON) gets the v3-key explanation, not 'couldn't reach'", async () => {
+    const h = harness(scripted([true, "a", "b", "c"]), { respond: semrushServer('{"errors":[{"field":"key","message":"invalid api key: a"}]}', 400) });
+    expect(await stepSemrush(h.ctx)).toMatchObject({ outcome: "failed" });
+    expect(h.ui.events.filter((e) => e.startsWith("fail: Semrush rejected that key. Semrush says this isn't a valid v3 API key."))).toHaveLength(3);
+    expect(h.ui.events.some((e) => e.includes("Couldn't reach"))).toBe(false);
+    expect(existsSync(join(h.home, ".env"))).toBe(false);
   });
 
   it("--yes skips the key (needs a key) and never asks about v4", async () => {
