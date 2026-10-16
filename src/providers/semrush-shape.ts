@@ -6,7 +6,7 @@
  * Source of truth: docs/research/semrush-api.md (Semrush developer docs, accessed
  * 2026-10-13). Column codes and header texts, report prices, error codes and the
  * database list come from there; items under its "Not confirmed" take the spec's safe
- * reading (specs/2026-10-13-1500-phase-9-seo-data-providers.md 9.11 N7-N15), marked below.
+ * reading, marked below.
  */
 import { stripControl } from "../lib/terminal-text.js";
 import type { KeywordVolume } from "./dataforseo.js";

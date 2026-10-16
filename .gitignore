@@ -30,3 +30,8 @@ config/report-templates/
 # Build and test leftovers
 *.tgz
 coverage/
+
+# Internal planning and build notes: kept locally, not published
+/specs/
+/implementation.md
+/docs/launch/

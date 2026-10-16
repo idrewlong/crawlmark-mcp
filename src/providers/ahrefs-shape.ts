@@ -5,8 +5,8 @@
  *
  * Source of truth: docs/research/ahrefs-api-v3.md (Ahrefs' OpenAPI spec and guides,
  * accessed 2026-10-13). Parameter names, enums, field costs and headers come from
- * there; anything listed under its "Not confirmed" takes the spec's safe reading
- * (specs/2026-10-13-1500-phase-9-seo-data-providers.md 9.11 N1-N6), marked below.
+ * there; anything listed under its "Not confirmed" takes the spec's safe reading,
+ * marked below.
  */
 import { stripControl } from "../lib/terminal-text.js";
 import type { KeywordVolume } from "./dataforseo.js";
