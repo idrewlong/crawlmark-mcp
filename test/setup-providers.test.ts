@@ -216,13 +216,13 @@ function byQuestion(o: { pick?: string[]; choice?: string; key?: string } = {}):
 }
 
 describe("provider:pick", () => {
-  it("on a fresh home pre-ticks DataForSEO only", async () => {
+  it("on a fresh home ticks nothing; the user picks (or skips)", async () => {
     let defaults: readonly string[] = [];
     const p = byQuestion();
     p.multiselect = async <T extends string>(_q: string, _c: readonly Choice<T>[], d: readonly T[]) => ((defaults = d), [...d]);
     const h = harness(p);
     await stepProviderPick(h.ctx);
-    expect(defaults).toEqual(["dataforseo"]);
+    expect(defaults).toEqual([]);
     expect(h.lines[0]).toBe("SEO data providers: DataForSEO (not set up), Ahrefs (not set up), Semrush (not set up)");
   });
 

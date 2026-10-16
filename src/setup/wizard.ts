@@ -759,8 +759,10 @@ export async function stepProviderPick(ctx: WizardContext): Promise<{ result: St
   ctx.out(`SEO data providers: ${ids.map((id) => `${PROVIDER_LABELS[id]} (${(works(id, st.get(rowId(id))) ? "working" : STATE_WORD[st.get(rowId(id))?.state ?? "missing"])})`).join(", ")}`);
   ctx.out(describeDefault(st.get("seoprovider")));
   ctx.out("Keyword volumes, rankings, competitors and backlinks come from a paid provider. Pick the ones you have an API key for (none is required).");
+  if (ctx.ui?.fancy) ctx.out("Space selects, Enter continues. To skip, press Enter with nothing selected; add one later with setup --step provider.");
   const keyed = ids.filter((id) => hasKey(id, st.get(rowId(id))));
-  const defaults = ctx.yes ? keyed : keyed.length ? keyed : (["dataforseo"] as ProviderId[]);
+  // Nothing is ticked for you: only providers you already have a key for start selected (a re-run).
+  const defaults = keyed;
   const choices = ids.map((id) => ({ value: id, label: PROVIDER_LABELS[id], hint: PROVIDER_HINTS[id] }));
   const picked = ctx.prompt.multiselect ? await ctx.prompt.multiselect("Which SEO data providers do you have?", choices, defaults) : [...defaults];
   const selected = new Set(picked);

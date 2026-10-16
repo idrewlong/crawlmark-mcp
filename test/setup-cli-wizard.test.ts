@@ -227,7 +227,7 @@ describe("crawlmark-cli init, first run (DataForSEO sandbox typed in, Google ski
     expected.forEach(([, text], i) => expect(prompts[i]![1]).toContain(text));
     const providerQ = s.asked.find((q) => q.kind === "multiselect" && q.question.startsWith("Which SEO"))!;
     expect(providerQ.options).toEqual(["dataforseo", "ahrefs", "semrush"]);
-    expect(providerQ.def).toEqual(["dataforseo"]); // a fresh home pre-ticks DataForSEO only
+    expect(providerQ.def).toEqual([]); // a fresh home ticks nothing: the user picks
     expect(s.asked.find((q) => q.kind === "choose" && q.question === "Which DataForSEO API?")!.def).toBe("sandbox");
 
     // The credentials went to the DataForSEO sandbox with Basic auth, through the faked fetch.
