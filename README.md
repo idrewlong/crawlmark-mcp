@@ -26,7 +26,7 @@ Install crawlmark
 npx crawlmark-mcp@latest init
 ```
 
-That one command sets up crawlmark and adds it to your AI apps: **Claude Code, Claude Desktop, Cursor and Codex**. It needs **Node 22.13 or later** (crawlmark uses the built-in `node:sqlite`). Other ways to install are below; whichever you pick, [set up your credentials](#set-up-credentials) next.
+That one command sets up crawlmark and adds it to your AI apps: **Claude Code, Claude Desktop, Cursor and Codex**. `npm install crawlmark-mcp` on its own only downloads the package and doesn't start setup; run `init` with `npx` as above (or install globally with `npm i -g crawlmark-mcp` and run `crawlmark-mcp init`). It needs **Node 22.13 or later** (crawlmark uses the built-in `node:sqlite`). Other ways to install are below; whichever you pick, [set up your credentials](#set-up-credentials) next.
 
 | System or use | Installation method |
 |---|---|
