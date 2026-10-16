@@ -65,7 +65,7 @@ crawlmark prefers puppeteer's `chrome-headless-shell` (run `npx puppeteer browse
 
 ### Claude Desktop bundle (MCPB)
 
-Download `crawlmark.mcpb` from the release page and double-click it, or drag it onto Claude Desktop (**Settings > Extensions**). Claude Desktop shows a form. Every field is optional, so fill in only what you use:
+Download `crawlmark.mcpb` from the [latest release](https://github.com/idrewlong/crawlmark-mcp/releases/latest) and double-click it, or drag it onto Claude Desktop (**Settings > Extensions**). Claude Desktop shows a form. Every field is optional, so fill in only what you use:
 
 | Field | What it is |
 |---|---|
