@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
-import { ahrefsCountry, countryFromLocationCode, resolveCountry, SEMRUSH_DATABASES, semrushDatabase } from "../src/lib/country.js";
+import { ahrefsCountry, countryFromLocationCode, resolveCountry } from "../src/lib/country.js";
 import { mergeClients, parseOverrides } from "../src/lib/clients.js";
 import { dropUnsetKeys, PHASE9_ENV_KEYS, shellUrlOverride, urlOverrideNotice } from "../src/lib/env.js";
 import { resolveDefaultProvider } from "../src/lib/provider-ids.js";
@@ -92,16 +92,8 @@ describe("markets (src/lib/country.ts)", () => {
     expect(resolveCountry(undefined, 1023191)).toBeNull();
   });
 
-  it("Ahrefs gets lowercase; Semrush gets uk for GB and null outside the documented list", () => {
+  it("Ahrefs gets lowercase", () => {
     expect(ahrefsCountry("GB")).toBe("gb");
-    expect(semrushDatabase("GB")).toBe("uk");
-    expect(semrushDatabase("US")).toBe("us");
-    expect(semrushDatabase("GL")).toBeNull();
-    expect(SEMRUSH_DATABASES.has("gb")).toBe(false);
-    // Exactly the documented list (docs/research/semrush-api.md "Databases").
-    const note = readFileSync(join(root, "docs", "research", "semrush-api.md"), "utf8");
-    const listed = /The documented desktop list: ([a-z ]+)\./.exec(note)![1]!.split(" ");
-    expect([...SEMRUSH_DATABASES].sort()).toEqual(listed.sort());
   });
 });
 
@@ -222,7 +214,7 @@ describe("SEC-2: provider URL overrides", () => {
       env: { ...process.env, CRAWLMARK_HOME: home },
     });
     expect(r.status, r.stderr).toBe(0);
-    expect(r.stderr).toContain("crawlmark: test-only provider URL override in use: AHREFS_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BALANCE_URL -> http://127.0.0.1:9, CRUX_BASE_URL -> http://127.0.0.1:9, BING_BASE_URL -> http://127.0.0.1:9, CRAWLER_IPRANGES_BASE_URL -> http://127.0.0.1:9.");
+    expect(r.stderr).toContain("crawlmark: test-only provider URL override in use: AHREFS_BASE_URL -> http://127.0.0.1:9, SEMRUSH_BASE_URL -> http://127.0.0.1:9, CRUX_BASE_URL -> http://127.0.0.1:9, BING_BASE_URL -> http://127.0.0.1:9, CRAWLER_IPRANGES_BASE_URL -> http://127.0.0.1:9.");
   }, perSpawns(1));
 });
 

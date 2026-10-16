@@ -25,8 +25,6 @@ export const FREE_ENDPOINTS: readonly Rule[] = [
   { vendor: "Ahrefs", method: "GET", host: /^api\.ahrefs\.com$/, path: /^\/v3\/subscription-info\/limits-and-usage$/ },
   // Account details; free in the sandbox and live (DataForSEO docs). The sandbox host is the default here.
   { vendor: "DataForSEO", method: "GET", host: /(^|\.)dataforseo\.com$/, path: /^\/v3\/appendix\/user_data$/ },
-  // Units balance check; documented as free (Semrush API docs).
-  { vendor: "Semrush", method: "GET", host: /^api\.semrush\.com$/, path: /^\/users\/countapiunits\.html$/ },
   { vendor: "Bing Webmaster", method: "GET", host: /^ssl\.bing\.com$/, path: /^\/webmaster\/api\.svc\/json\/GetUserSites$/ },
   // CrUX History API: no per-call charge, 150 queries a minute quota.
   { vendor: "CrUX", method: "POST", host: /^chromeuxreport\.googleapis\.com$/, path: /^\/v1\/records:queryHistoryRecord$/ },

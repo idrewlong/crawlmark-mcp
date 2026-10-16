@@ -54,13 +54,23 @@ export function formatEnvValue(value: string): string {
  * line it appears on (keeping `export` and spacing), so it never ends up with two
  * different values; a new key is appended. Returns the new text and what changed.
  */
-export function setEnvValues(text: string, updates: Record<string, string>): { text: string; updated: string[]; added: string[] } {
+export function setEnvValues(text: string, updates: Record<string, string>, remove: readonly string[] = []): { text: string; updated: string[]; added: string[]; removed: string[] } {
   for (const k of Object.keys(updates)) if (!KEY_RE.test(k)) throw new Error(`Invalid env key: ${k}`);
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text === "" ? [] : text.split(/\r?\n/);
   // A trailing newline gives a last empty element; keep it aside so appends go before it.
   const trailing = lines.length > 0 && lines[lines.length - 1] === "";
   if (trailing) lines.pop();
+
+  // Keys to delete (every line they appear on), e.g. a name an older version wrote.
+  const removed = new Set<string>();
+  for (let i = lines.length - 1; i >= 0 && remove.length; i--) {
+    const m = LINE_RE.exec(lines[i]!);
+    if (m && remove.includes(m[2]!)) {
+      removed.add(m[2]!);
+      lines.splice(i, 1);
+    }
+  }
 
   const seen = new Set<string>();
   const updated = new Set<string>();
@@ -82,7 +92,7 @@ export function setEnvValues(text: string, updates: Record<string, string>): { t
     lines.push(`${key}=${formatEnvValue(value)}`);
     added.push(key);
   }
-  return { text: lines.length ? lines.join(eol) + eol : "", updated: [...updated], added };
+  return { text: lines.length ? lines.join(eol) + eol : "", updated: [...updated], added, removed: [...removed] };
 }
 
 export function readEnvFile(path: string): Record<string, string> {
@@ -93,12 +103,12 @@ export function readEnvFile(path: string): Record<string, string> {
  * Update keys in a `.env` file: atomic (temp file, then rename), mode 0600,
  * parent directory created with 0700, symlinks followed. Returns which keys were updated or added.
  */
-export function writeEnvFile(file: string, updates: Record<string, string>): { updated: string[]; added: string[] } {
+export function writeEnvFile(file: string, updates: Record<string, string>, remove: readonly string[] = []): { updated: string[]; added: string[]; removed: string[] } {
   // Follow a symlinked .env so the link survives the rename.
   const path = existsSync(file) ? realpathSync(file) : file;
   const before = existsSync(path) ? readFileSync(path, "utf8") : "";
-  const r = setEnvValues(before, updates);
+  const r = setEnvValues(before, updates, remove);
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   writeFileAtomic(path, r.text, 0o600);
-  return { updated: r.updated, added: r.added };
+  return { updated: r.updated, added: r.added, removed: r.removed };
 }

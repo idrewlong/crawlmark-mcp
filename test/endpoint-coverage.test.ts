@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AHREFS_PATHS } from "../src/providers/ahrefs-shape.js";
 import { BING_READ_METHODS } from "../src/providers/bing.js";
-import { SEMRUSH_COLUMNS } from "../src/providers/semrush-shape.js";
 
 const SRC = join(import.meta.dirname, "..", "src", "providers");
 const FIX = join(import.meta.dirname, "fixtures");
@@ -20,20 +19,11 @@ function discover(): Record<string, string[]> {
   const uniq = (xs: string[]) => [...new Set(xs)].sort();
   const dfsSrc = src("dataforseo.ts");
   const semrushSrc = src("semrush.ts");
-  const ssaSrc = src("semrush-site-audit.ts");
   const googleSrc = ["gsc.ts", "ga4.ts", "discovery.ts", "gtm.ts"].map(src).join("\n");
   return {
     dataforseo: uniq(all(/"(\/(?:serp|dataforseo_labs|keywords_data|backlinks|on_page|business_data|ai_optimization|appendix)\/[a-z_/]+)"/g, dfsSrc)),
     ahrefs: uniq([...Object.values(AHREFS_PATHS), ...all(/"(\/site-audit\/[a-z-]+)"/g, src("ahrefs-site-audit.ts"))]),
-    semrush: uniq([
-      // Report types are the keys of SEMRUSH_COLUMNS (the *_full set is a second column list for domain_organic_organic).
-      ...Object.keys(SEMRUSH_COLUMNS).filter((t) => t !== "domain_organic_organic_full").map((t) => `report:${t}`),
-      ...all(/path: "(\/apis\/v4\/[a-z0-9/]+)"/g, semrushSrc),
-      ...(/path: "\/analytics\/v1\/"/.test(semrushSrc) ? ["/analytics/v1/"] : []),
-      ...(/SEMRUSH_BALANCE_URL/.test(semrushSrc) ? ["balance"] : []),
-      ...all(/label: "(siteaudit[a-z/]*)"/g, ssaSrc),
-      ...all(/"(\/management\/v1\/projects)"/g, ssaSrc),
-    ]),
+    semrush: uniq(all(/path: "(\/apis\/v4\/[a-z0-9/]+)"/g, semrushSrc)),
     bing: uniq([...BING_READ_METHODS]),
     crux: uniq(all(/(records:queryHistoryRecord)/g, src("crux.ts"))),
     google: uniq(all(/\b(?:sc|admin|data|tm)\.((?:[a-zA-Z]+\.)+[a-zA-Z]+)\(/g, googleSrc)),
@@ -85,22 +75,8 @@ const FILES: Record<string, Record<string, Entry>> = {
     "/site-audit/page-explorer": ["ahrefs/p13/site-audit-page-explorer.json"],
   },
   semrush: {
-    "report:phrase_these": ["semrush/phrase_these.csv"],
-    "report:domain_organic": ["semrush/domain_organic.csv"],
-    "report:domain_organic_organic": ["semrush/domain_organic_organic.csv", "semrush/p13/domain_organic_organic_full.csv"],
-    "report:backlinks_overview": ["semrush/backlinks_overview.doc.csv"],
-    "report:phrase_related": ["semrush/phase12b/phrase_related.csv"],
-    "report:phrase_fullsearch": ["semrush/phase12b/phrase_fullsearch.csv"],
-    "report:domain_domains": ["semrush/phase12b/domain_domains.csv"],
-    "report:domain_rank": ["semrush/p13/domain_rank.csv"],
-    "report:domain_rank_history": ["semrush/p13/domain_rank_history.csv"],
     "/apis/v4/backlinks/v1/overview": ["semrush/v4-backlinks-overview.json"],
-    "/analytics/v1/": ["semrush/backlinks_overview.doc.csv"],
-    "balance": ["semrush/balance.txt"],
-    "/management/v1/projects": ["semrush/p13/projects.json"],
-    "siteaudit/info": ["semrush/p13/siteaudit-info.json"],
-    "siteaudit/meta/issues": ["semrush/p13/siteaudit-meta-issues.json"],
-    "siteaudit/issue": ["semrush/p13/siteaudit-issue.json"],
+    "/apis/v4/keywords/v1/metrics": ["semrush/v4-keyword-metrics.json"],
   },
   bing: {
     GetUserSites: ["bing/user-sites.json"],
@@ -167,7 +143,7 @@ describe("endpoint to fixture coverage map", () => {
       ["dataforseo", "/dataforseo_labs/google/ranked_keywords/live"],
       ["dataforseo", "/backlinks/summary/live"],
       ["ahrefs", "/site-explorer/organic-keywords"],
-      ["semrush", "report:domain_organic"],
+      ["semrush", "/apis/v4/backlinks/v1/overview"],
       ["bing", "GetRankAndTrafficStats"],
       ["crux", "records:queryHistoryRecord"],
     ];

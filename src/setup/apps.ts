@@ -104,7 +104,7 @@ export interface AppOutcome {
 }
 
 /** A message for the end of the step, with how the fancy renderer should show it. */
-interface Note {
+export interface Note {
   kind: "success" | "info" | "warn" | "fail";
   text: string;
 }
@@ -177,7 +177,7 @@ export async function detectApps(ctx: WizardContext): Promise<AppProbe[]> {
  * Run an app's CLI to change its registration. Plain mode gives it the terminal,
  * as before; fancy mode captures its output and prints it inside the frame.
  */
-async function runApp(ctx: WizardContext, cmd: string, args: string[]): Promise<ExecResult> {
+export async function runApp(ctx: WizardContext, cmd: string, args: string[]): Promise<ExecResult> {
   if (!uiFor(ctx).fancy) return ctx.exec(cmd, args, { inherit: true });
   const r = await ctx.exec(cmd, args);
   const text = `${r.stdout}\n${r.code === 0 ? "" : r.stderr}`.trim();

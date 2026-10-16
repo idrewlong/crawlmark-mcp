@@ -12,7 +12,7 @@
  */
 import { ENV_FILE_KEYS, env } from "../config.js";
 import type { IssueSource } from "../reports/report-types.js";
-import { pruneSemrushIssueSnapshots, stripSourceFromIssueSnapshots } from "./issue-snapshots.js";
+import { stripSourceFromIssueSnapshots } from "./issue-snapshots.js";
 import { purgeExpired } from "./cache.js";
 import { pruneSnapshots } from "./snapshots.js";
 import { db } from "./store.js";
@@ -26,6 +26,7 @@ export function setProcessEntry(e: ProcessEntry): void {
   processEntry = e;
 }
 
+/** Stored issue items from a provider's Site Audit, removed with the rest of its data. (Semrush has none now; an older build may have stored some.) */
 const SITE_AUDIT_SOURCE: Partial<Record<DataProvider, string>> = { ahrefs: "ahrefs_site_audit", semrush: "semrush_site_audit" };
 const KEY_VAR: Partial<Record<DataProvider, keyof typeof env>> = { ahrefs: "AHREFS_API_KEY", semrush: "SEMRUSH_API_KEY" };
 
@@ -106,7 +107,6 @@ export function reconcileRemovedKeys(entry: ProcessEntry = processEntry): PurgeR
 export function retentionSweep(now = Date.now()): void {
   purgeExpired();
   pruneSnapshots(now);
-  pruneSemrushIssueSnapshots(now);
 }
 
 let reconciled = false;

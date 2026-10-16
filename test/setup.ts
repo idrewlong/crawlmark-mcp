@@ -33,7 +33,6 @@ process.env.CRAWLMARK_HOME = join(dir, "crawlmark-home");
 for (const k of ["AHREFS_API_KEY", "SEMRUSH_API_KEY", "SEMRUSH_V4_API_KEY", "SEO_DATA_PROVIDER"]) delete process.env[k];
 process.env.AHREFS_BASE_URL = "http://127.0.0.1:9/v3";
 process.env.SEMRUSH_BASE_URL = "http://127.0.0.1:9";
-process.env.SEMRUSH_BALANCE_URL = "http://127.0.0.1:9/users/countapiunits.html";
 // Before this home isolation, test runs loaded the developer's .env and so usually had DataForSEO credentials.
 // Fake ones keep that "DataForSEO configured" baseline for the routed provider layer (a test that needs it
 // unconfigured deletes them before importing config), and the base URL points at the closed port too.

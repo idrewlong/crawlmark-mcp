@@ -1,0 +1,4 @@
+{ "meta": { "country": "US", "keyword": "seo tools", "month": "2026-10", "request_id": "4fb1773ec2a8d61a0407f464599f897c", "status_code": 200, "success": true },
+  "data": { "search_volume": "60500", "cpc": "1245", "keyword_difficulty": 74, "competitive_density": 78,
+            "intents": ["COMMERCIAL", "INFORMATIONAL"], "number_of_results": "1850000000",
+            "serp_features": ["AI_OVERVIEW", "SITELINKS"], "trends": [12, 11, 12, 13, 12, 14, 15, 14, 13, 12, 12, 13] } }

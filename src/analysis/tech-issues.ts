@@ -35,24 +35,23 @@ export interface CatalogueRow {
   category: string;
   /** `<issue source>:<rule>` patterns (audit rules carry their finding source: `audit:onpage:no_title`). */
   match: string[];
-  /** Stage B: Ahrefs issue names (case-insensitive prefix) and Semrush issue IDs. */
+  /** Ahrefs issue names (case-insensitive prefix). */
   ahrefs?: string[];
-  semrush?: number[];
 }
 
 /**
  * The starter mapping (spec 13.5.3). crawlmark sources: `audit:<finding source>:<rule>` for the saved audit's
  * findings, `local_crawl:<rule>`, `site_hygiene:<rule>`, `gsc_inspection:<rule>`; DataForSEO crawl checks:
- * `dataforseo_crawl:<check>`. Ahrefs names and Semrush IDs are filled in by Stage B (research §1-2).
+ * `dataforseo_crawl:<check>`. Ahrefs names are filled in by Stage B (research §1).
  */
 export const CATALOGUE: readonly CatalogueRow[] = [
-  { key: "broken-internal-link", title: "Internal link to a broken page", category: "links", match: ["local_crawl:broken-internal-link", "dataforseo_crawl:is_broken"], ahrefs: ["Page has links to broken page"], semrush: [8] },
-  { key: "server-error", title: "Page returns a server error (5xx)", category: "crawlability", match: ["audit:onpage:is_5xx_code", "dataforseo_crawl:is_5xx_code", "site_hygiene:sitemap-non200:5xx"], ahrefs: ["5XX page"], semrush: [1] },
-  { key: "client-error-page", title: "Page returns a client error (4xx)", category: "crawlability", match: ["audit:onpage:is_4xx_code", "dataforseo_crawl:is_4xx_code", "site_hygiene:sitemap-non200:4xx"], ahrefs: ["4XX page"], semrush: [2] },
+  { key: "broken-internal-link", title: "Internal link to a broken page", category: "links", match: ["local_crawl:broken-internal-link", "dataforseo_crawl:is_broken"], ahrefs: ["Page has links to broken page"] },
+  { key: "server-error", title: "Page returns a server error (5xx)", category: "crawlability", match: ["audit:onpage:is_5xx_code", "dataforseo_crawl:is_5xx_code", "site_hygiene:sitemap-non200:5xx"], ahrefs: ["5XX page"] },
+  { key: "client-error-page", title: "Page returns a client error (4xx)", category: "crawlability", match: ["audit:onpage:is_4xx_code", "dataforseo_crawl:is_4xx_code", "site_hygiene:sitemap-non200:4xx"], ahrefs: ["4XX page"] },
   { key: "missing-title", title: "Page has no title", category: "content", match: ["local_crawl:missing-title", "audit:onpage:no_title", "dataforseo_crawl:no_title"], ahrefs: ["Title tag missing or empty"] },
   { key: "duplicate-title", title: "Title is used by another page", category: "duplicates", match: ["local_crawl:duplicate-title", "audit:onpage:duplicate_title_tag", "dataforseo_crawl:duplicate_title_tag"], ahrefs: ["Multiple pages have same title"] },
   { key: "missing-description", title: "Page has no meta description", category: "content", match: ["local_crawl:missing-description", "audit:onpage:no_description", "dataforseo_crawl:no_description"], ahrefs: ["Meta description tag missing or empty"] },
-  { key: "missing-h1", title: "Page has no H1 heading", category: "content", match: ["audit:onpage:no_h1_tag", "dataforseo_crawl:no_h1_tag"], ahrefs: ["H1 tag missing or empty"], semrush: [103] },
+  { key: "missing-h1", title: "Page has no H1 heading", category: "content", match: ["audit:onpage:no_h1_tag", "dataforseo_crawl:no_h1_tag"], ahrefs: ["H1 tag missing or empty"] },
   { key: "redirect-chain", title: "Redirect chain (two or more hops)", category: "redirects", match: ["local_crawl:redirect-chain", "dataforseo_crawl:redirect_chain"], ahrefs: ["Redirect chain"] },
   { key: "noindex-in-sitemap", title: "Sitemap lists a noindex page", category: "indexability", match: ["site_hygiene:sitemap-noindex"], ahrefs: ["Noindex page in sitemap"] },
   { key: "canonical-mismatch", title: "Google chose a different canonical than the page declares", category: "indexability", match: ["audit:indexing:canonical-mismatch", "gsc_inspection:canonical-mismatch"] },
@@ -78,16 +77,12 @@ function matchKey(r: RawIssue): string {
 
 /**
  * Stage B: an Ahrefs Site Audit issue matches a row by its name (case-insensitive prefix: Ahrefs doesn't document its
- * issue IDs, research §1); a Semrush Site Audit issue by its documented numeric ID (S2). Unmatched ones keep their own key.
+ * issue IDs, research §1). Unmatched ones keep their own key.
  */
 function providerRow(r: RawIssue): CatalogueRow | undefined {
   if (r.source === "ahrefs_site_audit") {
     const name = r.rule.toLowerCase();
     return CATALOGUE.find((row) => row.ahrefs?.some((a) => name.startsWith(a.toLowerCase())));
-  }
-  if (r.source === "semrush_site_audit") {
-    const id = Number(r.rule);
-    return Number.isInteger(id) ? CATALOGUE.find((row) => row.semrush?.includes(id)) : undefined;
   }
   return undefined;
 }

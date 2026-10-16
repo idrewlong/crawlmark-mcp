@@ -84,7 +84,7 @@ test/               vitest tests and fixtures
 
 Paid SEO data (keyword volume, ranked keywords, competitors, backlinks) goes through `src/providers/seo-data.ts`, never a provider file directly: it picks the client's provider (`resolveProvider`, a pure truth table), gates DataForSEO-only capabilities (`requireDataForSeo`), and adds `provider` and `units` to every result. Unit-billed providers (Ahrefs, Semrush) use `unitsCall()` from `units-billing.ts` (cache, `assertUnits()` before, `recordUnits()` per request) and a `createLimiter()` from `src/lib/rate.ts`. Keys never go into an error, log, cache key or ledger row: run vendor text through `redact()`.
 
-Tests point the provider base URLs at a closed local port (`test/setup.ts`) and use a temp `CRAWLMARK_HOME`, so a developer's `.env` is never read and no unstubbed call can reach a real API. For a manual check against a fake server, set `AHREFS_BASE_URL`, `SEMRUSH_BASE_URL` and `SEMRUSH_BALANCE_URL` in your shell (they're ignored in `.env`).
+Tests point the provider base URLs at a closed local port (`test/setup.ts`) and use a temp `CRAWLMARK_HOME`, so a developer's `.env` is never read and no unstubbed call can reach a real API. For a manual check against a fake server, set `AHREFS_BASE_URL` and `SEMRUSH_BASE_URL` in your shell (they're ignored in `.env`).
 
 ## Live smoke checks
 

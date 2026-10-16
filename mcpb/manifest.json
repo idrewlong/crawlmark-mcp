@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "crawlmark",
   "display_name": "Crawlmark SEO",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SEO audits and monthly reports from Google Search Console, GA4, Tag Manager, DataForSEO, Ahrefs or Semrush, Lighthouse and axe-core.",
   "long_description": "Crawlmark gives Claude read access to your SEO data: Search Console and GA4 (free), PageSpeed/Lighthouse and accessibility audits, Tag Manager container audits, and optional paid keyword, ranking, competitor and backlink data from DataForSEO, Ahrefs or Semrush, using your own API key (capped by monthly budgets: dollars for DataForSEO, API units for Ahrefs and Semrush; DataForSEO's sandbox by default). Choose the default provider in the \"Default SEO data provider\" setting (or with `npx crawlmark-mcp setup --step provider`); each client can override it. Live SERPs, on-page checks and crawls always use DataForSEO. Everything runs locally; credentials stay on this computer. Site audits drive headless Chrome: Crawlmark uses the Chrome you already have installed (or the path in the Chrome path setting); install Google Chrome if the setup_status tool reports Chrome as missing. A Google service-account key file needs no extra step. To sign in with your own Google account instead (OAuth), run `CRAWLMARK_HOME=<data folder> npx crawlmark-mcp setup --step google` in a terminal once, then restart Claude.",
   "license": "MIT",
@@ -316,7 +316,7 @@
     },
     {
       "name": "semrush_status",
-      "description": "Check the Semrush API key with Semrush's free balance call: units left and whether a v4 key is set. Never shows a key."
+      "description": "Whether the Semrush v4 API key is set, what Semrush serves (keyword volume and backlinks) and the units used this month. Never shows a key."
     },
     {
       "name": "lighthouse",
@@ -477,15 +477,15 @@
     },
     "semrush_api_key": {
       "type": "string",
-      "title": "Semrush API key (v3)",
-      "description": "Optional. From Subscription info > API units. Needs an SEO Business plan and an API unit package.",
+      "title": "Semrush API key (v4)",
+      "description": "Optional. A v4 key from your profile > API keys (Semrush's older v3 keys aren't supported). Needs a Semrush plan with API units. Used for keyword volume and backlinks; Semrush has no free key check.",
       "sensitive": true,
       "required": false
     },
     "semrush_v4_api_key": {
       "type": "string",
-      "title": "Semrush API key (v4, optional)",
-      "description": "Optional. From your profile > API keys. Used for the newer backlinks report; without it crawlmark uses the v3 report.",
+      "title": "Semrush API key (older v4 field)",
+      "description": "Optional. The v4 field from earlier versions. If you filled it in, it wins over the field above; new setups only need the field above.",
       "sensitive": true,
       "required": false
     },

@@ -1,7 +1,6 @@
 /**
  * Phase 13 B-3: Ahrefs (metrics, keywords-history, metrics-history, refdomains-history, domain-rating-history,
- * organic-competitors) and Semrush (domain_rank, domain_rank_history, domain_organic_organic) for the provider
- * sections. fetch is stubbed on the closed local port; fixtures follow the documented schemas. Keys are sentinels
+ * organic-competitors) for the provider sections. fetch is stubbed on the closed local port; fixtures follow the documented schemas. Keys are sentinels
  * checked against results, errors, the cache, the ledger and the tool-call log.
  */
 import { readFileSync } from "node:fs";
@@ -9,19 +8,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../src/config.js";
 
 const AH = "ahrefs-P13B-SENTINEL-7d1a";
-const SR = "semrush-P13B-SENTINEL-2c9e";
 process.env.AHREFS_API_KEY = AH;
-process.env.SEMRUSH_API_KEY = SR;
 
 const ahrefs = await import("../src/providers/ahrefs.js");
-const semrush = await import("../src/providers/semrush.js");
 const { db } = await import("../src/lib/store.js");
 const { ahrefsTiming } = ahrefs;
 ahrefsTiming.spacing = async () => undefined;
-semrush.semrushTiming.spacing = async () => undefined;
 
 const ax = (n: string) => readFileSync(new URL(`./fixtures/ahrefs/p13/${n}`, import.meta.url), "utf8");
-const sx = (n: string) => readFileSync(new URL(`./fixtures/semrush/p13/${n}`, import.meta.url), "utf8");
 const AFIX: Record<string, string> = {
   "/v3/site-explorer/metrics": ax("metrics.json"),
   "/v3/site-explorer/keywords-history": ax("keywords-history.json"),
@@ -31,17 +25,11 @@ const AFIX: Record<string, string> = {
   "/v3/site-explorer/organic-competitors": ax("organic-competitors-full.json"),
   "/v3/site-explorer/organic-keywords": readFileSync(new URL("./fixtures/ahrefs/organic-keywords.json", import.meta.url), "utf8"),
 };
-const SFIX: Record<string, string> = {
-  domain_rank: sx("domain_rank.csv"),
-  domain_rank_history: sx("domain_rank_history.csv"),
-  domain_organic_organic: sx("domain_organic_organic_full.csv"),
-};
-
 interface Call {
   url: URL;
   method: string;
 }
-function fake(opts: { semrushMissing?: string } = {}): Call[] {
+function fake(): Call[] {
   const calls: Call[] = [];
   vi.stubGlobal(
     "fetch",
@@ -53,9 +41,7 @@ function fake(opts: { semrushMissing?: string } = {}): Call[] {
         const body = AFIX[url.pathname];
         return body ? new Response(body, { status: 200, headers: { "content-type": "application/json" } }) : new Response(JSON.stringify({ error: "nope" }), { status: 404 });
       }
-      const type = url.searchParams.get("type") ?? "";
-      if (type === "domain_rank" && url.searchParams.get("domain") === opts.semrushMissing) return new Response("Domain;Organic Keywords;Organic Traffic\r\nx;640;1200\r\n", { status: 200 });
-      return new Response(SFIX[type] ?? "ERROR 50 :: NOTHING FOUND", { status: 200 });
+      return new Response("{}", { status: 404 });
     }),
   );
   return calls;
@@ -71,7 +57,6 @@ function client(extra: Partial<Client> = {}): Client {
 const ledger = (c: Client) => db.prepare("SELECT provider, endpoint, units FROM spend WHERE client = ? ORDER BY id").all(c.slug) as { provider: string; endpoint: string; units: number }[];
 const noKeys = (text: string) => {
   expect(text).not.toContain(AH);
-  expect(text).not.toContain(SR);
 };
 
 describe("Ahrefs (Phase 13 B)", () => {
@@ -126,42 +111,6 @@ describe("Ahrefs (Phase 13 B)", () => {
     const c = client({ country: null } as Partial<Client>);
     expect(() => ahrefs.planAhrefsOrganicOverview(c, "example.com")).toThrow(/country/i);
     expect(calls).toHaveLength(0);
-  });
-});
-
-describe("Semrush (Phase 13 B)", () => {
-  it("domain_rank and domain_rank_history: type, export_columns, database and display_limit always sent; no bands", async () => {
-    const calls = fake();
-    const c = client();
-    const now = await semrush.semrushOrganicOverview(c, "example.com");
-    expect(now.figures).toEqual({ keywords: 1204, top3: null, pos4_10: null, pos11_20: null, pos21_100: null, traffic: 3950, trafficLabel: "Semrush organic traffic" });
-    expect(now).toMatchObject({ market: "us", units: 10 });
-    const h = await semrush.semrushOrganicHistory(c, "example.com", 13);
-    expect(h.points.map((p) => p.day)).toEqual(["2026-07-15", "2026-08-15", "2026-09-15"]);
-    const p0 = Object.fromEntries(calls[0]!.url.searchParams);
-    const p1 = Object.fromEntries(calls[1]!.url.searchParams);
-    expect(p0).toMatchObject({ type: "domain_rank", domain: "example.com", database: "us", export_columns: "Dn,Or,Ot" });
-    expect(p1).toMatchObject({ type: "domain_rank_history", export_columns: "Dt,Or,Ot", display_limit: "13", display_sort: "dt_desc", database: "us" });
-    expect(semrush.planSemrushOrganicHistory(c, "example.com", 13).cost(1)).toBe(130);
-    expect(ledger(c)).toEqual([{ provider: "semrush", endpoint: "domain_rank", units: 10 }, { provider: "semrush", endpoint: "domain_rank_history", units: 30 }]);
-    // The key travels in the URL only to the fake server: never in results, the ledger or the cache.
-    noKeys(JSON.stringify([now, h, ledger(c)]));
-    noKeys(JSON.stringify(db.prepare("SELECT key, value FROM cache").all()));
-    noKeys(JSON.stringify(db.prepare("SELECT * FROM spend").all()));
-  });
-
-  it("competitors: domain_organic_organic with Dn,Np,Or,Ot and display_limit max(limit,10); a missing saved one via domain_rank", async () => {
-    const calls = fake({ semrushMissing: "competitor-b.example" });
-    const c = client({ domain: "example.com" } as Partial<Client>);
-    const r = await semrush.semrushCompetitorOverview(c, { saved: ["competitor-b.example"], limit: 5 });
-    expect(Object.fromEntries(calls[0]!.url.searchParams)).toMatchObject({ type: "domain_organic_organic", export_columns: "Dn,Np,Or,Ot", display_limit: "10", display_sort: "np_desc" });
-    expect(r.rows.map((x) => [x.domain, x.commonKeywords, x.keywords, x.inProviderList])).toEqual([
-      ["competitor-a.example", 312, 2410, true],
-      ["rival.example.net", 205, 1890, true],
-      ["competitor-b.example", null, 640, false],
-    ]);
-    expect(semrush.planSemrushCompetitorOverview(c, { saved: ["a.example"], limit: 5 }).cost(1)).toBe(410);
-    expect(semrush.planSemrushBacklinksSummary(c, "example.com").cost(1)).toBe(40);
   });
 });
 

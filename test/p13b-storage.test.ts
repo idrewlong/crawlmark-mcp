@@ -133,36 +133,6 @@ describe("crawlmark-cli data purge", () => {
   });
 });
 
-describe("Semrush Site Audit items in issue snapshots (31 days, fake clock)", () => {
-  it("are removed from snapshots older than 31 days on the next save and on read; other sources stay", () => {
-    const client = "semrush-issues.example.com";
-    const src = (source: string) => ({ source, rule: "8", nativeSeverity: "error", count: 4, examples: [] });
-    const snap = (id: string, at: number) => ({
-      id,
-      client,
-      capturedAt: at,
-      items: [
-        { key: "broken-internal-link", title: "t", category: "links", severity: "high", url: null, affected: 4, sources: [src("semrush_site_audit"), src("local_crawl")] },
-        { key: "semrush_site_audit:215", title: "t", category: "other", severity: "low", url: null, affected: 20, sources: [src("semrush_site_audit")] },
-      ] as never,
-      checked: [{ source: "semrush_site_audit" as const, runId: "s", ranAt: "2026-09-01T00:00:00Z", stale: false }, { source: "local_crawl" as const, runId: "c", ranAt: "2026-09-01T00:00:00Z", stale: false }],
-      settings: { sources: ["semrush_site_audit" as const, "local_crawl" as const], maxAgeDays: 45 },
-    });
-    const T = Date.parse("2030-01-01T00:00:00Z");
-    saveIssueSnapshot(snap("iss_01SEMRUSHA00000000000000000", T), T);
-    saveIssueSnapshot(snap("iss_01SEMRUSHB00000000000000000", T + 32 * DAY), T + 32 * DAY);
-    const rows = () => db.prepare("SELECT id, items, checked FROM issue_snapshots WHERE client = ? ORDER BY captured_at").all(client) as { id: string; items: string; checked: string }[];
-    const [a, b] = rows();
-    expect(a!.items).not.toContain("semrush_site_audit");
-    expect(a!.checked).not.toContain("semrush_site_audit");
-    expect(JSON.parse(a!.items).map((i: { key: string }) => i.key)).toEqual(["broken-internal-link"]);
-    expect(b!.items).toContain("semrush_site_audit");
-    // Read 40 days after B: B's Semrush items are gone too.
-    const read = latestIssueSnapshotBefore(client, T + 41 * DAY, [], T + 64 * DAY)!;
-    expect(JSON.stringify([read.items, read.checked])).not.toContain("semrush_site_audit");
-    expect(read.items.map((i) => i.key)).toEqual(["broken-internal-link"]);
-  });
-});
 
 describe("SEC-5: Ahrefs data that only lived in the cache", () => {
   it("is marked when cached, so removing the key purges it", async () => {

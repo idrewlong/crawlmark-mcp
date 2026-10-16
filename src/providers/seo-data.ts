@@ -55,7 +55,8 @@ const DFS_ONLY = ["serpLive", "onPageInstant", "siteCrawl", "localProfile", "loc
 export const CAPABILITIES: Readonly<Record<ProviderId, ReadonlySet<Capability>>> = {
   dataforseo: new Set<Capability>([...ROUTED_CAPABILITIES, ...DFS_ONLY]),
   ahrefs: new Set<Capability>(ROUTED_CAPABILITIES),
-  semrush: new Set<Capability>(ROUTED_CAPABILITIES),
+  /** Semrush's v4 API serves keyword volume and backlinks only; the rest routes to DataForSEO or is unavailable. */
+  semrush: new Set<Capability>(["keywordVolume", "backlinksSummary"]),
 };
 
 /** Extra fields every routed result carries (additive to today's shapes). */
@@ -222,7 +223,7 @@ export interface SeoDataProvider {
   organicOverview?(client: Client, target: string, opts?: CallOpts): Promise<OrganicOverviewRouted>;
   planOrganicHistory?(client: Client, target: string, months: number): PaidPlan;
   organicHistory?(client: Client, target: string, months: number, opts?: CallOpts): Promise<OrganicHistoryRouted>;
-  /** DataForSEO and Ahrefs; Semrush has no backlink history (local snapshots only). */
+  /** DataForSEO and Ahrefs; Semrush's v4 history isn't used (local snapshots only). */
   planBacklinksHistory?(client: Client, target: string, months: number): PaidPlan;
   backlinksHistory?(client: Client, target: string, months: number, opts?: CallOpts): Promise<BacklinksHistoryRouted>;
   planCompetitorOverview?(client: Client, req: CompetitorOverviewRequest): PaidPlan;
@@ -250,6 +251,16 @@ const ONLY_LABEL: Record<(typeof DFS_ONLY)[number], string> = {
   localPack: "Map pack positions",
   localReviews: "Google reviews",
   aiVisibility: "AI-search visibility checks",
+};
+
+/** What a Semrush-routed client is told is missing, in plain words. */
+const SEMRUSH_LACKS: Partial<Record<Capability, string>> = {
+  rankedKeywords: "ranked keywords",
+  competitorDomains: "competitor domains",
+  keywordIdeas: "keyword ideas",
+  keywordGap: "keyword gaps",
+  organicOverview: "organic visibility",
+  competitorOverview: "the competitor overview",
 };
 
 const KEY_VAR: Record<ProviderId, string> = { dataforseo: "DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD", ahrefs: "AHREFS_API_KEY", semrush: "SEMRUSH_API_KEY" };
@@ -285,6 +296,7 @@ export function resolveProvider(
 
   if (!CAPABILITIES[chosen].has(capability)) {
     if (e.configured.dataforseo) return { provider: "dataforseo", fallbackFrom: chosen };
+    if (chosen === "semrush" && !isDfsOnly(capability)) return { unavailable: `Semrush's API (v4) doesn't include ${SEMRUSH_LACKS[capability] ?? capability}. Use DataForSEO or Ahrefs for it.` };
     const what = isDfsOnly(capability) ? ONLY_LABEL[capability] : capability;
     return { unavailable: `${what} need DataForSEO; ${chosen} (the provider for ${client.slug}) doesn't offer them. Run setup --step dataforseo.` };
   }

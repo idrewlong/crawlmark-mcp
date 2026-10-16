@@ -406,8 +406,9 @@ const noneToEmpty = (v: string | undefined) => (v !== undefined && v.trim().toLo
 
 async function clientsSet(args: string[], values: ClientsSetFlags): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
-  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"], ah: values["ahrefs-site-audit-project"], sp: values["semrush-project"] }).every((v) => v === undefined)) {
-    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site, --place-id, --ahrefs-site-audit-project or --semrush-project.");
+  if (values["semrush-project"] !== undefined) return usageError("--semrush-project is no longer supported: Semrush Site Audit needs Semrush's v3 API, which crawlmark no longer supports.");
+  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"], ah: values["ahrefs-site-audit-project"] }).every((v) => v === undefined)) {
+    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site, --place-id, or --ahrefs-site-audit-project.");
   }
   const provider = noneToEmpty(values.provider)?.trim().toLowerCase();
   if (provider !== undefined && provider !== "" && !(PROVIDER_IDS as readonly string[]).includes(provider)) {
@@ -418,7 +419,7 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
     return usageError(`--country must be a two-letter ISO code such as US or GB, or none (got "${values.country}").`);
   }
   const brandTerms = values["brand-terms"] === undefined ? undefined : values["brand-terms"].split(",");
-  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]), ahrefsSiteAuditProject: noneToEmpty(values["ahrefs-site-audit-project"]), semrushProject: noneToEmpty(values["semrush-project"]) }, { trustedPlaceId: true });
+  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]), ahrefsSiteAuditProject: noneToEmpty(values["ahrefs-site-audit-project"]) }, { trustedPlaceId: true });
   for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
   for (const k of r.cleared) out(`Cleared ${k}.`);
   out(
@@ -427,7 +428,6 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
       (r.profile.bingSite !== undefined ? `Bing site ${r.profile.bingSite ?? "(matched by domain)"}. ` : "") +
       (r.profile.gbpPlaceId !== undefined ? `Google Business Profile place ID ${r.profile.gbpPlaceId ?? "(not set)"}. ` : "") +
       (r.profile.ahrefsSiteAuditProject !== undefined ? `Ahrefs Site Audit project ${r.profile.ahrefsSiteAuditProject ?? "(matched by domain)"}. ` : "") +
-      (r.profile.semrushProject !== undefined ? `Semrush project ${r.profile.semrushProject ?? "(matched by domain)"}. ` : "") +
       `File: ${r.clientsFile}`,
   );
   return 0;

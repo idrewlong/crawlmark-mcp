@@ -65,7 +65,7 @@ describe("catalogue and merge (D8)", () => {
   it("severity (D9): the highest across sources; an item only providers report is never critical", () => {
     expect(mergedSeverity([{ source: "local_crawl", severity: "medium" }, { source: "dataforseo_crawl", severity: "high" }])).toBe("high");
     expect(mergedSeverity([{ source: "audit", severity: "critical" }])).toBe("critical");
-    expect(mergedSeverity([{ source: "ahrefs_site_audit", severity: "critical" }, { source: "semrush_site_audit", severity: "low" }])).toBe("high");
+    expect(mergedSeverity([{ source: "ahrefs_site_audit", severity: "critical" }, { source: "ahrefs_site_audit", severity: "low" }])).toBe("high");
     expect(mergedSeverity([{ source: "ahrefs_site_audit", severity: "critical" }, { source: "audit", severity: "low" }])).toBe("critical");
   });
 });
@@ -192,14 +192,13 @@ describe("technical_issues over stored sources (Done-when)", () => {
     expect(countIssueSnapshots(slug)).toBe(0);
   });
 
-  it("the provider Site Audit sources request nothing: unavailable, needing allowPaid", async () => {
+  it("the Ahrefs Site Audit source requests nothing: unavailable, needing allowPaid", async () => {
     const deps: TechIssuesDeps = { ...(await loadTechIssuesDeps()), latestCrawlTask: () => undefined };
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    const r = await technicalIssues(C("issues-paid.example.com"), { baseBeforeMs: 0, sources: ["ahrefs_site_audit", "semrush_site_audit"] }, deps);
+    const r = await technicalIssues(C("issues-paid.example.com"), { baseBeforeMs: 0, sources: ["ahrefs_site_audit"] }, deps);
     expect(r.unavailable).toEqual([
       { source: "ahrefs_site_audit", reason: "paid source: needs allowPaid (it spends provider units)" },
-      { source: "semrush_site_audit", reason: "paid source: needs allowPaid (it spends provider units)" },
     ]);
     expect(fetch).not.toHaveBeenCalled();
   });

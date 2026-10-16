@@ -246,7 +246,6 @@ export const ISSUE_SOURCE_NAMES: Record<IssueSource, string> = {
   dataforseo_crawl: "DataForSEO crawl",
   gsc_inspection: "Google URL Inspection",
   ahrefs_site_audit: "Ahrefs Site Audit",
-  semrush_site_audit: "Semrush Site Audit",
 };
 const SEVERITY_TITLE = { critical: "Critical", high: "High", medium: "Medium", low: "Low" } as const;
 const CHANGE_TAG: Record<TechIssue["change"], Text> = {
@@ -968,6 +967,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     if (data.resolved.length) {
       blocks.push({ kind: "table", title: "Resolved since the last report", header: ["Issue", "Example", "Found by"], rows: data.resolved.map((i) => [d(i.title), issueExample(i, ctx.domain), foundBy(i)]) });
     }
+    for (const n of data.notes ?? []) blocks.push({ kind: "note", text: [t(n)] });
     if (data.noLongerChecked) ctx.note("Technical SEO issues: some issues from earlier reports are no longer checked by any current source, so they are left out (not counted as fixed).");
     const from = data.sources.map((x) => `${ISSUE_SOURCE_NAMES[x.source]} (${fullDay(x.ranAt)}${x.stale ? ", older data" : ""})`).join(", ");
     blocks.push({

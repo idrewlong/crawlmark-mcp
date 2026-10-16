@@ -76,6 +76,7 @@ const EnvSchema = z.object({
   // Phase 9: Ahrefs (API v3) and Semrush keys, and monthly unit caps. SEO_DATA_PROVIDER is read
   // leniently below (not here), so an unknown value never stops the server.
   AHREFS_API_KEY: z.string().optional(),
+  // Semrush's v4 API key (profile > API keys). SEMRUSH_V4_API_KEY is the name 0.1.0 used for the v4 key (there SEMRUSH_API_KEY was the old v3 key), so it wins when both are set.
   SEMRUSH_API_KEY: z.string().optional(),
   SEMRUSH_V4_API_KEY: z.string().optional(),
   AHREFS_MONTHLY_UNIT_CAP: z.coerce.number().int().positive().default(50_000),
@@ -102,7 +103,6 @@ const parsedEnv = EnvSchema.parse(stripEmptyValues(process.env));
 
 export const AHREFS_DEFAULT_BASE_URL = "https://api.ahrefs.com/v3";
 export const SEMRUSH_DEFAULT_BASE_URL = "https://api.semrush.com";
-export const SEMRUSH_DEFAULT_BALANCE_URL = "https://www.semrush.com/users/countapiunits.html";
 export const CRUX_DEFAULT_BASE_URL = "https://chromeuxreport.googleapis.com/v1";
 /** Bing Webmaster Tools JSON endpoint; methods are appended as /<Method>. */
 export const BING_DEFAULT_BASE_URL = "https://ssl.bing.com/webmaster/api.svc/json";
@@ -139,9 +139,9 @@ export const env = {
   GOOGLE_APPLICATION_CREDENTIALS: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS
     ? resolveFromRoot(HOME.dir, parsedEnv.GOOGLE_APPLICATION_CREDENTIALS)
     : undefined,
+  SEMRUSH_API_KEY: parsedEnv.SEMRUSH_V4_API_KEY || parsedEnv.SEMRUSH_API_KEY || undefined,
   AHREFS_BASE_URL: urlOverride("AHREFS_BASE_URL", AHREFS_DEFAULT_BASE_URL),
   SEMRUSH_BASE_URL: urlOverride("SEMRUSH_BASE_URL", SEMRUSH_DEFAULT_BASE_URL),
-  SEMRUSH_BALANCE_URL: urlOverride("SEMRUSH_BALANCE_URL", SEMRUSH_DEFAULT_BALANCE_URL),
   CRUX_BASE_URL: urlOverride("CRUX_BASE_URL", CRUX_DEFAULT_BASE_URL),
   BING_BASE_URL: urlOverride("BING_BASE_URL", BING_DEFAULT_BASE_URL),
   CRAWLER_IPRANGES_BASE_URL: urlOverride("CRAWLER_IPRANGES_BASE_URL", CRAWLER_IPRANGES_DEFAULT_BASE_URL),
@@ -163,7 +163,6 @@ export const clientDefaults: ClientDefaults = {
 export const providerUrlNotice: string | undefined = urlOverrideNotice([
   { name: "AHREFS_BASE_URL", value: env.AHREFS_BASE_URL, fallback: AHREFS_DEFAULT_BASE_URL },
   { name: "SEMRUSH_BASE_URL", value: env.SEMRUSH_BASE_URL, fallback: SEMRUSH_DEFAULT_BASE_URL },
-  { name: "SEMRUSH_BALANCE_URL", value: env.SEMRUSH_BALANCE_URL, fallback: SEMRUSH_DEFAULT_BALANCE_URL },
   { name: "CRUX_BASE_URL", value: env.CRUX_BASE_URL, fallback: CRUX_DEFAULT_BASE_URL },
   { name: "BING_BASE_URL", value: env.BING_BASE_URL, fallback: BING_DEFAULT_BASE_URL },
   { name: "CRAWLER_IPRANGES_BASE_URL", value: env.CRAWLER_IPRANGES_BASE_URL, fallback: CRAWLER_IPRANGES_DEFAULT_BASE_URL },

@@ -459,7 +459,7 @@ describe("re-run: the 'already set up' menu", () => {
     s.assertDrained();
     const menu = s.asked[0]!;
     expect(menu.kind).toBe("choose");
-    expect(menu.options).toEqual(["provider", "google", "register", "discovery", "branding", "status", "full", "exit"]);
+    expect(menu.options).toEqual(["provider", "google", "register", "vendor-mcp", "discovery", "branding", "status", "full", "exit"]);
     expect(menu.def).toBe("provider");
     expect(s.ui.events).toContain("line: ✔ DataForSEO   ○ Google   ○ Ahrefs   ○ Semrush   ✔ Clients 3");
     expect(s.ui.events).toContain("outro: Nothing changed");

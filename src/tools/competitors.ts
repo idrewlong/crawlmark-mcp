@@ -257,7 +257,7 @@ export function registerCompetitorTools(server: McpServer) {
     {
       title: "Organic visibility",
       description:
-        "A domain's organic search visibility from the client's data provider: ranking keywords (top 100), keywords by position band (top 3, 4-10, 11-20, 21-100; not available from Semrush) and estimated organic traffic, labelled by provider (never compare traffic across providers). " +
+        "A domain's organic search visibility from the client's data provider: ranking keywords (top 100), keywords by position band (top 3, 4-10, 11-20, 21-100; Semrush's API has no visibility data, so a Semrush client is served by DataForSEO) and estimated organic traffic, labelled by provider (never compare traffic across providers). " +
         "Comparisons with a month and a year ago appear only when stored snapshots (or, with history: true, the provider's own history, paid) have them. " +
         SNAPSHOTS,
       inputSchema: {

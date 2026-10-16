@@ -53,23 +53,6 @@ export function ahrefsCountry(cc: string): string {
   return cc.trim().toLowerCase();
 }
 
-/**
- * The documented Semrush desktop databases, copied from docs/research/semrush-api.md
- * "Databases" (lowercase; the United Kingdom is `uk`). Mobile and `-ext` databases are never used.
- */
-export const SEMRUSH_DATABASES: ReadonlySet<string> = new Set(
-  (
-    "us uk ca ru de fr es it br au ar be ch dk fi hk ie il mx nl no pl se sg tr jp in hu af al dz ao am at az bh bd by bz bo ba bw bn bg cv kh cm cl co cr hr cy cz cd do ec eg sv ee et ge gh gr gt gy ht hn is id jm jo kz kw lv lb lt lu mg my mt mu md mn me ma mz na np nz ni ng om py pe ph pt ro sa sn rs sk si za kr lk th bs tt tn ua ae uy ve vn zm zw ly pa pk tw qa"
-  ).split(" "),
-);
-
-/** Semrush `database` for a country: lowercase, GB -> `uk`; null when it isn't a documented desktop database. */
-export function semrushDatabase(cc: string): string | null {
-  const lower = cc.trim().toLowerCase();
-  const db = lower === "gb" ? "uk" : lower;
-  return SEMRUSH_DATABASES.has(db) ? db : null;
-}
-
 /** The message when a client has no country Ahrefs/Semrush can use (spec 9.1). */
 export function noCountryMessage(client: { domain: string; locationCode: number }): string {
   return (

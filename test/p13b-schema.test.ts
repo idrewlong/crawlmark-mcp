@@ -37,10 +37,11 @@ describe("Phase 13 B section types", () => {
     expect(r.errors.map((e) => e.path)).toEqual(expect.arrayContaining(["templates.t.sections[0].trendMonths", "templates.t.sections[0].colour", "templates.t.sections[1].limit", "templates.t.sections[1].source"]));
   });
 
-  it("organicOverview and competitorOverview are routed capabilities every provider declares", () => {
+  it("organicOverview and competitorOverview are routed capabilities DataForSEO and Ahrefs declare; Semrush's v4 API has neither", () => {
     for (const cap of ["organicOverview", "competitorOverview"] as const) {
       expect(ROUTED_CAPABILITIES).toContain(cap);
-      for (const p of ["dataforseo", "ahrefs", "semrush"] as const) expect(CAPABILITIES[p].has(cap)).toBe(true);
+      for (const p of ["dataforseo", "ahrefs"] as const) expect(CAPABILITIES[p].has(cap)).toBe(true);
+      expect(CAPABILITIES.semrush.has(cap)).toBe(false);
     }
   });
 });

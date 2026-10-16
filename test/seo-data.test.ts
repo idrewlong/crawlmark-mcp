@@ -15,7 +15,7 @@ const c = (dataProvider?: "dataforseo" | "ahrefs" | "semrush") => ({ slug: "exam
 
 describe("resolveProvider (9.5 rules 1-6)", () => {
   it("rule 1: the client's override beats the default", () => {
-    expect(resolveProvider(c("semrush"), "rankedKeywords", env("ahrefs", all))).toEqual({ provider: "semrush" });
+    expect(resolveProvider(c("semrush"), "keywordVolume", env("ahrefs", all))).toEqual({ provider: "semrush" });
     expect(resolveProvider(c(), "rankedKeywords", env("ahrefs", all))).toEqual({ provider: "ahrefs" });
   });
 
@@ -33,8 +33,11 @@ describe("resolveProvider (9.5 rules 1-6)", () => {
 
   it("rule 2: a configured provider with the capability serves it", () => {
     for (const cap of ["keywordVolume", "rankedKeywords", "competitorDomains", "backlinksSummary"] as Capability[]) {
-      for (const p of ["dataforseo", "ahrefs", "semrush"] as const) expect(resolveProvider(c(), cap, env(p, all)), `${p} ${cap}`).toEqual({ provider: p });
+      for (const p of ["dataforseo", "ahrefs"] as const) expect(resolveProvider(c(), cap, env(p, all)), `${p} ${cap}`).toEqual({ provider: p });
     }
+    // Semrush's v4 API serves keyword volume and backlinks only.
+    for (const cap of ["keywordVolume", "backlinksSummary"] as Capability[]) expect(resolveProvider(c(), cap, env("semrush", all)), `semrush ${cap}`).toEqual({ provider: "semrush" });
+    for (const cap of ["rankedKeywords", "competitorDomains"] as Capability[]) expect(resolveProvider(c(), cap, env("semrush", all)), `semrush ${cap}`).toEqual({ provider: "dataforseo", fallbackFrom: "semrush" });
   });
 
   it("rule 3: a provider without the capability falls back to DataForSEO, or says DataForSEO is needed", () => {

@@ -379,7 +379,7 @@ export function normalizeArea(input: string): string | undefined {
 /** A Google place ID (e.g. ChIJexamplePlaceId000001): letters, digits, - and _ only. Phase 12 C4. */
 export const PLACE_ID_RE = /^[A-Za-z0-9_-]{10,300}$/;
 
-/** Phase 13 B: Ahrefs and Semrush project IDs are digits. */
+/** Phase 13 B: Ahrefs project IDs are digits. */
 export const PROJECT_ID_RE = /^\d{1,20}$/;
 
 const OverrideSchema = z.object({
@@ -426,8 +426,8 @@ const OverrideSchema = z.object({
   gbpPlaceId: z.string().regex(PLACE_ID_RE, { error: "must be a Google place ID (letters, digits, - and _), e.g. ChIJexamplePlaceId000001" }).optional(),
   /** Phase 13 B: the client's existing Ahrefs Site Audit project (its ID from app.ahrefs.com/site-audit/<id>); wins over matching by domain. */
   ahrefsSiteAuditProject: z.coerce.string().regex(PROJECT_ID_RE, { error: "must be an Ahrefs Site Audit project ID (digits)" }).optional(),
-  /** Phase 13 B: the client's existing Semrush project with Site Audit (its ID); wins over matching by domain. */
-  semrushProject: z.coerce.string().regex(PROJECT_ID_RE, { error: "must be a Semrush project ID (digits)" }).optional(),
+  /** Deprecated and ignored: Semrush Site Audit needed Semrush's v3 API, which crawlmark no longer supports. Accepted so an existing file still loads. */
+  semrushProject: z.coerce.string().optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
   ignore: z.boolean().optional(),
 });
@@ -442,6 +442,10 @@ const OverridesFileSchema = z
  * Validate parsed clients.yaml content. An empty file or empty `clients:` is
  * fine. Throws one readable error naming the bad entries.
  */
+let semrushProjectNoted = false;
+export const SEMRUSH_PROJECT_NOTE =
+  "crawlmark: clients.yaml `semrushProject` is no longer used (Semrush Site Audit needs Semrush's v3 API, which crawlmark no longer supports); you can remove it.";
+
 export function parseOverrides(raw: unknown, source = "clients.yaml"): ClientOverride[] {
   const parsed = OverridesFileSchema.safeParse(raw);
   if (!parsed.success) {
@@ -473,7 +477,13 @@ export function parseOverrides(raw: unknown, source = "clients.yaml"): ClientOve
     entry.brandTerms?.forEach((t, i) => {
       if (!normalizeBrandTerm(brandTermText(t))) throw new Error(`Invalid ${source}: clients.${slug}.brandTerms[${i}] must contain a letter or digit and be at most 100 characters.`);
     });
-    return { ...entry, domain: host, slug };
+    // The deprecated key is accepted and dropped; one stderr note per process says so.
+    const { semrushProject, ...rest } = entry;
+    if (semrushProject !== undefined && !semrushProjectNoted) {
+      semrushProjectNoted = true;
+      process.stderr.write(`${SEMRUSH_PROJECT_NOTE}\n`);
+    }
+    return { ...rest, domain: host, slug };
   });
 }
 
@@ -533,8 +543,6 @@ export interface Client {
   gbpPlaceId?: string;
   /** Phase 13 B: clients.yaml ahrefsSiteAuditProject (an existing Ahrefs Site Audit project); unset means match by domain. */
   ahrefsSiteAuditProject?: string;
-  /** Phase 13 B: clients.yaml semrushProject (an existing Semrush project with Site Audit); unset means match by domain. */
-  semrushProject?: string;
   /** clients.yaml slugs that also resolve to this client. */
   aliases: string[];
   sources: ClientSource[];
@@ -605,7 +613,6 @@ export function mergeClients(
       if (y?.bingSite?.trim()) client.bingSite = y.bingSite.trim();
       if (y?.gbpPlaceId) client.gbpPlaceId = y.gbpPlaceId;
       if (y?.ahrefsSiteAuditProject) client.ahrefsSiteAuditProject = y.ahrefsSiteAuditProject;
-      if (y?.semrushProject) client.semrushProject = y.semrushProject;
       if (d?.ga4DisplayName && d.ga4DisplayName !== client.name) client.ga4Name = d.ga4DisplayName;
       return client;
     });

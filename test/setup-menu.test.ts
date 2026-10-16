@@ -37,32 +37,33 @@ function ctxFor(opts: { fancy?: boolean; status?: () => Promise<SetupStatusRepor
 }
 
 describe("returning-user menu", () => {
-  it("lists the eight choices, mapping five to --step", () => {
+  it("lists the nine choices, mapping six to --step", () => {
     expect(MENU_CHOICES.map((c) => c.label)).toEqual([
       "Add or change a data provider",
       "Change Google sign-in",
       "Re-register AI apps",
+      "Add Semrush's or Ahrefs' own MCP server",
       "Refresh clients",
       "Set up report branding",
       "Check status",
       "Run full setup again",
       "Exit",
     ]);
-    expect(MENU_CHOICES.map((c) => menuStep(c.value))).toEqual(["provider", "google", "register", "discovery", "branding", undefined, undefined, undefined]);
+    expect(MENU_CHOICES.map((c) => menuStep(c.value))).toEqual(["provider", "google", "register", "vendor-mcp", "discovery", "branding", undefined, undefined, undefined]);
   });
 
   it("is complete with a .env and at least one working data source", () => {
     expect(isSetupComplete(true, report({ google: ["working"] }))).toBe(true);
     expect(isSetupComplete(true, report({ ahrefs: ["working"] }))).toBe(true);
-    // Semrush with units left counts even while its v4 key is untested.
-    expect(isSetupComplete(true, report({ semrush: ["configured", { unitsLeft: 10 }] }))).toBe(true);
-    expect(isSetupComplete(true, report({ semrush: ["configured", { unitsLeft: 0 }] }))).toBe(false);
+    // Semrush has no free key check: a key that is set counts.
+    expect(isSetupComplete(true, report({ semrush: ["configured", { keySet: true }] }))).toBe(true);
+    expect(isSetupComplete(true, report({ semrush: ["configured", { keySet: false }] }))).toBe(false);
     expect(isSetupComplete(true, report({ dataforseo: ["configured"], google: ["error"], clients: ["working"] }))).toBe(false);
     expect(isSetupComplete(false, report({ google: ["working"] }))).toBe(false);
   });
 
   it("the compact line shows icons per state and only the client count", () => {
-    expect(compactStatusLine(report({ dataforseo: ["working"], google: ["error"], ahrefs: ["missing"], semrush: ["configured", { unitsLeft: 5 }], clients: ["working", { count: 11 }] }))).toBe(
+    expect(compactStatusLine(report({ dataforseo: ["working"], google: ["error"], ahrefs: ["missing"], semrush: ["configured", { keySet: true }], clients: ["working", { count: 11 }] }))).toBe(
       "✔ DataForSEO   ✖ Google   ○ Ahrefs   ✔ Semrush   ✔ Clients 11",
     );
   });

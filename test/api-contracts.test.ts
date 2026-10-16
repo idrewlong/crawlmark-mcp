@@ -68,20 +68,6 @@ function dfsResult(rel: string, expectCode = 20000) {
   return j.tasks[0].result?.[0];
 }
 const nonEmpty = (a: unknown) => expect(Array.isArray(a) && a.length > 0, "expected a non-empty array").toBe(true);
-const csv = (rel: string, cols: readonly string[]) => sr.parseSemrushCsv(text(rel), cols);
-/** Export-column codes for a CSV's header cells, via the production header table. */
-function codesOfHeader(rel: string): string[] {
-  const byText = new Map(Object.entries(sr.SEMRUSH_HEADER_TEXT).map(([code, t]) => [t, code]));
-  return text(rel)
-    .split(/\r?\n/)[0]!
-    .split(";")
-    .map((c) => {
-      const code = byText.get(c.replace(/^"|"$/g, ""));
-      if (!code) throw new Error(`${rel}: header ${c} is not in SEMRUSH_HEADER_TEXT`);
-      return code;
-    });
-}
-const csvCols = (rel: string, cols: readonly string[], accept?: Parameters<typeof sr.parseSemrushCsv>[2]) => sr.parseSemrushCsv(text(rel), cols, accept);
 
 type Check = () => void | Promise<void>;
 
@@ -163,32 +149,9 @@ const CONTRACTS: Record<string, Check> = {
   "ahrefs/p13/organic-competitors-full.json": () => nonEmpty(ah.mapAhrefsCompetitorsFull(json("ahrefs/p13/organic-competitors-full.json"), "example.com")),
 
   // ---------------------------------------------------------------- Semrush
-  "semrush/phrase_these.csv": () => nonEmpty(sr.mapSemrushKeywordVolumes(csv("semrush/phrase_these.csv", sr.SEMRUSH_COLUMNS.phrase_these), ["example widgets"])),
-  "semrush/phrase_these.doc.csv": () => nonEmpty(csv("semrush/phrase_these.doc.csv", sr.SEMRUSH_COLUMNS.phrase_these)),
-  // The documentation samples carry more columns than crawlmark requests: read them with the columns their own header names.
-  "semrush/domain_organic.doc.csv": () => nonEmpty(csv("semrush/domain_organic.doc.csv", codesOfHeader("semrush/domain_organic.doc.csv"))),
-  "semrush/domain_organic_organic.doc.csv": () => nonEmpty(csv("semrush/domain_organic_organic.doc.csv", codesOfHeader("semrush/domain_organic_organic.doc.csv"))),
-  "semrush/domain_organic.csv": () => nonEmpty(sr.mapSemrushRankedKeywords(csv("semrush/domain_organic.csv", sr.SEMRUSH_COLUMNS.domain_organic), "example.com").items),
-  "semrush/domain_organic_organic.csv": () => nonEmpty(sr.mapSemrushCompetitors(csv("semrush/domain_organic_organic.csv", sr.SEMRUSH_COLUMNS.domain_organic_organic), "example.com").items),
-  "semrush/backlinks_overview.doc.csv": () => expect(sr.mapSemrushBacklinksV3(csv("semrush/backlinks_overview.doc.csv", sr.SEMRUSH_COLUMNS.backlinks_overview), "example.com")?.backlinks).toEqual(expect.any(Number)),
+  "semrush/v4-keyword-metrics.json": () => expect(sr.mapSemrushKeywordMetricsV4(json("semrush/v4-keyword-metrics.json"), "seo tools")).toMatchObject({ keyword: "seo tools", search_volume: 60500, competition: "HIGH", cpc: 1245 }),
   "semrush/v4-backlinks-overview.json": () => expect(sr.mapSemrushBacklinksV4(json("semrush/v4-backlinks-overview.json"), "example.com").backlinks).toEqual(expect.any(Number)),
   "semrush/v4-error-403.json": () => expect(sr.parseSemrushV4Error(json("semrush/v4-error-403.json"))).toMatchObject({ code: expect.any(Number) }),
-  "semrush/error-50.txt": () => expect(sr.parseSemrushError(text("semrush/error-50.txt"))).toMatchObject({ code: 50 }),
-  "semrush/error-120.txt": () => expect(sr.parseSemrushError(text("semrush/error-120.txt"))).toMatchObject({ code: 120 }),
-  "semrush/error-132.txt": () => expect(sr.parseSemrushError(text("semrush/error-132.txt"))).toMatchObject({ code: 132 }),
-  "semrush/balance.txt": () => expect(sr.parseUnitsBalance(text("semrush/balance.txt"))).toEqual(expect.any(Number)),
-  "semrush/phase12b/phrase_related.csv": () => nonEmpty(sr.mapSemrushIdeas(csv("semrush/phase12b/phrase_related.csv", sr.SEMRUSH_COLUMNS.phrase_related), "example widgets")),
-  "semrush/phase12b/phrase_fullsearch.csv": () => nonEmpty(sr.mapSemrushIdeas(csv("semrush/phase12b/phrase_fullsearch.csv", sr.SEMRUSH_COLUMNS.phrase_fullsearch), "example widgets")),
-  "semrush/phase12b/domain_domains.csv": () => {
-    const rows = csvCols("semrush/phase12b/domain_domains.csv", sr.SEMRUSH_COLUMNS.domain_domains, {
-      P0: sr.positionHeaderFor("competitor-a.example", "P0"),
-      P1: sr.positionHeaderFor("example.com", "P1"),
-    });
-    nonEmpty(sr.mapSemrushGapRows(rows));
-  },
-  "semrush/p13/domain_rank.csv": () => expect(sr.mapSemrushVisibility(csv("semrush/p13/domain_rank.csv", sr.SEMRUSH_COLUMNS.domain_rank))).toBeTruthy(),
-  "semrush/p13/domain_rank_history.csv": () => nonEmpty(sr.mapSemrushVisibilityHistory(csv("semrush/p13/domain_rank_history.csv", sr.SEMRUSH_COLUMNS.domain_rank_history))),
-  "semrush/p13/domain_organic_organic_full.csv": () => nonEmpty(sr.mapSemrushCompetitorsFull(csv("semrush/p13/domain_organic_organic_full.csv", sr.SEMRUSH_COLUMNS.domain_organic_organic_full), "example.com")),
 
   // ---------------------------------------------------------------- Bing (every method answers { d: ... })
   "bing/user-sites.json": () => {
@@ -244,10 +207,6 @@ const COVERED_ELSEWHERE: Record<string, string> = {
   "ahrefs/p13/site-audit-projects.json": "p13b-site-audit.test.ts",
   "ahrefs/p13/site-audit-issues.json": "p13b-site-audit.test.ts",
   "ahrefs/p13/site-audit-page-explorer.json": "p13b-site-audit.test.ts",
-  "semrush/p13/projects.json": "p13b-site-audit.test.ts",
-  "semrush/p13/siteaudit-info.json": "p13b-site-audit.test.ts",
-  "semrush/p13/siteaudit-meta-issues.json": "p13b-site-audit.test.ts",
-  "semrush/p13/siteaudit-issue.json": "p13b-site-audit.test.ts",
   "google/p13/url-inspection-indexed.json": "p13-indexing.test.ts",
   "google/p13/url-inspection-not-indexed.json": "p13-indexing.test.ts",
   "google/p13/sitemaps-list.json": "p13-indexing.test.ts",

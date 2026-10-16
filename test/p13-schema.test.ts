@@ -27,19 +27,19 @@ describe("Phase 13 section types", () => {
     expect(paths).toEqual(expect.arrayContaining(["templates.t.sections[0].colour", "templates.t.sections[0].maxInspections", "templates.t.sections[1].limit", "templates.t.sections[1].sources[0]"]));
   });
 
-  it("a provider site-audit source makes technical_issues paid (paid: true required); issueUrls needs one", () => {
+  it("the Ahrefs site-audit source makes technical_issues paid (paid: true required); issueUrls needs one", () => {
     const free = { id: "i", type: "technical_issues", sources: ["audit"] } as SectionSpec;
     const paid = { id: "i", type: "technical_issues", sources: ["audit", "ahrefs_site_audit"] } as SectionSpec;
     expect(isPaidSection(free)).toBe(false);
     expect(isPaidSection({ id: "i", type: "technical_issues" } as SectionSpec)).toBe(false);
     expect(isPaidSection(paid)).toBe(true);
-    const r = validateTemplateText(file("      - { id: a, type: technical_issues, sources: [semrush_site_audit] }\n      - { id: b, type: technical_issues, issueUrls: 2 }\n      - { id: c, type: technical_issues, sources: [audit, audit] }\n"), { today });
+    const r = validateTemplateText(file("      - { id: a, type: technical_issues, sources: [ahrefs_site_audit] }\n      - { id: b, type: technical_issues, issueUrls: 2 }\n      - { id: c, type: technical_issues, sources: [audit, audit] }\n"), { today });
     expect(r.errors).toEqual([
-      { path: "templates.t.sections[0].paid", message: "the ahrefs_site_audit and semrush_site_audit sources spend provider units, so the section must set paid: true" },
-      { path: "templates.t.sections[1].issueUrls", message: "issueUrls needs an ahrefs_site_audit or semrush_site_audit source (it fetches example URLs from the provider)" },
+      { path: "templates.t.sections[0].paid", message: "the ahrefs_site_audit source spends Ahrefs units, so the section must set paid: true" },
+      { path: "templates.t.sections[1].issueUrls", message: "issueUrls needs the ahrefs_site_audit source (it fetches example URLs from the provider)" },
       { path: "templates.t.sections[2].sources", message: "entries must be unique" },
     ]);
-    expect(validateTemplateText(file("      - { id: a, type: technical_issues, paid: true, sources: [semrush_site_audit], issueUrls: 2 }\n"), { today }).valid).toBe(true);
+    expect(validateTemplateText(file("      - { id: a, type: technical_issues, paid: true, sources: [ahrefs_site_audit], issueUrls: 2 }\n"), { today }).valid).toBe(true);
   });
 
   it("the catalogue covers every section type", () => {

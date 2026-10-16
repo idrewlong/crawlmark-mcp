@@ -6,7 +6,6 @@
  */
 import type { AhrefsKeyCheck } from "../providers/ahrefs.js";
 import { stripControl } from "../lib/terminal-text.js";
-import type { SemrushKeyCheck } from "../providers/semrush.js";
 import { describeAhrefsAccount } from "../providers/ahrefs-shape.js";
 import type { DataForSeoStatusResult } from "../providers/dataforseo.js";
 import type { GoogleAuthStatus } from "../lib/google-auth.js";
@@ -86,10 +85,9 @@ export interface AhrefsStatusInput {
 }
 
 export interface SemrushStatusInput {
-  check: SemrushKeyCheck;
+  /** SEMRUSH_API_KEY (a v4 key) is set. Semrush has no free key check, so it is untested until the first paid call. */
+  keySet: boolean;
   chosen: ProviderChoice;
-  /** SEMRUSH_V4_API_KEY is set (it has no free check, so it's untested until backlinks_summary runs). */
-  v4KeySet: boolean;
   unitsUsedThisMonth: number;
   cap: number;
 }
@@ -287,38 +285,34 @@ export function ahrefsRow(a: AhrefsStatusInput, next: string): IntegrationStatus
 }
 
 /**
- * The `semrush` row (spec 9.6): missing (no key, nobody uses it), error (used but no key,
- * or rejected), configured (the balance check couldn't be reached, the balance is 0, or a
- * v4 key is set but untested: it has no free check), working. Never a key.
+ * The `semrush` row: missing (no key, nobody uses it), error (used but no key), configured (key set; Semrush has no
+ * free key check, so it is untested until the first paid call). Never a key, never a request.
  */
 export function semrushRow(s: SemrushStatusInput, next: string): IntegrationStatus {
-  const { check, chosen } = s;
+  const { chosen } = s;
   const used = chosen.byDefault || chosen.clients > 0;
   const base = { id: "semrush" as const, label: "Semrush" };
   const data: Record<string, unknown> = {
     default: chosen.byDefault,
     clients: chosen.clients,
-    keySet: check.configured,
-    v4KeySet: s.v4KeySet,
+    keySet: s.keySet,
+    keyCheck: "none",
+    capabilities: { keywordVolume: s.keySet, backlinksSummary: s.keySet },
     unitsUsedThisMonth: s.unitsUsedThisMonth,
     cap: s.cap,
-    ...(check.works === true ? { unitsLeft: (check as Extract<SemrushKeyCheck, { works: true }>).unitsLeft } : {}),
   };
-  const usage = `crawlmark used ${fmtUnits(s.unitsUsedThisMonth)} of its ${fmtUnits(s.cap)}-unit monthly cap this month`;
-  if (!check.configured) {
+  if (!s.keySet) {
     return used
       ? { ...base, state: "error", detail: `Semrush is ${choiceText(chosen)}, but SEMRUSH_API_KEY is not set, so its paid calls fail.`, next, data }
-      : { ...base, state: "missing", detail: "Optional. A Semrush API key (SEO Business plan plus an API unit package) can supply keyword, ranking, competitor and backlink data.", next, data };
+      : { ...base, state: "missing", detail: "Optional. A Semrush v4 API key (profile > API keys) supplies keyword volume and backlinks; rankings, competitors and visibility come from DataForSEO or Ahrefs.", next, data };
   }
-  if (check.works === false) return { ...base, state: "error", detail: check.error, next, data };
-  if (check.works === null) {
-    return { ...base, state: "configured", detail: `SEMRUSH_API_KEY is set but Semrush's balance check couldn't be reached, so it's untested: ${check.error}`, next, data };
-  }
-  const left = (check as Extract<SemrushKeyCheck, { works: true }>).unitsLeft;
-  const v4 = s.v4KeySet ? " The v4 key (backlinks) has no free check; it's checked the first time backlinks_summary runs." : " Backlinks use the v3 report (no v4 key set).";
-  const head = `Key accepted, ${fmtUnits(left)} API units left; ${usage}.${used ? ` Used as ${choiceText(chosen)}.` : ""}`;
-  if (left === 0) return { ...base, state: "configured", detail: `Key accepted but the balance is 0 units; Semrush API needs an SEO Business plan and a unit package.${v4}`, next, data };
-  return { ...base, state: s.v4KeySet ? "configured" : "working", detail: `${head}${v4}`, next: null, data };
+  return {
+    ...base,
+    state: "configured",
+    detail: `Key set (v4). It serves keyword volume (20 units per keyword, Early Access) and backlinks (45 units); Semrush has no free key check, so it's checked by the first paid call. crawlmark used ${fmtUnits(s.unitsUsedThisMonth)} of its ${fmtUnits(s.cap)}-unit monthly cap this month.${used ? ` Used as ${choiceText(chosen)}.` : ""}`,
+    next: null,
+    data,
+  };
 }
 
 async function attempt<T>(fn: () => Promise<T>): Promise<{ ok: true; listing: T } | { ok: false; error: string }> {
@@ -395,7 +389,7 @@ export async function collectSetupStatus(
     const states: Record<ProviderId, IntegrationState> = {
       dataforseo: dfs ? dfsState(dfs) : "missing",
       ahrefs: ahrefs ? keyState(ahrefs.check) : "missing",
-      semrush: semrush ? keyState(semrush.check) : "missing",
+      semrush: semrush?.keySet ? "configured" : "missing",
     };
     const row = seoProviderRow(seo, states, { cli, configuredByEnv: home.configuredByEnv });
     seoData = row.data as unknown as SeoDataProviderData;

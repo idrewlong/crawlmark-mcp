@@ -50,7 +50,8 @@ import type {
 } from "../report-types.js";
 import { loadTemplates, resolveTemplate, templateFileWarnings, type LoadedTemplates, type ResolvedTemplate } from "./load.js";
 import { resolvePeriod, type ResolvedPeriod, type RunPeriodOverride } from "./period.js";
-import { isPaidSection, SECTION_TITLES, type SectionSpec } from "./schema.js";
+import { isPaidSection, PAID_ISSUE_SOURCES, REMOVED_ISSUE_SOURCE, REMOVED_ISSUE_SOURCE_NOTE, SECTION_TITLES, type SectionSpec } from "./schema.js";
+import type { IssueSource } from "../report-types.js";
 import type { RankHistoryOptions, RankHistoryResult } from "../../ranks.js";
 import type { EstimateResult, KeywordGapRequest, KeywordGapRouted } from "../../providers/seo-data.js";
 import { analyzeCrawl, topFindings } from "../../analysis/crawl.js";
@@ -143,8 +144,8 @@ export interface RunDeps {
    * client's provider can't serve it (never another provider).
    */
   planProviderSection(client: Client, req: SectionRequest, window: SectionWindow): Promise<PlannedProviderSection>;
-  /** Phase 13 B: the technical_issues section's paid sources (Ahrefs / Semrush Site Audit) priced, no request. */
-  planIssueSources(client: Client, sources: readonly string[], issueUrls: number): Promise<{ source: string; provider: "ahrefs" | "semrush"; units: number; requests: number; breakdown: string }[]>;
+  /** Phase 13 B: the technical_issues section's paid sources (the Ahrefs Site Audit) priced, no request. */
+  planIssueSources(client: Client, sources: readonly string[], issueUrls: number): Promise<{ source: string; provider: "ahrefs"; units: number; requests: number; breakdown: string }[]>;
 }
 
 export interface PlannedProviderSection {
@@ -688,12 +689,16 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
     // Phase 13 A: fetchers land in A-4 (technical_issues) and A-5 (indexing_issues).
     // Phase 13 A: stored sources only (never starts a crawl).
     technical_issues: async (s: Extract<SectionSpec, { type: "technical_issues" }>): Promise<TechnicalIssuesData> => {
+      // A source removed since 0.1.0 is dropped, with a note in the section.
+      const removed = (s.sources as readonly string[] | undefined)?.includes(REMOVED_ISSUE_SOURCE) === true;
+      const kept = (s.sources as readonly string[] | undefined)?.filter((x) => x !== REMOVED_ISSUE_SOURCE) as IssueSource[] | undefined;
       const r = await deps.technicalIssues(client, {
-        sources: s.sources,
+        sources: kept?.length ? kept : undefined,
         minSeverity: s.minSeverity,
         limit: s.limit ?? 25,
         maxAgeDays: s.maxAgeDays,
-        issueUrls: s.issueUrls,
+        // No paid source left after dropping the removed one: nothing to fetch example URLs from.
+        issueUrls: kept?.some((x) => PAID_ISSUE_SOURCES.has(x)) ? s.issueUrls : removed ? 0 : s.issueUrls,
         allowPaid,
         // The base is the newest snapshot from before the period ended (for a September report run on 2 October, the
         // one the August report took about 2 September), never one this run made.
@@ -703,7 +708,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       if (r.snapshotId) issueSnapshotIds.add(r.snapshotId);
       if (!r.sources.length) throw new SectionUnavailableError(`no saved audit, crawl or URL Inspection results for ${client.domain} yet (run run_audit or crawlmark-cli crawl, free)`);
       const { snapshotId: _id, ...data } = r;
-      return data;
+      return removed ? { ...data, notes: [REMOVED_ISSUE_SOURCE_NOTE] } : data;
     },
     // Phase 13 A: a sample, labelled as one in the file; never Search Console's full Page indexing report.
     indexing_issues: async (s: Extract<SectionSpec, { type: "indexing_issues" }>): Promise<IndexingIssuesData> => {

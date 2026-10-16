@@ -23,10 +23,9 @@ describe("live smoke guard", () => {
     await fetch("https://api.ahrefs.com/v3/subscription-info/limits-and-usage");
     await fetch("https://sandbox.dataforseo.com/v3/appendix/user_data");
     await fetch("https://api.dataforseo.com/v3/appendix/user_data", { method: "GET" });
-    await fetch("https://api.semrush.com/users/countapiunits.html?key=k");
     await fetch("https://ssl.bing.com/webmaster/api.svc/json/GetUserSites?apikey=k");
     await fetch("https://chromeuxreport.googleapis.com/v1/records:queryHistoryRecord?key=k", { method: "POST" });
-    expect(sent).toHaveLength(6);
+    expect(sent).toHaveLength(5);
   });
 
   it("refuses every paid path before sending, including each Ahrefs path except the status check", async () => {
@@ -36,9 +35,9 @@ describe("live smoke guard", () => {
       ["POST", "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live"],
       ["POST", "https://api.dataforseo.com/v3/business_data/google/reviews/task_post"],
       ["POST", "https://api.dataforseo.com/v3/appendix/user_data"],
-      ["GET", "https://api.semrush.com/?type=domain_organic&key=k"],
-      ["GET", "https://api.semrush.com/analytics/v1/?type=backlinks_overview&key=k"],
-      ["GET", "https://api.semrush.com/users/countapiunits.html.evil/"],
+      ["GET", "https://api.semrush.com/apis/v4/keywords/v1/metrics?keyword=x&country=US"],
+      ["GET", "https://api.semrush.com/apis/v4/backlinks/v1/overview?url=example.com"],
+      ["GET", "https://api.semrush.com/users/countapiunits.html"],
       ["GET", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?siteUrl=x"],
       ["GET", "https://evil.example/v3/subscription-info/limits-and-usage"],
       ["GET", "https://api.ahrefs.com.evil.example/v3/subscription-info/limits-and-usage"],
@@ -72,7 +71,7 @@ describe("live smoke guard", () => {
   it("the smoke runner calls vendors only through the guarded fetch", () => {
     const smoke = readFileSync(join(import.meta.dirname, "live", "smoke.live.ts"), "utf8");
     // Every production check function is handed `guarded`; none is called with the default fetch.
-    for (const fn of ["checkDataForSeoCredentials", "checkAhrefsKey", "checkSemrushKey", "checkBingKey"]) {
+    for (const fn of ["checkDataForSeoCredentials", "checkAhrefsKey", "checkBingKey"]) {
       expect(smoke, fn).toMatch(new RegExp(`${fn}\\([^)]*guarded\\)`));
     }
     expect(smoke).toMatch(/cruxHistory\([^)]*fetchImpl: guarded/);

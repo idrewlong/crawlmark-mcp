@@ -1,7 +1,7 @@
 /**
- * Phase 13 B-5: Ahrefs and Semrush Site Audit as technical_issues sources. Read-only path allowlists (any other method
+ * Phase 13 B-5: the Ahrefs Site Audit as a technical_issues source. Read-only path allowlists (any other method
  * or path is refused before a request), existing projects only (matching 0/1/many, a saved ID wins), units planned and
- * recorded, Ahrefs names and Semrush IDs mapped onto the catalogue, issueUrls adding exactly n calls, nothing requested
+ * recorded, Ahrefs names mapped onto the catalogue, issueUrls adding exactly n calls, nothing requested
  * without allowPaid, and no Ahrefs example URLs in the stored snapshot. fetch stubbed on the closed local port.
  */
 import { readFileSync } from "node:fs";
@@ -9,29 +9,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../src/config.js";
 
 const AH = "ahrefs-AUDIT-sentinel-5b0d";
-const SR = "semrush-AUDIT-sentinel-0c4a";
 process.env.AHREFS_API_KEY = AH;
-process.env.SEMRUSH_API_KEY = SR;
 
 const aSA = await import("../src/providers/ahrefs-site-audit.js");
-const sSA = await import("../src/providers/semrush-site-audit.js");
 const ti = await import("../src/reports/technical-issues.js");
 const { ahrefsTiming } = await import("../src/providers/ahrefs.js");
-const { semrushTiming } = await import("../src/providers/semrush.js");
 const { db } = await import("../src/lib/store.js");
 const { canonicalOf } = await import("../src/analysis/tech-issues.js");
 ahrefsTiming.spacing = async () => undefined;
-semrushTiming.spacing = async () => undefined;
 
 const ax = (n: string) => readFileSync(new URL(`./fixtures/ahrefs/p13/${n}`, import.meta.url), "utf8");
-const sx = (n: string) => readFileSync(new URL(`./fixtures/semrush/p13/${n}`, import.meta.url), "utf8");
 
 interface Call {
   method: string;
   path: string;
   params: Record<string, string>;
 }
-function fake(o: { projects?: unknown; infoUrl?: string } = {}): Call[] {
+function fake(o: { projects?: unknown } = {}): Call[] {
   const calls: Call[] = [];
   vi.stubGlobal(
     "fetch",
@@ -47,12 +41,7 @@ function fake(o: { projects?: unknown; infoUrl?: string } = {}): Call[] {
           return json(ax("site-audit-issues.json"), 50);
         case "/v3/site-audit/page-explorer":
           return json(ax("site-audit-page-explorer.json"), 50);
-        case "/management/v1/projects":
-          return json(o.projects ? JSON.stringify(o.projects) : sx("projects.json"));
       }
-      if (/\/siteaudit\/info$/.test(url.pathname)) return json(o.infoUrl ? JSON.stringify({ ...JSON.parse(sx("siteaudit-info.json")), url: o.infoUrl }) : sx("siteaudit-info.json"));
-      if (/\/siteaudit\/meta\/issues$/.test(url.pathname)) return json(sx("siteaudit-meta-issues.json"));
-      if (/\/siteaudit\/snapshot\/.+\/issue\/\d+$/.test(url.pathname)) return json(sx("siteaudit-issue.json"));
       return new Response("{}", { status: 404 });
     }),
   );
@@ -77,26 +66,6 @@ describe("allowlists (D12)", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("Semrush: only the four GETs; the 10,000-unit snapshot report, launch, enable, save and any non-GET are refused", async () => {
-    const calls = fake();
-    const ok = ["/management/v1/projects", "/reports/v1/projects/7701/siteaudit/info", "/reports/v1/projects/7701/siteaudit/meta/issues", "/reports/v1/projects/7701/siteaudit/snapshot/5f1e00aa/issue/8"];
-    for (const p of ok) expect(() => sSA.assertSemrushAllowed("GET", p)).not.toThrow();
-    const refused: [string, string, Record<string, string>?][] = [
-      ["GET", "/reports/v1/projects/7701/siteaudit/snapshot", { snapshot_id: "5f1e00aa" }],
-      ["GET", "/reports/v1/projects/7701/siteaudit/snapshot"],
-      ["GET", "/reports/v1/projects/7701/siteaudit/snapshots"],
-      ["POST", "/reports/v1/projects/7701/siteaudit/launch"],
-      ["GET", "/reports/v1/projects/7701/siteaudit/launch"],
-      ["POST", "/management/v1/projects/7701/siteaudit/enable"],
-      ["POST", "/management/v1/projects/7701/siteaudit/save"],
-      ["POST", "/management/v1/projects"],
-      ["GET", "/reports/v1/projects/7701/siteaudit/info?snapshot_id=1"],
-      ["GET", "/reports/v1/projects/abc/siteaudit/info"],
-      ["GET", "/reports/v1/projects/7701/siteaudit/info", { snapshot_id: "x" }],
-    ];
-    for (const [m, p, q] of refused) expect(() => sSA.semrushAuditRequest(m, p, q ?? {}), `${m} ${p}`).toThrow(sSA.SemrushAuditRefused);
-    expect(calls).toHaveLength(0);
-  });
 });
 
 describe("Ahrefs Site Audit", () => {
@@ -142,52 +111,9 @@ describe("Ahrefs Site Audit", () => {
 
   it("without allowPaid nothing is requested and the source is unavailable", async () => {
     const calls = fake();
-    const r = await ti.technicalIssues(client(), { sources: ["ahrefs_site_audit", "semrush_site_audit"], baseBeforeMs: Date.now(), save: false }, await ti.loadTechIssuesDeps());
+    const r = await ti.technicalIssues(client(), { sources: ["ahrefs_site_audit"], baseBeforeMs: Date.now(), save: false }, await ti.loadTechIssuesDeps());
     expect(calls).toHaveLength(0);
-    expect(r.unavailable.map((u) => u.reason)).toEqual(["paid source: needs allowPaid (it spends provider units)", "paid source: needs allowPaid (it spends provider units)"]);
-  });
-});
-
-describe("Semrush Site Audit", () => {
-  it("list (matched by host and Site Audit tool) + info + meta titles; IDs mapped; issueUrls adds exactly n issue calls; 100 units each", async () => {
-    const calls = fake();
-    const c = client();
-    const r = await sSA.readSemrushSiteAudit(c, { issueUrls: 2 });
-    expect(calls.map((x) => x.path)).toEqual([
-      "/management/v1/projects",
-      "/reports/v1/projects/7701/siteaudit/info",
-      "/reports/v1/projects/7701/siteaudit/meta/issues",
-      "/reports/v1/projects/7701/siteaudit/snapshot/5f1e00aa/issue/8",
-      "/reports/v1/projects/7701/siteaudit/snapshot/5f1e00aa/issue/103",
-    ]);
-    for (const x of calls) {
-      expect(x.method).toBe("GET");
-      expect(x.params.key).toBe(SR);
-      expect(x.params.snapshot_id).toBeUndefined();
-    }
-    expect(r.issues.map((i) => [i.rule, i.severity, i.title, i.count])).toEqual([
-      ["8", "high", "internal links are broken", 4],
-      ["103", "medium", "pages don't have an h1 heading", 7],
-      ["215", "low", "pages have only one incoming internal link", 20],
-    ]);
-    expect(r.issues[0]!.examples).toEqual(["https://example.com/old-link", "https://example.com/also-broken"]);
-    expect(canonicalOf(r.issues[0]!).key).toBe("broken-internal-link");
-    expect(canonicalOf(r.issues[1]!).key).toBe("missing-h1");
-    expect(canonicalOf(r.issues[2]!).key).toBe("semrush_site_audit:215");
-    expect(ledger(c).map((l) => [l.endpoint, l.units])).toEqual([["projects list", 100], ["siteaudit/info", 100], ["siteaudit/meta/issues", 100], ["siteaudit/issue", 100], ["siteaudit/issue", 100]]);
-    expect(JSON.stringify([r, ledger(c), db.prepare("SELECT value FROM cache").all()])).not.toContain(SR);
-    expect(sSA.planSemrushSiteAudit({ savedProject: false, listCached: false, metaCached: false, issueUrls: 2 })).toMatchObject({ units: 500, requests: 5 });
-    expect(sSA.planSemrushSiteAudit({ savedProject: true, listCached: false, metaCached: true, issueUrls: 0 })).toMatchObject({ units: 100, requests: 1 });
-  });
-
-  it("a saved semrushProject skips the list; no matching project is unavailable naming semrushProject", async () => {
-    const calls = fake();
-    await sSA.readSemrushSiteAudit(client({ semrushProject: "7701" } as Partial<Client>), {});
-    expect(calls[0]!.path).toBe("/reports/v1/projects/7701/siteaudit/info");
-    vi.unstubAllGlobals();
-    db.exec("DELETE FROM cache");
-    fake({ projects: [{ project_id: 1, url: "example.com", tools: [{ tool: "tracking" }] }] });
-    await expect(sSA.matchSemrushProject(client())).rejects.toThrow(/semrushProject/);
+    expect(r.unavailable.map((u) => u.reason)).toEqual(["paid source: needs allowPaid (it spends provider units)"]);
   });
 });
 
@@ -198,13 +124,13 @@ describe("clients.yaml project fields", () => {
     const { setClientProfile, resolveClient } = await import("../src/clients.js");
     writeFileSync(env.CLIENTS_FILE, "clients:\n  example.com:\n    domain: example.com\n    name: Example Co # keep this comment\n");
     await expect(setClientProfile("example.com", { ahrefsSiteAuditProject: "12ab" })).rejects.toThrow(/an Ahrefs Site Audit project ID/);
-    const r = await setClientProfile("example.com", { ahrefsSiteAuditProject: "4412001", semrushProject: "7701" });
-    expect(r.profile).toMatchObject({ ahrefsSiteAuditProject: "4412001", semrushProject: "7701" });
+    const r = await setClientProfile("example.com", { ahrefsSiteAuditProject: "4412001" });
+    expect(r.profile).toMatchObject({ ahrefsSiteAuditProject: "4412001" });
     const c = await resolveClient("example.com");
-    expect([c.ahrefsSiteAuditProject, c.semrushProject]).toEqual(["4412001", "7701"]);
+    expect(c.ahrefsSiteAuditProject).toBe("4412001");
     expect(readFileSync(env.CLIENTS_FILE, "utf8")).toContain("# keep this comment");
-    await setClientProfile("example.com", { semrushProject: "" });
-    expect((await resolveClient("example.com")).semrushProject).toBeUndefined();
+    await setClientProfile("example.com", { ahrefsSiteAuditProject: "" });
+    expect((await resolveClient("example.com")).ahrefsSiteAuditProject).toBeUndefined();
   });
 });
 
@@ -220,47 +146,21 @@ describe("SEC-1: a Site Audit project for another site never reaches this client
     expect(aSA.onClientDomain("notexample.com", "example.com")).toBe(false);
   });
 
-  it("Semrush: an audit whose site isn't the client's is refused (pinned or matched), and nothing from it is returned", async () => {
-    const calls = fake({ infoUrl: "other.example.org" });
-    await expect(sSA.readSemrushSiteAudit(client({ semrushProject: "7701" } as Partial<Client>), {})).rejects.toThrow(/project 7701 is for other\.example\.org, not example\.com/);
-    // Refused right after /info: no titles or issue URLs requested.
-    expect(calls.map((x) => x.path)).toEqual(["/reports/v1/projects/7701/siteaudit/info"]);
-  });
-
   it("set_client_profile (MCP) can't set the project IDs: only the CLI or the file can", async () => {
     const { registerCompetitorTools } = await import("../src/tools/competitors.js");
     let schema: Record<string, unknown> = {};
     registerCompetitorTools({ registerTool: (name: string, d: { inputSchema: Record<string, unknown> }) => void (name === "set_client_profile" && (schema = d.inputSchema)) } as never);
     expect(Object.keys(schema)).toContain("gbpPlaceId");
     expect(Object.keys(schema)).not.toContain("ahrefsSiteAuditProject");
-    expect(Object.keys(schema)).not.toContain("semrushProject");
-  });
-});
-
-describe("SEC-3: a Semrush Site Audit call that times out", () => {
-  it("records its estimated 100 units as (timeout, estimated) and rethrows", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string) => {
-        if (new URL(input).hostname !== "127.0.0.1") throw new Error("real host");
-        throw Object.assign(new Error("The operation timed out."), { name: "TimeoutError" });
-      }),
-    );
-    const c = client();
-    await expect(sSA.semrushAuditRequest("GET", "/reports/v1/projects/7701/siteaudit/info")(c)).rejects.toThrow(/timed out.*100 units were recorded/);
-    expect(ledger(c)).toEqual([{ provider: "semrush", endpoint: "siteaudit/info (timeout, estimated)", units: 100 }]);
   });
 });
 
 describe("SEC-6: the shared request helpers check the allowlists themselves", () => {
-  it("ahrefsGet and semrushProjectsGet refuse any path outside the Site Audit allowlist before a request", async () => {
+  it("ahrefsGet refuses any path outside the Site Audit allowlist before a request", async () => {
     const calls = fake();
     const { ahrefsGet } = await import("../src/providers/ahrefs.js");
-    const { semrushProjectsGet } = await import("../src/providers/semrush.js");
     await expect(ahrefsGet(client(), { path: "/management/projects", params: {} }, 0)).rejects.toThrow(aSA.SiteAuditRefused);
     await expect(ahrefsGet(client(), { path: "/site-explorer/metrics", params: {} }, 0)).rejects.toThrow(aSA.SiteAuditRefused);
-    await expect(semrushProjectsGet("/reports/v1/projects/7701/siteaudit/launch", "x", {})).rejects.toThrow(sSA.SemrushAuditRefused);
-    await expect(semrushProjectsGet("/reports/v1/projects/7701/siteaudit/info", "x", { snapshot_id: "1" })).rejects.toThrow(sSA.SemrushAuditRefused);
     expect(calls).toHaveLength(0);
   });
 });

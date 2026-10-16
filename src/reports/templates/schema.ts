@@ -86,12 +86,15 @@ const common = {
 };
 const limit = (max: number) => z.number().int().min(1).max(max).optional();
 
-/** technical_issues sources (spec 13.6.1). The two provider site audits are paid and arrive in Stage B. */
-export const ISSUE_SOURCES = ["audit", "local_crawl", "site_hygiene", "dataforseo_crawl", "gsc_inspection", "ahrefs_site_audit", "semrush_site_audit"] as const;
+/** technical_issues sources (spec 13.6.1). The Ahrefs Site Audit is paid. */
+/** A source 0.1.0 templates may still name. It validates (with a warning) and is dropped when the section runs. */
+export const REMOVED_ISSUE_SOURCE = "semrush_site_audit";
+export const REMOVED_ISSUE_SOURCE_NOTE = "Semrush Site Audit is no longer available (Semrush's v4 API doesn't include it).";
+export const ISSUE_SOURCES = ["audit", "local_crawl", "site_hygiene", "dataforseo_crawl", "gsc_inspection", "ahrefs_site_audit"] as const;
 /** The free sources: the default when a technical_issues section names none. */
 export const FREE_ISSUE_SOURCES = ["audit", "local_crawl", "site_hygiene", "dataforseo_crawl", "gsc_inspection"] as const;
-/** Sources that spend Ahrefs or Semrush units. */
-export const PAID_ISSUE_SOURCES: ReadonlySet<string> = new Set(["ahrefs_site_audit", "semrush_site_audit"]);
+/** Sources that spend Ahrefs units. */
+export const PAID_ISSUE_SOURCES: ReadonlySet<string> = new Set(["ahrefs_site_audit"]);
 
 const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("search_overview"), metrics: z.array(z.enum(["clicks", "impressions", "ctr", "position"])).min(1).optional() }),
@@ -134,13 +137,13 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("ai_visibility"), mode: z.enum(["mentions", "metrics"]).optional(), platform: z.enum(["google", "chat_gpt"]).optional(), limit: limit(50) }),
   // llms.txt and AI crawler access from the newest saved audit (free, local; never fetches).
   z.strictObject({ ...common, type: z.literal("ai_readiness") }),
-  // Phase 13 A: one deduplicated technical-issues list from stored results (free sources; Ahrefs/Semrush Site Audit are paid, Stage B).
+  // Phase 13 A: one deduplicated technical-issues list from stored results (free sources; the Ahrefs Site Audit is paid, Stage B).
   z.strictObject({
     ...common,
     type: z.literal("technical_issues"),
     limit: limit(200),
     minSeverity: z.enum(["critical", "high", "medium", "low"]).optional(),
-    sources: z.array(z.enum(ISSUE_SOURCES)).min(1).max(ISSUE_SOURCES.length).optional(),
+    sources: z.array(z.enum([...ISSUE_SOURCES, REMOVED_ISSUE_SOURCE])).min(1).max(ISSUE_SOURCES.length + 1).optional(),
     issueUrls: z.number().int().min(0).max(5).optional(),
     maxAgeDays: z.number().int().min(7).max(120).optional(),
   }),
@@ -227,7 +230,7 @@ export const SECTION_CATALOGUE: Record<SectionType, { group: SectionGroup; cost:
   local_profile: { group: "local", cost: "paid", needs: "DataForSEO and a confirmed Google Business Profile", summary: "The Google Business Profile and map-pack positions." },
   ai_visibility: { group: "ai", cost: "paid", needs: "DataForSEO with AI_VISIBILITY_ENABLED=true", summary: "AI answers (Google AI Overviews, ChatGPT) that cite the site." },
   ai_readiness: { group: "ai", cost: "free", needs: "a saved audit", summary: "llms.txt and which AI crawlers robots.txt lets in." },
-  technical_issues: { group: "site", cost: "paid_optional", needs: "a saved audit or crawl (Ahrefs / Semrush Site Audit sources are paid)", summary: "One deduplicated, severity-grouped list of technical problems from every stored source, with what changed since the last report." },
+  technical_issues: { group: "site", cost: "paid_optional", needs: "a saved audit or crawl (the Ahrefs Site Audit source is paid)", summary: "One deduplicated, severity-grouped list of technical problems from every stored source, with what changed since the last report." },
   indexing_issues: { group: "site", cost: "free", needs: "Google Search Console (uses the daily URL Inspection quota)", summary: "Google's verdict for key pages, top pages and a rotating sample of sitemap URLs, plus sitemap errors." },
   backlinks: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Referring domains, backlinks and the provider's authority metric, with the change since last month from stored snapshots." },
   organic_visibility: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Ranking keywords by position band and estimated organic traffic, with the trend from stored snapshots." },
@@ -348,13 +351,15 @@ export function semanticIssues(file: TemplateFile, today: Date): ValidationIssue
           s.type === "tracked_keywords"
             ? "liveRanks: true is a paid live SERP check, so the section must set paid: true"
             : s.type === "technical_issues"
-              ? "the ahrefs_site_audit and semrush_site_audit sources spend provider units, so the section must set paid: true"
+              ? "the ahrefs_site_audit source spends Ahrefs units, so the section must set paid: true"
               : `${s.type} is paid, so the section must set paid: true`,
         );
       }
       if (s.type === "technical_issues") {
         if (s.sources && new Set(s.sources).size !== s.sources.length) push([...at, "sources"], "entries must be unique");
-        if ((s.issueUrls ?? 0) > 0 && !(s.sources ?? []).some((x) => PAID_ISSUE_SOURCES.has(x))) push([...at, "issueUrls"], "issueUrls needs an ahrefs_site_audit or semrush_site_audit source (it fetches example URLs from the provider)");
+        // A 0.1.0 template pairing issueUrls with the removed semrush_site_audit source still loads (warned about in validateTemplateText).
+        const hasRemoved = (s.sources as readonly string[] | undefined)?.includes(REMOVED_ISSUE_SOURCE) === true;
+        if ((s.issueUrls ?? 0) > 0 && !hasRemoved && !(s.sources ?? []).some((x) => PAID_ISSUE_SOURCES.has(x))) push([...at, "issueUrls"], "issueUrls needs the ahrefs_site_audit source (it fetches example URLs from the provider)");
       }
       if (s.type === "core_web_vitals_history") {
         if (s.scope === "url" && !s.url) push([...at, "url"], "scope: url needs a url");
@@ -426,5 +431,12 @@ export function validateTemplateText(text: string, opts: ValidateOptions = {}): 
   if (logo && opts.logoExists && !opts.logoExists(logo)) {
     warnings.push({ path: "branding.logo", message: `${logo} doesn't exist; reports are rendered without a logo until it does` });
   }
+  (parsed.data.templates ? Object.entries(parsed.data.templates) : []).forEach(([id, t]) =>
+    t.sections.forEach((s, i) => {
+      if (s.type === "technical_issues" && (s.sources as readonly string[] | undefined)?.includes(REMOVED_ISSUE_SOURCE)) {
+        warnings.push({ path: `templates.${id}.sections[${i}].sources`, message: `${REMOVED_ISSUE_SOURCE}: ${REMOVED_ISSUE_SOURCE_NOTE} It is skipped when the report runs; you can remove it.${(s.issueUrls ?? 0) > 0 && !(s.sources ?? []).some((x) => PAID_ISSUE_SOURCES.has(x)) ? " issueUrls has no source left to fetch example URLs from, so it is ignored." : ""}` });
+      }
+    }),
+  );
   return errors.length ? { valid: false, errors, warnings } : { valid: true, errors: [], warnings, value: parsed.data };
 }

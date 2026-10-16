@@ -10,7 +10,7 @@ import type { IntegrationId, IntegrationStatus, SetupStatusReport } from "./stat
 import { uiFor } from "./ui.js";
 import { works, type StepName, type WizardContext } from "./wizard.js";
 
-export type MenuAction = "provider" | "google" | "register" | "discovery" | "branding" | "status" | "full" | "exit";
+export type MenuAction = "provider" | "google" | "register" | "vendor-mcp" | "discovery" | "branding" | "status" | "full" | "exit";
 
 export const MENU_QUESTION = "crawlmark is already set up. What would you like to do?";
 
@@ -18,6 +18,7 @@ export const MENU_CHOICES: readonly Choice<MenuAction>[] = [
   { value: "provider", label: "Add or change a data provider" },
   { value: "google", label: "Change Google sign-in" },
   { value: "register", label: "Re-register AI apps" },
+  { value: "vendor-mcp", label: "Add Semrush's or Ahrefs' own MCP server" },
   { value: "discovery", label: "Refresh clients" },
   { value: "branding", label: "Set up report branding" },
   { value: "status", label: "Check status" },
@@ -27,7 +28,7 @@ export const MENU_CHOICES: readonly Choice<MenuAction>[] = [
 
 /** The --step a menu action runs, if it is one. */
 export function menuStep(action: MenuAction): StepName | undefined {
-  return action === "provider" || action === "google" || action === "register" || action === "discovery" || action === "branding" ? action : undefined;
+  return action === "provider" || action === "google" || action === "register" || action === "vendor-mcp" || action === "discovery" || action === "branding" ? action : undefined;
 }
 
 /** What the menu's status read asks for. */

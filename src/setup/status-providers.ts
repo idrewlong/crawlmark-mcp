@@ -6,7 +6,6 @@ import { ENV_FILE, ENV_FILE_KEYS, env, HOME, PROJECT_ROOT, seoDefaultProvider } 
 import { globalUnitCap, unitsThisMonth } from "../lib/budget.js";
 import type { ProviderId } from "../lib/provider-ids.js";
 import { checkAhrefsKey } from "../providers/ahrefs.js";
-import { checkSemrushKey } from "../providers/semrush.js";
 import { checkCruxKey, cruxKey } from "../providers/crux.js";
 import { bingKey, checkBingKey } from "../providers/bing.js";
 import { remainingAiUsd } from "../lib/budget.js";
@@ -137,9 +136,8 @@ export const realStatusProviders: StatusProviders = {
       : { default: null, source: ENV_FILE_KEYS.has("SEO_DATA_PROVIDER") ? "envFile" : "env", invalidValue: d.invalidValue, perClientOverrides };
   },
   semrush: async () => ({
-    check: await checkSemrushKey(env.SEMRUSH_API_KEY),
+    keySet: Boolean(env.SEMRUSH_API_KEY),
     chosen: providerChoice("semrush"),
-    v4KeySet: Boolean(env.SEMRUSH_V4_API_KEY),
     unitsUsedThisMonth: unitsThisMonth(undefined, "semrush"),
     cap: globalUnitCap("semrush"),
   }),

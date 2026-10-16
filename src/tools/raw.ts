@@ -259,14 +259,13 @@ export function registerRawTools(server: McpServer) {
     {
       title: "Semrush status",
       description:
-        "Check the Semrush v3 API key with Semrush's free balance call: whether the key is accepted and how many API units are left, whether a v4 key " +
-        "(used for backlinks) is set, plus the units crawlmark recorded this calendar month against its own cap. Accepted proves the key exists, not that the " +
-        "plan includes the API (that shows on the first paid call). The v4 key has no free check. Free, never cached, records no spend, never shows a key. " +
-        "A missing or rejected key is reported in the result, not as a tool error. Change keys in a terminal (setup --step semrush), never through chat.",
+        "Whether a Semrush API key (v4, from the profile > API keys page) is set, what Semrush serves in crawlmark (keyword volume and backlinks; its v4 API has no rankings, " +
+        "competitors, visibility or Site Audit), and the units crawlmark recorded this calendar month against its own cap. Semrush has no free key check, so a rejected key shows " +
+        "on the first paid call. Free, never cached, records no spend, never shows a key. Change the key in a terminal (setup --step semrush), never through chat.",
       inputSchema: {},
       annotations: READ_ONLY,
     },
-    handler("semrush_status", () => semrushStatus()),
+    handler("semrush_status", async () => semrushStatus()),
   );
 
   // ---------------------------------------------------- browser checks (free)

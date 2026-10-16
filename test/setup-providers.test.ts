@@ -3,7 +3,7 @@
  * phases, and their status rows. Fake fetch, scripted prompts, recording Ui and a
  * temp home; nothing reaches the network or a real config.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -406,7 +406,7 @@ describe("the seoprovider row", () => {
       dataforseo: async () => ({ credentialsConfigured: false, credentialsWork: false, reachable: true, mode: "sandbox", apiHost: "x", error: "not set", costUsd: 0 }),
       ahrefs: async () => ({ check: await checkAhrefsKey(SENTINEL, leaky), chosen: { byDefault: true, clients: 0 }, unitsUsedThisMonth: 0, cap: 50_000 }),
       seoDataProvider: () => ({ default: "ahrefs", source: "envFile", perClientOverrides: 0 }),
-      semrush: async () => ({ check: { configured: false, works: false, reachable: true, error: "SEMRUSH_API_KEY is not set.", costUsd: 0 }, chosen: { byDefault: false, clients: 0 }, v4KeySet: false, unitsUsedThisMonth: 0, cap: 20_000 }),
+      semrush: async () => ({ keySet: false, chosen: { byDefault: false, clients: 0 }, unitsUsedThisMonth: 0, cap: 20_000 }),
       googleStatus: () => ({ mode: "none", auto: true, configured: false, problem: "none" }),
       googleLive: vi.fn(),
       gscSites: vi.fn(),
@@ -445,55 +445,55 @@ const semrushServer = (body: string, status = 200) => (url: URL) =>
   url.pathname.endsWith("/countapiunits.html") ? new Response(body, { status }) : new Response("not found", { status: 404 });
 
 describe("stepSemrush", () => {
-  it("accepted: masked key, a spinner, 'key accepted' with units left; the v4 follow-up saves its key with no fetch", async () => {
-    const p = scripted([true, SENTINEL, true, "v4-" + SENTINEL]);
-    const h = harness(p, { respond: semrushServer("1,000\n") });
+  const SAVED_NOTE = "Saved. Semrush has no free key check, so the key is checked on the first paid call (keyword volume or backlinks).";
+
+  it("asks once for a v4 key, saves SEMRUSH_API_KEY with no request, and says there is no free check", async () => {
+    const p = scripted([true, SENTINEL]);
+    const h = harness(p, { respond: semrushServer("unused") });
     const r = await stepSemrush(h.ctx);
-    expect(r).toMatchObject({ step: "semrush", outcome: "done", message: "Semrush key accepted (1,000 API units left)." });
-    expect(p.asked).toEqual([
-      "Set up Semrush now?",
-      "Semrush API key (v3)",
-      "Add a Semrush v4 key too? (backlinks use the v4 overview; without it they use the older v3 report)",
-      "Semrush API key (v4, from your profile > API keys)",
-    ]);
-    expect(h.ui.events).toContain("spin: Checking with Semrush (free API units balance call)...");
-    expect(h.ui.events).toContain("success: Semrush key accepted  1,000 API units left");
-    expect(h.ui.events).toContain("info: Saved; Semrush has no free check for v4 keys, so it's checked the first time backlinks_summary runs.");
-    expect(h.fetch).toHaveBeenCalledTimes(1);
-    expect(h.env()).toEqual({ SEMRUSH_API_KEY: SENTINEL, SEMRUSH_V4_API_KEY: "v4-" + SENTINEL });
+    expect(r).toMatchObject({ step: "semrush", outcome: "done", message: expect.stringContaining("no free key check") });
+    expect(p.asked).toEqual(["Set up Semrush now?", "Semrush API key (v4, from your profile > API keys)"]);
+    expect(h.ui.events).toContain(`info: ${SAVED_NOTE}`);
+    expect(h.fetch).not.toHaveBeenCalled();
+    expect(h.env()).toEqual({ SEMRUSH_API_KEY: SENTINEL });
     expect(transcript(h)).not.toContain(SENTINEL);
   });
 
-  it("rejected: 'rejected that key (ERROR 120)', at most 3 attempts", async () => {
-    const h = harness(scripted([true, "a", "b", "c"]), { respond: semrushServer("ERROR 120 :: WRONG KEY - ID PAIR") });
+  it("says v3 keys aren't supported and where to create a v4 key", async () => {
+    const h = harness(scripted([true, SENTINEL]), { respond: semrushServer("unused") });
+    await stepSemrush(h.ctx);
+    const out = transcript(h);
+    expect(out).toContain("Create a v4 API key under your profile > API keys. Semrush's older v3 keys aren't supported; create a v4 key.");
+    expect(out).toContain("50,000 come with SEO Classic Pro and Guru");
+  });
+
+  it("strips quotes and spaces from a pasted key", async () => {
+    const h = harness(scripted([true, `  "${SENTINEL}"  `]), { respond: semrushServer("unused") });
+    await stepSemrush(h.ctx);
+    expect(h.env()).toEqual({ SEMRUSH_API_KEY: SENTINEL });
+  });
+
+  it("0.1.0 with both keys: Enter keeps the v4 key (SEMRUSH_V4_API_KEY, which wins), saves it as SEMRUSH_API_KEY and removes the alias; the old v3 key is dropped", async () => {
+    const p = scripted([true, ""]);
+    const h = harness(p, { respond: semrushServer("unused") });
+    writeFileSync(join(h.home, ".env"), `DATAFORSEO_LOGIN=me\nSEMRUSH_API_KEY=old-v3-${SENTINEL}\nSEMRUSH_V4_API_KEY=v4-${SENTINEL}\n`, { mode: 0o600 });
+    const r = await stepSemrush(h.ctx);
+    expect(r.outcome).toBe("done");
+    expect(p.asked[1]).toContain("Enter keeps the current one");
+    expect(h.env()).toEqual({ DATAFORSEO_LOGIN: "me", SEMRUSH_API_KEY: `v4-${SENTINEL}` });
+    expect(readFileSync(join(h.home, ".env"), "utf8")).not.toContain("SEMRUSH_V4_API_KEY");
+    if (POSIX_MODES) expect(statSync(join(h.home, ".env")).mode & 0o777).toBe(0o600);
+    expect(transcript(h)).not.toContain(SENTINEL);
+  });
+
+  it("an empty answer is asked again, at most 3 times, and saves nothing", async () => {
+    const h = harness(scripted([true, "", "", ""]), { respond: semrushServer("unused") });
     expect(await stepSemrush(h.ctx)).toMatchObject({ outcome: "failed" });
-    expect(h.ui.events.filter((e) => e === "fail: Semrush rejected that key (ERROR 120). Find the v3 key under Subscription info > API units.")).toHaveLength(3);
+    expect(h.ui.events.filter((e) => e === "fail: No key entered.")).toHaveLength(3);
     expect(existsSync(join(h.home, ".env"))).toBe(false);
   });
 
-  it("unreachable: saves untested only on yes", async () => {
-    const no = harness(scripted([true, SENTINEL, false]), { respond: semrushServer("", 502) });
-    expect(await stepSemrush(no.ctx)).toMatchObject({ outcome: "failed", message: "Semrush unreachable; nothing saved." });
-    const yes = harness(scripted([true, SENTINEL, true, false]), { respond: semrushServer("", 502) });
-    expect(await stepSemrush(yes.ctx)).toMatchObject({ outcome: "done", message: expect.stringContaining("untested") });
-    expect(yes.env()).toEqual({ SEMRUSH_API_KEY: SENTINEL });
-  });
-
-  it("a zero balance is a warning, not a failure", async () => {
-    const h = harness(scripted([true, SENTINEL, false]), { respond: semrushServer("0") });
-    expect(await stepSemrush(h.ctx)).toMatchObject({ outcome: "done" });
-    expect(h.ui.events).toContain("warn: Semrush answered 0 API units. Its balance check also answers 0 for a key it doesn't know, so check the key; and the API needs an SEO Business plan with an API unit package.");
-  });
-
-  it("a key Semrush can't parse (HTTP 400 JSON) gets the v3-key explanation, not 'couldn't reach'", async () => {
-    const h = harness(scripted([true, "a", "b", "c"]), { respond: semrushServer('{"errors":[{"field":"key","message":"invalid api key: a"}]}', 400) });
-    expect(await stepSemrush(h.ctx)).toMatchObject({ outcome: "failed" });
-    expect(h.ui.events.filter((e) => e.startsWith("fail: Semrush rejected that key. Semrush says this isn't a valid v3 API key."))).toHaveLength(3);
-    expect(h.ui.events.some((e) => e.includes("Couldn't reach"))).toBe(false);
-    expect(existsSync(join(h.home, ".env"))).toBe(false);
-  });
-
-  it("--yes skips the key (needs a key) and never asks about v4", async () => {
+  it("--yes skips the key (needs a key)", async () => {
     const h = harness(autoPrompter(() => {}));
     h.ctx.yes = true;
     expect(await stepSemrush(h.ctx)).toEqual({ step: "semrush", outcome: "skipped", message: "Semrush needs a key; run crawlmark-cli setup --step semrush" });
@@ -508,20 +508,12 @@ describe("stepSemrush", () => {
 });
 
 describe("the semrush status row", () => {
-  const next = "crawlmark-cli setup --step semrush";
-  const base = { chosen: { byDefault: false, clients: 0 }, v4KeySet: false, unitsUsedThisMonth: 0, cap: 20_000 };
-  const accepted = (unitsLeft: number) => ({ configured: true as const, works: true as const, reachable: true as const, unitsLeft, error: null, costUsd: 0 as const });
-
-  it("missing, error when chosen without a key or rejected, configured when unreachable / zero balance / v4 untested, working", () => {
-    const none = { configured: false, works: false as const, reachable: true, error: "SEMRUSH_API_KEY is not set.", costUsd: 0 as const };
-    expect(semrushRow({ ...base, check: none }, next).state).toBe("missing");
-    expect(semrushRow({ ...base, check: none, chosen: { byDefault: false, clients: 1 } }, next).state).toBe("error");
-    expect(semrushRow({ ...base, check: { configured: true, works: false, reachable: true, errorCode: 120, error: "rejected", costUsd: 0 } }, next).state).toBe("error");
-    expect(semrushRow({ ...base, check: { configured: true, works: null, reachable: false, error: "down", costUsd: 0 } }, next).state).toBe("configured");
-    expect(semrushRow({ ...base, check: accepted(0) }, next).state).toBe("configured");
-    const v4 = semrushRow({ ...base, v4KeySet: true, check: accepted(1000) }, next);
-    expect(v4).toMatchObject({ state: "configured", data: { v4KeySet: true, unitsLeft: 1000 } });
-    expect(semrushRow({ ...base, check: accepted(1000) }, next)).toMatchObject({ state: "working", next: null, data: { unitsLeft: 1000, cap: 20_000 } });
+  it("missing, error when chosen without a key, configured with a key (no free check)", () => {
+    const base = { chosen: { byDefault: false, clients: 0 }, unitsUsedThisMonth: 0, cap: 20_000 };
+    const next = "crawlmark-cli setup --step semrush";
+    expect(semrushRow({ ...base, keySet: false }, next).state).toBe("missing");
+    expect(semrushRow({ ...base, keySet: false, chosen: { byDefault: false, clients: 1 } }, next).state).toBe("error");
+    expect(semrushRow({ ...base, keySet: true }, next)).toMatchObject({ state: "configured", next: null, data: { keySet: true, keyCheck: "none", cap: 20_000 } });
   });
 });
 
@@ -536,7 +528,7 @@ describe("setup status --only seoprovider,ahrefs,semrush --json (CLI)", () => {
     expect(r.status, r.stderr).toBe(0);
     const report = JSON.parse(r.stdout) as SetupStatusReport;
     expect(report.integrations.map((i) => i.id)).toEqual(["seoprovider", "ahrefs", "semrush"]);
-    // The keys are set but the APIs (pointed at a closed local port) can't be reached: untested.
+    // The keys are set; Ahrefs' API (pointed at a closed local port) can't be reached and Semrush has no free check: untested.
     expect(report.integrations.map((i) => i.state)).toEqual(["configured", "configured", "configured"]);
     expect(report.seoDataProvider).toMatchObject({ default: "ahrefs", source: "env", configured: { ahrefs: true, semrush: true } });
     expect(r.stdout).not.toContain(SENTINEL);
@@ -551,7 +543,7 @@ describe("MCPB manifest (Phase 9)", () => {
   const envMap = manifest.server.mcp_config.env as Record<string, string>;
 
   it("has the six new fields, each mapped to an env var config reads", () => {
-    const fields = { seo_data_provider: "SEO_DATA_PROVIDER", ahrefs_api_key: "AHREFS_API_KEY", semrush_api_key: "SEMRUSH_API_KEY", semrush_v4_api_key: "SEMRUSH_V4_API_KEY", ahrefs_monthly_unit_cap: "AHREFS_MONTHLY_UNIT_CAP", semrush_monthly_unit_cap: "SEMRUSH_MONTHLY_UNIT_CAP" };
+    const fields = { seo_data_provider: "SEO_DATA_PROVIDER", ahrefs_api_key: "AHREFS_API_KEY", semrush_api_key: "SEMRUSH_API_KEY", ahrefs_monthly_unit_cap: "AHREFS_MONTHLY_UNIT_CAP", semrush_monthly_unit_cap: "SEMRUSH_MONTHLY_UNIT_CAP" };
     for (const [field, envVar] of Object.entries(fields)) {
       expect(uc[field], field).toBeDefined();
       expect(uc[field].required, field).toBe(false);
@@ -563,8 +555,12 @@ describe("MCPB manifest (Phase 9)", () => {
   it("seo_data_provider has no default and names all three values; keys are sensitive; caps are numbers with min 1", () => {
     expect(uc.seo_data_provider.default).toBeUndefined();
     for (const v of ["dataforseo", "ahrefs", "semrush"]) expect(uc.seo_data_provider.description).toContain(v);
-    for (const k of ["ahrefs_api_key", "semrush_api_key", "semrush_v4_api_key"]) expect(uc[k].sensitive, k).toBe(true);
+    for (const k of ["ahrefs_api_key", "semrush_api_key"]) expect(uc[k].sensitive, k).toBe(true);
     for (const k of ["ahrefs_monthly_unit_cap", "semrush_monthly_unit_cap"]) expect(uc[k]).toMatchObject({ type: "number", min: 1 });
+    // The Semrush key is v4. The 0.1.0 v4 field stays mapped so a bundle user's existing v4 key still wins over their old v3 field.
+    expect(uc.semrush_api_key.title).toBe("Semrush API key (v4)");
+    expect(uc.semrush_v4_api_key).toMatchObject({ type: "string", sensitive: true, required: false });
+    expect(envMap.SEMRUSH_V4_API_KEY).toBe("${user_config.semrush_v4_api_key}");
     expect(manifest.tools.map((t: { name: string }) => t.name)).toEqual(expect.arrayContaining(["ahrefs_status", "semrush_status"]));
   });
 });

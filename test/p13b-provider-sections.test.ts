@@ -44,11 +44,8 @@ function fake(): Req[] {
       if (url.hostname !== "127.0.0.1") throw new Error(`test tried to reach a real host: ${url.hostname}`);
       log.push({ host: url.host, path: url.pathname, type: url.searchParams.get("type"), body: init?.body ? JSON.parse(String(init.body)) : null });
       if (url.pathname.startsWith("/v3/")) return DFS[url.pathname] ? new Response(DFS[url.pathname], { status: 200 }) : new Response("{}", { status: 404 });
-      const type = url.searchParams.get("type");
-      if (type === "backlinks_overview") return new Response(sx("backlinks_overview.doc.csv"), { status: 200 });
-      if (type === "domain_rank") return new Response(sx("p13/domain_rank.csv"), { status: 200 });
-      if (type === "domain_rank_history") return new Response(sx("p13/domain_rank_history.csv"), { status: 200 });
-      return new Response("ERROR 50 :: NOTHING FOUND", { status: 200 });
+      if (url.pathname === "/apis/v4/backlinks/v1/overview") return new Response(sx("v4-backlinks-overview.json"), { status: 200 });
+      return new Response("{}", { status: 404 });
     }),
   );
   return log;
@@ -144,25 +141,22 @@ describe("organic visibility", () => {
     expect(v.comparisons.previous_period?.change.keywords).toBe(108);
   });
 
-  it("Semrush: no bands, history via domain_rank_history; never a DataForSEO request though DataForSEO is configured", async () => {
+  it("Semrush's v4 API has no organic visibility: a Semrush client's section is served by DataForSEO", async () => {
     const log = fake();
     const c = client({ dataProvider: "semrush" } as Partial<Client>);
     const planned = await ps.planSection(c, { type: "organic_visibility" }, SEPT, deps());
-    expect(ps.estimateOf(planned)).toMatchObject({ provider: "semrush", usd: 0, units: 10 + 130 });
-    const v = (await ps.runSection(planned, deps())) as import("../src/reports/report-types.js").VisibilityData;
-    expect(log.every((l) => !l.path.startsWith("/v3/"))).toBe(true);
-    expect(v.distributionAvailable).toBe(false);
-    expect(v.notes).toContain("Semrush's API doesn't report keywords by position band.");
-    expect(v.comparisons.previous_period).toMatchObject({ asOf: "2026-08-15", origin: "provider_history" });
+    expect(ps.estimateOf(planned)).toMatchObject({ provider: "dataforseo" });
+    await ps.runSection(planned, deps());
+    expect(log.every((l) => l.path.startsWith("/v3/"))).toBe(true);
   });
 
-  it("Semrush backlinks: no history call to anyone; last year's figures are dropped with a note", async () => {
+  it("Semrush backlinks: the v4 overview (45 units), no history call to anyone; last year's figures are dropped with a note", async () => {
     const log = fake();
     const c = client({ dataProvider: "semrush" } as Partial<Client>);
     const planned = await ps.planSection(c, { type: "backlinks" }, SEPT, deps());
-    expect(ps.estimateOf(planned)).toMatchObject({ provider: "semrush", units: 40, requests: 1 });
+    expect(ps.estimateOf(planned)).toMatchObject({ provider: "semrush", units: 45, requests: 1 });
     const data = (await ps.runSection(planned, deps())) as import("../src/reports/report-types.js").BacklinksData;
-    expect(log.map((l) => l.type)).toEqual(["backlinks_overview"]);
+    expect(log.map((l) => l.path)).toEqual(["/apis/v4/backlinks/v1/overview"]);
     expect(data.authority.label).toBe("Semrush Authority Score (0–100)");
     expect(data.notes.join(" ")).toContain("Semrush data is kept for 31 days");
   });

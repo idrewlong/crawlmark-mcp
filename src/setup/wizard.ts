@@ -8,14 +8,14 @@
  */
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { APP_LABELS, registerApps, type AppOutcome } from "./apps.js";
+import { APP_LABELS, registerApps, type AppId, type AppOutcome } from "./apps.js";
+import { stepVendorMcp } from "./vendor-mcp-step.js";
 import { copyFileAtomic } from "../lib/atomic-file.js";
 import { readEnvFile, writeEnvFile } from "../lib/env-file.js";
 import { expandPath, sourceCheckoutMarker, type HomeSource } from "../lib/home.js";
 import { checkAhrefsKey } from "../providers/ahrefs.js";
 import { describeAhrefsAccount } from "../providers/ahrefs-shape.js";
 import { checkDataForSeoCredentials } from "../providers/dataforseo.js";
-import { checkSemrushKey, SEMRUSH_NOT_A_V3_KEY } from "../providers/semrush.js";
 import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type ProviderId } from "../lib/provider-ids.js";
 import { checkPsiKey } from "./checks.js";
 import { checkCruxKey } from "../providers/crux.js";
@@ -29,7 +29,7 @@ import { tryAskingExamples, type ExampleClient } from "./try-asking.js";
 import { DFS_LIVE_URL, DFS_SANDBOX_URL } from "../lib/env.js";
 import { LINKS, type IntegrationId, type IntegrationStatus, type SetupStatusReport } from "./status.js";
 
-export const STEP_NAMES = ["node", "provider", "dataforseo", "ahrefs", "semrush", "google", "psi", "discovery", "register"] as const;
+export const STEP_NAMES = ["node", "provider", "dataforseo", "ahrefs", "semrush", "google", "psi", "discovery", "register", "vendor-mcp"] as const;
 /**
  * Phase 12: steps run only with --step (branding is also "Set up report branding" in the returning-user menu).
  * They are not in the default flow or the step lists the wizard prints, so plain installer output is unchanged.
@@ -120,6 +120,10 @@ export interface WizardContext {
 /** Options for a provider credential step. `ticked`: the user just picked it in the provider list, so don't ask again whether to set it up. */
 export interface CredentialStepOptions {
   ticked?: boolean;
+  /** vendor-mcp: run on its own (--step or the menu), not as the one optional question of the full run. */
+  asked?: boolean;
+  /** vendor-mcp, full run: the apps the register step just set up. */
+  apps?: AppId[];
 }
 
 /** Record that a provider's check passed in this run (the default select offers it even in a dry run). */
@@ -161,15 +165,16 @@ async function showStatus(ctx: WizardContext, only: IntegrationId[], opts: { ref
 }
 
 /** Write keys to <home>/.env (0600), or say what would be written in a dry run. Values are never printed. */
-function saveEnv(ctx: WizardContext, updates: Record<string, string>): void {
+function saveEnv(ctx: WizardContext, updates: Record<string, string>, remove: readonly string[] = []): void {
   const keys = Object.keys(updates).join(", ");
   const ui = uiFor(ctx);
   if (ctx.dryRun) {
-    ui.info(`Dry run: would set ${keys} in ${ctx.paths.envFile} (mode 0600).`);
+    ui.info(`Dry run: would set ${keys}${remove.length ? ` and remove ${remove.join(", ")}` : ""} in ${ctx.paths.envFile} (mode 0600).`);
     return;
   }
-  const r = writeEnvFile(ctx.paths.envFile, updates);
+  const r = writeEnvFile(ctx.paths.envFile, updates, remove);
   const changed = [...r.updated, ...r.added];
+  if (r.removed.length) ui.info(`Removed ${r.removed.join(", ")} from ${ctx.paths.envFile}.`);
   ui.success(changed.length ? `Saved ${changed.join(", ")} to ${ctx.paths.envFile} (mode 0600).` : `${ctx.paths.envFile} already had these values.`);
   const shadowed = Object.keys(updates).filter((k) => ctx.shellEnvKeys.has(k));
   if (shadowed.length) {
@@ -352,7 +357,6 @@ export async function stepAhrefs(ctx: WizardContext, opts: CredentialStepOptions
   return { step, outcome: "failed", message: `No working Ahrefs key after ${MAX_ATTEMPTS} attempts.` };
 }
 
-const SEMRUSH_API_UNITS = "https://www.semrush.com/accounts/subscription-info/api-units/";
 const GOOGLE_SERVICE_ACCOUNTS = "https://console.cloud.google.com/iam-admin/serviceaccounts";
 const GOOGLE_AUTH_OVERVIEW = "https://console.cloud.google.com/auth/overview";
 
@@ -364,68 +368,36 @@ export async function stepSemrush(ctx: WizardContext, opts: CredentialStepOption
   if (!opts.ticked && !(await ctx.prompt.confirm(working ? "Change the Semrush API key?" : "Set up Semrush now?", !working))) {
     return { step, outcome: "skipped", message: working ? "Kept the current Semrush key." : "Semrush not set up." };
   }
-  ctx.out("Semrush: keyword, ranking, competitor and backlink data (needs an SEO Business plan plus an API unit package).");
-  ctx.out(`Find the v3 API key under Subscription info > API units (${SEMRUSH_API_UNITS}).`);
-  await offerOpen(ctx, "Semrush API units", SEMRUSH_API_UNITS);
-  const env = existingEnv(ctx);
-  const current = env.SEMRUSH_API_KEY;
+  ctx.out("Semrush: keyword volume and backlinks (needs a Semrush plan with API units: 50,000 come with SEO Classic Pro and Guru, and Semrush One Starter and Pro+).");
+  ctx.out("Create a v4 API key under your profile > API keys. Semrush's older v3 keys aren't supported; create a v4 key.");
+  const saved = existingEnv(ctx);
+  // In 0.1.0 SEMRUSH_API_KEY was the old v3 key and SEMRUSH_V4_API_KEY the v4 key, so the alias wins when both are set.
+  // Keeping it saves it as SEMRUSH_API_KEY and removes the alias.
+  const current = saved.SEMRUSH_V4_API_KEY || saved.SEMRUSH_API_KEY;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let key: string;
     try {
-      key = await ctx.prompt.secret(current ? "Semrush API key, v3 (Enter keeps the current one)" : "Semrush API key (v3)");
+      key = await ctx.prompt.secret(current ? "Semrush API key (v4, from your profile > API keys; Enter keeps the current one)" : "Semrush API key (v4, from your profile > API keys)");
     } catch (err) {
       if (err instanceof NeedsInputError) {
         const keySet = Boolean(current) || st?.data?.keySet === true;
-        return { step, outcome: "skipped", message: keySet ? `Semrush key is set but untested; run ${ctx.cliDisplay} setup --step semrush` : `Semrush needs a key; run ${ctx.cliDisplay} setup --step semrush` };
+        return { step, outcome: "skipped", message: keySet ? `Semrush key is set; run ${ctx.cliDisplay} setup --step semrush to change it` : `Semrush needs a key; run ${ctx.cliDisplay} setup --step semrush` };
       }
       throw err;
     }
     // A key pasted with its quotes from a .env line or a doc.
-    key = key.replace(/^(["'])(.*)\1$/, "$2").trim();
+    key = key.trim().replace(/^(["'])(.*)\1$/, "$2").trim();
     if (!key && current) key = current;
     if (!key) {
       ui.fail("No key entered.");
       continue;
     }
-    const check = await ui.spin("Checking with Semrush (free API units balance call)...", () => checkSemrushKey(key, ctx.fetch));
-    if (check.works === true) {
-      if (check.unitsLeft === 0) ui.warn("Semrush answered 0 API units. Its balance check also answers 0 for a key it doesn't know, so check the key; and the API needs an SEO Business plan with an API unit package.");
-      else ui.success(`Semrush key accepted  ${check.unitsLeft.toLocaleString("en-US")} API units left`);
-      saveEnv(ctx, { SEMRUSH_API_KEY: key });
-      markWorking(ctx, "semrush");
-      await semrushV4(ctx);
-      return { step, outcome: "done", message: `Semrush key accepted (${check.unitsLeft.toLocaleString("en-US")} API units left).` };
-    }
-    if (check.works === false) {
-      ui.fail(`Semrush rejected that key${"errorCode" in check && check.errorCode ? ` (ERROR ${check.errorCode})` : ""}. ${check.error === SEMRUSH_NOT_A_V3_KEY ? check.error : "Find the v3 key under Subscription info > API units."}`);
-      continue;
-    }
-    ui.warn(check.reachable ? `Semrush's balance check didn't confirm the key: ${check.error}` : `Couldn't reach Semrush's balance check, so the key is untested: ${check.error}`);
-    if (await ctx.prompt.confirm("Save it anyway?", false)) {
-      saveEnv(ctx, { SEMRUSH_API_KEY: key });
-      await semrushV4(ctx);
-      return { step, outcome: "done", message: `Saved an untested Semrush key; check later with \`${ctx.cliDisplay} setup --step semrush\`.` };
-    }
-    return { step, outcome: "failed", message: "Semrush unreachable; nothing saved." };
+    saveEnv(ctx, { SEMRUSH_API_KEY: key }, ["SEMRUSH_V4_API_KEY"]);
+    markWorking(ctx, "semrush");
+    ui.info("Saved. Semrush has no free key check, so the key is checked on the first paid call (keyword volume or backlinks).");
+    return { step, outcome: "done", message: "Semrush key saved (v4). Semrush has no free key check, so it is checked on the first paid call (keyword volume or backlinks)." };
   }
-  return { step, outcome: "failed", message: `No accepted Semrush key after ${MAX_ATTEMPTS} attempts.` };
-}
-
-/** The optional v4 key (backlinks): saved untested, since Semrush has no free check for it (N15). Skipped under --yes. */
-async function semrushV4(ctx: WizardContext): Promise<void> {
-  if (ctx.yes) return;
-  if (!(await ctx.prompt.confirm("Add a Semrush v4 key too? (backlinks use the v4 overview; without it they use the older v3 report)", false))) return;
-  const v4 = await ctx.prompt.secret("Semrush API key (v4, from your profile > API keys)");
-  if (!v4) {
-    uiFor(ctx).info("No v4 key entered; backlinks keep using the v3 report.");
-    return;
-  }
-  saveEnv(ctx, { SEMRUSH_V4_API_KEY: v4 });
-  uiFor(ctx).info(
-    ctx.dryRun
-      ? "Semrush has no free check for v4 keys, so it would be checked the first time backlinks_summary runs."
-      : "Saved; Semrush has no free check for v4 keys, so it's checked the first time backlinks_summary runs.",
-  );
+  return { step, outcome: "failed", message: `No Semrush key entered after ${MAX_ATTEMPTS} attempts.` };
 }
 
 const GOOGLE_OPTIONS = [
@@ -729,7 +701,7 @@ const PROVIDER_ORDER: readonly ProviderId[] = ["dataforseo", "ahrefs", "semrush"
 const PROVIDER_HINTS: Record<ProviderId, string> = {
   dataforseo: "pay per call; free sandbox; also live SERPs, on-page, crawls",
   ahrefs: "API v3, Lite plan or higher",
-  semrush: "Business plan + API unit package",
+  semrush: "v4 API key; keyword volume and backlinks",
 };
 
 /** What the wizard says when a provider isn't set up and --yes can't ask for its key. */
@@ -743,7 +715,7 @@ const NEEDS_KEY: Record<ProviderId, (cli: string) => string> = {
 const KEY_VARS: Record<ProviderId, string> = {
   dataforseo: "DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD",
   ahrefs: "AHREFS_API_KEY",
-  semrush: "SEMRUSH_API_KEY (and SEMRUSH_V4_API_KEY)",
+  semrush: "SEMRUSH_API_KEY",
 };
 
 const STATE_WORD: Record<IntegrationStatus["state"], string> = { working: "working", configured: "set, untested", error: "error", missing: "not set up" };
@@ -763,9 +735,8 @@ async function readStatus(ctx: WizardContext, only: IntegrationId[]): Promise<Ma
 const providerIds = (): ProviderId[] => PROVIDER_ORDER.filter((id) => PROVIDER_STEPS.includes(id));
 /** A provider's setup_status row id (every provider with a credential step has one). */
 const rowId = (id: ProviderId) => id as IntegrationId;
-/** A provider counts as working: its row is working, or (Semrush) its key was accepted with units left and only the v4 key is untested. */
-export const works = (id: ProviderId, s: IntegrationStatus | undefined) =>
-  s?.state === "working" || (id === "semrush" && s?.state === "configured" && typeof s.data?.unitsLeft === "number" && s.data.unitsLeft > 0);
+/** A provider counts as working: its row is working, or (Semrush, which has no free key check) its key is set. */
+export const works = (id: ProviderId, s: IntegrationStatus | undefined) => s?.state === "working" || (id === "semrush" && s?.state === "configured" && s.data?.keySet === true);
 const hasKey = (id: ProviderId, s: IntegrationStatus | undefined) => (id === "dataforseo" ? s !== undefined && s.state !== "missing" : s?.data?.keySet === true);
 
 function describeDefault(seo: IntegrationStatus | undefined): string {
@@ -876,6 +847,7 @@ const STEPS: Record<Exclude<StepName, "provider">, { title: string; run: StepRun
   branding: { title: "Report branding", run: stepBranding },
   discovery: { title: "Clients", run: stepDiscovery },
   register: { title: "Register with Claude", run: stepRegister },
+  "vendor-mcp": { title: "Semrush and Ahrefs MCP servers (optional)", run: (ctx, opts) => stepVendorMcp(ctx, opts ?? {}) },
 };
 
 /** A run's phases: the public steps plus the provider pick and default phases (not --step values). */
@@ -886,7 +858,7 @@ const isProviderStep = (p: Phase): p is ProviderId & Phase => (PROVIDER_STEPS as
 /** The run plan (spec 9.6) for a full run or one --step. */
 export function runPlan(step?: StepName): Phase[] {
   const creds = PROVIDER_STEPS as readonly Phase[];
-  if (!step) return ["node", "provider:pick", ...creds, "provider:default", "google", "psi", "discovery", "register"];
+  if (!step) return ["node", "provider:pick", ...creds, "provider:default", "google", "psi", "discovery", "register", "vendor-mcp"];
   if (step === "provider") return ["provider:pick", ...creds, "provider:default"];
   if (isProviderStep(step)) return [step, "provider:default"];
   return [step];
@@ -904,6 +876,7 @@ const SUMMARY_LABELS: Record<Exclude<StepName, "register">, string> = {
   bing: "Bing",
   branding: "Branding",
   discovery: "Clients",
+  "vendor-mcp": "Vendor MCP",
 };
 
 const APP_OUTCOME: Record<AppOutcome["status"], StepOutcome> = {
@@ -996,11 +969,14 @@ export async function runWizard(ctx: WizardContext, opts: { step?: StepName; int
   const ui = uiFor(ctx);
   // The returning-user menu (src/setup/menu.ts) shows the intro itself before it runs a step.
   if (!opts.introShown) ui.intro({ command: ctx.command ?? "setup", version: ctx.version ?? "", home: ctx.paths.home, dryRun: ctx.dryRun });
-  const phases = runPlan(opts.step);
+  let phases = runPlan(opts.step);
+  // The vendor MCP question exists only in a fancy, interactive full run; plain, CI and --yes output is unchanged.
+  if (!opts.step && (ctx.yes || !ui.fancy)) phases = phases.filter((p) => p !== "vendor-mcp");
   const results: StepResult[] = [];
   let picked: Map<IntegrationId, IntegrationStatus> | undefined;
   let index = 0;
-  for (const name of phases) {
+  for (let pi = 0; pi < phases.length; pi++) {
+    const name = phases[pi]!;
     let result: StepResult | undefined;
     let record = true;
     const run = async (title: string, fn: () => Promise<StepResult>): Promise<StepResult> => {
@@ -1020,6 +996,8 @@ export async function runWizard(ctx: WizardContext, opts: { step?: StepName; int
         picked = r.statuses;
         return r.result;
       });
+      // No Semrush or Ahrefs picked: the vendor MCP question has nothing to ask.
+      if (!opts.step && !(ctx.providers?.selected?.has("semrush") || ctx.providers?.selected?.has("ahrefs"))) phases = phases.filter((p) => p !== "vendor-mcp");
       // The pick's line is shown; the summary's "provider" entry is the default phase's result.
       record = false;
     } else if (name === "provider:default") {
@@ -1036,8 +1014,11 @@ export async function runWizard(ctx: WizardContext, opts: { step?: StepName; int
       } else {
         result = await run(STEPS[name].title, () => STEPS[name].run(ctx, { ticked: true }));
       }
+    } else if (name === "vendor-mcp") {
+      const apps = results.find((r) => r.step === "register")?.apps?.filter((a) => a.status === "registered" || a.status === "already").map((a) => a.id);
+      result = await run(STEPS[name].title, () => STEPS[name].run(ctx, opts.step ? { asked: true } : { apps: apps ?? [] }));
     } else {
-      const step = name as Exclude<Phase, "provider:pick" | "provider:default">;
+      const step = name as Exclude<Phase, "provider:pick" | "provider:default" | "vendor-mcp">;
       result = await run(STEPS[step].title, () => STEPS[step].run(ctx));
     }
     // Fancy mode already showed each app's line; its result is a short tally instead of all of them again.

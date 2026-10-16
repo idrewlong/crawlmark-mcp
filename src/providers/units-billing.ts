@@ -13,7 +13,7 @@ import { stripControl } from "../lib/terminal-text.js";
 
 /**
  * Untrusted vendor text made safe to show or throw: every secret (and any `key=...`
- * query parameter, since Semrush keys travel in the URL) replaced, control characters
+ * query parameter, since Ahrefs and older Semrush keys can travel in a URL) replaced, control characters
  * stripped, whitespace collapsed and the length capped.
  */
 export function redact(text: string, secrets: readonly (string | undefined)[], max = 300): string {

@@ -555,8 +555,6 @@ export interface ProfileUpdate {
   gbpPlaceId?: string | undefined;
   /** Phase 13 B: an existing Ahrefs Site Audit project ID (digits); empty string clears it. */
   ahrefsSiteAuditProject?: string | undefined;
-  /** Phase 13 B: an existing Semrush project ID (digits); empty string clears it. */
-  semrushProject?: string | undefined;
 }
 
 export interface ProfileResult {
@@ -564,7 +562,7 @@ export interface ProfileResult {
   set: Record<string, string>;
   cleared: string[];
   /** dataProvider and country are included when the update set or cleared either of them. */
-  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null; ahrefsSiteAuditProject?: string | null; semrushProject?: string | null };
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null; ahrefsSiteAuditProject?: string | null; };
   clientsFile: string;
 }
 
@@ -619,11 +617,10 @@ export async function setClientProfile(
     if (v !== "" && !PLACE_ID_RE.test(v)) throw new Error(`"${stripControl(update.gbpPlaceId).slice(0, 100)}" is not a Google place ID (letters, digits, - and _, as local_profile returns it in matched.placeId).`);
     fields.gbpPlaceId = v;
   }
-  for (const k of ["ahrefsSiteAuditProject", "semrushProject"] as const) {
-    if (update[k] === undefined) continue;
-    const v = update[k]!.trim();
-    if (v !== "" && !PROJECT_ID_RE.test(v)) throw new Error(`"${stripControl(update[k]!).slice(0, 60)}" isn't ${k === "semrushProject" ? "a Semrush project" : "an Ahrefs Site Audit project"} ID (digits, from the project's URL).`);
-    fields[k] = v;
+  if (update.ahrefsSiteAuditProject !== undefined) {
+    const v = update.ahrefsSiteAuditProject.trim();
+    if (v !== "" && !PROJECT_ID_RE.test(v)) throw new Error(`"${stripControl(update.ahrefsSiteAuditProject).slice(0, 60)}" isn't an Ahrefs Site Audit project ID (digits, from the project's URL).`);
+    fields.ahrefsSiteAuditProject = v;
   }
   let brandTerms: string[] | undefined;
   if (update.brandTerms !== undefined) {
@@ -631,7 +628,7 @@ export async function setClientProfile(
     const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
     if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
   }
-  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ahrefsSiteAuditProject or semrushProject.");
+  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId or ahrefsSiteAuditProject.");
   const client = await resolveClient(idOrDomain);
   if (fields.bingSite && !bingSiteOnDomain(fields.bingSite, client.domain)) {
     throw new Error(`bingSite ${fields.bingSite.slice(0, 200)} isn't on ${client.domain}: it would show another site's Bing data in this client's reports. Use a Bing site on ${client.domain} or a subdomain of it.`);
@@ -665,7 +662,6 @@ export async function setClientProfile(
       ...(update.bingSite !== undefined ? { bingSite: updated.bingSite ?? null } : {}),
       ...(update.gbpPlaceId !== undefined ? { gbpPlaceId: updated.gbpPlaceId ?? null } : {}),
       ...(update.ahrefsSiteAuditProject !== undefined ? { ahrefsSiteAuditProject: updated.ahrefsSiteAuditProject ?? null } : {}),
-      ...(update.semrushProject !== undefined ? { semrushProject: updated.semrushProject ?? null } : {}),
     },
     clientsFile: env.CLIENTS_FILE,
   };

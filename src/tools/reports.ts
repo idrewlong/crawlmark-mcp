@@ -318,17 +318,17 @@ export function registerReportTools(server: McpServer) {
         "The same problem found by two sources is one item, listing both sources with their own severity; `affected` is the largest page count any one source reports. " +
         "`changes` compares with the newest snapshot older than 24 hours: new, persistent, resolved (only when the source that reported it ran again) and unverified (not re-checked, never counted as fixed); null on the first run. " +
         "Each call saves a snapshot (local). Never starts a crawl or audit; stale sources (older than maxAgeDays) are shown with their date. " +
-        "Free by default. The ahrefs_site_audit and semrush_site_audit sources read the client's existing Site Audit project (clients.yaml ahrefsSiteAuditProject / semrushProject, else matched by domain) and spend units " +
-        "(Ahrefs: 50 for the issues, plus 50 per issueUrls call; Semrush: about 100 per call, up to 400 with the project list and titles): they need allowPaid: true, read only (never start a crawl or create a project). " +
+        "Free by default. The ahrefs_site_audit source reads the client's existing Ahrefs Site Audit project (clients.yaml ahrefsSiteAuditProject, else matched by domain) and spends units " +
+        "(50 for the issues, plus 50 per issueUrls call): it needs allowPaid: true and is read only (never starts a crawl or creates a project). Semrush's API has no Site Audit. " +
         "Call with estimateOnly: true first, state the units and ask before passing allowPaid.",
       inputSchema: {
         client: clientArg,
         sources: z.array(z.enum(ISSUE_SOURCES)).min(1).max(ISSUE_SOURCES.length).optional().describe("Default: every free source (audit, local_crawl, site_hygiene, dataforseo_crawl, gsc_inspection)."),
         minSeverity: z.enum(["critical", "high", "medium", "low"]).optional().describe("Leave out issues below this severity. Default low (everything)."),
         limit: z.number().int().min(1).max(200).optional().describe("Issues listed (counts cover all). Default 50."),
-        issueUrls: z.number().int().min(0).max(5).optional().describe("Top issues to fetch up to 3 example URLs for from a provider Site Audit source (paid: one call each). Default 0."),
+        issueUrls: z.number().int().min(0).max(5).optional().describe("Top issues to fetch up to 3 example URLs for from the Ahrefs Site Audit source (paid: one call each). Default 0."),
         maxAgeDays: z.number().int().min(7).max(120).optional().describe("Sources older than this are flagged stale. Default 45."),
-        allowPaid: z.boolean().optional().describe("Needed for the Ahrefs / Semrush Site Audit sources (they spend provider units); set only after the user agreed to the estimate."),
+        allowPaid: z.boolean().optional().describe("Needed for the Ahrefs Site Audit source (it spends Ahrefs units); set only after the user agreed to the estimate."),
         estimateOnly: z.boolean().optional().describe("Return the provider units this would spend, read nothing and save nothing."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -336,11 +336,11 @@ export function registerReportTools(server: McpServer) {
     handler("technical_issues", async ({ client, estimateOnly, ...o }) => {
       const c = await resolveClient(client);
       const sources = o.sources ?? [...FREE_ISSUE_SOURCES];
-      if ((o.issueUrls ?? 0) > 0 && !sources.some((x) => PAID_ISSUE_SOURCES.has(x))) throw new Error("issueUrls needs an ahrefs_site_audit or semrush_site_audit source.");
+      if ((o.issueUrls ?? 0) > 0 && !sources.some((x) => PAID_ISSUE_SOURCES.has(x))) throw new Error("issueUrls needs the ahrefs_site_audit source.");
       const ti = await import("../reports/technical-issues.js");
       if (estimateOnly) {
         const paid = await ti.planPaidIssueSources(c, sources, o.issueUrls ?? 0);
-        const units = { ahrefs: paid.filter((p) => p.provider === "ahrefs").reduce((a, p) => a + p.units, 0), semrush: paid.filter((p) => p.provider === "semrush").reduce((a, p) => a + p.units, 0) };
+        const units = { ahrefs: paid.reduce((a, p) => a + p.units, 0), semrush: 0 };
         return {
           estimateOnly: true,
           sources,

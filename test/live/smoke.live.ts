@@ -15,7 +15,6 @@ import { checkBingKey } from "../../src/providers/bing.js";
 import { cruxHistory, cruxKey } from "../../src/providers/crux.js";
 import { checkDataForSeoCredentials } from "../../src/providers/dataforseo.js";
 import { googleAuth, googleConfigured } from "../../src/providers/google.js";
-import { checkSemrushKey } from "../../src/providers/semrush.js";
 import { assertFreeEndpoint, guardedFetchFrom, PaidEndpointRefusedError } from "./guard.js";
 
 const guarded = guardedFetchFrom(globalThis.fetch);
@@ -72,7 +71,7 @@ describe("guard", () => {
     for (const [method, url] of [
       ["POST", "https://api.dataforseo.com/v3/serp/google/organic/live/regular"],
       ["GET", "https://api.ahrefs.com/v3/site-explorer/organic-keywords?target=example.com"],
-      ["GET", "https://api.semrush.com/?type=domain_organic&key=x"],
+      ["GET", "https://api.semrush.com/apis/v4/keywords/v1/metrics?keyword=x&country=US"],
     ] as const) {
       await expect(g(url, { method })).rejects.toBeInstanceOf(PaidEndpointRefusedError);
     }
@@ -128,19 +127,6 @@ describe("live smoke: free endpoints", () => {
       const r = await checkAhrefsKey(env.AHREFS_API_KEY, guarded);
       expect(r.error ?? "").toBe("");
       expect(r).toMatchObject({ configured: true, works: true, reachable: true, costUsd: 0 });
-      return "key works";
-    },
-  );
-
-  check(
-    "Semrush status (balance)",
-    "GET /users/countapiunits.html",
-    () => (env.SEMRUSH_API_KEY ? undefined : "SEMRUSH_API_KEY not set"),
-    async () => {
-      const r = await checkSemrushKey(env.SEMRUSH_API_KEY, guarded);
-      expect(r.error ?? "").toBe("");
-      expect(r).toMatchObject({ configured: true, works: true, reachable: true, costUsd: 0 });
-      if (r.works) expect(Number.isFinite(r.unitsLeft)).toBe(true);
       return "key works";
     },
   );

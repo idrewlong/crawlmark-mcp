@@ -37,7 +37,6 @@ Every field is in `config/clients.example.yaml`. The file is re-read on every ca
 | `bingSite` | The verified Bing Webmaster Tools site whose host is the client's domain (https first, then the root path) |
 | `gbpPlaceId` | None: `local_profile` searches by the client's name until you confirm a listing |
 | `ahrefsSiteAuditProject` | None: `technical_issues` matches the client's existing Ahrefs Site Audit project by domain (exactly one must match); set it with `clients set example.com --ahrefs-site-audit-project <id>` (the ID in `app.ahrefs.com/site-audit/<id>`) or by editing clients.yaml; not through Claude. The project's site must be the client's domain or a subdomain of it, or the source is refused |
-| `semrushProject` | None: matched by domain among your Semrush projects that have Site Audit; set it with `clients set example.com --semrush-project <id>` or in clients.yaml, not through Claude (saves the project-list call, 100 units). An audit whose site isn't the client's domain or a subdomain is refused |
 | `monthlyUnits.ahrefs`, `monthlyUnits.semrush` | `DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS` (10,000) and `DEFAULT_CLIENT_MONTHLY_SEMRUSH_UNITS` (5,000) |
 
 Arrays you set (`competitors`, `trackedKeywords`, `keyPages`) replace the defaults rather than append.
@@ -58,7 +57,7 @@ clients:
 ```
 
 - `dataProvider` picks whose data is used, not credentials: the key itself is in `.env` (or the Claude Desktop extension settings). With no key for the chosen provider, the client's paid calls fail with the command to fix it; crawlmark never falls back to another provider's account. Live SERPs, on-page checks and crawls always use DataForSEO.
-- `country` is stored uppercase. Semrush uses its database for that country (`GB` is Semrush's `uk`); a country Semrush has no database for makes Semrush unavailable for the client. A client with a city-level `locationCode` and no `country` can't use Ahrefs or Semrush until `country` is set.
+- `country` is stored uppercase. Ahrefs and Semrush's keyword volume use it as the market. A client with a city-level `locationCode` and no `country` can't use Ahrefs or Semrush until `country` is set.
 - `languageCode` and `area` stay DataForSEO-only.
 - An invalid `dataProvider` or `country` is a config error naming the allowed values.
 
@@ -143,7 +142,7 @@ Tracked keywords get a stored rank history (local, in crawlmark's database). `cr
 
 `suggest_competitors` (or the `find-competitors` prompt) proposes competitors from two sources:
 
-1. **Organic overlap:** the client's data provider's list of domains ranking for the same keywords as the client (DataForSEO, Ahrefs or Semrush).
+1. **Organic overlap:** the client's data provider's list of domains ranking for the same keywords as the client (DataForSEO or Ahrefs; a Semrush client is served by DataForSEO, since Semrush's v4 API has no competitor list).
 2. **Local search presence** (DataForSEO only; skipped with a note when DataForSEO isn't set up): live Google results for up to 5 seed keywords, searched in the client's `area` (or its `locationCode` market when no area is set). Seeds are, in order: `seeds` the AI passes (3-5 non-branded service keywords, confirmed with you), the `niche`, tracked keywords, then the top non-branded Search Console queries of the last 28 days (free; needs Google). When seeds or a niche are given, a Search Console query is used only if it shares a meaningful word with them. Only if none of those exist does it fall back to the client's ranked keywords from its data provider.
 
 **Pass service-keyword `seeds`.** A small site's own ranked keywords are mostly branded, so organic overlap returns companies that share its name. `find-competitors` has the AI propose 3-5 non-branded service keywords, confirm them with you, and pass them as `seeds`. Candidates whose domain starts or ends with the client's brand initialism (`abbuild.example`, `buildingwithab.example`) or contains a longer brand name are excluded with reason `brand-lookalike` (still listed under `excluded`); common-word brand names are never used for this.
@@ -172,7 +171,7 @@ The split sums query-level rows (up to 5,000 per month), which leave out anonymi
 
 A domain often isn't how people search for a business: `casaluna.example` gets searched as "casa luna pizza" and "casa luna menu", which the domain-stem matching misses. `suggest_brand_terms` finds those names in the client's own queries:
 
-1. **Data.** Search Console query rows for the last 90 days (up to 1,000; free). Only when Search Console isn't usable at all (Google isn't set up, or the client has no property) does it use ranked keywords for the client's own domain from its data provider (top 100, paid: about $0.02 on DataForSEO, or Ahrefs/Semrush units; cached 7 days, through the budget or unit cap). If Search Console returns fewer than 20 rows, the paid fallback runs only with `allowPaid: true` (the `review-brand-terms` prompt asks you first); `allowPaid: false` turns it off. A Search Console error is reported and never falls back to the paid source.
+1. **Data.** Search Console query rows for the last 90 days (up to 1,000; free). Only when Search Console isn't usable at all (Google isn't set up, or the client has no property) does it use ranked keywords for the client's own domain from its data provider (top 100, paid: about $0.02 on DataForSEO, or Ahrefs units; cached 7 days, through the budget or unit cap). If Search Console returns fewer than 20 rows, the paid fallback runs only with `allowPaid: true` (the `review-brand-terms` prompt asks you first); `allowPaid: false` turns it off. A Search Console error is reported and never falls back to the paid source.
 2. **Candidates.** 1-3 word phrases from queries the client's current matching doesn't already cover. Generic words never start or end a candidate: stop words, intent words ("near", "best", "how"), navigational modifiers ("menu", "hours", "reviews"), the niche, the area, US state names, and trade words seen in the queries. So "pizza near me" never becomes a brand term, however well the site does for it.
 3. **Signals.** (a) Name similarity to the *distinctive part* of the domain stem, client name or GA4 name: the name minus trade words, places and company suffixes. (b) Navigational behaviour, Search Console only: the phrase's queries average position 2 or better with CTR well above the expected curve. (c) Concentration: the phrase recurs across several queries that carry a real share of the site's clicks, on page one.
 4. **Confidence.** `high` needs strong name similarity plus navigational behaviour or concentration, at an average position of 3 or better. Behaviour without name similarity is at most `medium`. A similar name the site ranks poorly for is usually another business, so it stays `low`. The response's `method` string has every threshold.

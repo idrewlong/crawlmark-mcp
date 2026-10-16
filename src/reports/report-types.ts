@@ -397,8 +397,8 @@ export interface AiReadinessData {
 
 export type IssueSeverity = "critical" | "high" | "medium" | "low";
 
-/** Where a technical issue was found. The Ahrefs and Semrush Site Audit sources arrive in Stage B. */
-export type IssueSource = "audit" | "local_crawl" | "site_hygiene" | "dataforseo_crawl" | "gsc_inspection" | "ahrefs_site_audit" | "semrush_site_audit";
+/** Where a technical issue was found. The Ahrefs Site Audit source is paid. */
+export type IssueSource = "audit" | "local_crawl" | "site_hygiene" | "dataforseo_crawl" | "gsc_inspection" | "ahrefs_site_audit";
 
 /** One source run a technical-issues snapshot read (D10). */
 export interface SourceRun {
@@ -455,6 +455,8 @@ export interface TechnicalIssuesData {
   total: number;
   /** Earlier not re-checked issues dropped because no source that reported them is read any more (or its data is too old). */
   noLongerChecked?: number;
+  /** Section notes, e.g. that a source named in the template is no longer available. */
+  notes?: string[];
 }
 
 export interface IndexingIssuesData {

@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { chmodSync, existsSync, lstatSync, mkdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep, isAbsolute } from "node:path";
-import { Document, isMap, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq, type Node } from "yaml";
+import { Document, isMap, isNode, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq, type Node } from "yaml";
 import { RegularFileError, readRegularFileCapped } from "../../lib/read-regular-file.js";
 import { writeFileAtomic } from "../../lib/atomic-file.js";
 import { clientTemplatesFile, globalTemplatesFile } from "../paths.js";
@@ -22,6 +22,8 @@ import {
   ID_RE,
   isPaidSection,
   MAX_TEMPLATE_BYTES,
+  REMOVED_ISSUE_SOURCE,
+  REMOVED_ISSUE_SOURCE_NOTE,
   SectionSchema,
   validateTemplateText,
   type Format,
@@ -215,6 +217,12 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
   const templates = templatesMap(doc);
   const existing = templates.get(req.id, true);
   const inFile = existing !== undefined;
+  // Sources the saved template already names (by section id), so an update that leaves one alone isn't refused.
+  const priorRemoved = new Set<string>();
+  if (isNode(existing)) {
+    const prior = (existing as unknown as { toJSON(): { sections?: { id?: string; sources?: string[] }[] } }).toJSON();
+    for (const s of prior?.sections ?? []) if (s?.id && s.sources?.includes(REMOVED_ISSUE_SOURCE)) priorRemoved.add(s.id);
+  }
   const isBuiltin = Object.hasOwn(BUILTIN_TEMPLATES, req.id);
   // A client template with the same id fully replaces the global one for that client (load.ts), so say so.
   const globalIds = req.file === "client" ? globalTemplateIds(req.homeDir, req.today) : { ids: [] as string[] };
@@ -267,6 +275,11 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
   const result = validateTemplateText(after, { ...(req.today ? { today: req.today } : {}), logoExists: (l) => existsSync(resolveLogo(req.homeDir, l)) });
   if (!result.valid) throw new TemplateWriteError(`The template isn't valid: ${result.errors.map((e) => `${e.path || "(file)"}: ${e.message}`).join("; ")}`, result.errors);
   const template = result.value!.templates![req.id]!;
+  for (const [i, s] of template.sections.entries()) {
+    if (s.type === "technical_issues" && (s.sources as readonly string[] | undefined)?.includes(REMOVED_ISSUE_SOURCE) && !priorRemoved.has(s.id)) {
+      throw new TemplateWriteError(`${REMOVED_ISSUE_SOURCE_NOTE} It can't be added to a template.`, [{ path: `templates.${req.id}.sections[${i}].sources`, message: `${REMOVED_ISSUE_SOURCE}: ${REMOVED_ISSUE_SOURCE_NOTE}` }]);
+    }
+  }
   const block = new Document({ [req.id]: template });
   styleTemplateNode((block.contents as YAMLMap).get(req.id, true));
   return {

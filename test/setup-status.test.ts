@@ -16,7 +16,7 @@ function providers(over: Partial<StatusProviders> = {}): StatusProviders {
     // Phase 9: Ahrefs not set up and not anyone's provider.
     ahrefs: async () => ({ check: { configured: false, works: false, reachable: true, error: "AHREFS_API_KEY is not set.", costUsd: 0 }, chosen: { byDefault: false, clients: 0 }, unitsUsedThisMonth: 0, cap: 50_000 }),
     seoDataProvider: () => ({ default: "dataforseo", source: "default", perClientOverrides: 0 }),
-    semrush: async () => ({ check: { configured: false, works: false, reachable: true, error: "SEMRUSH_API_KEY is not set.", costUsd: 0 }, chosen: { byDefault: false, clients: 0 }, v4KeySet: false, unitsUsedThisMonth: 0, cap: 20_000 }),
+    semrush: async () => ({ keySet: false, chosen: { byDefault: false, clients: 0 }, unitsUsedThisMonth: 0, cap: 20_000 }),
     googleStatus: () => sa,
     googleLive: async () => ({ ok: true }),
     gscSites: async () => ({ items: ["sc-domain:example.com", "https://www.example.org/"] }),

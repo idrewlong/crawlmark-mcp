@@ -46,20 +46,21 @@ function makeClient(slug: string, extra: Partial<Client> = {}): Client {
 const noGsc: GapContext = { gscAvailable: false, clientQueries: async () => { throw new Error("not used"); } };
 
 describe("routing", () => {
-  it("keyword ideas and gap are routed capabilities that every provider serves", () => {
+  it("keyword ideas and gap are routed capabilities that DataForSEO and Ahrefs serve; Semrush's v4 API doesn't, so DataForSEO does", () => {
     expect(ROUTED_CAPABILITIES).toEqual(expect.arrayContaining(["keywordIdeas", "keywordGap"]));
     const env = { defaultProvider: "dataforseo" as const, configured: { dataforseo: true, ahrefs: true, semrush: true } };
-    for (const p of ["dataforseo", "ahrefs", "semrush"] as const) {
+    for (const p of ["dataforseo", "ahrefs"] as const) {
       expect(resolveProvider({ slug: "x", dataProvider: p }, "keywordIdeas", env)).toEqual({ provider: p });
       expect(resolveProvider({ slug: "x", dataProvider: p }, "keywordGap", env)).toEqual({ provider: p });
     }
+    for (const cap of ["keywordIdeas", "keywordGap"] as const) expect(resolveProvider({ slug: "x", dataProvider: "semrush" }, cap, env)).toEqual({ provider: "dataforseo", fallbackFrom: "semrush" });
   });
 
   it("never falls back to DataForSEO when the client's provider has no key (error names the step)", async () => {
     const sent = fakeDfs();
-    const c = makeClient("semrush-nokey.example.com", { dataProvider: "semrush" });
+    const c = makeClient("ahrefs-nokey.example.com", { dataProvider: "ahrefs" });
     await expect(keywordIdeas(c, { seeds: ["plumber"], mode: "related", limit: 10 })).rejects.toBeInstanceOf(ProviderUnavailableError);
-    await expect(keywordGap(c, { competitors: ["competitor-a.example"], limit: 10, minVolume: 0 }, { ctx: noGsc })).rejects.toThrow(/SEMRUSH_API_KEY is not set\. Run setup --step semrush/);
+    await expect(keywordGap(c, { competitors: ["competitor-a.example"], limit: 10, minVolume: 0 }, { ctx: noGsc })).rejects.toThrow(/AHREFS_API_KEY is not set\. Run setup --step ahrefs/);
     expect(sent).toEqual([]);
   });
 });
