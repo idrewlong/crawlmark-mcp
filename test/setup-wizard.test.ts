@@ -390,13 +390,34 @@ describe("wizard: register step", () => {
     expect(f.exec.mock.calls.filter((c) => c[1][1] === "remove" || c[1][1] === "add")).toEqual([]);
   });
 
-  it("from an npx cache, registers `npx -y crawlmark-mcp` instead of the cache path", async () => {
+  it("from an npx cache, registers `npx -y crawlmark-mcp@latest` instead of the cache path", async () => {
     const f = fake([true], { desktop: false, homeSource: "user" });
     f.ctx.paths.projectRoot = join(f.root, "_npx", "abc123", "node_modules", "crawlmark-mcp");
     await stepRegister(f.ctx);
     const add = f.exec.mock.calls.find((c) => c[1][1] === "add")!;
-    expect(add[1]).toEqual(["mcp", "add", "crawlmark", "-s", "user", "-e", `CRAWLMARK_HOME=${f.home}`, "--", "npx", "-y", "crawlmark-mcp"]);
+    expect(add[1]).toEqual(["mcp", "add", "crawlmark", "-s", "user", "-e", `CRAWLMARK_HOME=${f.home}`, "--", "npx", "-y", "crawlmark-mcp@latest"]);
     expect(f.lines.join("\n")).toContain("temporary npx cache");
+  });
+
+  it("an older npx entry without @latest is offered as an update, default yes (so --yes takes it)", async () => {
+    const asked: [string, boolean][] = [];
+    const prompt = scriptedPrompter([]);
+    prompt.confirm = async (q: string, d: boolean) => (asked.push([q, d]), d);
+    const existing = `crawlmark:\n  Scope: User config\n  Command: npx\n  Args: -y crawlmark-mcp\n  Environment:\n    CRAWLMARK_HOME=HOME_PLACEHOLDER\n`;
+    const f = fake([], { desktop: false, homeSource: "user", prompt, mcpGet: "" });
+    f.ctx.paths.projectRoot = join(f.root, "_npx", "abc123", "node_modules", "crawlmark-mcp");
+    f.exec.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === "claude" && args[0] === "--version") return { code: 0, stdout: "2.0.0", stderr: "" };
+      if (cmd === "claude" && args[1] === "get") return { code: 0, stdout: existing.replace("HOME_PLACEHOLDER", f.home), stderr: "" };
+      return { code: 0, stdout: "", stderr: "" };
+    });
+    await stepRegister(f.ctx);
+    const q = asked.find(([text]) => text.startsWith("Update it to `npx -y crawlmark-mcp@latest`"));
+    expect(q?.[1]).toBe(true);
+    expect(f.lines.join("\n")).toContain("keeps reusing the version npx downloaded first");
+    expect(f.exec.mock.calls.map((c) => c[1].slice(0, 2).join(" "))).toEqual(expect.arrayContaining(["mcp remove", "mcp add"]));
+    const add = f.exec.mock.calls.find((c) => c[1][1] === "add")!;
+    expect(add[1].slice(-3)).toEqual(["npx", "-y", "crawlmark-mcp@latest"]);
   });
 
   it("declined registration runs nothing, writes nothing and prints the snippet", async () => {

@@ -64,9 +64,32 @@ export function isNpxCache(projectRoot: string): boolean {
   return projectRoot.split(/[\\/]/).includes("_npx");
 }
 
+/** What an npx install registers. `@latest` makes npx check for a newer crawlmark each time an app starts it. */
+export const NPX_SPEC = "crawlmark-mcp@latest";
+
+/**
+ * True when `current` is the entry an earlier crawlmark wrote from an npx install (`npx -y crawlmark-mcp`, no
+ * version) and `launch` is the same entry with `@latest`. That's an update of crawlmark's own entry, not a
+ * different server, so the wizard offers it with yes as the default.
+ */
+export function isNpxLatestUpgrade(current: { command?: unknown; args?: unknown; env?: unknown } | undefined, launch: ServerLaunch): boolean {
+  if (!current || typeof current.command !== "string") return false;
+  // `claude mcp get` prints the args as one string; app configs keep an array.
+  const args = Array.isArray(current.args) ? current.args : typeof current.args === "string" ? current.args.trim().split(/\s+/) : undefined;
+  if (!args) return false;
+  const npx = /(^|[\\/])npx(\.cmd)?$/i;
+  if (!npx.test(current.command) || !npx.test(launch.command)) return false;
+  if (JSON.stringify(args) !== JSON.stringify(["-y", "crawlmark-mcp"]) || JSON.stringify(launch.args) !== JSON.stringify(["-y", NPX_SPEC])) return false;
+  const env = (e: unknown) => JSON.stringify(Object.entries((e && typeof e === "object" ? e : {}) as Record<string, unknown>).sort());
+  return env(current.env) === env(launch.env);
+}
+
+const NPX_UPGRADE_NOTE = "It runs `npx -y crawlmark-mcp`, which keeps reusing the version npx downloaded first.";
+const NPX_UPGRADE_QUESTION = "Update it to `npx -y crawlmark-mcp@latest`, so it picks up new versions?";
+
 /**
  * How an app should start the server. CRAWLMARK_HOME is passed when the home isn't
- * the project root. From an npx cache, `npx -y crawlmark-mcp` is registered instead
+ * the project root. From an npx cache, `npx -y crawlmark-mcp@latest` is registered instead
  * of the cache path. `nodeCommand` is `node` (Claude Code, which inherits the shell
  * PATH) or an absolute path (Claude Desktop, Cursor and Codex, which may not).
  */
@@ -74,7 +97,7 @@ export function serverLaunch(ctx: WizardContext, nodeCommand: string): ServerLau
   const env = ctx.paths.homeSource === "project" ? undefined : { CRAWLMARK_HOME: ctx.paths.home };
   if (isNpxCache(ctx.paths.projectRoot)) {
     const npx = nodeCommand === "node" ? "npx" : join(dirname(nodeCommand), process.platform === "win32" ? "npx.cmd" : "npx");
-    return { command: npx, args: ["-y", "crawlmark-mcp"], ...(env ? { env } : {}) };
+    return { command: npx, args: ["-y", NPX_SPEC], ...(env ? { env } : {}) };
   }
   return { command: nodeCommand, args: ["--disable-warning=ExperimentalWarning", join(ctx.paths.projectRoot, "dist", "index.js")], ...(env ? { env } : {}) };
 }
@@ -222,11 +245,13 @@ async function registerClaudeCode(ctx: WizardContext, probe: AppProbe, notes: No
     return "manual";
   }
   const scope = current.scope ?? "user";
-  ctx.out("Claude Code already has a crawlmark server, with a different command:");
+  const upgrade = isNpxLatestUpgrade(current, launch);
+  if (upgrade) ctx.out(`Claude Code has crawlmark registered. ${NPX_UPGRADE_NOTE}`);
+  else ctx.out("Claude Code already has a crawlmark server, with a different command:");
   ctx.out(`  current: ${describeRegistration(current)}`);
   ctx.out(`  new:     ${describeRegistration({ ...launch, scope: "user" })}`);
-  // Default no, so --yes never removes an existing registration.
-  if (!(await ctx.prompt.confirm(`Replace it (claude mcp remove ${SERVER_NAME} -s ${scope}, then add)?`, false))) {
+  // Default no for a different server, so --yes never removes one; yes for crawlmark's own older npx entry.
+  if (!(await ctx.prompt.confirm(upgrade ? NPX_UPGRADE_QUESTION : `Replace it (claude mcp remove ${SERVER_NAME} -s ${scope}, then add)?`, upgrade))) {
     notes.push({ kind: "info", text: "Kept the existing Claude Code registration." });
     return "skipped";
   }
@@ -267,8 +292,14 @@ async function registerJsonApp(ctx: WizardContext, id: "claude-desktop" | "curso
     }
     uiFor(ctx).preview(`${app} config: ${path}`, describeDesktopChange(merge, entry));
     // Replacing a different crawlmark entry defaults to no, so --yes never replaces one.
-    const question = merge.replaced ? "Replace the existing crawlmark entry? (the current file is kept as .bak)" : "Write this change? (the current file is kept as .bak)";
-    if (!(await ctx.prompt.confirm(question, !merge.replaced))) {
+    const upgrade = merge.replaced && isNpxLatestUpgrade(merge.previous as Record<string, unknown> | undefined, entry as unknown as ServerLaunch);
+    if (upgrade) ctx.out(NPX_UPGRADE_NOTE);
+    const question = upgrade
+      ? `${NPX_UPGRADE_QUESTION} (the current file is kept as .bak)`
+      : merge.replaced
+        ? "Replace the existing crawlmark entry? (the current file is kept as .bak)"
+        : "Write this change? (the current file is kept as .bak)";
+    if (!(await ctx.prompt.confirm(question, upgrade || !merge.replaced))) {
       notes.push({ kind: "info", text: `Skipped ${app}.` });
       return "skipped";
     }
@@ -359,10 +390,12 @@ async function registerCodexCli(ctx: WizardContext, probe: AppProbe, notes: Note
     notes.push({ kind: "warn", text: `To replace it yourself: codex mcp remove ${SERVER_NAME}, then ${display}` });
     return "manual";
   }
-  ctx.out("Codex already has a crawlmark server, with a different command:");
+  const upgrade = isNpxLatestUpgrade(state.entry, launch);
+  if (upgrade) ctx.out(`Codex has crawlmark registered. ${NPX_UPGRADE_NOTE}`);
+  else ctx.out("Codex already has a crawlmark server, with a different command:");
   ctx.out(`  current: ${describeRegistration(state.entry)}`);
   ctx.out(`  new:     ${describeRegistration(want)}`);
-  if (!(await ctx.prompt.confirm(`Replace it (codex mcp remove ${SERVER_NAME}, then add)?`, false))) {
+  if (!(await ctx.prompt.confirm(upgrade ? NPX_UPGRADE_QUESTION : `Replace it (codex mcp remove ${SERVER_NAME}, then add)?`, upgrade))) {
     notes.push({ kind: "info", text: "Kept the existing Codex registration." });
     return "skipped";
   }
@@ -401,8 +434,14 @@ async function registerCodexToml(ctx: WizardContext, notes: Note[]): Promise<App
     return "already";
   }
   uiFor(ctx).preview(`Codex config: ${path}`, describeCodexChange(plan, entry));
-  const question = plan.replaced ? "Replace the existing crawlmark entry? (the current file is kept as .bak)" : "Write this change? (the current file is kept as .bak)";
-  if (!(await ctx.prompt.confirm(question, !plan.replaced))) {
+  const upgrade = plan.replaced && isNpxLatestUpgrade(plan.previous as Record<string, unknown> | undefined, serverLaunch(ctx, ctx.node.execPath));
+  if (upgrade) ctx.out(NPX_UPGRADE_NOTE);
+  const question = upgrade
+    ? `${NPX_UPGRADE_QUESTION} (the current file is kept as .bak)`
+    : plan.replaced
+      ? "Replace the existing crawlmark entry? (the current file is kept as .bak)"
+      : "Write this change? (the current file is kept as .bak)";
+  if (!(await ctx.prompt.confirm(question, upgrade || !plan.replaced))) {
     notes.push({ kind: "info", text: "Skipped Codex." });
     return "skipped";
   }
@@ -442,7 +481,7 @@ export async function registerApps(ctx: WizardContext): Promise<StepResult & { a
   const ui = uiFor(ctx);
   const notes: Note[] = [];
   if (isNpxCache(ctx.paths.projectRoot)) {
-    ctx.out("crawlmark is running from a temporary npx cache, so Claude will start it with `npx -y crawlmark-mcp` instead of this path.");
+    ctx.out("crawlmark is running from a temporary npx cache, so Claude will start it with `npx -y crawlmark-mcp@latest` instead of this path.");
   }
 
   const probes = await ui.spin("Looking for AI apps...", () => detectApps(ctx), { plain: false });

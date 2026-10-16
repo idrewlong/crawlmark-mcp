@@ -309,7 +309,7 @@ Configure your MCP client
 **Claude Code** (from npm):
 
 ```bash
-claude mcp add crawlmark -s user -- npx -y crawlmark-mcp
+claude mcp add crawlmark -s user -- npx -y crawlmark-mcp@latest
 ```
 
 **Claude Code** (from source):
@@ -325,18 +325,18 @@ claude mcp add crawlmark -s user -- node --disable-warning=ExperimentalWarning /
   "mcpServers": {
     "crawlmark": {
       "command": "npx",
-      "args": ["-y", "crawlmark-mcp"]
+      "args": ["-y", "crawlmark-mcp@latest"]
     }
   }
 }
 ```
 
-**Codex** (`~/.codex/config.toml`, or run `codex mcp add crawlmark -- npx -y crawlmark-mcp`):
+**Codex** (`~/.codex/config.toml`, or run `codex mcp add crawlmark -- npx -y crawlmark-mcp@latest`):
 
 ```toml
 [mcp_servers.crawlmark]
 command = "npx"
-args = ["-y", "crawlmark-mcp"]
+args = ["-y", "crawlmark-mcp@latest"]
 ```
 
 For a source checkout, use `"command": "node"` and `"args": ["--disable-warning=ExperimentalWarning", "/absolute/path/to/crawlmark-mcp/dist/index.js"]`. Claude Desktop, Cursor and Codex may not load your shell's `PATH`, so if one can't find `node` or `npx`, use the absolute path (`which node`). Credentials come from `.env` in the config home, so no `env` block is needed unless your settings live somewhere other than the default; then add `"env": { "CRAWLMARK_HOME": "/path/to/home" }`.
