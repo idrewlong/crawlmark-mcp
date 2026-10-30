@@ -397,6 +397,10 @@ url = "https://mcp.semrush.com/v2/mcp"
 
 If a client can't do OAuth, Semrush also accepts the header `Authorization: Apikey <key>`; the wizard never writes that for you, so add it yourself if you need it.
 
+### Other MCP servers alongside crawlmark
+
+An AI app can run several MCP servers in one chat, and the agent combines their tools. crawlmark covers search: Search Console, GA4, crawls, ranks and organic competitors. It doesn't cover competitors' paid ads, social, or other channels. To ask about those in the same conversation, add an MCP server for that data (an ad-library or analytics server, for example) to your AI app next to crawlmark, the same way as the Semrush and Ahrefs servers above. Their costs, limits and data handling are their own; crawlmark's caps, cache and reports only cover crawlmark's tools.
+
 Once connected, run the **`getting-started`** prompt. It checks what's set up, explains what crawlmark can do with it, and offers a first report for your busiest client.
 
 Tools
