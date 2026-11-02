@@ -104,6 +104,13 @@ describe("exportReport", () => {
     await expect(exportReport(await fixtureReport(), base(dir, { formats: [] }))).rejects.toThrow(/Nothing to do/);
   });
 
+  it("inline docx is size-capped by its base64 length, not by the 1,000,000-character text cap, and never throws for size", async () => {
+    const out = await exportReport(await fixtureReport(), base(tmp(), { formats: [], inline: "docx", maxInlineDocxBase64: 10 }));
+    expect(out.inline).toBeUndefined();
+    expect(out.inlineError).toMatch(/limit is 10 so it can pass through the chat/);
+    expect(out.warnings).toEqual([]);
+  });
+
   it("refuses inline content over 1,000,000 characters", async () => {
     const huge = fakeDeps({ gscQuery: async () => Array.from({ length: 100 }, (_, i) => ({ keys: [`q${i} ${"x@y".repeat(20_000)}`], clicks: 1, impressions: 1, ctr: 1, position: 1 })) });
     const report = await fixtureReport({ include: [] }, huge);
