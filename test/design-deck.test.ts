@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildReportDoc, type Block, type DocNarrativeBlock, type DocSection, type Kpi, type LineChart, type ReportDoc, type TableBlock } from "../src/reports/render/doc.js";
-import { buildDeck, condense, DECK, notesText, type DeckSlide } from "../src/reports/render/deck.js";
+import { buildDeck, condense, kpiVerdict, DECK, notesText, type DeckSlide } from "../src/reports/render/deck.js";
 import { fixtureReport } from "./fixtures/reports/report.js";
 import { layoutReport } from "./fixtures/reports/release-b-render.js";
 
@@ -161,11 +161,13 @@ describe("buildDeck: takeaways (action subtitles)", () => {
     expect(b!.bullets).toEqual([]);
   });
 
-  it("the key numbers verdict is the summary's first point; a short agenda carries the section takeaways as descriptions", async () => {
+  it("the key numbers verdict is computed from the KPIs, never the summary text; a short agenda carries the section takeaways as descriptions", async () => {
     const d = await withSections([sec("a", [table(3)], [p("Alpha rose.")]), sec("b", [table(3)]), sec("c", [table(3)], [p("Gamma fell.")]), sec("d", [table(3)])]);
     const deck = buildDeck({ ...d, summary: { title: "Summary", caption: "", narrative: [p("Clicks grew 12%. More text."), { kind: "ul", items: [R("one")] }] } });
     const kpis = deck.slides.find((s) => s.kind === "kpis") as Extract<DeckSlide, { kind: "kpis" }>;
-    expect(kpis.takeaway).toBe("Clicks grew 12%.");
+    expect(kpis.takeaway).toMatch(/^Clicks (up|down) [\d.]+%/);
+    expect(kpis.takeaway).not.toContain("Clicks grew 12%");
+    expect(kpis.takeaway).toContain(" vs ");
     const agenda = deck.slides.find((s) => s.kind === "agenda") as Extract<DeckSlide, { kind: "agenda" }>;
     expect(agenda.details).toEqual(["Alpha rose.", "", "Gamma fell.", ""]);
     // A long agenda (a list, not a grid) has no descriptions.
@@ -184,14 +186,25 @@ describe("buildDeck: takeaways (action subtitles)", () => {
     const takeaways = deck.slides.flatMap((s) => (s.kind === "section" || s.kind === "kpis") && s.takeaway ? [s.takeaway] : []);
     const details = deck.slides.flatMap((s) => (s.kind === "agenda" ? (s.details ?? []) : []));
     expect(takeaways).toContain("Search held up well.");
-    expect(takeaways).toContain("Clicks grew 17.6% in September.");
+    expect(takeaways.some((t) => /^Clicks up [\d.]+%/.test(t))).toBe(true);
+    expect(takeaways).not.toContain("Clicks grew 17.6% in September.");
     for (const t of [...takeaways, ...details]) {
       expect(t).not.toContain("SECRET-INTERNAL-NOTE");
       expect(t).not.toMatch(/crawlmark|dataforseo|claude/i);
     }
     // Every takeaway is text the client's report already shows: commentary or a chart summary.
     const docText = JSON.stringify(doc);
-    for (const t of takeaways) expect(docText).toContain(t.replace(/…$/, ""));
+    for (const t of deck.slides.flatMap((s) => (s.kind === "section" && s.takeaway ? [s.takeaway] : []))) expect(docText).toContain(t.replace(/…$/, ""));
+  });
+});
+
+describe("kpiVerdict", () => {
+  const k = (label: string, dir: "up" | "down" | "flat", text: string) => ({ label, value: "1", delta: { text, dir, tone: "neutral" as const } });
+  it("is built only from KPI labels and changes, skipping flat ones, and is absent without changes", () => {
+    const cap = "Change vs August 2026 (previous period)";
+    expect(kpiVerdict([k("Clicks", "up", "17.6%"), k("Impressions", "up", "17.6%"), k("CTR", "flat", "0.0 pts"), k("Average position", "up", "0.3 better")], cap)).toBe("Clicks up 17.6%, impressions up 17.6% and average position 0.3 better vs August 2026");
+    expect(kpiVerdict([k("Clicks", "down", "4.0%")])).toBe("Clicks down 4.0%");
+    expect(kpiVerdict([{ label: "Clicks", value: "1" }, k("CTR", "flat", "0.0 pts")], cap)).toBeUndefined();
   });
 });
 

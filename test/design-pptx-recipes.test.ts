@@ -174,7 +174,7 @@ describe("side column beside a chart", () => {
       if (t.callout.fill) expect(panel.y + panel.h).toBeCloseTo(chartBottom, 3);
       const label = one(all, "Side label");
       expect(label.xml).toContain("<a:t>Commentary</a:t>");
-      const items = named(all, /^Side item \d$/);
+      const items = named(all, /^Side items?( \d)?$/);
       expect(items.length).toBeGreaterThan(0);
       const inset = items[0]!.x - SLIDE.sideX - (t.callout.left ? t.callout.left.weight / 72 : 0);
       if (t.callout.fill || t.callout.left) expect(inset).toBeGreaterThanOrEqual(0.3 - 1e-6);
@@ -182,6 +182,29 @@ describe("side column beside a chart", () => {
       for (const i of items) expect(i.xml).toMatch(/ sz="(1600|1800|2000)"/);
     });
   }
+});
+
+describe("side column item count", () => {
+  const withItems = (n: number) => {
+    const deck = fixtureDeck();
+    const s = deck.slides[4]!;
+    if (s.kind !== "section") throw new Error("fixture changed");
+    s.bullets = Array.from({ length: n }, (_, i) => `Point number ${i + 1} for the client`);
+    return deck;
+  };
+  it("one or two items are top-aligned in a single block under the label; three or more are spread", async () => {
+    for (const n of [1, 2]) {
+      const all = shapes(await slideXml(withItems(n), "cards", 4));
+      const label = one(all, "Side label");
+      const block = one(all, "Side items");
+      expect(block.y).toBeGreaterThanOrEqual(label.y + label.h - 1e-6);
+      expect(block.xml).toContain('anchor="t"');
+      expect((block.xml.match(/<a:t>Point number/g) ?? []).length).toBe(n);
+      expect(named(all, /^Side item \d$/)).toHaveLength(0);
+    }
+    const three = shapes(await slideXml(withItems(3), "cards", 4));
+    expect(named(three, /^Side item \d$/)).toHaveLength(3);
+  });
 });
 
 describe("KPI tiles + chart", () => {

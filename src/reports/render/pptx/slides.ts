@@ -327,7 +327,16 @@ function sideColumn(x: Ctx, b: Builder, box: Box, items: string[]): void {
   const ls = labelStyle(x, bg);
   b.add(textBox(b, "Side label", { ...inner, h: 0.3 }, [line1("Commentary", ls)], { anchor: "t" }));
   const list: Box = { ...inner, y: inner.y + 0.4, h: inner.h - 0.4 };
-  spreadItems(x, b, list, items, { sizes: [20, 18, 16], bg, name: "Side item" });
+  if (items.length >= 3) {
+    spreadItems(x, b, list, items, { sizes: [20, 18, 16], bg, name: "Side item" });
+    return;
+  }
+  // One or two items sit under the label with normal paragraph spacing; spreading them would leave a gap.
+  const GAP_PT = 14;
+  const fits = (s: number) => items.reduce((h, t) => h + textH(t, bodyStyle(x, s), list.w - bulletHang(s) - 0.05, ITEM_SPACING), 0) + ((items.length - 1) * GAP_PT) / 72 <= list.h - 0.1;
+  const st = bodyStyle(x, fitSize([20, 18, 16], fits));
+  const paras = items.map((t, i) => para([run(t, st)], st, { bullet: "•", bulletColor: x.p.primary, lineSpacing: ITEM_SPACING * 100, hang: bulletHang(st.size), ...(i ? { before: GAP_PT } : {}) } satisfies ParaStyle));
+  b.add(textBox(b, "Side items", list, paras, { anchor: "t", autofit: true }));
 }
 
 /** Consulting's label column: a small caps label left of a block, with a rule over both. Returns the block's box. */
@@ -1133,7 +1142,7 @@ function banner(x: Ctx, b: Builder, box: Box, text: string): void {
   }
   const st: RunStyle = { ...bodyStyle(x, 18), italic: x.id === "editorial", ...(bold ? { color: x.p.onDark, bold: true } : {}) };
   if (x.t.surface.labelColumn) {
-    b.add(textBox(b, "Banner label", { x: inner.x, y: inner.y, w: 1.9, h: inner.h }, [line1("Summary", labelStyle(x, bg))], { anchor: "ctr" }));
+    b.add(textBox(b, "Banner label", { x: inner.x, y: inner.y, w: 1.9, h: inner.h }, [line1("At a glance", labelStyle(x, bg))], { anchor: "ctr" }));
     inner = { ...inner, x: inner.x + 2.25, w: inner.w - 2.25 };
   }
   b.add(textBox(b, "Banner text", inner, [line1(text, st, { lineSpacing: 110 })], { anchor: "ctr", autofit: true }));

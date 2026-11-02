@@ -212,7 +212,7 @@ describe("bullet panels", () => {
     for (const id of THEME_IDS) {
       const zip = await unzip(await renderDeck(fixtureDeck(), styleFor(id)));
       const xml = await text(zip, "ppt/slides/slide5.xml");
-      const item = /<p:sp><p:nvSpPr><p:cNvPr id="\d+" name="Side item 1"\/>.*?<\/p:sp>/.exec(xml)![0];
+      const item = /<p:sp><p:nvSpPr><p:cNvPr id="\d+" name="Side items?( 1)?"\/>.*?<\/p:sp>/.exec(xml)![0];
       const size = Number(/ sz="(\d+)"/.exec(item)![1]) / 100;
       const hang = Math.round(bulletHang(size) * 914400);
       expect(item).toContain(`marL="${hang}" indent="${-hang}"`);
