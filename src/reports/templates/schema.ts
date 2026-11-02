@@ -6,6 +6,7 @@
  */
 import { parseDocument } from "yaml";
 import { z } from "zod";
+import { DEFAULT_PAGE_GROUPS, OTHER_GROUP, validatePageGroups } from "../../lib/page-groups.js";
 import { stripControl } from "../../lib/terminal-text.js";
 import { chartRefCount, MAX_CHART_REFS, NarrativeParseError, parseNarrative } from "../render/narrative-parse.js";
 
@@ -98,8 +99,14 @@ export const PeriodSchema = z.discriminatedUnion("range", [
   z.strictObject({ range: z.literal("last_quarter") }),
   z.strictObject({ range: z.literal("last_n_days"), days: z.number().int().min(7).max(MAX_SPAN_DAYS) }),
   z.strictObject({ range: z.literal("custom"), start: date, end: date }),
+  // Release 0.5.0 (C1): whole calendar years and the last 12 whole months, compared with the same dates a year earlier.
+  z.strictObject({ range: z.literal("year_to_date") }),
+  z.strictObject({ range: z.literal("last_year") }),
+  z.strictObject({ range: z.literal("last_12_months") }),
 ]);
 export type Period = z.infer<typeof PeriodSchema>;
+/** Ranges a year long (or up to one): their previous period is the previous year, so they only ever compare with previous_year. */
+export const YEAR_RANGES: ReadonlySet<string> = new Set(["year_to_date", "last_year", "last_12_months"]);
 
 export const COMPARISONS = ["previous_period", "previous_year"] as const;
 export type Comparison = (typeof COMPARISONS)[number];
@@ -113,6 +120,13 @@ const common = {
   pageBreakBefore: z.boolean().optional(),
 };
 const limit = (max: number) => z.number().int().min(1).max(max).optional();
+
+/** Release 0.5.0 (C3/C4): a page group in a page_groups section (the rest of the rules are validatePageGroups, in semanticIssues). */
+const pageGroupSchema = z.strictObject({
+  name: lineText(40).pipe(z.string().min(1)),
+  prefix: z.array(z.string().max(200)).max(20).optional(),
+  regex: z.array(z.string().max(200)).max(20).optional(),
+});
 
 /** technical_issues sources (spec 13.6.1). The Ahrefs Site Audit is paid. */
 /** A source 0.1.0 templates may still name. It validates (with a warning) and is dropped when the section runs. */
@@ -191,6 +205,26 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("text"), text: freeText(2000).pipe(z.string().min(1)) }),
   // Release B: a reusable text block from the template file's `blocks` library (a glossary, a methodology note).
   z.strictObject({ ...common, type: z.literal("block"), block: id }),
+  // Release 0.5.0 (C4): the yearly sections.
+  z.strictObject({ ...common, type: z.literal("channel_yoy"), limit: limit(20), metric: z.enum(["sessions", "users", "keyEvents"]).optional() }),
+  z.strictObject({ ...common, type: z.literal("page_groups"), groups: z.array(pageGroupSchema).min(1).max(12).optional() }),
+  z.strictObject({
+    ...common,
+    type: z.literal("content_by_year"),
+    group: lineText(40).optional(),
+    maxYears: z.number().int().min(3).max(20).optional(),
+    minYear: z.number().int().min(1995).max(2100).optional(),
+  }),
+  z.strictObject({
+    ...common,
+    type: z.literal("wins_misses"),
+    limit: limit(10),
+    goals: z
+      .array(z.strictObject({ metric: z.enum(["clicks", "impressions", "sessions", "keyEvents"]), target: z.number().int().min(1), label: lineText(80).optional() }))
+      .min(1)
+      .max(6)
+      .optional(),
+  }),
 ] as const;
 
 export const SECTION_TYPES = sectionSchemas.map((s) => s.shape.type.value);
@@ -229,6 +263,10 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   competitor_overview: "Competitors",
   text: "Note",
   block: "Note",
+  channel_yoy: "Traffic by channel, year over year",
+  page_groups: "Search clicks by page type",
+  content_by_year: "Content by publish year",
+  wins_misses: "Wins and misses",
 };
 
 export type SectionGroup = "search" | "analytics" | "site" | "seo_data" | "local" | "ai" | "other";
@@ -268,6 +306,10 @@ export const SECTION_CATALOGUE: Record<SectionType, { group: SectionGroup; cost:
   competitor_overview: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Top organic competitors (saved ones first), shared keywords and their visibility next to the client's." },
   text: { group: "other", cost: "free", summary: "A fixed paragraph of your own." },
   block: { group: "other", cost: "free", summary: "A reusable text block from the template file's blocks library (a glossary, a methodology note)." },
+  channel_yoy: { group: "analytics", cost: "free", needs: "Google Analytics 4", summary: "Sessions, users and key events per GA4 channel against the same dates a year earlier (all traffic, not only organic)." },
+  page_groups: { group: "search", cost: "free", needs: "Google Search Console", summary: "Search clicks and impressions per page type (blog, services, locations\u2026) from Search Console page filters." },
+  content_by_year: { group: "site", cost: "free", needs: "a saved local crawl and Google Search Console", summary: "Pages and search clicks by the year each page was published, from the newest saved crawl." },
+  wins_misses: { group: "search", cost: "free", needs: "Google Search Console (GA4 for traffic goals)", summary: "Goals met or missed, and the biggest gains and losses, by fixed published thresholds." },
 };
 
 /**
@@ -442,6 +484,10 @@ export function semanticIssues(file: TemplateFile, today: Date, opts: { knownBlo
         if (s.scope === "url" && !s.url) push([...at, "url"], "scope: url needs a url");
         if (s.url && s.scope !== "url") push([...at, "url"], "url is only used with scope: url");
       }
+      if (s.type === "page_groups" && s.groups) {
+        const problem = validatePageGroups(s.groups);
+        if (problem) push([...at, "groups"], problem);
+      }
     });
   }
   return issues;
@@ -458,6 +504,17 @@ export function semanticWarnings(file: TemplateFile): ValidationIssue[] {
     if (t.sections[0]?.pageBreakBefore === true) {
       out.push({ path: formatPath([...base, "sections", 0, "pageBreakBefore"]), message: "a page break before the first section does nothing" });
     }
+    // Release 0.5.0 (C1): a year range's previous period is the previous year.
+    if (t.period && YEAR_RANGES.has(t.period.range) && t.compare?.length === 1 && t.compare[0] === "previous_period") {
+      out.push({ path: formatPath([...base, "compare"]), message: `for ${t.period.range}, the previous period is the same as the previous year; the report shows it as previous_year` });
+    }
+    // The client's own page groups aren't known here, so a name that isn't a default group is only a warning.
+    t.sections.forEach((s, i) => {
+      if (s.type !== "content_by_year" || s.group === undefined) return;
+      const g = s.group.toLowerCase();
+      if (g === OTHER_GROUP.toLowerCase() || DEFAULT_PAGE_GROUPS.some((d) => d.name.toLowerCase() === g)) return;
+      out.push({ path: formatPath([...base, "sections", i, "group"]), message: `no default page group named "${s.group}"; the client's own groups may have it` });
+    });
   }
   return out;
 }
@@ -475,7 +532,7 @@ function zodIssues(error: z.ZodError): ValidationIssue[] {
       continue;
     }
     if (issue.code === "invalid_union" && "discriminator" in issue && issue.discriminator === "range") {
-      out.push({ path: formatPath(issue.path), message: "range must be last_month, last_quarter, last_n_days or custom" });
+      out.push({ path: formatPath(issue.path), message: "range must be last_month, last_quarter, last_n_days, custom, year_to_date, last_year or last_12_months" });
       continue;
     }
     out.push({ path: formatPath(issue.path), message: issue.message });

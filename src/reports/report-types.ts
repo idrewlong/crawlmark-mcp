@@ -621,3 +621,104 @@ export interface CompetitorOverviewData {
   providerListSize: number;
   notes: string[];
 }
+
+// ------------------------------------------------------------------------------------------- Release 0.5.0 (C4)
+// The yearly sections. Percent values have 1 decimal place; a change is null when its base is 0.
+
+/** One GA4 default channel group (channel_yoy). `previous` is null for a channel with no row in the previous range. */
+export interface ChannelRow {
+  channel: string;
+  sessions: number;
+  users: number;
+  keyEvents: number;
+  /** Engaged sessions / sessions × 100; null at 0 sessions. */
+  engagementRate: number | null;
+  previous: { sessions: number; users: number; keyEvents: number } | null;
+  change: { sessions: number | null; users: number | null; keyEvents: number | null };
+}
+
+/** Traffic by channel, year over year: all sessions on the site's hostnames, not only organic. */
+export interface ChannelYoyData {
+  current: DateRange;
+  /** Always the same dates a year earlier, whatever the template compares with. */
+  previous: DateRange;
+  metric: "sessions" | "users" | "keyEvents";
+  /** The top `limit` channels by `metric` (descending; ties by channel name). */
+  rows: ChannelRow[];
+  /** The channels after `limit`, summed (channel "Other channels"); null when there are none. */
+  other: ChannelRow | null;
+  totals: ChannelRow;
+  /** The previous range has 0 sessions in total (the property may be newer than that). */
+  previousEmpty: boolean;
+}
+
+export interface PageGroupRow {
+  name: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  /** Null at 0 impressions. */
+  position: number | null;
+  /** This row's clicks / the sum of every row's clicks × 100 (not the site's total: page filters can count more). */
+  share: number;
+  previous: { clicks: number; impressions: number } | null;
+  change: { clicks: number | null; clicksAbs: number } | null;
+}
+
+/** Search clicks by page type (page_groups). Rows in configured order, then "Other" (always present). */
+export interface PageGroupsData {
+  comparedWith: Comparison | null;
+  /** filtered: one Search Console request per group; stored_top_pages: saved monthly top pages grouped locally. */
+  method: "filtered" | "stored_top_pages";
+  groupsSource: "default" | "yaml" | "template";
+  rows: PageGroupRow[];
+  /** stored_top_pages only: stored totals minus the grouped rows (clicks outside each month's top 250 pages). */
+  unattributed: { clicks: number; impressions: number } | null;
+}
+
+export interface ContentYearRow {
+  /** "2024", "2015 and earlier" or "Unknown". */
+  year: string;
+  pages: number;
+  clicks: number;
+  impressions: number;
+  clicksShare: number;
+  clicksPerPage: number;
+}
+
+/** Content by publish year (content_by_year), from the newest saved local crawl. */
+export interface ContentByYearData {
+  crawlId: string;
+  crawledAt: string;
+  /** The page group the section is limited to, or null for every page. */
+  group: string | null;
+  pagesConsidered: number;
+  /** Newest year first, then "… and earlier", then "Unknown". */
+  rows: ContentYearRow[];
+  /** Pages counted by where their date came from (none: no date found). */
+  sources: { jsonld: number; meta: number; url: number; none: number };
+  /** Whole days between the crawl and the run when over 90, else null. */
+  staleDays: number | null;
+}
+
+export type WinMissRule = "goal" | "kpi" | "page" | "page_new" | "page_lost" | "query_top3" | "query_top10";
+
+export interface WinMissItem {
+  kind: "win" | "miss";
+  rule: WinMissRule;
+  text: string;
+  metric: string;
+  current: number;
+  previous: number | null;
+  target?: number;
+}
+
+/** Wins and misses by fixed thresholds (src/analysis/wins-misses.ts). Goals are always listed, outside `limit`. */
+export interface WinsMissesData {
+  comparedWith: Comparison | null;
+  goals: WinMissItem[];
+  wins: WinMissItem[];
+  misses: WinMissItem[];
+  /** Goals whose source is unavailable (their label or metric name). */
+  skippedGoals: string[];
+}

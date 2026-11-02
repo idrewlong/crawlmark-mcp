@@ -8,6 +8,15 @@ import { CRAWL_COMPLETE_KEY, CRAWL_SITE_KEY, findingId, normalizeUrl, type Findi
 
 export { CRAWL_COMPLETE_KEY, CRAWL_COMPLETE_RULES, CRAWL_SITE_KEY } from "./findings.js";
 
+/**
+ * Release 0.5.0 (C4): when a page says it was published. `date` is YYYY-MM-DD (structured data, meta tags), or
+ * YYYY-MM / YYYY (a year in the address). Never a modification date, a sitemap lastmod or an HTTP header.
+ */
+export interface PublishedDate {
+  date: string;
+  source: "jsonld" | "meta" | "url";
+}
+
 /** One URL the crawl reached (fetched, or found through a link and skipped). */
 export interface CrawlPage {
   /** The URL as linked (fragment removed). */
@@ -43,6 +52,11 @@ export interface CrawlPage {
   error?: string;
   /** True when its HTML was parsed (title, description and links read). */
   parsed: boolean;
+  /**
+   * Release 0.5.0: the publish date found in a parsed page (null: none found). Absent on pages that weren't parsed
+   * and on every page of a crawl made before 0.5.0.
+   */
+  published?: PublishedDate | null;
   /** Rules this page fails (filled by analyzeCrawl). */
   issues: string[];
 }

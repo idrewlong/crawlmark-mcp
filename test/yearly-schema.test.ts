@@ -33,7 +33,7 @@ describe("year periods and yearly sections in template files", () => {
   it("names all seven ranges when the range is unknown", () => {
     const r = one({ id: "s", type: "search_overview" }, { period: { range: "last_decade" } });
     expect(r.valid).toBe(false);
-    expect(r.errors).toEqual([{ path: "templates.y.period", message: "range must be last_month, last_quarter, last_n_days, custom, year_to_date, last_year or last_12_months" }]);
+    expect(r.errors).toEqual([{ path: "templates.y.period.range", message: "range must be last_month, last_quarter, last_n_days, custom, year_to_date, last_year or last_12_months" }]);
   });
 
   it("rejects unknown fields on the year ranges", () => {

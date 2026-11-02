@@ -61,6 +61,10 @@ export const DEFAULT_SECTION_IDS: Record<SectionType, string> = {
   competitor_overview: "competitors",
   text: "note",
   block: "block",
+  channel_yoy: "channels",
+  page_groups: "page-types",
+  content_by_year: "content-years",
+  wins_misses: "wins",
 };
 
 export interface CatalogueEntry {
