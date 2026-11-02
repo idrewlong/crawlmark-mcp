@@ -723,7 +723,7 @@ export const WINS_RULES_NOTE =
   "Rules: changes of at least 5% and 20 (clicks, impressions, sessions, key events) or one position; pages ±25% and at least 20 clicks; non-branded searches entering or leaving the top 3 or top 10 with at least 100 impressions.";
 const capFirst = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 /** A goal's label as the rules wrote it ("Goal met: <label> 1,120 (target 1,000)"), else the metric's name. */
-const goalLabel = (g: WinMissItem) => capFirst(/^Goal (?:met|missed): (.+?) [\d.,]+(?: \(target | of )/.exec(g.text)?.[1] ?? GOAL_METRIC[g.metric] ?? g.metric);
+export const goalLabel = (g: WinMissItem) => capFirst(/^Goal (?:met|missed): (.+?) [\d.,]+(?: \(target | of )/.exec(g.text)?.[1] ?? GOAL_METRIC[g.metric] ?? g.metric);
 /** A figure in the wins and misses table; nothing before means no impressions (a position) or none at all (a count). */
 const itemValue = (metric: string, v: number | null) => (v === null ? (metric === "position" ? "no impressions" : "0") : metric === "position" ? fmt1(v) : metric === "ctr" ? fmtCtr(v) : fmtInt(v));
 /** Rule text with any URL in it shown as a page path (own site) or code, never as a link. */
