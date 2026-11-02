@@ -242,6 +242,8 @@ export interface ReportFlags {
   client?: string | undefined;
   all: boolean;
   template?: string | undefined;
+  /** --year YYYY: a calendar year (the current year: year to date). */
+  year?: string | undefined;
   month?: string | undefined;
   quarter?: string | undefined;
   start?: string | undefined;
@@ -336,7 +338,8 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
   const theme = flags.theme as ThemeId | undefined;
   const include = list(flags.include) ?? [];
   if ((flags.start === undefined) !== (flags.end === undefined)) return usage(io, "--start and --end go together.");
-  if ([flags.month, flags.quarter, flags.start].filter((v) => v !== undefined).length > 1) return usage(io, "Give only one of --month, --quarter, or --start and --end.");
+  if ([flags.year, flags.month, flags.quarter, flags.start].filter((v) => v !== undefined).length > 1) return usage(io, "Give only one of --year, --month, --quarter, or --start and --end.");
+  if (flags.year !== undefined && !/^\d{4}$/.test(flags.year)) return usage(io, `--year takes YYYY, e.g. 2025 (got "${stripControl(flags.year).slice(0, 20)}").`);
 
   const global = loadTemplates({ homeDir: io.homeDir, ...(io.today ? { today: io.today } : {}) }).files.global;
   if (global.exists && !global.valid) {
@@ -364,6 +367,7 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
   const runOpts = {
     homeDir: io.homeDir,
     template: flags.template,
+    year: flags.year,
     month: flags.month,
     quarter: flags.quarter,
     startDate: flags.start,

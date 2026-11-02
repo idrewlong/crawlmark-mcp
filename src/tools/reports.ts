@@ -113,7 +113,7 @@ export function registerReportTools(server: McpServer) {
     {
       title: "List report templates",
       description:
-        "Report templates available for a client: the builtin ones (`monthly`, `quarterly`, `executive` for a one-page summary, `technical` for web teams, `local` for local businesses), the global file (<home>/config/report-templates.yaml) and the client's own file " +
+        "Report templates available for a client: the builtin ones (`monthly`, `quarterly`, `executive` for a one-page summary, `technical` for web teams, `local` for local businesses, `yearly` for last year against the year before), the global file (<home>/config/report-templates.yaml) and the client's own file " +
         "(<home>/config/report-templates/<domain>.yaml), with each template's period, section count, optional sections (rendered only when asked for with `include`) and paid sections. " +
         "Also reports whether each file exists and is valid; an invalid file never hides the builtin templates. Free and local.",
       inputSchema: { client: clientArg.optional() },
@@ -176,6 +176,7 @@ export function registerReportTools(server: McpServer) {
       inputSchema: {
         client: clientArg,
         template: z.string().min(1).max(40).optional().describe("Template id (list_report_templates). Default: the template file's default, else monthly."),
+        year: z.string().regex(/^\d{4}$/).optional().describe("YYYY: a whole calendar year against the year before; the current year means year to date. Overrides the template's period."),
         month: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM. Overrides the template's period."),
         quarter: z.string().regex(/^\d{4}-Q[1-4]$/i).optional().describe("YYYY-Qn, e.g. 2026-Q3."),
         startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -212,6 +213,7 @@ export function registerReportTools(server: McpServer) {
         client: clientArg,
         reportId: z.string().max(40).optional().describe("From run_report_template. Leave out the template and period arguments when you pass it."),
         template: z.string().min(1).max(40).optional(),
+        year: z.string().regex(/^\d{4}$/).optional(),
         month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
         quarter: z.string().regex(/^\d{4}-Q[1-4]$/i).optional(),
         startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -244,7 +246,7 @@ export function registerReportTools(server: McpServer) {
         }
         let report;
         if (reportId) {
-          const given = (["template", "month", "quarter", "startDate", "endDate", "include", "allowPaid"] as const).filter((k) => runArgs[k] !== undefined);
+          const given = (["template", "year", "month", "quarter", "startDate", "endDate", "include", "allowPaid"] as const).filter((k) => runArgs[k] !== undefined);
           if (given.length) throw new Error(`With reportId, leave out ${given.join(", ")}: the stored report already fixes the template and period.`);
           report = getStoredReport(reportId);
           if (report.client.slug !== c.slug) throw new Error(`Report ${reportId} is for ${report.client.domain}, not ${c.domain}.`);

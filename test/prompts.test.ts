@@ -191,6 +191,11 @@ describe("report prompts (Phase 12)", () => {
     expect(await textOf("template-report", { client: "example.com", period: "2026-09" })).toContain('`month: "2026-09"`');
     expect(await textOf("template-report", { client: "example.com", period: "2026-07-01..2026-09-30" })).toContain('`startDate: "2026-07-01"`, `endDate: "2026-09-30"`');
     await expect(textOf("template-report", { client: "example.com", period: "last month" })).rejects.toThrow();
+    // Release 0.5.0: a year.
+    const y = await textOf("template-report", { client: "example.com", template: "yearly", period: "2025" });
+    expect(y).toContain('`template: "yearly"`, `year: "2025"`');
+    expect(y).toContain("for 2025");
+    await expect(textOf("template-report", { client: "example.com", period: "25" })).rejects.toThrow();
     expect(q).toContain("PDF (the default), Word, HTML or Markdown");
     expect(q).toContain("Don't export them all");
     expect(q).toContain("upload the .pptx to Drive and open it with Google Slides");

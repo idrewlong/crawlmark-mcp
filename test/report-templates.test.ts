@@ -32,7 +32,7 @@ describe("template schema", () => {
   });
 
   it("the builtin templates are valid, with short stable ids; executive is one page and technical has no Search Console sections", () => {
-    expect(Object.keys(BUILTIN_TEMPLATES)).toEqual(["monthly", "quarterly", "executive", "technical", "local"]);
+    expect(Object.keys(BUILTIN_TEMPLATES)).toEqual(["monthly", "quarterly", "executive", "technical", "local", "yearly"]);
     expect(BUILTIN_TEMPLATES.local!.sections.map((s) => [s.type, s.paid ?? false])).toEqual([["search_overview", false], ["branded_split", false], ["local_profile", true], ["top_queries", false], ["landing_pages", false], ["tracked_keywords", false]]);
     for (const [id, spec] of Object.entries(BUILTIN_TEMPLATES)) {
       const yaml = `version: 1\ntemplates:\n  ${id}: ${JSON.stringify(spec)}\n`;
@@ -45,6 +45,24 @@ describe("template schema", () => {
     for (const t of Object.values(BUILTIN_TEMPLATES)) for (const s of t.sections) if (s.type === "technical_issues" || s.type === "indexing_issues") expect(s.optional, s.id).toBe(true);
     // Paid data spend is opt-in in the builtin monthly: operator information, not client content.
     expect(BUILTIN_MONTHLY.sections.find((s) => s.type === "data_spend")).toMatchObject({ optional: true });
+  });
+
+  it("0.5.0: yearly is a builtin: last year against the year before, contents on, the four yearly sections", () => {
+    const y = BUILTIN_TEMPLATES.yearly!;
+    expect(validateTemplateText(`version: 1\ntemplates:\n  yearly: ${JSON.stringify(y)}\n`, { today }).errors).toEqual([]);
+    expect(y).toMatchObject({ title: "Yearly SEO review", period: { range: "last_year" }, compare: ["previous_year"], contents: true });
+    expect(y.sections.map((s) => [s.id, s.type, s.optional ?? false])).toEqual([
+      ["search", "search_overview", false],
+      ["channels", "channel_yoy", false],
+      ["page-types", "page_groups", false],
+      ["pages", "top_pages", false],
+      ["page-movers", "page_movers", false],
+      ["content-years", "content_by_year", true],
+      ["wins", "wins_misses", false],
+      ["issues", "technical_issues", true],
+    ]);
+    // The starter file is unchanged: monthly and quarterly only.
+    expect(STARTER_YAML).not.toContain("yearly");
   });
 
   it("checks every section type's extra fields", () => {
@@ -140,7 +158,7 @@ describe("template loader", () => {
     mkdirSync(join(h, "config"), { recursive: true });
     writeFileSync(join(h, "config", "report-templates.yaml"), "version: 1\ntemplates:\n  mine: { title: M, sections: [{ id: a, type: bogus }] }\n");
     const list = listReportTemplates(h, undefined, today);
-    expect(list.templates.map((t) => [t.id, t.source])).toEqual([["monthly", "builtin"], ["quarterly", "builtin"], ["executive", "builtin"], ["technical", "builtin"], ["local", "builtin"]]);
+    expect(list.templates.map((t) => [t.id, t.source])).toEqual([["monthly", "builtin"], ["quarterly", "builtin"], ["executive", "builtin"], ["technical", "builtin"], ["local", "builtin"], ["yearly", "builtin"]]);
     expect(list.files.global).toMatchObject({ exists: true, valid: false, errors: [{ path: "templates.mine.sections[0].type" }] });
     expect(list.templates[0]).toMatchObject({ optionalSections: ["spend", "cwv", "gtm", "ranks", "ai", "issues", "indexing", "backlinks", "visibility"], paidSections: ["backlinks", "visibility"] });
     expect(() => resolveTemplate(loadTemplates({ homeDir: h, today }), "mine")).toThrow(/No report template "mine".*monthly.*have errors/);

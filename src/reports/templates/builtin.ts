@@ -1,6 +1,6 @@
 /**
  * The builtin templates (always available, even with no template file or an
- * invalid one): `monthly`, `quarterly`, `executive`, `technical` and `local`, and the
+ * invalid one): `monthly`, `quarterly`, `executive`, `technical`, `local` and `yearly`, and the
  * starter file `report templates init` writes. The starter's `monthly` and
  * `quarterly` are the builtin ones, so they stay in step (tested).
  */
@@ -110,6 +110,25 @@ export const BUILTIN_LOCAL: TemplateSpec = {
   ],
 };
 
+/** Release 0.5.0 (C7): last year against the year before, with the four yearly sections. */
+export const BUILTIN_YEARLY: TemplateSpec = {
+  title: "Yearly SEO review",
+  description: "Last year against the year before: search, traffic by channel, page types, content by publish year, wins and misses.",
+  period: { range: "last_year" },
+  compare: ["previous_year"],
+  contents: true,
+  sections: [
+    { id: "search", type: "search_overview", metrics: ["clicks", "impressions", "ctr", "position"] },
+    { id: "channels", type: "channel_yoy" },
+    { id: "page-types", type: "page_groups" },
+    { id: "pages", type: "top_pages", limit: 15 },
+    { id: "page-movers", type: "page_movers", limit: 10 },
+    { id: "content-years", type: "content_by_year", optional: true },
+    { id: "wins", type: "wins_misses" },
+    { id: "issues", type: "technical_issues", optional: true },
+  ],
+};
+
 /** Builtin template ids, in listing order. */
 export const BUILTIN_TEMPLATES: Readonly<Record<string, TemplateSpec>> = {
   monthly: BUILTIN_MONTHLY,
@@ -117,6 +136,7 @@ export const BUILTIN_TEMPLATES: Readonly<Record<string, TemplateSpec>> = {
   executive: BUILTIN_EXECUTIVE,
   technical: BUILTIN_TECHNICAL,
   local: BUILTIN_LOCAL,
+  yearly: BUILTIN_YEARLY,
 };
 /** One PDF unless a template file says otherwise: reports are never exported in every format by default. */
 export const BUILTIN_DEFAULTS: { template: string; formats: Format[] } = { template: "monthly", formats: ["pdf"] };

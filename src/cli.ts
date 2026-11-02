@@ -628,6 +628,7 @@ async function main(argv: string[]): Promise<number> {
       json: { type: "boolean", default: false },
       only: { type: "string" },
       template: { type: "string" },
+      year: { type: "string" },
       month: { type: "string" },
       quarter: { type: "string" },
       start: { type: "string" },

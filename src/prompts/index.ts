@@ -40,15 +40,16 @@ export const COMMENTARY_FORMAT = [
   "   - Remarks only I should see (caveats, how a number was checked, a note on the client) go in `{ client, internal }` form or in `narrative.internal`: they are saved to a separate internal notes file and never reach the client's files.",
 ].join("\n");
 
-/** "2026-09", "2026-Q3" or "2026-07-01..2026-09-30" as run_report_template arguments. */
+/** "2025", "2026-09", "2026-Q3" or "2026-07-01..2026-09-30" as run_report_template arguments. */
 export function periodArgs(period: string | undefined): { arg: string; label: string } {
   const p = period?.trim();
   if (!p) return { arg: "", label: "for the template's default period" };
+  if (/^\d{4}$/.test(p)) return { arg: `, \`year: "${p}"\``, label: `for ${p}` };
   if (/^\d{4}-\d{2}$/.test(p)) return { arg: `, \`month: "${p}"\``, label: `for ${p}` };
   if (/^\d{4}-Q[1-4]$/i.test(p)) return { arg: `, \`quarter: "${p.toUpperCase()}"\``, label: `for ${p.toUpperCase()}` };
   const m = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/.exec(p);
   if (m) return { arg: `, \`startDate: "${m[1]}"\`, \`endDate: "${m[2]}"\``, label: `for ${m[1]} to ${m[2]}` };
-  throw new Error("period must be YYYY-MM, YYYY-Qn or YYYY-MM-DD..YYYY-MM-DD");
+  throw new Error("period must be YYYY, YYYY-MM, YYYY-Qn or YYYY-MM-DD..YYYY-MM-DD");
 }
 
 /** Load a template and replace each `{{name}}` with its value. Unknown placeholders are left as-is. */
@@ -145,9 +146,9 @@ export function registerPrompts(server: McpServer) {
         template: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/, "Use a template id such as monthly.").optional().describe("Template id (see list_report_templates). Leave empty to choose from the list."),
         period: z
           .string()
-          .regex(/^(\d{4}-\d{2}|\d{4}-Q[1-4]|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})$/i, "Use YYYY-MM, YYYY-Qn or YYYY-MM-DD..YYYY-MM-DD.")
+          .regex(/^(\d{4}|\d{4}-\d{2}|\d{4}-Q[1-4]|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})$/i, "Use YYYY, YYYY-MM, YYYY-Qn or YYYY-MM-DD..YYYY-MM-DD.")
           .optional()
-          .describe("YYYY-MM, YYYY-Qn or YYYY-MM-DD..YYYY-MM-DD. Defaults to the template's period."),
+          .describe("YYYY (a calendar year; the current year is year to date), YYYY-MM, YYYY-Qn or YYYY-MM-DD..YYYY-MM-DD. Defaults to the template's period."),
       },
     },
     ({ client, template: tpl, period }) => {

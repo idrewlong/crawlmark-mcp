@@ -40,6 +40,17 @@ describe("help", () => {
     expect(topHelp(plain)).toContain("report");
   });
 
+  it("0.5.0: report help lists --year and the yearly builtin; clients help lists --page-group; within 80 columns", () => {
+    const report = groupHelp("report", plain);
+    expect(report).toContain("[--year YYYY | --month YYYY-MM | --quarter YYYY-Qn |");
+    expect(report).toMatch(/--year YYYY\s+A whole calendar year against the year before/);
+    expect(report).toMatch(/monthly, quarterly, executive, technical, local,\s+yearly\)/);
+    const clients = groupHelp("clients", plain);
+    expect(clients).toContain('[--page-group "Name=/prefix/,/prefix/" | none]...');
+    expect(clients).toContain('--page-group "Blog=/blog/,/news/"');
+    for (const text of [report, clients]) expect(width(text)).toBeLessThanOrEqual(80);
+  });
+
   it("gsc-history help lists its subcommands and flags within 80 columns (Release A)", () => {
     const text = groupHelp("gsc-history", plain);
     expect(width(text)).toBeLessThanOrEqual(80);

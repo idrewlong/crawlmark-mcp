@@ -36,7 +36,7 @@ function golden(name: string, actual: string): void {
   expect(actual === readFileSync(file, "utf8"), `${name} differs from the 0.2.0 output`).toBe(true);
 }
 
-const ids = Object.keys(BUILTIN_TEMPLATES);
+const ids = ["monthly", "quarterly", "executive", "technical", "local"];
 
 describe("0.2.0 templates still validate", () => {
   it("accepts the starter file", () => {

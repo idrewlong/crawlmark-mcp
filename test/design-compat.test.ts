@@ -29,7 +29,7 @@ const NARRATIVE = {
   sections: {} as Record<string, string>,
 };
 const BRANDING = { agencyName: "Example Agency", primaryColor: "#224466", accentColor: "#cc6600", footer: "Example Agency, example.com", paper: "A4" as const, hideCrawlmark: true };
-const ids = Object.keys(BUILTIN_TEMPLATES);
+const ids = ["monthly", "quarterly", "executive", "technical", "local"];
 
 /** Every way of getting the cards look: nothing set, then cards set in the branding, the template and the export override. */
 type Variant = { name: string; apply(report: TemplateReport, opts: BuildOptions): { report: TemplateReport; opts: BuildOptions } };
