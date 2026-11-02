@@ -4,7 +4,7 @@ import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
 import { gscError } from "../lib/google-access.js";
 import { exclusionRegex, isExcludedQuery } from "../lib/gsc-exclusions.js";
-import { historyCutoff, mergeRows, readMonths, storedMonths, wholeMonths } from "../lib/gsc-monthly.js";
+import { mergeRows, readMonths, storedMonths, wholeMonths, windowStart } from "../lib/gsc-monthly.js";
 import { apiErrorInfo } from "../lib/gtm.js";
 import { lastInSitemap, markQuotaExhausted, pacificDay, reserveQuota, saveInspection, type InspectionOrigin, type InspectionRecord } from "../lib/inspections.js";
 import { assertGoogleConfigured, googleAuth, googleAuthIdentity, googleAuthStatus } from "./google.js";
@@ -45,6 +45,10 @@ export interface GscQueryOptions extends DateRange {
   queryContains?: string;
   /** Filter to rows whose query matches this RE2 regular expression (Search Console `includingRegex`). */
   queryRegex?: string;
+  /** Release 0.5.0 (page groups): only pages whose full URL matches this RE2 expression (`includingRegex`). */
+  pageRegex?: string;
+  /** Release 0.5.0 (page groups): leave out pages whose full URL matches this RE2 expression (`excludingRegex`). */
+  pageExcludeRegex?: string;
   /** D4: don't leave out the client's gscExcludeQueries (raw Search Console numbers). Default false. */
   includeExcludedQueries?: boolean;
   /** D5: never answer from stored monthly history (the backfill reads Google itself). */
@@ -102,8 +106,9 @@ function fromHistory(client: Client, opts: GscQueryOptions, items: readonly stri
   if (opts.live || !client.gscProperty) return null;
   const dims = opts.dimensions ?? [];
   const kind = dims.length === 0 ? "totals" : dims.length === 1 && dims[0] === "query" ? "query" : dims.length === 1 && dims[0] === "page" ? "page" : null;
-  if (!kind || opts.pageContains || opts.queryContains || opts.queryRegex) return null;
-  if (opts.startDate >= historyCutoff(Date.now())) return null;
+  if (!kind || opts.pageContains || opts.queryContains || opts.queryRegex || opts.pageRegex || opts.pageExcludeRegex) return null;
+  // Google's own window (today minus 16 months, to the day): a range starting before it can't come from Google in full (C2).
+  if (opts.startDate >= windowStart(Date.now())) return null;
   const months = wholeMonths(opts);
   if (!months) return null;
   const property = client.gscProperty;
@@ -144,6 +149,8 @@ export async function gscQueryDetailed(client: Client, opts: GscQueryOptions): P
     opts.pageContains && { dimension: "page", operator: "contains", expression: opts.pageContains },
     opts.queryContains && { dimension: "query", operator: "contains", expression: opts.queryContains },
     opts.queryRegex && { dimension: "query", operator: "includingRegex", expression: opts.queryRegex },
+    opts.pageRegex && { dimension: "page", operator: "includingRegex", expression: opts.pageRegex },
+    opts.pageExcludeRegex && { dimension: "page", operator: "excludingRegex", expression: opts.pageExcludeRegex },
   ].filter(Boolean) as Filter[];
 
   const { refresh, live: _live, ...keyed } = opts;

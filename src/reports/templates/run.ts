@@ -228,6 +228,7 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     ga4TopLandingPages: ga4.ga4TopLandingPages,
     ga4OrganicDaily: ga4.ga4OrganicDaily,
     ga4HostnameBreakdown: (c, r) => ga4.ga4HostnameBreakdown(c, r, { organicOnly: true }),
+    ga4ChannelReport: ga4.ga4ChannelReport,
     querySpikes: (c, r) => querySpikesFor(c, r),
     saveGscHistory: (c) => saveRecentHistory(c),
     opportunitiesForMonth: opp.opportunitiesForMonth,

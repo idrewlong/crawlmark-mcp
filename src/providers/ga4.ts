@@ -4,6 +4,7 @@ import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
 import { ALL_HOSTNAMES, defaultGa4Hostnames, ga4HostnameRegex, hostnameAllowed } from "../lib/ga4-hostnames.js";
 import { ga4Error } from "../lib/google-access.js";
+import { stripControl } from "../lib/terminal-text.js";
 import { assertGoogleConfigured, googleAuth, googleAuthIdentity, googleAuthStatus } from "./google.js";
 
 function whoAmI() {
@@ -167,4 +168,27 @@ export function ga4TopLandingPages(client: Client, range: DateRange, limit = 20)
     metrics: ["sessions", "engagementRate", "keyEvents"],
     limit,
   });
+}
+
+/**
+ * Release 0.5.0 (channel_yoy): sessions, users, engaged sessions and key events per GA4 default channel group for a
+ * range: all traffic on the client's hostnames, not only organic search. One report (cached a day like every GA4 call).
+ */
+export async function ga4ChannelReport(
+  client: Client,
+  range: DateRange,
+): Promise<{ channel: string; sessions: number; users: number; engagedSessions: number; keyEvents: number }[]> {
+  const rows = await ga4Report(client, {
+    ...range,
+    dimensions: ["sessionDefaultChannelGroup"],
+    metrics: ["sessions", "totalUsers", "engagedSessions", "keyEvents"],
+    limit: 50,
+  });
+  return rows.map((r) => ({
+    channel: stripControl(String(r.sessionDefaultChannelGroup ?? "")).slice(0, 100),
+    sessions: Number(r.sessions ?? 0),
+    users: Number(r.totalUsers ?? 0),
+    engagedSessions: Number(r.engagedSessions ?? 0),
+    keyEvents: Number(r.keyEvents ?? 0),
+  }));
 }
