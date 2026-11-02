@@ -36,4 +36,21 @@ describe("crawl tools", () => {
     expect(missing.isError).toBe(true);
     expect(missing.content[0]!.text).toMatch(/No saved crawl crawl_nope/);
   });
+
+  it("local_crawl_pages shows published when the page has the key (a date or null), and omits it for crawls made before 0.5.0", async () => {
+    saveCrawl({
+      id: "crawl_tools2",
+      client: "example.com",
+      ranAt: Date.UTC(2026, 10, 1),
+      settings: {},
+      summary: {},
+      exhaustive: true,
+      pages: [p("https://example.com/a", { published: { date: "2023-04-02", source: "jsonld" } }), p("https://example.com/b", { published: null }), p("https://example.com/c")],
+    });
+    const r = JSON.parse((await tools.get("local_crawl_pages")!.cb({ crawlId: "crawl_tools2" })).content[0]!.text);
+    const by = (u: string) => r.pages.find((x: { url: string }) => x.url === `https://example.com/${u}`);
+    expect(by("a").published).toEqual({ date: "2023-04-02", source: "jsonld" });
+    expect(by("b").published).toBeNull();
+    expect("published" in by("c")).toBe(false);
+  });
 });

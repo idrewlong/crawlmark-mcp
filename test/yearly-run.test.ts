@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { env } from "../src/config.js";
+import { cliHint } from "../src/lib/cli-hint.js";
 import { reportCommand, type ReportCliDeps, type ReportFlags } from "../src/report-cli.js";
 import { runTemplate } from "../src/reports/templates/run.js";
 import { registerReportTools } from "../src/tools/reports.js";
@@ -48,7 +49,7 @@ describe("the builtin yearly template", () => {
       ["page-types", "unavailable", "not built yet"],
       ["pages", "ok", null],
       ["page-movers", "ok", null],
-      ["content-years", "unavailable", "not built yet"],
+      ["content-years", "unavailable", `no saved local crawl for example.com yet (run ${cliHint()} crawl, free)`],
       ["wins", "unavailable", "not built yet"],
     ]);
     expect(r.sections.find((s) => s.id === "channels")!.title).toBe("Traffic by channel, year over year");

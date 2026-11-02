@@ -16,6 +16,7 @@ import { UrlRefusedError } from "../src/lib/url-guard.js";
 import { crawlSite, crawlerUserAgent, inCrawlScope, type CrawlDeps, type CrawlSettings } from "../src/providers/crawler.js";
 import { fetchHop, type Hop, type HopOptions } from "../src/providers/render.js";
 import { runLocalCrawl, sitemapFetcher, type LocalCrawlDeps } from "../src/reports/local-crawl.js";
+import { startFixtureSite, type FixtureSite } from "./helpers/fixture-site.js";
 
 type Res = { status: number; body?: string; type?: string; location?: string; xRobotsTag?: string; truncated?: boolean };
 const html = (head: string, body = "") => `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
@@ -449,6 +450,38 @@ describe("fetchHop and a real local server", () => {
     expect(result.topIssues.map((f) => f.rule)).toContain("internal-link-to-redirect");
     expect(saved).toEqual([result.crawlId]);
     expect(sitemapUa).toEqual(["crawlmark/0.1.0 (+https://github.com/idrewlong/crawlmark-mcp)"]);
+  });
+});
+
+describe("publish dates on a crawled site (release 0.5.0)", () => {
+  let site: FixtureSite;
+  beforeAll(async () => {
+    site = await startFixtureSite();
+  });
+  afterAll(async () => {
+    delete process.env.ALLOW_PRIVATE_URLS;
+    await site.close();
+  });
+
+  it("stores published per parsed page; a page with only a sitemap lastmod (and a Last-Modified header) has none", async () => {
+    process.env.ALLOW_PRIVATE_URLS = "true";
+    const { extractCrawlIsolated } = await import("../src/analysis/extract-isolated.js");
+    const client = { slug: "127.0.0.1", domain: "127.0.0.1", name: "Local", keyPages: [] } as unknown as Client;
+    const lastmodOnly = `${site.origin}/posts/lastmod-only`;
+    const saved: { pages: CrawlPage[] }[] = [];
+    await runLocalCrawl(client, { startUrls: [`${site.origin}/posts`] }, {
+      crawl: { fetchHop, extract: (h, u) => extractCrawlIsolated(h, u), assertAllowed: () => undefined },
+      sitemaps: async () => ({ urls: new Set([lastmodOnly]), lastmods: new Map([[lastmodOnly, Date.UTC(2025, 0, 1)]]), hreflang: new Map(), hreflangCapped: false, readFailed: false, complete: true, anyUrlset: true, files: [], totalLocs: 1, fallback: null }),
+      save: (c) => void saved.push({ pages: c.pages }),
+      version: "0.5.0",
+    });
+    const pages = saved[0]!.pages;
+    const published = (path: string) => pages.find((p) => p.url === `${site.origin}${path}`)?.published;
+    expect(published("/posts/jsonld")).toEqual({ date: "2023-04-02", source: "jsonld" });
+    expect(published("/posts/meta")).toEqual({ date: "2022-06-30", source: "meta" });
+    expect(published("/2021/old-post/")).toEqual({ date: "2021", source: "url" });
+    expect(published("/posts/lastmod-only")).toBeNull();
+    expect(published("/posts")).toBeNull();
   });
 });
 

@@ -1,4 +1,6 @@
 import * as cheerio from "cheerio";
+import type { PublishedDate } from "./crawl.js";
+import { extractPublished } from "./publish-date.js";
 import { assertParseable } from "./render-extract.js";
 
 /** Most links kept per page; a page with more is noted, and the crawl can't call itself exhaustive. */
@@ -17,6 +19,8 @@ export interface CrawlPageExtract {
   links: string[];
   /** True when the page had more links than were kept. */
   linksCapped: boolean;
+  /** Release 0.5.0: when the page says it was published (structured data, meta tags, a year in the address); null: none found. */
+  published: PublishedDate | null;
 }
 
 const clean = (s: string | undefined | null): string | null => {
@@ -69,5 +73,6 @@ export function extractCrawlPage(html: string, pageUrl: string): CrawlPageExtrac
     h1Count: $("h1").length,
     links,
     linksCapped,
+    published: extractPublished($, pageUrl),
   };
 }
