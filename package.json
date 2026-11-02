@@ -60,7 +60,7 @@
     "cheerio": "^1.2.0",
     "chrome-launcher": "^1.2.2",
     "docx": "9.10.0",
-    "googleapis": "^185.0.0",
+    "googleapis": "^188.0.0",
     "lighthouse": "^13.5.0",
     "puppeteer": "^25.13.0",
     "re2js": "2.8.8",
