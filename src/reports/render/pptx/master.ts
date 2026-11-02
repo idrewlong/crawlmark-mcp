@@ -102,8 +102,8 @@ function lvl(n: number, st: RunStyle, bullet: boolean, before: number): string {
 export const headingStyle = (x: Ctx): RunStyle => ({ size: x.t.heading.size, bold: x.t.heading.bold, color: x.col(x.t.heading.color), font: x.fonts.heading });
 /** Body text. */
 export const bodyStyle = (x: Ctx, size = 18): RunStyle => ({ size, color: NEUTRAL.ink, font: x.fonts.body });
-/** Footer text: 9 pt, faint. */
-export const footerStyle = (x: Ctx): RunStyle => ({ size: 9, color: NEUTRAL.faint, font: x.fonts.body });
+/** Footer text: 11 pt (the deck's smallest size), faint. */
+export const footerStyle = (x: Ctx): RunStyle => ({ size: 11, color: NEUTRAL.faint, font: x.fonts.body });
 
 export const TITLE_BOX: Box = { x: SLIDE.margin, y: SLIDE.titleY, w: CONTENT_W, h: SLIDE.titleH };
 export const FOOTER_BOX: Box = { x: SLIDE.margin, y: SLIDE.footerY, w: 9.5, h: SLIDE.footerH };

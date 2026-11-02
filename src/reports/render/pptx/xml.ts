@@ -74,6 +74,9 @@ export const rPr = (st: RunStyle, tag = "a:rPr") => `<${tag} ${rPrAttrs(st)}>${r
 
 export const run = (text: string, st: RunStyle) => `<a:r>${rPr(st)}<a:t>${esc(text)}</a:t></a:r>`;
 
+/** A tab character (esc drops control characters, so the tab is written here). */
+export const tabRun = (st: RunStyle) => `<a:r>${rPr(st)}<a:t>\t</a:t></a:r>`;
+
 /** A slide-number field: renders the current slide's number. */
 export const slideNumField = (n: number, st: RunStyle) => `<a:fld id="{B6F15528-21DE-4FAA-801E-634DDDAF4B2B}" type="slidenum">${rPr(st)}<a:t>${n}</a:t></a:fld>`;
 
@@ -87,11 +90,18 @@ export interface ParaStyle {
   after?: number;
   /** Line spacing in percent (100 = single). */
   lineSpacing?: number;
+  /** A hanging indent in inches (marL, with indent = -marL): a bullet's text column, or a number's tab column. Default 0.3 with a bullet, else none. */
+  hang?: number;
+  /** Left tab stops in inches. */
+  tabs?: number[];
+  /** A first-line indent in inches (Keynote ignores a table cell's margins and marL, but honours this). */
+  firstLine?: number;
 }
 
 /** `a:pPr` children in schema order: lnSpc, spcBef, spcAft, buClr, buSzPct, buFont, buChar / buNone. */
 function pPr(ps: ParaStyle): string {
-  const attrs = `${ps.bullet ? ` marL="${emu(0.3)}" indent="${-emu(0.3)}"` : ` marL="0" indent="0"`}${ps.align ? ` algn="${ps.align}"` : ""}`;
+  const hang = ps.hang ?? (ps.bullet ? 0.3 : 0);
+  const attrs = `${hang ? ` marL="${emu(hang)}" indent="${-emu(hang)}"` : ps.firstLine ? ` marL="0" indent="${emu(ps.firstLine)}"` : ` marL="0" indent="0"`}${ps.align ? ` algn="${ps.align}"` : ""}`;
   let body = "";
   if (ps.lineSpacing) body += `<a:lnSpc><a:spcPct val="${Math.round(ps.lineSpacing * 1000)}"/></a:lnSpc>`;
   if (ps.before !== undefined) body += `<a:spcBef><a:spcPts val="${Math.round(ps.before * 100)}"/></a:spcBef>`;
@@ -100,6 +110,7 @@ function pPr(ps: ParaStyle): string {
     if (ps.bulletColor) body += `<a:buClr><a:srgbClr val="${hex(ps.bulletColor)}"/></a:buClr>`;
     body += `<a:buSzPct val="100000"/><a:buFont typeface="Arial"/><a:buChar char="${esc(ps.bullet)}"/>`;
   } else body += "<a:buNone/>";
+  if (ps.tabs?.length) body += `<a:tabLst>${ps.tabs.map((t) => `<a:tab pos="${emu(t)}" algn="l"/>`).join("")}</a:tabLst>`;
   return `<a:pPr${attrs}>${body}</a:pPr>`;
 }
 
@@ -202,6 +213,10 @@ export interface Cell {
   fill: string | null;
   /** The bottom border; the other three sides have no line. */
   bottom: { color: string; weight: number } | null;
+  /** Vertical alignment (default centre); header cells sit on the bottom so one- and two-line headers share a baseline. */
+  anchor?: "t" | "ctr" | "b";
+  /** Extra space in inches before the text: a text column that follows a right-aligned number column (written as a first-line indent; Keynote ignores cell margins). */
+  padL?: number;
 }
 
 /** "No Style, No Grid": the explicit cell fills and borders below are the whole look. */
@@ -210,10 +225,10 @@ const NO_STYLE_TABLE = "{2D5ABB26-0587-4C30-8999-92F81FD0307C}";
 /** `a:tc`: txBody, then tcPr (lnL, lnR, lnT, lnB, fill). */
 function cell(c: Cell): string {
   const runs = c.text ? [run(c.text, c.style)] : [];
-  const body = txBody([para(runs, c.style, { align: c.align })], {}, "a:txBody");
+  const body = txBody([para(runs, c.style, { align: c.align, ...(c.padL ? { firstLine: c.padL } : {}) })], {}, "a:txBody");
   const noLn = (tag: string) => `<${tag} w="0"><a:noFill/></${tag}>`;
   const bottom = c.bottom ? `<a:lnB w="${ptEmu(c.bottom.weight)}" cap="flat" cmpd="sng" algn="ctr">${solidFill(c.bottom.color)}<a:prstDash val="solid"/></a:lnB>` : noLn("a:lnB");
-  return `<a:tc>${body}<a:tcPr marL="${emu(0.08)}" marR="${emu(0.08)}" marT="${emu(0.04)}" marB="${emu(0.04)}" anchor="ctr">${noLn("a:lnL")}${noLn("a:lnR")}${noLn("a:lnT")}${bottom}${c.fill ? solidFill(c.fill) : noFill}</a:tcPr></a:tc>`;
+  return `<a:tc>${body}<a:tcPr marL="${emu(0.08)}" marR="${emu(0.08)}" marT="${emu(0.04)}" marB="${emu(0.04)}" anchor="${c.anchor ?? "ctr"}">${noLn("a:lnL")}${noLn("a:lnR")}${noLn("a:lnT")}${bottom}${c.fill ? solidFill(c.fill) : noFill}</a:tcPr></a:tc>`;
 }
 
 /** A table frame: nvGraphicFramePr, xfrm, a:graphic > a:tbl (tblPr, tblGrid, tr+). `cols` are inch widths. */

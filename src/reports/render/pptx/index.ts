@@ -9,6 +9,7 @@ import { buildDeck, type Deck } from "../deck.js";
 import type { DocBranding, ReportDoc } from "../doc.js";
 import { deckTheme, type DeckTheme } from "../themes/deck-themes.js";
 import { themePalette, type ThemePalette } from "../themes/palette.js";
+import { deckChartXml } from "./chart-style.js";
 import { chartPart, type ChartPart } from "./charts.js";
 import { bodyLayoutXml, makeCtx, notesMasterXml, notesSlideXml, slideMasterXml, themeXml, titleLayoutXml } from "./master.js";
 import { appXml, coreXml, CT, packageDate, presentationParts, PRES_PROPS, relsName, rootRels, TABLE_STYLES, VIEW_PROPS, writePackage, type Part } from "./package.js";
@@ -53,7 +54,10 @@ async function render(deck: Deck, style: DeckStyle): Promise<{ data: Buffer; war
   for (let i = 0; i < deck.slides.length; i++) {
     const s = deck.slides[i]!;
     let part: ChartPart | null | undefined;
-    if (s.kind === "section" && s.chart) part = await chartPart(s.chart, { primary: style.palette.primary, font: style.fonts.body });
+    if (s.kind === "section" && s.chart) {
+      part = await chartPart(s.chart, { primary: style.palette.primary, font: style.fonts.body });
+      if (part) part = { ...part, xml: deckChartXml(part.xml, s.chart) };
+    }
     const built = buildSlide(x, s, { number: i + 1, chart: part, chartNo: charts + 1, ...(style.logo ? { logo: style.logo } : {}) });
     if (built.chartFailed && !warnings.includes(CHART_WARNING)) warnings.push(CHART_WARNING);
     const name = `ppt/slides/slide${i + 1}.xml`;

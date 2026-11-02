@@ -164,7 +164,7 @@ describe("renderDeck package", () => {
     const s5 = await text(zip, "ppt/slides/slide5.xml");
     expect(s5).toContain(`<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId2"/>`);
     expect(s5).toContain(`descr="Clicks rose from 10 to 30 over September."`);
-    expect(chartPart).toHaveBeenCalledWith(expect.objectContaining({ title: "Clicks per day" }), { primary: "#1f5ea8", font: "Calibri" });
+    expect(chartPart).toHaveBeenCalledWith(expect.objectContaining({ title: "Clicks per day" }), { primary: "#1f5ea8", font: "Arial" });
   });
 
   it("a chart that can't be drawn shows its fallback table, the footnote and a warning (toPptx)", async () => {

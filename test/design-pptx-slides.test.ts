@@ -19,7 +19,7 @@ vi.mock("../src/reports/render/pptx/charts.js", async () => {
 const { renderDeck } = await import("../src/reports/render/pptx/index.js");
 
 const FONTS: Record<string, [string, string]> = {
-  cards: ["Calibri", "Calibri"],
+  cards: ["Arial", "Arial"],
   minimal: ["Arial", "Arial"],
   editorial: ["Georgia", "Georgia"],
   bold: ["Arial Black", "Arial"],
@@ -83,13 +83,25 @@ describe("theme looks", () => {
     expect(p.onDark).toBe("#ffffff");
   });
 
-  it("friendly: section titles sit in a roundRect with the tint fill", async () => {
+  it("friendly: section titles sit in a rounded tint pill sized to the text", async () => {
     const p = themePalette("#1f5ea8", "#5b9bd5");
     const zip = await unzip(await renderDeck(fixtureDeck(), styleFor("friendly")));
-    const title = titleShape(await text(zip, "ppt/slides/slide5.xml"));
-    expect(title).toContain(`<a:prstGeom prst="roundRect">`);
-    expect(title).toContain(`<a:solidFill>${fill(p.tint)}</a:solidFill>`);
+    const xml = await text(zip, "ppt/slides/slide5.xml");
+    const title = titleShape(xml);
+    // The pill is its own shape (Keynote ignores a placeholder's geometry), drawn behind an unfilled title.
+    const all: string[] = shapes(xml);
+    const pill = all.find((s) => s.includes('name="Title pill"'))!;
+    expect(all.indexOf(pill)).toBeLessThan(all.indexOf(title));
+    expect(pill).toContain(`<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 50000"/></a:avLst></a:prstGeom>`);
+    expect(pill).toContain(`<a:solidFill>${fill(p.tint)}</a:solidFill>`);
+    expect(title).toContain("<a:noFill/>");
+    expect(title).toContain(`wrap="none"`);
     expect(title).toContain(fill(p.tintInk));
+    // Sized to the text: a short title gets a short pill.
+    const agenda = shapes(await text(zip, "ppt/slides/slide2.xml")).find((s) => s.includes('name="Title pill"'))!;
+    const width = (s: string) => Number(/<a:ext cx="(\d+)"/.exec(s)![1]) / 914_400;
+    expect(width(agenda)).toBeGreaterThan(1.2);
+    expect(width(agenda)).toBeLessThan(2.2);
   });
 
   it("consulting: section titles start with 01, 02, …", async () => {
