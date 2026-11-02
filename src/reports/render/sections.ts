@@ -22,6 +22,11 @@ import type {
   AuditChangesData,
   BingOverviewData,
   BrandedSplitData,
+  ChannelYoyData,
+  ContentByYearData,
+  PageGroupsData,
+  WinMissItem,
+  WinsMissesData,
   ComparedTotals,
   CruxHistoryResult,
   CwvMetric,
@@ -47,7 +52,7 @@ import type {
   TopRowsData,
   TrackedKeywordsData,
 } from "../report-types.js";
-import { periodName } from "../templates/period.js";
+import { minusOneYear, periodName } from "../templates/period.js";
 import type { Block, Chart, Delta, Kpi, LineChart, TableBlock, Text } from "./doc.js";
 import { looksLinky } from "./escape.js";
 import { parseNarrative, type Run } from "./narrative.js";
@@ -178,9 +183,61 @@ function weeklyTable(label: string, cur: { date: string; v: number }[], prev: { 
   return { kind: "table", title: `${label} by week`, header: ["Days", curName, ...(prev ? [prevName, "Change"] : [])], rows, numeric: [false, true, true, true] };
 }
 
-function dailyChart(title: string, label: string, cur: { date: string; v: number }[], prev: { v: number }[] | null, curName: string, prevName: string): LineChart {
+const DAY_MS = 86_400_000;
+/** Days from `a` to `b`, both included (ISO dates). */
+const spanDays = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS) + 1;
+/** The last day of a YYYY-MM month (ISO date). */
+const monthEnd = (ym: string) => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).toISOString().slice(0, 10);
+const prevYearMonth = (ym: string) => `${Number(ym.slice(0, 4)) - 1}${ym.slice(4, 7)}`;
+/** A daily chart's table fallback switches from weeks to months when the current series spans more than this many days. */
+export const MONTHLY_FALLBACK_DAYS = 100;
+
+/**
+ * Monthly totals for a long daily chart's table fallback (0.5.0, C6): one row per calendar month the current series
+ * touches ("Jan 2025", or "Jan 2025 (from 15 Jan)" for a partial month). Against the previous year, each month is
+ * matched by date (the same days a year earlier, so a leap day lands in its own February); otherwise by position, as the
+ * chart lines up its two series. A month without every matching previous day shows "n/a".
+ */
+function monthlyTable(label: string, cur: { date: string; v: number }[], prev: { date?: string; v: number }[] | null, byDate: boolean, curName: string, prevName: string): TableBlock {
+  const groups: { ym: string; from: number; to: number }[] = [];
+  cur.forEach((p, i) => {
+    const ym = p.date.slice(0, 7);
+    const g = groups.at(-1);
+    if (g && g.ym === ym) g.to = i;
+    else groups.push({ ym, from: i, to: i });
+  });
+  const dated = byDate && prev !== null && prev.length > 0 && prev.every((p) => typeof p.date === "string");
+  const prevFirst = dated ? prev![0]!.date! : "";
+  const prevLast = dated ? prev!.at(-1)!.date! : "";
+  const rows: Text[][] = groups.map((g) => {
+    const block = cur.slice(g.from, g.to + 1);
+    const a = block.reduce((s, x) => s + x.v, 0);
+    const first = block[0]!.date;
+    const last = block.at(-1)!.date;
+    const fromStart = first.endsWith("-01");
+    const toEnd = last === monthEnd(g.ym);
+    const name = `${monthOf(first)}${fromStart && toEnd ? "" : fromStart ? ` (to ${shortDay(last)})` : toEnd ? ` (from ${shortDay(first)})` : ` (${shortDay(first)} – ${shortDay(last)})`}`;
+    let b: number | null = null;
+    if (prev && dated) {
+      // The same days a year earlier; a whole month maps to the whole month (29 February included).
+      const start = minusOneYear({ startDate: first, endDate: first }).startDate;
+      const end = toEnd ? monthEnd(prevYearMonth(g.ym)) : minusOneYear({ startDate: last, endDate: last }).endDate;
+      if (prevFirst <= start && prevLast >= end) b = prev.filter((p) => p.date! >= start && p.date! <= end).reduce((s, x) => s + x.v, 0);
+    } else if (prev) {
+      const pb = prev.slice(g.from, g.to + 1);
+      b = pb.length === block.length ? pb.reduce((s, x) => s + x.v, 0) : null;
+    }
+    const ch = b ? ((a - b) / b) * 100 : null;
+    return [cell(name), cell(fmtInt(a)), ...(prev ? [cell(b === null ? "n/a" : fmtInt(b)), changeCell(ch, fmtPct(ch))] : [])];
+  });
+  return { kind: "table", title: `${label} by month`, header: ["Month", curName, ...(prev ? [prevName, "Change"] : [])], rows, numeric: [false, true, true, true] };
+}
+
+function dailyChart(title: string, label: string, cur: { date: string; v: number }[], prev: { date?: string; v: number }[] | null, curName: string, prevName: string, comparedWith: "previous_period" | "previous_year" | null = null): LineChart {
   const sum = (l: { v: number }[]) => l.reduce((s, x) => s + x.v, 0);
   const prevAligned = prev ? cur.map((_, i) => prev[i]?.v ?? null) : null;
+  // Monthly, quarterly and shorter periods keep the weekly table; a year (or anything over 100 days) gets months.
+  const long = spanDays(cur[0]!.date, cur.at(-1)!.date) > MONTHLY_FALLBACK_DAYS;
   return {
     type: "line",
     title,
@@ -188,7 +245,7 @@ function dailyChart(title: string, label: string, cur: { date: string; v: number
     format: "count",
     series: [{ name: curName, values: cur.map((p) => p.v), role: "current" }, ...(prevAligned ? [{ name: prevName, values: prevAligned, role: "previous" as const }] : [])],
     summary: `${title}: ${fmtInt(sum(cur))} ${label.toLowerCase()} in ${curName}${prev ? ` against ${fmtInt(sum(prev))} in ${prevName}` : ""}, from ${shortDay(cur[0]!.date)} to ${shortDay(cur.at(-1)!.date)}.`,
-    fallback: weeklyTable(label, cur, prev, curName, prevName),
+    fallback: long ? monthlyTable(label, cur, prev, comparedWith === "previous_year", curName, prevName) : weeklyTable(label, cur, prev, curName, prevName),
   };
 }
 
@@ -461,6 +518,209 @@ function competitorBlocks(data: CompetitorOverviewData, _report: TemplateReport,
   return blocks;
 }
 
+// ---- 0.5.0: yearly sections (C6). Existing block kinds only; the first chart, table and KPI row are what the deck shows. ----
+
+/** The most parts a share chart may have: shareColors has six colours and a grey for the last part. */
+export const MAX_SHARE_PARTS = 7;
+const bolded = (text: Text): Text => text.map((r) => ({ ...r, b: true as const }));
+const pctText = (n: number) => `${n.toFixed(1)}%`;
+const shareOf = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
+/** A percentage change, or "new" when there was nothing before and something now. */
+const changeOrNew = (change: number | null | undefined, now: number, before: number): Text => (change === null || change === undefined ? cell(before === 0 && now > 0 ? "new" : "n/a") : changeCell(change, fmtPct(change)));
+
+/**
+ * The parts of a share chart, at most MAX_SHARE_PARTS: every item when they fit (in the given order), else the top
+ * MAX_SHARE_PARTS − 1 by `key` (in the given order) and the rest summed as `otherLabel`. `fold` items (an existing
+ * "Other" row) always go into the summed part when there is one. Parts that are 0 in every row are left out.
+ */
+function shareParts(items: { name: string; key: number; values: number[]; fold?: boolean }[], otherLabel: string): { parts: string[]; values: number[][] } {
+  const live = items.filter((x) => x.values.some((v) => v > 0));
+  let kept = live;
+  let rest: typeof live = [];
+  if (live.length > MAX_SHARE_PARTS) {
+    const top = new Set(live.filter((x) => !x.fold).sort((a, b) => b.key - a.key).slice(0, MAX_SHARE_PARTS - 1));
+    kept = live.filter((x) => top.has(x));
+    rest = live.filter((x) => !top.has(x));
+  }
+  const rowCount = items[0]?.values.length ?? 0;
+  const parts = [...kept.map((x) => x.name), ...(rest.length ? [otherLabel] : [])];
+  const values = Array.from({ length: rowCount }, (_, r) => [...kept.map((x) => x.values[r]!), ...(rest.length ? [rest.reduce((s, x) => s + x.values[r]!, 0)] : [])]);
+  return { parts, values };
+}
+
+const CHANNEL_METRIC = { sessions: "Sessions", users: "Users", keyEvents: "Key events" } as const;
+
+function channelYoyBlocks(data: ChannelYoyData): Block[] {
+  const all = [...data.rows, ...(data.other ? [data.other] : [])];
+  const m = data.metric;
+  const label = CHANNEL_METRIC[m];
+  const prevTotal = data.totals.previous?.[m] ?? 0;
+  if (!all.length || (data.totals.sessions === 0 && data.totals[m] === 0 && prevTotal === 0)) return [];
+  const cur = periodName(data.current);
+  const prev = periodName(data.previous);
+  const hasPrev = !data.previousEmpty;
+  const blocks: Block[] = [];
+
+  // Rows: last year, then this year (left to right in time).
+  const items = all.map((r) => ({ name: r.channel, key: r[m], values: hasPrev ? [r.previous?.[m] ?? 0, r[m]] : [r[m]], fold: r === data.other }));
+  const { parts, values } = shareParts(items, "Other channels");
+  if (data.totals[m] > 0 && parts.length) {
+    const rows = hasPrev && prevTotal > 0 ? [{ label: prev, values: values[0]! }, { label: cur, values: values[1]! }] : [{ label: cur, values: values.at(-1)! }];
+    const top = [...data.rows].sort((a, b) => b[m] - a[m])[0]!;
+    const topPrev = top.previous?.[m] ?? 0;
+    blocks.push({
+      kind: "chart",
+      chart: {
+        type: "share",
+        title: `${label} by channel`,
+        parts,
+        rows,
+        summary: `${top.channel} brought ${pctText(shareOf(top[m], data.totals[m]))} of ${label.toLowerCase()} in ${cur}${hasPrev && prevTotal > 0 ? ` (${pctText(shareOf(topPrev, prevTotal))} in ${prev})` : ""}.`,
+      },
+    });
+  }
+
+  // The chosen metric first (with last year and the change), then the other two counts and the engagement rate.
+  const others = (["sessions", "users", "keyEvents"] as const).filter((x) => x !== m);
+  const header = ["Channel", label, ...(hasPrev ? [prev, "Change"] : []), ...others.map((x) => CHANNEL_METRIC[x]), "Engagement rate"];
+  const row = (r: (typeof all)[number]): Text[] => [
+    d(r.channel),
+    cell(fmtInt(r[m])),
+    ...(hasPrev ? [cell(fmtInt(r.previous?.[m] ?? 0)), changeOrNew(r.change[m], r[m], r.previous?.[m] ?? 0)] : []),
+    ...others.map((x) => cell(fmtInt(r[x]))),
+    cell(r.engagementRate === null ? "n/a" : pctText(r.engagementRate)),
+  ];
+  const tableRows = all.map(row);
+  tableRows.push(row({ ...data.totals, channel: "Total" }).map(bolded));
+  blocks.push({ kind: "table", header, rows: tableRows, numeric: header.map((_, i) => i > 0) });
+  if (data.previousEmpty) blocks.push({ kind: "note", text: [t(`Google Analytics has no data for ${prev} (the property may be newer than that).`)] });
+  return blocks;
+}
+
+export const PAGE_FILTER_NOTE = "Search Console counts by page when you filter by page, so the page types can add up to more than the site's total clicks.";
+
+function pageGroupsBlocks(data: PageGroupsData, report: TemplateReport): Block[] {
+  const any = (r: PageGroupsData["rows"][number]) => r.clicks > 0 || r.impressions > 0 || (r.previous !== null && (r.previous.clicks > 0 || r.previous.impressions > 0));
+  if (!data.rows.some(any)) return [];
+  const cur = periodName(report.period.current);
+  const prev = data.comparedWith ? vsLabel(report, data.comparedWith) : "";
+  const hasPrev = Boolean(prev) && data.rows.some((r) => r.previous !== null);
+  const total = data.rows.reduce((s, r) => s + r.clicks, 0);
+  const prevTotal = data.rows.reduce((s, r) => s + (r.previous?.clicks ?? 0), 0);
+  const blocks: Block[] = [];
+
+  if (total > 0) {
+    const withPrev = hasPrev && prevTotal > 0;
+    const items = data.rows.map((r) => ({ name: r.name, key: r.clicks, values: withPrev ? [r.clicks, r.previous?.clicks ?? 0] : [r.clicks], fold: r.name === "Other" }));
+    const { parts, values } = shareParts(items, "Other page types");
+    const top = [...data.rows].sort((a, b) => b.clicks - a.clicks)[0]!;
+    blocks.push({
+      kind: "chart",
+      chart: {
+        type: "share",
+        title: "Clicks by page type",
+        parts,
+        rows: [{ label: cur, values: values[0]! }, ...(withPrev ? [{ label: prev, values: values[1]! }] : [])],
+        summary: `${top.name} had ${pctText(shareOf(top.clicks, total))} of clicks in ${cur}${withPrev ? ` (${pctText(shareOf(top.previous?.clicks ?? 0, prevTotal))} in ${prev})` : ""}.`,
+      },
+    });
+  }
+
+  const header = ["Page type", "Clicks", ...(hasPrev ? [prev, "Change"] : []), "Share of clicks", "Impressions", "CTR", "Avg. position"];
+  const rows = data.rows.map((r) => [
+    d(r.name),
+    cell(fmtInt(r.clicks)),
+    ...(hasPrev ? [cell(r.previous ? fmtInt(r.previous.clicks) : "n/a"), r.change ? changeOrNew(r.change.clicks, r.clicks, r.previous?.clicks ?? 0) : cell("n/a")] : []),
+    cell(pctText(r.share)),
+    cell(fmtInt(r.impressions)),
+    cell(r.impressions ? fmtCtr(r.ctr) : "n/a"),
+    cell(fmt1(r.position)),
+  ]);
+  blocks.push({ kind: "table", header, rows, numeric: header.map((_, i) => i > 0), bar: { col: 1, values: data.rows.map((r) => r.clicks) } });
+  blocks.push({ kind: "note", text: [t(PAGE_FILTER_NOTE)] });
+  if (data.method === "stored_top_pages") {
+    const un = data.unattributed?.clicks ?? 0;
+    blocks.push({ kind: "note", text: [t(`From saved monthly history, which keeps each month's top 250 pages; ${pctText(shareOf(un, total + un))} of clicks couldn't be assigned to a page type.`)] });
+  }
+  return blocks;
+}
+
+const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1 ? one : many}`;
+
+function contentByYearBlocks(data: ContentByYearData): Block[] {
+  if (!data.rows.length) return [];
+  const blocks: Block[] = [
+    {
+      kind: "table",
+      header: ["Published", "Pages", "Clicks", "Share of clicks", "Clicks per page", "Impressions"],
+      rows: data.rows.map((r) => [cell(r.year), cell(fmtInt(r.pages)), cell(fmtInt(r.clicks)), cell(pctText(r.clicksShare)), cell(fmt1(r.clicksPerPage)), cell(fmtInt(r.impressions))]),
+      numeric: [false, true, true, true, true, true],
+      bar: { col: 2, values: data.rows.map((r) => r.clicks) },
+    },
+  ];
+  const src = data.sources;
+  blocks.push({
+    kind: "note",
+    text: [t(`From the newest saved crawl (${fullDay(data.crawledAt)}): publish dates from structured data (${fmtInt(src.jsonld)}), page meta tags (${fmtInt(src.meta)}) and addresses (${fmtInt(src.url)}); ${plural(src.none, "page has", "pages have")} no date.`)],
+  });
+  if (data.group) blocks.push({ kind: "note", text: [t("Only pages of the type "), ...d(data.group), t(" are counted.")] });
+  const shown = data.rows.reduce((s, r) => s + r.pages, 0);
+  if (data.pagesConsidered > shown) blocks.push({ kind: "note", text: [t(`${plural(data.pagesConsidered - shown, "page published before the first year shown is", "pages published before the first year shown are")} left out of the table.`)] });
+  if (data.staleDays !== null) blocks.push({ kind: "note", text: [t(`That crawl is ${fmtInt(data.staleDays)} days old.`)] });
+  return blocks;
+}
+
+const GOAL_METRIC: Record<string, string> = { clicks: "Clicks", impressions: "Impressions", sessions: "Sessions", keyEvents: "Key events" };
+export const WINS_RULES_NOTE =
+  "Rules: changes of at least 5% and 20 (clicks, impressions, sessions, key events) or one position; pages ±25% and at least 20 clicks; non-branded searches entering or leaving the top 3 or top 10 with at least 100 impressions.";
+const capFirst = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+/** A goal's label as the rules wrote it ("Goal met: <label> 1120 (target 1000)"), else the metric's name. */
+const goalLabel = (g: WinMissItem) => capFirst(/^Goal (?:met|missed): (.+?) [\d.,]+(?: \(target | of )/.exec(g.text)?.[1] ?? GOAL_METRIC[g.metric] ?? g.metric);
+/** A figure in the wins and misses table; nothing before means no impressions (a position) or none at all (a count). */
+const itemValue = (metric: string, v: number | null) => (v === null ? (metric === "position" ? "no impressions" : "0") : metric === "position" ? fmt1(v) : metric === "ctr" ? fmtCtr(v) : fmtInt(v));
+/** Rule text with any URL in it shown as a page path (own site) or code, never as a link. */
+function ruleText(s: string, domain: string): Text {
+  const out: Text = [];
+  for (const [i, part] of s.split(/(https?:\/\/[^\s"]+)/).entries()) {
+    if (!part) continue;
+    if (i % 2 === 0) {
+      out.push(t(part));
+      continue;
+    }
+    const trail = /[.,;:)]+$/.exec(part)?.[0] ?? "";
+    out.push(...pagePath(part.slice(0, part.length - trail.length), domain), ...(trail ? [t(trail)] : []));
+  }
+  return out;
+}
+
+function winsMissesBlocks(data: WinsMissesData, ctx: MapContext): Block[] {
+  const items = [...data.wins, ...data.misses];
+  if (!data.goals.length && !items.length && !data.comparedWith && !data.skippedGoals.length) return [];
+  const blocks: Block[] = [];
+  if (data.goals.length) {
+    blocks.push({
+      kind: "kpiRow",
+      items: data.goals.map((g): Kpi => {
+        const met = g.kind === "win";
+        const target = g.target ?? 0;
+        const pct = target > 0 ? Math.round((g.current / target) * 100) : null;
+        return { label: goalLabel(g), value: itemValue(g.metric, g.current), detail: `target ${fmtInt(target)} · ${met ? "met" : `${pct === null ? "n/a" : `${pct}%`} of target`}`, tone: met ? "good" : "bad" };
+      }),
+    });
+  }
+  if (items.length) {
+    blocks.push({
+      kind: "table",
+      header: ["Result", "What changed", "Now", "Before"],
+      rows: items.map((x) => [[{ t: x.kind === "win" ? "Win" : "Miss", tag: x.kind === "win" ? ("good" as const) : ("bad" as const) }], ruleText(x.text, ctx.domain), cell(itemValue(x.metric, x.current)), cell(itemValue(x.metric, x.previous))]),
+      numeric: [false, false, true, true],
+    });
+  } else if (data.comparedWith) blocks.push({ kind: "paragraph", text: [t("No change passed the thresholds this time.")] });
+  if (data.skippedGoals.length) blocks.push({ kind: "note", text: [t(`Goals not checked (their data isn't in this report): ${data.skippedGoals.join(", ")}.`)] });
+  if (data.comparedWith) blocks.push({ kind: "note", text: [t(WINS_RULES_NOTE)] });
+  return blocks;
+}
+
 /** The most Search Console reasons listed per table in the indexing section. */
 export const REASON_ROWS_MAX = 50;
 /** The most coverage states shown in the indexing share chart before the rest are grouped as "Other". */
@@ -477,9 +737,9 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     const daily = data.daily;
     if (daily && daily.current.length >= 2) {
       const prevName = daily.comparedWith ? vsLabel(report, daily.comparedWith) : "";
-      const clicks = dailyChart("Clicks per day", "Clicks", daily.current.map((p) => ({ date: p.date, v: p.clicks })), daily.previous?.map((p) => ({ v: p.clicks })) ?? null, cur, prevName);
+      const clicks = dailyChart("Clicks per day", "Clicks", daily.current.map((p) => ({ date: p.date, v: p.clicks })), daily.previous?.map((p) => ({ date: p.date, v: p.clicks })) ?? null, cur, prevName, daily.comparedWith);
       if (ctx.onepage) return [{ kind: "chart", chart: clicks }];
-      const impressions = dailyChart("Impressions per day", "Impressions", daily.current.map((p) => ({ date: p.date, v: p.impressions })), daily.previous?.map((p) => ({ v: p.impressions })) ?? null, cur, prevName);
+      const impressions = dailyChart("Impressions per day", "Impressions", daily.current.map((p) => ({ date: p.date, v: p.impressions })), daily.previous?.map((p) => ({ date: p.date, v: p.impressions })) ?? null, cur, prevName, daily.comparedWith);
       blocks.push({ kind: "columns", columns: [[{ kind: "chart", chart: clicks }], [{ kind: "chart", chart: impressions }]] });
     }
     // One page shows only the clicks chart; without the daily rows (a failed or short daily fetch) it says so in one line.
@@ -539,7 +799,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     const blocks: Block[] = [{ kind: "kpiRow", items }];
     if (data.daily && data.daily.current.length >= 2 && !ctx.onepage) {
       const prevName = data.daily.comparedWith ? vsLabel(report, data.daily.comparedWith) : "";
-      blocks.push({ kind: "chart", chart: dailyChart("Organic sessions per day", "Sessions", data.daily.current.map((p) => ({ date: p.date, v: p.sessions })), data.daily.previous?.map((p) => ({ v: p.sessions })) ?? null, periodName(report.period.current), prevName) });
+      blocks.push({ kind: "chart", chart: dailyChart("Organic sessions per day", "Sessions", data.daily.current.map((p) => ({ date: p.date, v: p.sessions })), data.daily.previous?.map((p) => ({ date: p.date, v: p.sessions })) ?? null, periodName(report.period.current), prevName, data.daily.comparedWith) });
     }
     if (prev && data.previous) blocks.push({ kind: "note", text: [t(`Organic search visits from Google Analytics, compared with ${prev}.`)] });
     return blocks;
@@ -1141,6 +1401,11 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
       { kind: "note", text: [t("Difficulty is the provider's own 0-100 scale; don't compare it with another provider's.")] },
     ];
   },
+  // 0.5.0: yearly sections.
+  channel_yoy: (data: ChannelYoyData) => channelYoyBlocks(data),
+  page_groups: (data: PageGroupsData, report) => pageGroupsBlocks(data, report),
+  content_by_year: (data: ContentByYearData) => contentByYearBlocks(data),
+  wins_misses: (data: WinsMissesData, _r, ctx) => winsMissesBlocks(data, ctx),
 };
 
 /**

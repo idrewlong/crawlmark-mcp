@@ -395,7 +395,19 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
     if (ix?.data?.pagesReport && ix.data.sample?.inspected === 0) about.push([txt("Google indexing: an export of Search Console's Pages report (imported, read on this machine).")]);
     else about.push([txt(`Google indexing: Search Console's URL Inspection ${what} and its sitemap report (free, read-only)${ix?.data?.pagesReport ? ", and an export of its Pages report" : ""}.`)]);
   }
-  for (const n of [...ctx.notes, ...report.notes]) about.push([txt(n)]);
+  // 0.5.0 yearly sections: what each one is built from.
+  if (ok("channel_yoy")) about.push([txt("Traffic by channel: Google Analytics 4, all sessions on the site's own hostnames (not only search), in GA4's default channel groups, compared with the same dates a year earlier.")]);
+  if (ok("page_groups")) about.push([txt('Search clicks by page type: Search Console, filtered by page address; each page counts in the first matching type, and the rest is "Other".')]);
+  if (ok("content_by_year")) about.push([txt("Content by publish year: publish dates from each page's structured data, article meta tags or a year in its address, read from the newest saved site crawl; modification dates are never used.")]);
+  if (ok("wins_misses")) about.push([txt("Wins and misses: fixed thresholds, listed in that section.")]);
+  // A run note a yearly section already prints as its own note isn't repeated here.
+  const yearlyTypes = ["channel_yoy", "page_groups", "content_by_year", "wins_misses"];
+  const shown = new Set(
+    sections
+      .filter((x) => yearlyTypes.includes(report.sections.find((s) => s.id === x.id)?.type ?? ""))
+      .flatMap((x) => x.blocks.flatMap((bl) => (bl.kind === "note" ? [bl.text.map((r) => r.t).join("")] : []))),
+  );
+  for (const n of [...ctx.notes, ...report.notes.filter((n) => !shown.has(n))]) about.push([txt(n)]);
   for (const s of report.sections) if (s.status === "error") about.push([txt(statusLine(s))]);
   if (notIncluded.length) about.push([txt(`Not included this time (no data for this period): ${notIncluded.join(", ")}.`)]);
 
