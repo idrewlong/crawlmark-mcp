@@ -39,3 +39,37 @@ describe("report text contrast", () => {
     }
   });
 });
+
+describe("theme text contrast (release 0.4.0)", () => {
+  const block = (html: string, id: string) => html.slice(html.indexOf(`/* theme: ${id} */`));
+  const variable = (css: string, name: string) => new RegExp(`--${name}: (#[0-9a-f]{6})`).exec(css)![1]!;
+  const resolved = (theme: "bold" | "friendly", primaryColor: string) =>
+    block(toHtml(buildReportDoc(p13Report(), { version: "0.4.0", theme, branding: { primaryColor } })), theme);
+
+  it("bold: its text colours reach 4.5:1 on the derived dark colour", () => {
+    for (const p of sweep) {
+      const css = resolved("bold", p);
+      const dark = variable(css, "dark");
+      for (const n of ["on-dark", "on-dark-soft", "on-dark-subtle"]) expect(contrast(variable(css, n), dark), `${p} ${n}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("friendly: tint ink on tint and warm, chip text on the chip fill", () => {
+    for (const p of sweep) {
+      const css = resolved("friendly", p);
+      const ink = variable(css, "tint-ink");
+      for (const bg of ["tint", "warm", "surface"]) expect(contrast(ink, variable(css, bg)), `${p} ${bg}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(variable(css, "on-chip-soft"), variable(css, "chip-bg")), p).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(textOn(p), variable(css, "chip-bg")), p).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("the fixed neutrals the themes use", () => {
+    expect(contrast(NEUTRAL.muted, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(NEUTRAL.muted, "#faf8f3"), "editorial commentary").toBeGreaterThanOrEqual(4.5);
+    expect(contrast("#5c6670", "#ffffff"), "consulting muted").toBeGreaterThanOrEqual(4.5);
+    expect(contrast("#5c6670", "#f6f7f9"), "consulting commentary").toBeGreaterThanOrEqual(4.5);
+    expect(contrast(NEUTRAL.muted, "#f7f9fb"), "bold zebra").toBeGreaterThanOrEqual(4.5);
+    expect(contrast(NEUTRAL.ink, "#f5f7fa"), "bold summary").toBeGreaterThanOrEqual(4.5);
+  });
+});
