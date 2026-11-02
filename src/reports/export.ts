@@ -12,13 +12,14 @@ import { writeFileAtomic } from "../lib/atomic-file.js";
 import { RegularFileError, readRegularFileCapped } from "../lib/read-regular-file.js";
 import { stripControl } from "../lib/terminal-text.js";
 import { reportRelPath } from "./paths.js";
-import type { TemplateReport } from "./report-types.js";
+import type { TemplateReport, WinMissItem } from "./report-types.js";
 import { buildReportDoc, type DocBranding } from "./render/doc.js";
 import { MAX_DOCS_LOGO_BYTES, toDocx } from "./render/docx.js";
 import { toHtml } from "./render/html.js";
 import { MAX_LOGO_BYTES, sniffImage } from "./render/image.js";
 import { internalNotesMarkdown } from "./render/internal-notes.js";
 import { toMarkdown } from "./render/markdown.js";
+import { goalLabel } from "./render/sections.js";
 import { toPptx } from "./render/pptx/index.js";
 import { clientText, validateNarrative, type Narrative } from "./render/narrative.js";
 import { ClientTextLintError, isFixedTerm, lintClientText, type LintContext, type LintField } from "./render/term-lint.js";
@@ -234,6 +235,21 @@ export function clientTextFields(report: TemplateReport, narrative: Narrative | 
     if (typeof text !== "string") continue;
     if (s.type === "block") push(`blocks.${(s.data as { blockId?: string }).blockId ?? s.id}`, text);
     else if (s.type === "text") push(`sections.${s.id}.text`, text);
+  }
+  // Yearly sections: goal labels, page-group names (template, clients.yaml or profile alike: they are all in the rows) and the content_by_year group.
+  for (const s of report.sections) {
+    if (s.status !== "ok") continue;
+    const d = s.data as Record<string, unknown> | undefined;
+    if (!d || typeof d !== "object") continue;
+    if (s.type === "wins_misses") {
+      const goals = Array.isArray(d["goals"]) ? (d["goals"] as WinMissItem[]) : [];
+      goals.forEach((g, i) => push(`sections.${s.id}.goals[${i}].label`, typeof g?.text === "string" ? goalLabel(g) : undefined));
+      (Array.isArray(d["skippedGoals"]) ? (d["skippedGoals"] as unknown[]) : []).forEach((g, i) => push(`sections.${s.id}.skippedGoals[${i}]`, typeof g === "string" ? g : undefined));
+    } else if (s.type === "page_groups") {
+      (Array.isArray(d["rows"]) ? (d["rows"] as { name?: unknown }[]) : []).forEach((r, i) => push(`sections.${s.id}.pageGroups[${i}].name`, typeof r?.name === "string" ? r.name : undefined));
+    } else if (s.type === "content_by_year") {
+      push(`sections.${s.id}.group`, typeof d["group"] === "string" ? d["group"] : undefined);
+    }
   }
   const cover = report.template.cover;
   push("cover.subtitle", cover?.subtitle);

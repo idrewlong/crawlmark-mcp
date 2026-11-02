@@ -15,6 +15,13 @@ import { isPaidSection, validateTemplateText, withTemplateDefaults, type Brandin
 /** A hit as a validation warning. */
 const hitMessage = (h: LintHit) => `names the internal term "${h.term}" (…${h.snippet}…); client files would show it. Reword it, or allow the term with branding.allowTerms.`;
 
+/** Yearly-section texts that reach client files verbatim (goal labels, page-group names, the content_by_year group), under their YAML paths. */
+function yearlySpecFields(sec: TemplateSpec["sections"][number], base: string, push: (where: string, text: string | undefined) => void): void {
+  if (sec.type === "wins_misses") sec.goals?.forEach((g, j) => push(`${base}.goals[${j}].label`, g.label));
+  else if (sec.type === "page_groups") sec.groups?.forEach((g, j) => push(`${base}.groups[${j}].name`, g.name));
+  else if (sec.type === "content_by_year") push(`${base}.group`, sec.group);
+}
+
 /** The client-facing texts of a template file: block texts, `text` sections, cover texts and the branding lines. Paths are the YAML paths. */
 function templateFileFields(file: TemplateFile): LintField[] {
   const out: LintField[] = [];
@@ -30,6 +37,7 @@ function templateFileFields(file: TemplateFile): LintField[] {
     t.sections.forEach((sec, i) => {
       push(`templates.${tid}.sections[${i}].title`, sec.title);
       if (sec.type === "text") push(`templates.${tid}.sections[${i}].text`, sec.text);
+      yearlySpecFields(sec, `templates.${tid}.sections[${i}]`, push);
     });
     push(`templates.${tid}.cover.subtitle`, t.cover?.subtitle);
     push(`templates.${tid}.cover.preparedFor`, t.cover?.preparedFor);
@@ -59,6 +67,7 @@ export function templatePlanFields(spec: TemplateSpec, sections: TemplateSpec["s
   push("template.title", spec.title);
   for (const sec of sections) {
     push(`sections.${sec.id}.title`, sec.title ?? (sec.type === "block" ? blocks.get(sec.block)?.title : undefined));
+    yearlySpecFields(sec, `sections.${sec.id}`, push);
     if (sec.type === "text") push(`sections.${sec.id}.text`, sec.text);
     else if (sec.type === "block") push(`blocks.${sec.block}`, blocks.get(sec.block)?.text);
   }
