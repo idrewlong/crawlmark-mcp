@@ -100,6 +100,19 @@ npm run cli -- setup
 
 A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration). The wizard asks which SEO data providers you have; to change that later, run `npm run cli -- setup --step provider`, or run `npm run cli -- init` again and pick it from the menu. Set `CRAWLMARK_NO_UPDATE_CHECK=1` to turn off the daily update check.
 
+Upgrading to 0.5.0
+------------------
+
+Update with `npx -y crawlmark-mcp@latest init` (or `npm i -g crawlmark-mcp@latest`) **on every computer that uses your report template files or your clients.yaml**, then check these:
+
+- **Save your Search Console history now.** Yearly reports compare a whole year with the year before, and Google keeps only 16 months. Run `crawlmark-cli gsc-history backfill --all` (free) to save the months Google still has; months already gone can't be recovered. Saved history keeps each month's top 250 pages and queries.
+- **Yearly reports are new.** Periods `last_year`, `year_to_date` and `last_12_months`, `crawlmark-cli report --year 2025`, `year: "2025"` in Claude, the builtin `yearly` template, and four sections: traffic by channel, search clicks by page type, content by publish year, and wins and misses. See [Yearly reports](docs/reports.md#yearly-reports).
+- **A year that Google no longer fully covers is shown in part.** If the saved history is missing some early months, the Search Console sections show the whole months that are available, labelled (for example "Search Console: Jul–Dec 2025 only"), with no comparison. GA4 still covers the whole period. Custom and last-N-days ranges that cross Google's window used to show partial days; they are now complete or left out with a note.
+- **Crawl again to get publish dates.** Content by publish year reads dates recorded by crawls made with 0.5.0 or later. Run `crawlmark-cli crawl` for each client you want it for.
+- **Page groups are new.** Page types come from `pageGroups` in clients.yaml, `set_client_profile`, or `crawlmark-cli clients set example.com --page-group "Blog=/blog/"`. Without them: Home, Blog, Services and Locations ([Page groups](docs/clients.md#page-groups)).
+- **Google Docs gets a Word copy.** `export_report` with `inline: "docx"` returns the themed Word file for your Drive connector, with the HTML copy as the fallback ([Google Docs](docs/reports.md#google-docs)).
+- **Update every computer before you use the new ranges or sections in a template file.** A template file that uses them doesn't load in 0.4.0 or earlier: the older version marks the whole file invalid and falls back to the builtin templates and branding. Older versions also ignore `pageGroups` in clients.yaml. Files that don't use the new features load in both.
+
 Upgrading to 0.4.0
 ------------------
 
@@ -446,7 +459,7 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 |---|---|
 | `setup_status` | Each integration's state (`working`, `configured`, `missing` or `error`) and the exact next step, plus the default SEO data provider (`seoDataProvider`). Free |
 | `list_clients` | Every client with its Search Console and GA4 properties, Tag Manager container and what's missing. `refresh: true` re-lists from Google |
-| `set_client_profile` | Sets a client's area (for local searches), niche, display name, brand terms, data provider override, country, Bing site, confirmed Google Business Profile place ID (`gbpPlaceId`), GA4 hostnames (`ga4Hostnames`), Search Console query exclusions (`gscExcludeQueries`) and pinned Tag Manager container (`gtmContainerId`) ([Client settings](#client-settings)) |
+| `set_client_profile` | Sets a client's area (for local searches), niche, display name, brand terms, data provider override, country, Bing site, confirmed Google Business Profile place ID (`gbpPlaceId`), GA4 hostnames (`ga4Hostnames`), Search Console query exclusions (`gscExcludeQueries`), pinned Tag Manager container (`gtmContainerId`) and page groups (`pageGroups`) ([Client settings](#client-settings)) |
 
 ### Reports
 
@@ -459,13 +472,13 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 | `compare_audits` | What's new, resolved, still open or unverified between two audits, plus score changes. Findings on a page or source the earlier audit didn't check are `firstChecked` (not new), and findings of an old Tag Manager container after a container change are `retired` (not resolved) ([details](docs/audits.md#saved-audits-and-diffs)) |
 | `crawl_status` | Progress of a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check |
-| `list_report_templates` | Report templates for a client: the builtin `monthly`, `quarterly`, `executive` (one page), `technical` and `local`, your global file and the client's own file, with optional and paid sections. Free |
+| `list_report_templates` | Report templates for a client: the builtin `monthly`, `quarterly`, `yearly`, `executive` (one page), `technical` and `local`, your global file and the client's own file, with optional and paid sections. Free |
 | `get_report_template` | One template with its defaults filled in and the resolved branding. Free |
 | `validate_report_template` | Checks template YAML (or a saved file) and names each problem's YAML path. Free |
 | `create_report_template` | Drafts a new template in the global or a client's template file. The first call only proposes (YAML, diff, paid sections with estimates, a 15-minute single-use token); the second, after you say yes, saves it. Paid sections need your explicit OK; apps with elicitation also ask you directly. Free |
 | `update_report_template` | Changes a saved template (the whole template, or sections added or removed and settings changed) with the same propose-then-confirm steps. Free |
 | `run_report_template` | Runs a template for a client: per-section data and status, computed highlights, and a `reportId` kept for 24 hours. Free unless you allow a paid section; `estimateOnly: true` prices the paid sections without fetching or spending anything |
-| `export_report` | Saves a report as Markdown, HTML, PDF or Word files under the reports folder, data-only or with the agent's commentary, and can return a docs-friendly HTML copy for Google Docs |
+| `export_report` | Saves a report as Markdown, HTML, PDF, Word or PowerPoint files under the reports folder, data-only or with the agent's commentary. `inline` also returns a copy to pass on: `docx` (the themed Word file as base64, for Google Docs), `html` or `md` |
 
 ### Opportunities (free, Search Console only)
 
@@ -563,15 +576,16 @@ If Semrush or Ahrefs rejects a client's key on a paid call, the tool returns an 
 
 #### Client settings
 
-Three per-client settings, in `clients.yaml` or set from Claude with `set_client_profile` or from a terminal with `clients set`:
+Four per-client settings, in `clients.yaml` or set from Claude with `set_client_profile` or from a terminal with `clients set`:
 
 | Setting | Does | Terminal |
 |---|---|---|
 | `ga4Hostnames` | Hostnames counted in GA4 numbers. Default: the domain and its `www.` form. Exact hosts, `*.example.com` for any subdomain, or `*` for no filter. Up to 20 | `crawlmark-cli clients set example.com --ga4-hostname shop.example.com --ga4-hostname "*.example.com"` (`none` goes back to the default) |
 | `gscExcludeQueries` | Search Console queries to leave out of totals and query lists, as exact text or `/regex/` (RE2). Applies to every Search Console read; `gsc_query` can show the raw numbers with `includeExcludedQueries`. Totals say how many clicks and impressions were left out; average position is not adjusted | `crawlmark-cli clients set example.com --gsc-exclude-query "/^example( co)?$/"` (`none` clears) |
 | `gtmContainerId` | Pins the Tag Manager container `gtm_audit` uses (`GTM-XXXX` or the numeric ID) | `crawlmark-cli clients set example.com --gtm-container GTM-ABC123` (`none` unpins) |
+| `pageGroups` | Page types for the yearly report sections: a name plus path prefixes (and, in clients.yaml or `set_client_profile`, RE2 regexes). First match wins; the rest is Other. Default: Home, Blog, Services, Locations. Up to 12 groups | `crawlmark-cli clients set example.com --page-group "Blog=/blog/,/news/"` (repeat for more; `none` restores the defaults) |
 
-Examples and details are in [docs/clients.md](docs/clients.md#per-client-settings-for-ga4-search-console-and-tag-manager).
+Examples and details are in [docs/clients.md](docs/clients.md#per-client-settings-for-ga4-search-console-and-tag-manager) and [Page groups](docs/clients.md#page-groups).
 
 #### Search Console history
 
@@ -583,7 +597,7 @@ crawlmark-cli gsc-history backfill example.com --months 12
 crawlmark-cli gsc-history show example.com    # the saved months
 ```
 
-From chat, call `gsc_history` with `backfill: true`. It is free, paces its requests, backs off at quota limits and is safe to run again: it only fetches months not saved yet. The oldest month Google still has can be partial (`complete: false`). Saved numbers are raw. Query exclusions are applied to saved query rows when a report reads them. Saved totals are adjusted only for months saved under the same exclusions as the client has now: if you set or change `gscExcludeQueries` after saving, those months are read raw and the report says so (run the backfill again with `refresh` to re-save them). Stored page rows can't have exclusions subtracted. After that, each `monthly_report` and template run saves up to two missing months and says so in its notes. A report range older than 16 months uses saved history only when every month in it is saved.
+From chat, call `gsc_history` with `backfill: true`. It is free, paces its requests, backs off at quota limits and is safe to run again: it only fetches months not saved yet. The oldest month Google still has can be partial (`complete: false`). Saved numbers are raw. Query exclusions are applied to saved query rows when a report reads them. Saved totals are adjusted only for months saved under the same exclusions as the client has now: if you set or change `gscExcludeQueries` after saving, those months are read raw and the report says so (run the backfill again with `refresh` to re-save them). Stored page rows can't have exclusions subtracted. After that, each `monthly_report` and template run saves up to two missing months and says so in its notes. A report range older than 16 months uses saved history only when every month in it is saved; otherwise a yearly report shows the available whole months, labelled, without a comparison ([details](docs/reports.md#yearly-reports)).
 
 #### Tag Manager container
 
@@ -675,6 +689,7 @@ crawlmark-cli report templates init                         # writes config/repo
 crawlmark-cli report --client example.com --format md,pdf,docx
 crawlmark-cli report --all --template quarterly --quarter 2026-Q3 --format pdf
 crawlmark-cli report --client example.com --template executive --format pdf
+crawlmark-cli report --client example.com --template yearly --year 2025 --format pdf,docx,pptx
 crawlmark-cli report templates new --client example.com    # build your own: pick sections, preview, save
 ```
 
@@ -691,7 +706,7 @@ crawlmark-cli report preview-branding --all-themes          # your branding in a
 
 Your logo, colours and fonts apply in every theme. [Themes and PowerPoint decks in docs/reports.md](docs/reports.md#themes) cover the order the theme is chosen in, the fonts, the slide plan and Google Slides.
 
-PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, layout, fonts, commentary, branding, paths and the Docs handoff.
+PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the themed Word copy there after you agree (an HTML copy is the fallback). crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, layout, fonts, commentary, branding, paths and the Docs handoff.
 
 Scheduled audits and alerts
 ---------------------------
@@ -801,7 +816,7 @@ CLI
 | `index-coverage import --client <domain> <file> [--reason <text>] [--confirm-property]` | Import an export of Search Console's Pages report (zip of CSVs, .xlsx or CSV) for `index_coverage` and the indexing report section. Local. Exit 0 imported, 1 error |
 | `seo-snapshot --client <domain>\|--all --paid [--kinds backlinks,visibility,competitors] [--dry-run]` | Store today's backlinks, visibility and competitor figures through each client's SEO data provider (paid; each client's estimate is checked against its caps first; never buys history). Exit 0 done, 2 a client failed or was over its cap, 1 error or no `--paid` |
 | `data purge --provider <ahrefs\|semrush\|dataforseo> [--client <domain>]` | Delete one provider's stored data (local only) |
-| `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format pdf,docx,html,md,pptx] [--theme <id>] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats; `--theme` sets this run's look). Exit 0 written, 2 written with a failed section or format, 1 error |
+| `report --client <domain>\|--all [--template <id>] [--year\|--month\|--quarter\|--start --end] [--format pdf,docx,html,md,pptx] [--theme <id>] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats; `--theme` sets this run's look). Exit 0 written, 2 written with a failed section or format, 1 error |
 | `report preview-branding [--client <domain>] [--all-themes]` | Render the saved branding on a sample report (sample data, no network). `--all-themes` writes a short standard-layout sample report with a contents page (2–3 pages) in each of the six themes to `<home>/branding/themes/` |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
 | `report templates new [--client <domain>] [--file global\|client] [--replace] [--dry-run]` | Build a template on a terminal: pick sections (marked free or paid, with the client's cost per run), period, comparisons and layout, see a sample-data preview and the file diff, then save, change or cancel. Exit 0 saved or cancelled, 1 error or no terminal, 130 Ctrl-C |

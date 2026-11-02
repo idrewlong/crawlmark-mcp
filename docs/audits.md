@@ -61,6 +61,8 @@ A sub-check that could not finish (fetch error, a cap reached, or the time budge
 
 `local_crawl` returns a summary (pages by status, redirects, broken links, duplicate and missing titles and descriptions, missing H1s, titles that repeat the brand, canonical issues, noindex pages, a depth histogram and the orphan count) and the top 50 findings. The crawl is saved (the newest 10 per client); `local_crawl_pages` lists its pages with their issues, and the `site_crawl` report section summarises the newest one.
 
+**Publish dates.** Since 0.5.0 a crawl records when each page says it was published, and `local_crawl_pages` shows it as `published`. The date comes only from the page's own markup: JSON-LD `datePublished` on an Article, BlogPosting, NewsArticle, TechArticle, Report or WebPage; the `article:published_time` meta tag; `<time itemprop="datePublished" datetime="…">`; or a `/YYYY/` or `/YYYY/MM/` segment in the address. crawlmark never uses a sitemap `lastmod`, `dateModified` or a `Last-Modified` header, and it makes no extra requests for dates (no WordPress REST calls, no second crawl). Crawls saved before 0.5.0 have no dates: run `crawlmark-cli crawl` again before you use the `content_by_year` report section ([Content by publish year](reports.md#content-by-publish-year)). A site without date markup gets a large "Unknown" row there.
+
 In a saved audit, every page the crawl checked is recorded, so `compare_audits` resolves a crawl finding only when the later audit's crawl fetched that page again. Duplicate and canonical-target findings resolve only after a later exhaustive crawl; an audit without `localCrawl` leaves earlier crawl findings `unverified`.
 
 ## Technical issues

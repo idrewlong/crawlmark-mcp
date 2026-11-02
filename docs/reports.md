@@ -150,7 +150,7 @@ templates:
       # - { id: gap, type: keyword_gap, optional: true, paid: true, limit: 25 }
 ```
 
-The builtin `quarterly` also has an optional paid `competitors` section (`competitor_overview`).
+The builtin `quarterly` also has an optional paid `competitors` section (`competitor_overview`). The builtin `yearly` is described under [Yearly reports](#yearly-reports).
 
 A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, with the same layout. Its `branding` fields override the global ones one by one, its `defaults` override too, and a template with the same id replaces the global one entirely. Files are read on every run, so edits apply at once. An invalid file never hides the builtin `monthly`; its errors are reported instead.
 
@@ -162,8 +162,13 @@ A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, 
 | `{ range: last_quarter }` | The last complete calendar quarter | The quarter before | The same quarter last year |
 | `{ range: last_n_days, days: 28 }` | The last N days, ending 3 days ago | The N days before | The same dates last year |
 | `{ range: custom, start: 2026-07-01, end: 2026-09-30 }` | Those dates (up to 480 days, ending at least 2 days ago) | The same length just before | The same dates last year |
+| `{ range: last_year }` | The last complete calendar year | None (see below) | The year before |
+| `{ range: year_to_date }` | January to the last complete month of this year | None | The same months last year |
+| `{ range: last_12_months }` | The 12 whole months ending with the last complete month | None | The same 12 months a year earlier |
 
-`compare` picks which comparisons to show (default both; `[]` for none). At run time, `month`, `quarter` or `startDate` + `endDate` (CLI: `--month`, `--quarter`, `--start` + `--end`) override the template's period; a month on a quarterly template makes a one-month report and its label says so.
+A year-long period (`last_year`, `year_to_date`, `last_12_months`) compares only with `previous_year`. `compare: [previous_period]` alone shows no comparison and warns. In January, when no month of the new year is complete, `year_to_date` is the last year in full and its label says so ("2025 (full year; no complete month of 2026 yet)").
+
+`compare` picks which comparisons to show (default both; `[]` for none). At run time, `year`, `month`, `quarter` or `startDate` + `endDate` (CLI: `--year`, `--month`, `--quarter`, `--start` + `--end`) override the template's period; `year: "2025"` is that calendar year against the year before, and the current year means year to date; a month on a quarterly template makes a one-month report and its label says so.
 
 ### Section types
 
@@ -194,6 +199,10 @@ A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, 
 | `competitor_overview` | **Paid** (the client's SEO data provider). The client's saved competitors first, in saved order, then the provider's suggested ones (big platforms and denylisted domains left out), each with keywords shared with the client, its own ranking keywords (with the change when last month's figures are stored) and estimated traffic, and the client's own row. A saved competitor the provider doesn't list is looked up on its own: shared keywords show "n/a" with a note | `limit` (5, up to 10), `source` (`saved_then_suggested` default, `saved`, `suggested`) |
 | `indexing_issues` | Google's indexing of a sample of the site's URLs from stored URL Inspection results: URLs checked, indexed (and the share), not indexed, canonicals Google chose differently, a share chart of Google's coverage states, the worst pages (with whether each is in a sitemap and when Google last crawled it), Search Console's sitemap errors and warnings, and the indexed share by month. Before reading, it inspects up to `maxInspections` more URLs (free, within the daily budget; see [audits.md](audits.md#indexing-coverage)). The file says it's a sample (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's Page indexing report, which the API doesn't offer, and how many sitemap URLs were checked in the last 30 days; once every sitemap URL has a recent check (run `crawlmark-cli index-coverage --all-pages` daily) it says "all N sitemap pages" instead. When an export of Search Console's Pages report was imported (`import_index_report` or `crawlmark-cli index-coverage import`), the section starts with Google's own counts from it ("From Search Console's Pages report exported on 14 Oct 2026: 128 pages not indexed and 412 indexed"), a table of reasons with example pages, and "(indexed now)" beside examples URL Inspection found indexed after the export; with an import and no inspections it shows only that. Needs a Search Console property | `maxInspections` (25, 0 to 200; 0 reads stored results only), `staleDays` (7, 1 to 90), `limit` (10 worst pages, up to 50), `trendMonths` (6, 0 to 12) |
 | `data_spend` | Paid data used this month. Operator information: optional (`spend`) in the builtin monthly, and always in the tool and CLI results | |
+| `channel_yoy` | GA4 sessions by channel against the same dates a year earlier ([Yearly reports](#yearly-reports)) | `limit` (up to 20 channels), `metric` (`sessions` default, `users`, `keyEvents`) |
+| `page_groups` | Search clicks and impressions by page type ([Yearly reports](#yearly-reports)) | `groups` (up to 12; default the client's [page groups](clients.md#page-groups)) |
+| `content_by_year` | Pages and search clicks by the year each page says it was published ([Yearly reports](#yearly-reports)) | `group` (a page-group name), `maxYears` (3 to 20), `minYear` |
+| `wins_misses` | Goals met or missed, and the biggest gains and losses ([Yearly reports](#yearly-reports)) | `limit` (10 per side), `goals` (up to 6: `metric`, `target`, `label`) |
 | `text` | Your own text | `text` |
 | `block` | A reusable text block from the file's `blocks` library (a glossary, a methodology note). It has no "Commentary" label | `block` (the block's id) |
 
@@ -206,6 +215,60 @@ Every section has an `id` and `type`, and optionally a `title`, `pageBreakBefore
 A template can set `layout: onepage` for the compact one-page layout the builtin `executive` uses (search shows only the clicks chart, movers only the gains, opportunities only the top three, and query-mover and opportunity sections sit side by side).
 
 The charts need daily rows: run_report_template adds them to the `search_overview` and `organic_traffic` data as `daily` (Search Console and GA4 `date` dimension; free, extra fields only), and stored rank points to `rank_trend` keywords as `series`. When the daily rows can't be fetched, the section still renders, without its chart.
+
+## Yearly reports
+
+The builtin `yearly` template compares last year with the year before and has the contents page on:
+
+```bash
+crawlmark-cli report --client example.com --template yearly --year 2025 --format pdf,docx,pptx
+crawlmark-cli report --client example.com --template yearly --include content-years,issues
+```
+
+Its sections are the Search Console overview (`search`), `channels`, `page-types`, `pages`, `page-movers`, `content-years` (optional), `wins` and `issues` (optional). `--include content-years,issues` adds the optional ones. Files are named after the year and go in the folder of the year's last month, for example `reports/example.com/2025-12/yearly-2025.pdf`. `--year 2025` (or `year: "2025"` in Claude) works with any template; the current year is year to date.
+
+### Search Console's 16 months
+
+Google keeps 16 months of Search Console data, so a whole year compared with the year before is out of reach unless crawlmark saved the older months. It saves the top 250 pages and top 250 queries of each month, so tables read from saved months cover those rows only (a note says so). Run this once now, for every client, while Google still has the months:
+
+```bash
+crawlmark-cli gsc-history backfill --all
+```
+
+When a range reaches back further than Google's window, crawlmark uses Google, or saved history when that goes back further, but never mixes the two to bridge a gap. If the months aren't all saved, the comparison is left out with a note naming the missing months (`Search Console: 2025 is older than Google's 16 months and the saved history doesn't cover 2025-01…2025-03; that comparison is left out.`). This also applies to custom and `last_n_days` ranges that cross the window: earlier versions could show partial days for them; now they are complete or left out.
+
+**A partly available current period.** When the current range itself starts before Google's window and some of its months aren't saved, the Search Console sections show the whole months that are available, as one unbroken run ending at the period's end, and say so in their title (for example "Search Console: Jul–Dec 2025 only"). There is no comparison for that run. Query and page movers are unavailable. Search Console goals in `wins_misses` are skipped, and the section names them. GA4 sections still cover the whole period and keep their comparison. Gaps are never bridged. `gsc-history backfill` closes gaps that are still inside Google's window; months older than that can't be recovered.
+
+### Long periods by month
+
+For a period over 100 days, daily charts show one point per month ("Clicks per month"), matched to the same month a year earlier, and the matching tables are titled "by month". A month that is only partly in the period is labelled, for example "Jan 2025 (from 15 Jan)".
+
+### Traffic by channel
+
+`channel_yoy` shows GA4 sessions (or users, or key events) per default channel group. This is all traffic, not only organic, and it always compares with the same dates a year earlier. The chart shows the top six channels and "Other channels"; the table lists the metric, the same period last year, Change, the other counts, engagement rate and a Total row. It needs GA4.
+
+### Search clicks by page type
+
+`page_groups` shows clicks and impressions per [page group](clients.md#page-groups), as a share chart and a table with last year's figures. For a range inside Google's window it sends one free Search Console request for the site total and one per group (N+1 requests for N groups), filtered by page. Search Console counts by page when you filter by page, so the groups can add up to more than the site total; the section always says so. For a range older than 16 months it reads saved history, which keeps each month's top 250 pages, and notes what percentage of clicks couldn't be assigned to a page type.
+
+### Content by publish year
+
+`content_by_year` groups pages by the year each page says it was published, newest year first. Years beyond `maxYears` are folded into a "… and earlier" row, and pages with no date are in "Unknown". It reads the newest saved local crawl, so run `crawlmark-cli crawl` first; crawls from before 0.5.0 have no dates. Only crawled pages that returned 200 and parsed count. Clicks are the page's Search Console clicks for the current range; a page with no Search Console row counts 0. The `group` option limits the table to one page group by name. A crawl older than 90 days gets a note. A site whose pages carry no date markup shows a large "Unknown" row. The date sources, and the ones that are never used, are listed under [Publish dates](audits.md#local-crawl). It needs a saved crawl and Search Console.
+
+### Wins and misses
+
+`wins_misses` shows goal tiles, a Win / Miss table and a rules line that prints the thresholds. A win or miss is one of:
+
+- A change of at least 5% and at least 20 in Search Console clicks or impressions, or in GA4 organic sessions or key events.
+- Average position moving by 1.0 or more.
+- A page that gained or lost at least 20 clicks and at least 25%; a new page with 20 or more clicks; a page that had 20 or more clicks and now has none.
+- A non-branded query entering or leaving the top 3 or the top 10, with at least 100 impressions in the period where it ranked there.
+
+`goals` (up to 6, each a `metric` of `clicks`, `impressions`, `sessions` or `keyEvents` and a `target`) are listed as met or missed, outside the `limit`. Without a comparison, only goals are shown. With neither a comparison nor goals, the section is unavailable. Sessions and key-event goals need GA4. Pages and queries come from the top 1,000 Search Console rows of each range.
+
+### Decks and the About section
+
+In a PowerPoint deck, a share chart with a long table puts the table on a "continued" slide, and a Total row is kept when a table is cut. "About this report" adds one line for each yearly section in the report.
 
 ## Cover, contents, page breaks and text blocks
 
@@ -328,6 +391,10 @@ with every hit listed (at most 5 per term per text). Rewrite those passages, mov
 
 `report templates validate` (and `validate_report_template`) run the same check on the template's own text (the template, section and block titles, the `text` sections, blocks, cover and footer) and show hits as warnings with their YAML path. `crawlmark-cli report` stops with exit 1 on them before it fetches or spends anything, since a report from cron has no commentary of its own; edit that text in the template file, or allow the term with `branding.allowTerms`.
 
+## Compatibility with 0.4.0
+
+The yearly ranges (`last_year`, `year_to_date`, `last_12_months`) and the sections `channel_yoy`, `page_groups`, `content_by_year` and `wins_misses` are new in 0.5.0. A template file that uses any of them doesn't load in crawlmark 0.4.0: the older version reports the file as invalid and falls back to the builtin templates and branding. Update crawlmark everywhere the file is used (every computer and cron host) first. Files that don't use them load in both. A crawlmark older than 0.5.0 also ignores `pageGroups` in clients.yaml.
+
 ## Compatibility with 0.3.0
 
 Themes and decks are new in 0.4.0. A template or branding file that sets `theme`, or a template file that lists `pptx` in `defaults.formats`, doesn't load in crawlmark 0.3.0 or earlier: the older version reports the file as invalid and falls back to the builtin templates and branding. Update crawlmark everywhere the file is used (every computer and cron host) before you add them. Files that don't use them load in both. Existing files, templates and stored reports render as before, because the default theme is Cards.
@@ -383,7 +450,78 @@ The `build-report-template` prompt walks through this. The rules:
 
 ## Files and formats
 
-Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `quarterly-2026-q3.html` `monthly-2026-07-01-to-2026-09-30.docx` or `monthly-2026-09.pptx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Commentary kept internal goes to `<template>-<period>.internal.md` in the same folder ([Client and internal notes](#client-and-internal-notes)); exporting the same period again without internal notes removes that file, so it never belongs to an older version of the report. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.
+Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `reports/example.com/2025-12/yearly-2025.pdf` (a calendar year), `quarterly-2026-q3.html` `monthly-2026-07-01-to-2026-09-30.docx` or `monthly-2026-09.pptx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Commentary kept internal goes to `<template>-<period>.internal.md` in the same folder ([Client and internal notes](#client-and-internal-notes)); exporting the same period again without internal notes removes that file, so it never belongs to an older version of the report. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.
+
+| Format | Notes |
+|---|---|
+| `md` | Plain Markdown. Text from Search Console is escaped, and URLs appear as code, so nothing in the data becomes a link |
+| `html` | One self-contained page: no scripts and nothing loaded from the network (the logo is embedded) |
+| `pdf` | The HTML printed by the Chrome crawlmark already uses for Lighthouse, with JavaScript and network access off. Letter by default; `paper: A4` in branding. If Chrome isn't installed, an HTML file is written in the PDF's place (unless HTML was asked for too), `warnings` gives the setup hint, and the other formats are still written |
+| `docx` | A Word document with real headings, lists, tables and native charts, built with the `docx` library for Word, Google Docs and LibreOffice |
+| `pptx` | A PowerPoint deck of 16:9 slides with native, editable charts and speaker notes ([PowerPoint decks](#powerpoint-decks)). No Chrome needed |
+
+`formats` defaults to the template file's `defaults.formats`, else **PDF only**: a report is never exported in every format unless you ask. On an interactive terminal, `crawlmark-cli report --client` without `--format` shows a list with the default ticked (PDF, Word, HTML, Markdown, PowerPoint); `--all`, `--dry-run`, `--yes`, CI and pipes use the saved default without asking, and `--format` always wins. In Claude, the report prompts ask which format(s) you want (PDF by default) and export exactly those. If the PDF can't be made (Chrome isn't installed), an HTML file is written in its place and the result's `warnings` says so; the file itself never mentions it.
+
+## PowerPoint decks
+
+Add `pptx` to the formats and the same report is also written as a `.pptx` deck: `--format pdf,pptx` on the CLI, `formats: ["pptx"]` on `export_report`, or `defaults.formats` in a template file. A deck costs no extra data. It uses the report's theme, logo, colours and fonts, and it holds the same client text as the other files, so [white label](#white-label) and [the term check](#the-term-check) apply to it as they do to a PDF.
+
+**Slide plan**, in order:
+
+1. Title: client, report title, subtitle, period and compare lines, and your logo and agency name.
+2. Agenda, when the report has contents on or four or more sections; short agendas also show each section's takeaway.
+3. Key numbers: the key-figure cards with a verdict banner. The banner is a computed line naming each key figure's change against the comparison period (for example "Clicks up 17.6% and impressions up 17.6% vs August 2026"), built from the figures alone, not from the summary; it appears only when at least one figure changed.
+4. Summary: up to 5 bullets. A summary of a single point is shown as one large statement instead.
+5. One slide per section: a chart with its commentary bullets beside it, or a table, or both on a continuation slide. A takeaway line under the title is the commentary's first sentence, or the chart's own summary. Text blocks and `text` sections get text slides (up to 6 bullets, 2 slides per block).
+6. Closing ("Thank you"), with the footer and the date.
+
+**Limits.** A deck has at most 50 slides; if the report is bigger, continuation slides go first, then text slides, then sections from the end, and `warnings` names what was left out (it is all in the full report). Tables show 8 rows (5 under a chart) and 6 columns, cells are cut at 60 characters, and a note says "Top 8 of 42 rows; the full table is in the report." A section shows 3 bullets, and bullets are cut at 140 characters; where more was left out, the slide says the detail is in the report.
+
+**Text.** Everything on a slide is condensed from the report's own client text (the commentary, summary and highlights) by fixed rules; crawlmark writes no new interpretation. The speaker notes hold the full client commentary for that slide. Speaker notes travel with the file: anyone you send the `.pptx` to can read them (in PowerPoint's notes pane, Keynote's presenter notes or Google Slides), so they hold the same client-facing text as the report and nothing else. Internal notes never reach a deck or its notes. The closing slide's notes carry the "About this report" text. Under white label the file properties name your agency, not crawlmark.
+
+**Charts** are native PowerPoint charts with their data embedded, so "Edit Data" works in PowerPoint (and LibreOffice Impress); Keynote shows the charts. The chart caption row shows the latest value for line charts, because Keynote and macOS Quick Look drop per-point labels.
+
+**Where it opens.** PowerPoint and Keynote draw the deck as designed. macOS Quick Look (the Space-bar preview) draws charts in its own style and may differ.
+
+### Google Slides
+
+crawlmark never writes to Google, so there is no export to Slides. Upload the `.pptx` to Google Drive and open it with Google Slides (or turn on "Convert uploads to Google Docs editor format" in Drive's settings). Slides imports the layout and text; charts arrive as pictures, so they are no longer editable there. Edit the data in PowerPoint first if you need to change a figure.
+
+## Google Docs
+
+crawlmark never writes to Google and has no Google Drive access. If your Claude has a Google Drive connector that can create files, the report prompts offer to save the report as a Google Doc, and only do it after you say yes. Nothing is shared and no permissions change. Without such a connector, the prompts don't mention Google Docs.
+
+- **The Word copy.** Claude asks `export_report` for `inline: "docx"` with `formats: []` (no file is written again) and passes the result to the Drive connector, which converts it to a Google Doc. The copy is the themed Word file: cover, styled tables, contents links, fonts, and header and footer. Charts become tables, and chart workbooks are left out. The logo is included only when it is 48 KB or smaller; otherwise it is left out with a warning.
+- **The size limit.** The base64 text that passes through the chat is limited to 120,000 characters (about 90 KB of file). Over the limit, the result has no `inline` but an `inlineError`, with the path of the `.docx` on your computer so you can upload it yourself. A report that is over only because of the logo is retried without the logo.
+- **The HTML fallback.** `inline: "html"` returns a plain docs-friendly HTML copy (no logo; key figures and charts as tables; green and red changes kept). Claude uses it when the Word copy is too big, when the Drive tool can't take `base64Content`, or when the upload fails.
+- **What Google Docs changes.** It keeps the theme, layout and tables, and swaps fonts it doesn't have.
+- **Manual upload.** Upload the `.docx` to Drive and open it with Google Docs, or turn on "Convert uploads to Google Docs editor format" in Drive's settings.
+- **Slides.** There is no inline route to Google Slides; upload the `.pptx` yourself ([Google Slides](#google-slides)).
+
+## In Claude
+
+```
+> Draft me a quarterly board pack for example.com with search, backlinks and the technical issues.
+  get_report_template { template: "monthly" }                          # the `catalogue` of section types
+  create_report_template { client: "example.com", id: "board", template: { title: "Quarterly board pack", period: { range: "last_quarter" }, sections: [...] } }
+  → nothing saved: the YAML, the diff of report-templates.yaml, paid sections with estimates (backlinks about $0.025 per run), a confirmToken
+> Yes, save it, paid is fine.
+  create_report_template { ...same arguments..., confirmToken: "tpl_...", paidAcknowledged: true }  → saved
+```
+
+The `build-report-template` prompt walks through this. The rules:
+
+- A call without `confirmToken` only proposes: it validates the template with the same schema as `report templates validate`, returns the template's YAML, a diff of the whole target file and the paid sections with this client's estimates, and stores a single-use token for 15 minutes. Nothing is written.
+- Saving needs the same arguments plus the token. It fails if the token is unknown, used or expired, if the arguments changed, or if the file changed since the proposal (propose again and look at the new diff).
+- A template with paid sections also needs `paidAcknowledged: true`, which Claude may pass only after you agreed to those sections by name and cost.
+- When your app supports MCP elicitation (Claude Code, for example), crawlmark also asks you directly before saving ("Save template "board" to ...? It includes 1 paid section (backlinks). Sections: ...", with any free-text section and cover text) and saves only on yes.
+- Without elicitation, the token is only a two-step the model can complete by itself: it shows that Claude made the proposal first, not that you agreed. So without elicitation crawlmark saves only simple new templates (no paid sections, no free-text `text` sections, no cover subtitle or prepared-for/by texts, not replacing a template in the file, not hiding a builtin, and no `update_report_template` changes). Anything else is refused with a pointer to `crawlmark-cli report templates new`, where you make the choices yourself. This keeps text injected into a page Claude read from reaching every client report.
+- `update_report_template` changes a template that is already in a file: the whole `template`, or a `patch` that adds sections (at the end), removes sections by id, or sets the title, description, period, comparisons, layout, `cover` or `contents`. `addSections` can add `block` sections and `pageBreakBefore`. `patch.setBlocks` adds or replaces text blocks in the file, and `patch.removeBlockIds` removes them (refused while a section still uses one, naming the section). Builtin templates aren't in a file; copy one with `create_report_template` and `replace: true`.
+- Saving text blocks always asks you to confirm in a dialog that shows each block's title, its length and its text (the first and last 200 characters of a long one), because block text goes into client reports. An app without elicitation can't save blocks through Claude: use `crawlmark-cli report templates new` or edit the YAML.
+
+## Files and formats
+
+Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `reports/example.com/2025-12/yearly-2025.pdf` (a calendar year), `quarterly-2026-q3.html` `monthly-2026-07-01-to-2026-09-30.docx` or `monthly-2026-09.pptx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Commentary kept internal goes to `<template>-<period>.internal.md` in the same folder ([Client and internal notes](#client-and-internal-notes)); exporting the same period again without internal notes removes that file, so it never belongs to an older version of the report. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.
 
 | Format | Notes |
 |---|---|
@@ -475,7 +613,3 @@ The `backlinks`, `organic_visibility` and `competitor_overview` sections (and th
 - **Source line.** Each section ends with "Source: DataForSEO" (or Ahrefs, or Semrush) and the date of the figures, also in white-label files: the providers' terms ask for attribution. If you send Ahrefs figures to clients, check that your Ahrefs plan allows sharing Ahrefs-derived metrics with them.
 - **What's kept, for how long.** Only counts are kept long-term. Ahrefs row lists (keywords, competitors, keyword ideas, the keyword gap) are cached for at most a day so asking again is free, and are purged with the rest; Ahrefs Site Audit example URLs appear only in that run's result and its stored report (24 hours, for export).
 - **Retention.** Semrush figures are deleted 31 days after they were fetched (Semrush's API terms), so Semrush clients get month-over-month but not year-over-year for backlinks. Ahrefs figures are kept for 25 months, and deleted when you remove a client, when the Ahrefs key is removed from the `.env` (or from the Claude Desktop extension's settings), or on demand with `crawlmark-cli data purge --provider ahrefs [--client example.com]`. crawlmark reads Ahrefs only through its REST API v3, never Ahrefs' hosted MCP server.
-
-## Coming in 0.5.0
-
-Yearly reports and a Google Docs handoff are planned for 0.5.0. They aren't in this version.

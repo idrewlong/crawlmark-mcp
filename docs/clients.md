@@ -132,6 +132,32 @@ Reviews come back without reviewer names, profile links, photos or review IDs, a
 - Tag Manager unavailable or no access: clients are still discovered and `list_clients` adds a note.
 - A new property doesn't show up: discovery is cached for a day. Use `list_clients` with `refresh: true` or `crawlmark-cli clients list --refresh`.
 
+### Page groups
+
+Page groups are the page types the yearly report sections use: "Search clicks by page type" and, optionally, "Content by publish year". A group is a name and a list of path prefixes, regexes, or both. A URL belongs to the first group it matches; anything else is "Other". Set them in clients.yaml, from Claude with `set_client_profile`, or in a terminal with `clients set`:
+
+```yaml
+clients:
+  example:
+    domain: example.com
+    pageGroups:
+      - name: Blog
+        prefix: ["/blog/", "/news/"]
+      - name: Products
+        regex: ["/products/[^/]+/$"]
+```
+
+```bash
+crawlmark-cli clients set example.com --page-group "Blog=/blog/,/news/" --page-group "Products=/products/"
+crawlmark-cli clients set example.com --page-group none     # back to the defaults
+```
+
+- **Defaults.** Without `pageGroups`, the groups are Home (the homepage), Blog (`/blog/`, `/news/`, `/articles/`, `/insights/`, `/resources/`), Services (`/services/`, `/service/`) and Locations (`/locations/`, `/location/`, `/areas/`, `/service-areas/`), then Other.
+- **`--page-group "Name=/prefix/,/other/"`** takes prefixes only. Repeat it for several groups, in the order they should match; the list replaces the old one. `none` restores the defaults. Regex groups can only be set in clients.yaml or with `set_client_profile`. In `set_client_profile`, `pageGroups: []` restores the defaults.
+- **Limits.** Up to 12 groups. A name is up to 40 characters, unique when case is ignored, and not "Other". Each group has up to 20 prefixes and up to 20 regexes, each up to 200 characters. A prefix starts with `/` and has no `*`. Regexes use RE2 syntax (no lookarounds or backreferences), are case-sensitive and are matched from the leading `/` of the path. All groups together must fit in 4,000 characters, which is what Search Console accepts in one page filter.
+
+Page groups apply to the `page_groups` and `content_by_year` report sections ([docs/reports.md](reports.md#yearly-reports)). A crawlmark older than 0.5.0 ignores `pageGroups` in clients.yaml.
+
 ## Competitors, tracked keywords, area and niche
 
 Add them whenever you like, with the tools, the CLI (`crawlmark-cli competitors add example.com rival.example`) or by editing the file. Each competitor is a domain string or an object with a note, source and date; tracked keywords work the same way. The tools and CLI write the object form:
