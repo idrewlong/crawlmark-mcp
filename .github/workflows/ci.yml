@@ -47,7 +47,7 @@ jobs:
         run: node scripts/smoke-pack.mjs
 
   docx:
-    name: DOCX opens in LibreOffice
+    name: DOCX and PPTX open in LibreOffice
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -57,10 +57,10 @@ jobs:
           node-version: "22.x"
           cache: npm
       - run: npm ci
-      - name: Install LibreOffice and poppler
+      - name: Install LibreOffice, poppler and xmllint
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libreoffice-writer poppler-utils
+          sudo apt-get install -y --no-install-recommends libreoffice-writer libreoffice-impress poppler-utils libxml2-utils
       - name: Write one DOCX per builtin template
         run: npx vitest run test/docx-samples.test.ts
         env:
@@ -82,3 +82,38 @@ jobs:
             [ "$words" -ge 30 ] || { echo "::error::$f came out nearly empty"; exit 1; }
             pdftotext "$pdf" - | grep -q "example.com" || { echo "::error::$f is missing the client name"; exit 1; }
           done
+      - name: Write the sample decks
+        run: npx vitest run test/pptx-samples.test.ts
+        env:
+          PPTX_SAMPLES_DIR: ${{ runner.temp }}/pptx
+      - name: Check every deck part with xmllint, convert each deck to PDF and check pages and text
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/pptx"
+          ls *.pptx
+          for f in *.pptx; do
+            d="parts/${f%.pptx}"
+            mkdir -p "$d"
+            unzip -q "$f" -d "$d"
+            find "$d" \( -name '*.xml' -o -name '*.rels' \) -print0 | xargs -0 xmllint --noout || { echo "::error::$f has XML that isn't well formed"; exit 1; }
+          done
+          soffice --headless --convert-to pdf --outdir pdf *.pptx
+          for f in *.pptx; do
+            pdf="pdf/${f%.pptx}.pdf"
+            test -s "$pdf" || { echo "::error::$f did not convert"; exit 1; }
+            pages=$(pdfinfo "$pdf" | awk '/^Pages:/ {print $2}')
+            want=$(node -e "console.log(require('./slides.json')[process.argv[1]])" "$f")
+            words=$(pdftotext "$pdf" - | wc -w)
+            echo "$f: $pages page(s) for $want slide(s), $words words"
+            [ "$pages" = "$want" ] || { echo "::error::$f has $pages page(s) for $want slide(s)"; exit 1; }
+            [ "$words" -ge 30 ] || { echo "::error::$f came out nearly empty"; exit 1; }
+            pdftotext "$pdf" - | grep -q "example.com" || { echo "::error::$f is missing the client domain"; exit 1; }
+          done
+      # The gated Chrome layout test (themes): Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs.
+      - name: Allow Chrome's sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Theme layout checks in Chrome
+        run: npx vitest run test/design-layout.test.ts
+        env:
+          CRAWLMARK_LAYOUT_CHECK: "1"
