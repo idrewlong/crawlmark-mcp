@@ -33,15 +33,26 @@ function isoDay(value: unknown, now: number): string | null {
 
 const isType = (t: unknown): boolean => (Array.isArray(t) ? t : [t]).some((x) => typeof x === "string" && PUBLISHED_TYPES.has(x.toLowerCase()));
 
-/** Breadth-first through objects and arrays (arrays are transparent), at most MAX_JSONLD_DEPTH object levels. */
+/** Values visited in one JSON-LD document (every array element and object value counts); a larger document is not read. */
+export const MAX_JSONLD_NODES = 2_000;
+
+/** Breadth-first through objects and arrays (arrays are transparent), at most MAX_JSONLD_DEPTH object levels and MAX_JSONLD_NODES values. Linear: no queue shifting. */
 function jsonLdDate(root: unknown, now: number): string | null {
   let level: unknown[] = [root];
+  let visited = 0;
   for (let depth = 1; depth <= MAX_JSONLD_DEPTH && level.length; depth++) {
     const objects: Record<string, unknown>[] = [];
-    const queue = [...level];
-    while (queue.length) {
-      const v = queue.shift();
-      if (Array.isArray(v)) queue.unshift(...v);
+    // Explicit stack of array frames keeps document order without unshift.
+    const stack: { items: readonly unknown[]; i: number }[] = [{ items: level, i: 0 }];
+    while (stack.length) {
+      const top = stack[stack.length - 1]!;
+      if (top.i >= top.items.length) {
+        stack.pop();
+        continue;
+      }
+      const v = top.items[top.i++];
+      if (++visited > MAX_JSONLD_NODES) return null;
+      if (Array.isArray(v)) stack.push({ items: v, i: 0 });
       else if (v && typeof v === "object") objects.push(v as Record<string, unknown>);
     }
     for (const o of objects) {
