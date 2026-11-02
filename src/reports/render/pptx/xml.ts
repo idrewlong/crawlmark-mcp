@@ -136,7 +136,7 @@ export function txBody(paras: string[], b: BodyStyle = {}, tag = "p:txBody"): st
   return `<${tag}><a:bodyPr wrap="${b.wrap === false ? "none" : "square"}" lIns="${emu(l)}" tIns="${emu(t)}" rIns="${emu(r)}" bIns="${emu(bo)}" rtlCol="0" anchor="${b.anchor ?? "t"}">${fit}</a:bodyPr><a:lstStyle/>${body}</${tag}>`;
 }
 
-export type Geom = "rect" | "roundRect" | "line";
+export type Geom = "rect" | "roundRect" | "ellipse" | "line";
 
 /** Preset geometry; `radius` (roundRect) is the corner adjust in 1/100000 of the short side. */
 export const geom = (g: Geom, radius?: number) => `<a:prstGeom prst="${g}"><a:avLst>${g === "roundRect" && radius !== undefined ? `<a:gd name="adj" fmla="val ${Math.round(radius)}"/>` : ""}</a:avLst></a:prstGeom>`;

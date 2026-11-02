@@ -110,7 +110,7 @@ describe("theme looks", () => {
     for (const [i, s] of deck.slides.entries()) {
       if (s.kind !== "section") continue;
       const t = texts(titleShape(await text(zip, `ppt/slides/slide${i + 1}.xml`))).join("");
-      expect(t).toBe(`${String(s.number).padStart(2, "0")}  ${s.title}`);
+      expect(t).toBe(`${String(s.number).padStart(2, "0")}  ${s.continued ? s.title.replace(" (continued)", "   continued") : s.title}`);
     }
     // other themes don't number
     const cards = await unzip(await renderDeck(deck, styleFor("cards")));
@@ -178,6 +178,7 @@ describe("escaping", () => {
     const s = deck.slides[5]!;
     if (s.kind !== "section" || !s.table) throw new Error("fixture changed");
     s.title = NASTY;
+    s.continued = false;
     s.table.rows[0]![0] = NASTY;
     const zip = await unzip(await renderDeck(deck, styleFor("cards", { logo: { mime: "image/png", data: TINY_PNG } })));
     const xml = await text(zip, "ppt/slides/slide6.xml");

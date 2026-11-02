@@ -9,7 +9,7 @@ import type { LineChart, ShareChart } from "../src/reports/render/doc.js";
 import { axisScale, deckChartXml, niceUnit } from "../src/reports/render/pptx/chart-style.js";
 import { chartPart } from "../src/reports/render/pptx/charts.js";
 import { renderDeck } from "../src/reports/render/pptx/index.js";
-import { coverBackground, coverFill, makeCtx } from "../src/reports/render/pptx/master.js";
+import { coverBackground, coverFill, makeCtx, SLIDE } from "../src/reports/render/pptx/master.js";
 import { accentInk, agendaTab, bulletHang, columnWidths, textWidth } from "../src/reports/render/pptx/slides.js";
 import type { RunStyle } from "../src/reports/render/pptx/xml.js";
 import { deckTheme } from "../src/reports/render/themes/deck-themes.js";
@@ -177,18 +177,19 @@ describe("table gutters", () => {
     const s6 = deck.slides[5]!;
     if (s6.kind === "section" && s6.table) {
       s6.table.header = ["Metric", "Change", "Rating now"];
-      s6.table.rows = [["LCP", "600 ms better", "good"]];
+      // Three rows: one- and two-row tables are drawn as record cards, not a table.
+      s6.table.rows = [["LCP", "600 ms better", "good"], ["CLS", "0.01 worse", "good"], ["INP", "20 ms better", "good"]];
       s6.table.numeric = [false, true, false];
     }
     const xml = await text(await unzip(await renderDeck(deck, styleFor("consulting"))), "ppt/slides/slide6.xml");
     const cells = xml.match(/<a:tc>.*?<\/a:tc>/g)!;
-    expect(cells.filter((c) => c.includes(`<a:pPr marL="0" indent="228600"`))).toHaveLength(2);
+    expect(cells.filter((c) => c.includes(`<a:pPr marL="0" indent="228600"`))).toHaveLength(4);
     expect(cells.find((c) => c.includes("<a:t>good</a:t>"))).toContain(`indent="228600"`);
   });
 });
 
 describe("agenda numbers", () => {
-  it("a tab stop and hanging indent at one x, so 1- and 2-digit numbers line up", async () => {
+  it("a tab stop and hanging indent at one x, so 1- and 2-digit numbers line up (7–12 items: two columns, 28 pt numbers)", async () => {
     const deck = fixtureDeck();
     const agenda = deck.slides.find((s) => s.kind === "agenda")!;
     if (agenda.kind === "agenda") agenda.items = Array.from({ length: 12 }, (_, i) => `Section ${i + 1}`);
@@ -196,7 +197,7 @@ describe("agenda numbers", () => {
     const xml = await text(zip, `ppt/slides/slide${deck.slides.indexOf(agenda) + 1}.xml`);
     const paras = xml.match(/<a:p><a:pPr[^>]*>.*?<\/a:p>/g)!.filter((p) => p.includes("Section "));
     expect(paras).toHaveLength(12);
-    const tab = agendaTab({ size: 18, bold: true, font: "Georgia", color: "#000000" });
+    const tab = agendaTab({ size: 28, bold: true, font: "Georgia", color: "#000000" });
     for (const p of paras) {
       expect(p).toContain(`marL="${Math.round(tab * 914400)}" indent="${-Math.round(tab * 914400)}"`);
       expect(p).toContain(`<a:tabLst><a:tab pos="${Math.round(tab * 914400)}" algn="l"/></a:tabLst>`);
@@ -207,23 +208,18 @@ describe("agenda numbers", () => {
 });
 
 describe("bullet panels", () => {
-  it("the dot hangs just left of the text, and the text box is inset past the panel's rule", async () => {
+  it("the side column's dot hangs just left of the text, and the text sits ≥ 0.3 in past the panel's rule", async () => {
     for (const id of THEME_IDS) {
       const zip = await unzip(await renderDeck(fixtureDeck(), styleFor(id)));
-      const xml = await text(zip, "ppt/slides/slide4.xml");
-      const hang = Math.round(bulletHang(24) * 914400);
-      expect(xml).toContain(`marL="${hang}" indent="${-hang}"`);
+      const xml = await text(zip, "ppt/slides/slide5.xml");
+      const item = /<p:sp><p:nvSpPr><p:cNvPr id="\d+" name="Side item 1"\/>.*?<\/p:sp>/.exec(xml)![0];
+      const size = Number(/ sz="(\d+)"/.exec(item)![1]) / 100;
+      const hang = Math.round(bulletHang(size) * 914400);
+      expect(item).toContain(`marL="${hang}" indent="${-hang}"`);
       expect(hang / 914400).toBeLessThan(0.3);
-      const bulletsShape = /<p:sp><p:nvSpPr><p:cNvPr id="\d+" name="Bullets"\/>.*?<\/p:sp>/.exec(xml)![0];
-      const bx = Number(/<a:off x="(\d+)"/.exec(bulletsShape)![1]) / 914400;
-      const lIns = Number(/lIns="(\d+)"/.exec(bulletsShape)![1]) / 914400;
-      expect(lIns).toBeCloseTo(bulletHang(24), 2);
+      const ix = Number(/<a:off x="(\d+)"/.exec(item)![1]) / 914400;
       const rule = deckTheme(id).callout;
-      if (rule.fill || rule.left) {
-        const panelX = 0.5;
-        // Quick Look draws the dot a whole hang left of where PowerPoint does, at the box's inset edge: still ≥ 0.25 in past the rule.
-        expect(bx - panelX - (rule.left ? rule.left.weight / 72 : 0)).toBeGreaterThanOrEqual(0.25 - 1e-6);
-      }
+      if (rule.fill || rule.left) expect(ix - SLIDE.sideX - (rule.left ? rule.left.weight / 72 : 0)).toBeGreaterThanOrEqual(0.3 - 1e-6);
     }
   });
 });

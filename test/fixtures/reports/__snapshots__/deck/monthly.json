@@ -92,7 +92,8 @@
           "detail": "from 8.2 · lower is better"
         }
       ],
-      "caption": "Change vs August 2026 (previous period)"
+      "caption": "Change vs August 2026 (previous period)",
+      "takeaway": "Clicks grew 17.6% in September."
     },
     {
       "kind": "summary",
@@ -111,6 +112,7 @@
       "title": "Search performance",
       "number": 1,
       "continued": false,
+      "takeaway": "Search held up well.",
       "chart": {
         "type": "line",
         "title": "Clicks per day",
@@ -356,20 +358,6 @@
           ]
         }
       },
-      "bullets": [
-        "Search held up well."
-      ],
-      "footnotes": [
-        "More detail in the full report."
-      ],
-      "notes": "Search held up well. Position improved."
-    },
-    {
-      "kind": "section",
-      "sectionId": "search",
-      "title": "Search performance (continued)",
-      "number": 1,
-      "continued": true,
       "table": {
         "header": [
           "Metric",
@@ -422,10 +410,47 @@
           true
         ],
         "shown": 4,
-        "total": 4
+        "total": 4,
+        "tones": [
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            "good"
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            "good"
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            "good"
+          ]
+        ]
       },
       "bullets": [],
-      "footnotes": []
+      "footnotes": [
+        "More detail in the full report."
+      ],
+      "notes": "Search held up well. Position improved."
     },
     {
       "kind": "section",
@@ -433,6 +458,7 @@
       "title": "Branded vs non-branded",
       "number": 2,
       "continued": false,
+      "takeaway": "Branded queries brought 39.5% of clicks in September 2026 (34.1% in August 2026).",
       "chart": {
         "type": "share",
         "title": "Share of clicks",
@@ -494,7 +520,25 @@
           true
         ],
         "shown": 2,
-        "total": 2
+        "total": 2,
+        "tones": [
+          [
+            null,
+            null,
+            "good",
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            "bad",
+            null,
+            null,
+            null
+          ]
+        ]
       },
       "bullets": [],
       "footnotes": [
@@ -507,6 +551,7 @@
       "title": "Organic traffic (GA4)",
       "number": 3,
       "continued": false,
+      "takeaway": "Organic sessions per day: 1,499 sessions in September 2026 against 1,274 in August 2026, from 1 Sep to 30 Sep.",
       "chart": {
         "type": "line",
         "title": "Organic sessions per day",
@@ -795,9 +840,7 @@
         }
       ],
       "bullets": [],
-      "footnotes": [
-        "More detail in the full report."
-      ]
+      "footnotes": []
     },
     {
       "kind": "section",
@@ -872,7 +915,19 @@
           true
         ],
         "shown": 7,
-        "total": 7
+        "total": 7,
+        "bar": {
+          "col": 1,
+          "values": [
+            300,
+            180,
+            120,
+            90,
+            60,
+            5,
+            4
+          ]
+        }
       },
       "bullets": [],
       "footnotes": []
@@ -935,7 +990,45 @@
           true
         ],
         "shown": 6,
-        "total": 6
+        "total": 6,
+        "tones": [
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ]
+        ]
       },
       "bullets": [],
       "footnotes": [
@@ -994,7 +1087,16 @@
           true
         ],
         "shown": 4,
-        "total": 4
+        "total": 4,
+        "bar": {
+          "col": 1,
+          "values": [
+            420,
+            200,
+            110,
+            40
+          ]
+        }
       },
       "bullets": [],
       "footnotes": []
@@ -1045,7 +1147,33 @@
           true
         ],
         "shown": 4,
-        "total": 4
+        "total": 4,
+        "tones": [
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ]
+        ]
       },
       "bullets": [],
       "footnotes": []
@@ -1090,7 +1218,15 @@
           true
         ],
         "shown": 3,
-        "total": 3
+        "total": 3,
+        "bar": {
+          "col": 1,
+          "values": [
+            700,
+            400,
+            210
+          ]
+        }
       },
       "bullets": [],
       "footnotes": []
@@ -1145,12 +1281,36 @@
           true
         ],
         "shown": 3,
-        "total": 3
+        "total": 3,
+        "tones": [
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            null
+          ]
+        ]
       },
       "bullets": [],
-      "footnotes": [
-        "More detail in the full report."
-      ]
+      "footnotes": []
     },
     {
       "kind": "section",
@@ -1186,9 +1346,7 @@
         "total": 1
       },
       "bullets": [],
-      "footnotes": [
-        "More detail in the full report."
-      ]
+      "footnotes": []
     },
     {
       "kind": "section",
@@ -1215,7 +1373,14 @@
           false
         ],
         "shown": 1,
-        "total": 1
+        "total": 1,
+        "tones": [
+          [
+            "bad",
+            null,
+            null
+          ]
+        ]
       },
       "tiles": [
         {
@@ -1248,6 +1413,7 @@
       "title": "Core Web Vitals history (real users)",
       "number": 12,
       "continued": false,
+      "takeaway": "Largest Contentful Paint for real users went from 2,900 ms to 2,300 ms over 3 weekly periods.",
       "chart": {
         "type": "line",
         "title": "LCP · Largest Contentful Paint",
@@ -1311,7 +1477,25 @@
           false
         ],
         "shown": 2,
-        "total": 2
+        "total": 2,
+        "tones": [
+          [
+            null,
+            null,
+            null,
+            "good",
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "bad",
+            "good",
+            null
+          ]
+        ]
       },
       "bullets": [],
       "footnotes": [
@@ -1348,7 +1532,19 @@
           false
         ],
         "shown": 2,
-        "total": 2
+        "total": 2,
+        "tones": [
+          [
+            "warn",
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ]
+        ]
       },
       "bullets": [],
       "footnotes": [

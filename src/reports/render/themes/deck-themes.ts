@@ -51,8 +51,16 @@ export interface DeckTheme {
     chip: boolean;
   };
   table: { headerColor: Colour; headerBold: boolean; headerCaps: boolean; headerItalic: boolean; headerRule: { color: Colour; weight: number }; zebra: Colour | null };
-  /** The bullet panel beside a chart. */
+  /** The bullet panel beside a chart, the summary banner and the key-numbers verdict. */
   callout: { fill: Colour | null; left: { color: Colour; weight: number } | null };
+  /**
+   * How content blocks sit on body slides (the brief's theme surfaces). `card`: every chart, table and record sits
+   * in a rounded card (radius in inches); null draws no panel (structure comes from rules and whitespace).
+   * `edgeBlock`: a primary block bleeding off the right edge of the agenda and key-numbers slides (bold).
+   * `labelColumn`: commentary gets a small caps label column on its left (consulting). `lead`: the summary's and
+   * text slides' first sentence is a large serif lead (editorial).
+   */
+  surface: { card: { radius: number; fill: Colour; border: Colour | null } | null; edgeBlock: boolean; labelColumn: boolean; lead: boolean };
 }
 
 /** A hairline: 0.75 pt. */
@@ -61,62 +69,68 @@ const THIN = 0.75;
 const CARDS: DeckTheme = {
   fonts: { body: "Arial", heading: "Arial" },
   background: "#f4f6f9",
-  title: { fill: "primary", panel: "full", strip: { side: "bottom", color: "accent", size: 0.1 }, titleSize: 40, titleBold: true, titleColor: "onFill", kickerColor: "onFillSoft" },
-  heading: { size: 26, bold: true, color: "primaryInk", rule: null, bar: true, pill: false, numbered: false },
-  kpi: { shape: "rounded", fill: "#ffffff", border: "#E4E7EB", topRule: null, separators: false, valueSize: 32, valueBold: true, valueColor: "ink", labelCaps: true, labelItalic: false, chip: true },
+  title: { fill: "primary", panel: "full", strip: { side: "bottom", color: "accent", size: 0.1 }, titleSize: 56, titleBold: true, titleColor: "onFill", kickerColor: "onFillSoft" },
+  heading: { size: 28, bold: true, color: "primaryInk", rule: null, bar: true, pill: false, numbered: false },
+  kpi: { shape: "rounded", fill: "#ffffff", border: "#E4E7EB", topRule: null, separators: false, valueSize: 66, valueBold: true, valueColor: "ink", labelCaps: true, labelItalic: false, chip: true },
   table: { headerColor: "muted", headerBold: true, headerCaps: true, headerItalic: false, headerRule: { color: "#CBD2D9", weight: 1 }, zebra: "#F7F8FA" },
-  callout: { fill: "warm", left: { color: "primary", weight: 3 } },
+  callout: { fill: "tint", left: null },
+  surface: { card: { radius: 0.12, fill: "#ffffff", border: "#E4E7EB" }, edgeBlock: false, labelColumn: false, lead: false },
 };
 
 const MINIMAL: DeckTheme = {
   fonts: { body: "Arial", heading: "Arial" },
   background: "#ffffff",
-  title: { fill: null, panel: null, strip: null, titleSize: 44, titleBold: false, titleColor: "ink", kickerColor: "muted" },
-  heading: { size: 26, bold: false, color: "ink", rule: { pos: "below", color: "ink", weight: THIN, width: "full" }, bar: false, pill: false, numbered: false },
-  kpi: { shape: null, fill: null, border: null, topRule: null, separators: true, valueSize: 40, valueBold: false, valueColor: "ink", labelCaps: true, labelItalic: false, chip: false },
+  title: { fill: null, panel: null, strip: null, titleSize: 60, titleBold: false, titleColor: "ink", kickerColor: "muted" },
+  heading: { size: 30, bold: false, color: "ink", rule: { pos: "below", color: "ink", weight: THIN, width: "full" }, bar: false, pill: false, numbered: false },
+  kpi: { shape: null, fill: null, border: null, topRule: null, separators: true, valueSize: 72, valueBold: false, valueColor: "ink", labelCaps: true, labelItalic: false, chip: false },
   table: { headerColor: "muted", headerBold: false, headerCaps: true, headerItalic: false, headerRule: { color: "ink", weight: THIN }, zebra: null },
-  callout: { fill: null, left: { color: "ink", weight: THIN } },
+  callout: { fill: null, left: null },
+  surface: { card: null, edgeBlock: false, labelColumn: false, lead: false },
 };
 
 const EDITORIAL: DeckTheme = {
   fonts: { body: "Georgia", heading: "Georgia" },
   background: "#ffffff",
-  title: { fill: null, panel: null, strip: { side: "top", color: "primary", size: 0.14 }, titleSize: 54, titleBold: false, titleColor: "ink", kickerColor: "primaryInk" },
-  heading: { size: 32, bold: false, color: "ink", rule: { pos: "below", color: "ink", weight: THIN, width: "full" }, bar: false, pill: false, numbered: false },
-  kpi: { shape: null, fill: null, border: null, topRule: { color: "ink", weight: 3 }, separators: false, valueSize: 40, valueBold: false, valueColor: "ink", labelCaps: false, labelItalic: true, chip: false },
+  title: { fill: null, panel: null, strip: { side: "top", color: "primary", size: 0.14 }, titleSize: 60, titleBold: false, titleColor: "ink", kickerColor: "primaryInk" },
+  heading: { size: 34, bold: false, color: "ink", rule: { pos: "below", color: "ink", weight: THIN, width: "full" }, bar: false, pill: false, numbered: false },
+  kpi: { shape: null, fill: null, border: null, topRule: { color: "ink", weight: 3 }, separators: false, valueSize: 60, valueBold: false, valueColor: "ink", labelCaps: false, labelItalic: true, chip: false },
   table: { headerColor: "muted", headerBold: false, headerCaps: false, headerItalic: true, headerRule: { color: "ink", weight: THIN }, zebra: null },
   callout: { fill: "#FAF8F3", left: null },
+  surface: { card: null, edgeBlock: false, labelColumn: false, lead: true },
 };
 
 /** Bold's heading: a short primary bar (0.6 × 0.06 in) over a full-width #DFE3E8 rule that the slide master draws. */
 const BOLD: DeckTheme = {
   fonts: { body: "Arial", heading: "Arial Black" },
   background: "#ffffff",
-  title: { fill: "dark", panel: "full", strip: { side: "bottom", color: "primary", size: 0.1 }, titleSize: 48, titleBold: true, titleColor: "onFill", kickerColor: "onFillSoft" },
-  heading: { size: 26, bold: true, color: "dark", rule: { pos: "below", color: "primary", weight: 4.32, width: 0.6 }, bar: false, pill: false, numbered: false },
-  kpi: { shape: null, fill: null, border: null, topRule: { color: "primary", weight: 4 }, separators: false, valueSize: 44, valueBold: true, valueColor: "dark", labelCaps: true, labelItalic: false, chip: true },
+  title: { fill: "dark", panel: "full", strip: { side: "bottom", color: "primary", size: 0.1 }, titleSize: 54, titleBold: true, titleColor: "onFill", kickerColor: "onFillSoft" },
+  heading: { size: 30, bold: true, color: "dark", rule: { pos: "below", color: "primary", weight: 4.32, width: 0.6 }, bar: false, pill: false, numbered: false },
+  kpi: { shape: null, fill: null, border: null, topRule: { color: "primary", weight: 4 }, separators: false, valueSize: 72, valueBold: true, valueColor: "dark", labelCaps: true, labelItalic: false, chip: true },
   table: { headerColor: "dark", headerBold: true, headerCaps: true, headerItalic: false, headerRule: { color: "dark", weight: 1.5 }, zebra: "#F7F9FB" },
   callout: { fill: "#F5F7FA", left: { color: "primary", weight: 4 } },
+  surface: { card: null, edgeBlock: true, labelColumn: false, lead: false },
 };
 
 const CONSULTING: DeckTheme = {
   fonts: { body: "Arial", heading: "Arial" },
   background: "#ffffff",
-  title: { fill: null, panel: null, strip: { side: "left", color: "primary", size: 0.28 }, titleSize: 44, titleBold: false, titleColor: "ink", kickerColor: "primaryInk" },
-  heading: { size: 26, bold: false, color: "ink", rule: { pos: "above", color: "ink", weight: THIN, width: "full" }, bar: false, pill: false, numbered: true },
-  kpi: { shape: null, fill: null, border: null, topRule: { color: "ink", weight: THIN }, separators: true, valueSize: 36, valueBold: false, valueColor: "primaryInk", labelCaps: true, labelItalic: false, chip: false },
+  title: { fill: null, panel: null, strip: { side: "left", color: "primary", size: 0.28 }, titleSize: 54, titleBold: false, titleColor: "ink", kickerColor: "primaryInk" },
+  heading: { size: 28, bold: false, color: "ink", rule: { pos: "above", color: "ink", weight: THIN, width: "full" }, bar: false, pill: false, numbered: true },
+  kpi: { shape: null, fill: null, border: null, topRule: { color: "ink", weight: THIN }, separators: true, valueSize: 60, valueBold: false, valueColor: "primaryInk", labelCaps: true, labelItalic: false, chip: false },
   table: { headerColor: "muted", headerBold: false, headerCaps: true, headerItalic: false, headerRule: { color: "ink", weight: THIN }, zebra: null },
   callout: { fill: "#F6F7F9", left: null },
+  surface: { card: null, edgeBlock: false, labelColumn: true, lead: false },
 };
 
 const FRIENDLY: DeckTheme = {
   fonts: { body: "Trebuchet MS", heading: "Trebuchet MS" },
   background: "wash",
-  title: { fill: "primary", panel: "rounded", strip: null, titleSize: 40, titleBold: true, titleColor: "onFill", kickerColor: "onFillSoft" },
-  heading: { size: 22, bold: true, color: "tintInk", rule: null, bar: false, pill: true, numbered: false },
-  kpi: { shape: "rounded", fill: "#ffffff", border: "#E3E8EF", topRule: null, separators: false, valueSize: 32, valueBold: true, valueColor: "ink", labelCaps: false, labelItalic: false, chip: true },
+  title: { fill: "primary", panel: "rounded", strip: null, titleSize: 54, titleBold: true, titleColor: "onFill", kickerColor: "onFillSoft" },
+  heading: { size: 24, bold: true, color: "tintInk", rule: null, bar: false, pill: true, numbered: false },
+  kpi: { shape: "rounded", fill: "#ffffff", border: "#E3E8EF", topRule: null, separators: false, valueSize: 60, valueBold: true, valueColor: "ink", labelCaps: false, labelItalic: false, chip: true },
   table: { headerColor: "muted", headerBold: true, headerCaps: false, headerItalic: false, headerRule: { color: "#E3E8EF", weight: THIN }, zebra: "wash" },
   callout: { fill: "warm", left: null },
+  surface: { card: { radius: 0.2, fill: "#ffffff", border: "#E3E8EF" }, edgeBlock: false, labelColumn: false, lead: false },
 };
 
 const DECK_THEMES: Record<ThemeId, DeckTheme> = { cards: CARDS, minimal: MINIMAL, editorial: EDITORIAL, bold: BOLD, consulting: CONSULTING, friendly: FRIENDLY };

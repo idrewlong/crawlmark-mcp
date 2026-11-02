@@ -26,14 +26,20 @@ export interface DeckTable {
   numeric: boolean[];
   shown: number;
   total: number;
+  /** A cell's colour from the report (a toned change or a good/bad/warn tag), row by row; absent when no cell has one. */
+  tones?: (DeckTone | null)[][];
+  /** The report's proportional bar for one numeric column (one value per shown row): drawn as in-cell bars on short tables. */
+  bar?: { col: number; values: number[] };
 }
+
+export type DeckTone = "good" | "bad" | "warn";
 
 export type DeckSlide =
   | { kind: "title"; title: string; kicker: string; subtitle?: string; domain?: string; entries: { label: string; value: string }[]; badge?: string; agencyName?: string; logo: boolean }
-  | { kind: "agenda"; title: "Agenda"; items: string[] }
-  | { kind: "kpis"; title: "Key numbers"; kpis: Kpi[]; caption?: string }
+  | { kind: "agenda"; title: "Agenda"; items: string[]; details?: string[] }
+  | { kind: "kpis"; title: "Key numbers"; kpis: Kpi[]; caption?: string; takeaway?: string }
   | { kind: "summary"; title: string; bullets: string[]; caption?: string; notes?: string }
-  | { kind: "section"; sectionId: string; title: string; number: number; continued: boolean; chart?: Chart; table?: DeckTable; tiles?: Kpi[]; bullets: string[]; footnotes: string[]; notes?: string }
+  | { kind: "section"; sectionId: string; title: string; number: number; continued: boolean; chart?: Chart; table?: DeckTable; tiles?: Kpi[]; bullets: string[]; footnotes: string[]; notes?: string; takeaway?: string }
   | { kind: "text"; sectionId: string; title: string; continued: boolean; bullets: string[]; notes?: string }
   | { kind: "closing"; title: "Thank you"; agencyName?: string; lines: string[]; logo: boolean; notes?: string };
 
@@ -125,15 +131,28 @@ const notesOf = (blocks: DocNarrativeBlock[] | undefined): { notes?: string } =>
   return t ? { notes: t } : {};
 };
 
+/** A cell's colour: the first toned run (a change), else the first good/bad/warn tag (a severity or status). */
+function cellTone(runs: Text): DeckTone | null {
+  const toned = runs.find((r) => r.tone);
+  if (toned?.tone) return toned.tone;
+  const tag = runs.find((r) => r.tag && r.tag !== "neutral");
+  return tag?.tag && tag.tag !== "neutral" ? tag.tag : null;
+}
+
 function deckTable(t: TableBlock, limit: number): DeckTable {
   const cols = Math.min(t.header.length, DECK.maxTableCols);
-  const rows = t.rows.slice(0, limit).map((r) => Array.from({ length: cols }, (_, i) => cell(plain(r[i] ?? []), DECK.maxCellChars)));
+  const src = t.rows.slice(0, limit);
+  const rows = src.map((r) => Array.from({ length: cols }, (_, i) => cell(plain(r[i] ?? []), DECK.maxCellChars)));
+  const tones = src.map((r) => Array.from({ length: cols }, (_, i) => cellTone(r[i] ?? [])));
+  const bar = t.bar && t.bar.col < cols && t.bar.values.length >= src.length ? { col: t.bar.col, values: t.bar.values.slice(0, src.length) } : undefined;
   return {
     header: t.header.slice(0, cols).map((h) => cell(h.replace(/\s+/g, " ").trim(), DECK.maxCellChars)),
     rows,
     numeric: Array.from({ length: cols }, (_, i) => t.numeric?.[i] === true),
     shown: rows.length,
     total: t.rows.length,
+    ...(tones.some((r) => r.some((c) => c !== null)) ? { tones } : {}),
+    ...(bar ? { bar } : {}),
   };
 }
 
@@ -155,7 +174,11 @@ function sectionSlides(sec: DocSection, number: number): (SectionSlide | TextSli
   const chart = blocks.find((b): b is Extract<Block, { kind: "chart" }> => b.kind === "chart")?.chart;
   const tableBlock = blocks.find((b): b is TableBlock => b.kind === "table" && b.rows.length > 0);
   const kpis = blocks.find((b): b is Extract<Block, { kind: "kpiRow" }> => b.kind === "kpiRow")?.items ?? [];
-  const N = condense(sec.commentary ?? [], DECK.maxSectionBullets);
+  // The takeaway (an action subtitle under the title): the commentary's first sentence, else the chart's own summary.
+  // Both are client text the report already shows; the sentence leaves the bullets so it isn't said twice.
+  const C = condense(sec.commentary ?? [], DECK.maxSectionBullets + 1);
+  const N = C.slice(1);
+  const takeaway = C[0] ?? (chart?.summary ? shorten(firstSentence(chart.summary.replace(/\s+/g, " ").trim()), DECK.maxBulletChars) : undefined);
   const prose = blocks.filter((b): b is Extract<Block, { kind: "paragraph" | "list" }> => b.kind === "paragraph" || b.kind === "list");
   const P =
     !chart && !tableBlock && !kpis.length
@@ -164,19 +187,20 @@ function sectionSlides(sec: DocSection, number: number): (SectionSlide | TextSli
   const sources = blocks.filter((b): b is Extract<Block, { kind: "note" }> => b.kind === "note").map((b) => plain(b.text)).filter((t) => t.startsWith("Source:"));
 
   const base = { kind: "section" as const, sectionId: sec.id, title: sec.title, number, continued: false };
+  const lead = takeaway ? { takeaway } : {};
   let first: SectionSlide;
   let cont: SectionSlide | undefined;
   let leftover = false;
   let tableNotes: string[] = [];
   let kpiShown = false;
 
-  /** The side panel: commentary bullets, else up to four KPI tiles. */
-  const side = () => (N.length ? { bullets: N, tiles: [] as Kpi[] } : { bullets: [] as string[], tiles: kpis.slice(0, 4) });
+  /** A tile row (up to four KPIs) and the commentary bullets beside the main block. */
+  const side = () => ({ bullets: N, tiles: kpis.slice(0, 4) });
   if (chart && (N.length || kpis.length)) {
     const s = side();
     kpiShown = s.tiles.length > 0;
     leftover ||= kpis.length > s.tiles.length;
-    first = { ...base, chart, ...(s.tiles.length ? { tiles: s.tiles } : {}), bullets: s.bullets, footnotes: [] };
+    first = { ...base, ...lead, chart, ...(s.tiles.length ? { tiles: s.tiles } : {}), bullets: s.bullets, footnotes: [] };
     if (tableBlock) {
       const t = deckTable(tableBlock, DECK.maxTableRows);
       cont = { ...base, title: `${sec.title} (continued)`, continued: true, table: t, bullets: [], footnotes: topNote(t) };
@@ -184,31 +208,32 @@ function sectionSlides(sec: DocSection, number: number): (SectionSlide | TextSli
   } else if (chart) {
     const t = tableBlock ? deckTable(tableBlock, DECK.maxTableRowsUnderChart) : undefined;
     tableNotes = t ? topNote(t) : [];
-    first = { ...base, chart, ...(t ? { table: t } : {}), bullets: [], footnotes: [] };
+    first = { ...base, ...lead, chart, ...(t ? { table: t } : {}), bullets: [], footnotes: [] };
   } else if (tableBlock) {
-    const t = deckTable(tableBlock, DECK.maxTableRows);
-    tableNotes = topNote(t);
     const s = side();
+    // A tile row above the table leaves room for five rows.
+    const t = deckTable(tableBlock, s.tiles.length ? DECK.maxTableRowsUnderChart : DECK.maxTableRows);
+    tableNotes = topNote(t);
     kpiShown = s.tiles.length > 0;
     leftover ||= kpis.length > s.tiles.length;
-    first = { ...base, table: t, ...(s.tiles.length ? { tiles: s.tiles } : {}), bullets: s.bullets, footnotes: [] };
+    first = { ...base, ...lead, table: t, ...(s.tiles.length ? { tiles: s.tiles } : {}), bullets: s.bullets, footnotes: [] };
   } else if (kpis.length) {
     const tiles = kpis.slice(0, 8);
     kpiShown = true;
     leftover ||= kpis.length > tiles.length;
-    first = { ...base, tiles, bullets: N, footnotes: [] };
+    first = { ...base, ...lead, tiles, bullets: N, footnotes: [] };
   } else {
     const all = [...P, ...N];
     const bullets = all.slice(0, DECK.maxSectionBullets + 2);
     leftover ||= all.length > bullets.length;
-    first = { ...base, bullets, footnotes: [] };
+    first = { ...base, ...lead, bullets, footnotes: [] };
   }
 
-  // Anything no slide shows: a second chart, table or KPI row, headings, other notes, unused text.
+  // Data no slide shows (a second chart, table or KPI row, text that didn't fit): the slide says the rest is in the
+  // report. Sub-headings and remarks (other than sources) are left out quietly, so the line isn't on every slide.
   leftover ||= blocks.filter((b) => b.kind === "chart").length > (chart ? 1 : 0);
   leftover ||= blocks.filter((b) => b.kind === "table" && b.rows.length > 0).length > (tableBlock ? 1 : 0);
   leftover ||= blocks.filter((b) => b.kind === "kpiRow").length > (kpiShown ? 1 : 0);
-  leftover ||= blocks.some((b) => b.kind === "heading" || (b.kind === "note" && !plain(b.text).startsWith("Source:")));
   leftover ||= prose.length > 0 && !P.length;
 
   first.footnotes = [...sources, ...tableNotes, ...(leftover ? [MORE_DETAIL] : [])];
@@ -249,6 +274,10 @@ function generatedAtOf(display: string): string {
 
 const isCont = (s: DeckSlide) => (s.kind === "section" || s.kind === "text") && s.continued;
 const agendaItems = (slides: DeckSlide[]) => slides.flatMap((s) => ((s.kind === "section" || s.kind === "text") && !s.continued ? [s.title] : []));
+/** The agenda's one-line descriptions (a short agenda only): each section's takeaway, "" where it has none. */
+const agendaDetails = (slides: DeckSlide[]) => slides.flatMap((s) => ((s.kind === "section" || s.kind === "text") && !s.continued ? [s.kind === "section" ? (s.takeaway ?? "") : ""] : []));
+/** Agendas up to this long are a grid of blocks with descriptions; longer ones are numbered lists. */
+export const AGENDA_GRID_MAX = 6;
 
 export function buildDeck(doc: ReportDoc): Deck {
   const b = doc.branding;
@@ -280,7 +309,9 @@ export function buildDeck(doc: ReportDoc): Deck {
     },
   ];
   if (doc.contents || agendaItems(body).length >= DECK.agendaMinSections) slides.push({ kind: "agenda", title: "Agenda", items: [] });
-  if (doc.kpis.length) slides.push({ kind: "kpis", title: "Key numbers", kpis: doc.kpis, ...(doc.kpiCaption ? { caption: doc.kpiCaption } : {}) });
+  // The key-numbers verdict: the summary's first sentence (client text; already on the summary slide in full).
+  const verdict = body.find((s): s is Extract<DeckSlide, { kind: "summary" }> => s.kind === "summary")?.bullets[0];
+  if (doc.kpis.length) slides.push({ kind: "kpis", title: "Key numbers", kpis: doc.kpis, ...(doc.kpiCaption ? { caption: doc.kpiCaption } : {}), ...(verdict ? { takeaway: verdict } : {}) });
   slides.push(...body);
   const about = doc.about.map(plain).filter(Boolean).join("\n");
   slides.push({
@@ -308,7 +339,9 @@ export function buildDeck(doc: ReportDoc): Deck {
 
   // The agenda lists the slides that remain.
   const items = agendaItems(slides);
-  const out = slides.flatMap((s): DeckSlide[] => (s.kind === "agenda" ? (items.length ? [{ ...s, items }] : []) : [s]));
+  const details = agendaDetails(slides);
+  const withDetails = items.length <= AGENDA_GRID_MAX && details.some(Boolean) ? { details } : {};
+  const out = slides.flatMap((s): DeckSlide[] => (s.kind === "agenda" ? (items.length ? [{ ...s, items, ...withDetails }] : []) : [s]));
 
   return {
     meta: {

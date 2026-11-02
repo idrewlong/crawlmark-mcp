@@ -11,8 +11,12 @@ import type { DeckTheme } from "../themes/deck-themes.js";
 import type { Colour, ThemePalette } from "../themes/palette.js";
 import { background, emu, esc, hex, para, PML_NS, rect, shape, slideNumField, spTree, sz, txBody, XML_DECL, type Box, type RunStyle } from "./xml.js";
 
-/** Slide geometry in inches (P-C4). */
-export const SLIDE = { w: 13.333, h: 7.5, margin: 0.5, titleY: 0.35, titleH: 0.8, contentY: 1.35, contentBottom: 6.75, footerY: 7.0, footerH: 0.3, mainW: 8.1, sideX: 8.85, sideW: 3.98 } as const;
+/**
+ * Slide geometry in inches (P-C4, the 0.4.0 design brief's grid): title 0.35–1.15, an optional takeaway line under
+ * it, content from `contentY` (`takeawayContentY` with a takeaway) to `contentBottom`, a source line at `sourceY`,
+ * the footer at 7.0. The main column and the side column split the content width 8.1 / 3.98 with a 0.25 gap.
+ */
+export const SLIDE = { w: 13.333, h: 7.5, margin: 0.5, titleY: 0.35, titleH: 0.8, takeawayY: 1.33, contentY: 1.45, takeawayContentY: 1.9, contentBottom: 6.62, sourceY: 6.7, footerY: 7.0, footerH: 0.3, mainW: 8.1, sideX: 8.85, sideW: 3.983 } as const;
 export const CONTENT_W = SLIDE.w - 2 * SLIDE.margin;
 
 /** Placeholder indexes shared by the master, the layouts and the slides. */
@@ -163,18 +167,20 @@ export function slideMasterXml(x: Ctx): string {
 // ---------------------------------------------------------------------------------------------------------------
 // Layouts
 
-/** Title slide geometry (inches). The content block starts right of consulting's strip. */
+/**
+ * Title slide geometry (inches): the text column on the left (right of consulting's strip, inside friendly's panel),
+ * the theme's element in the right region, the meta row pinned near the bottom.
+ */
 export function coverGeometry(x: Ctx) {
-  const left = x.t.title.strip?.side === "left" ? x.t.title.strip.size + 0.75 : x.t.title.panel === "rounded" ? 1.0 : 0.9;
-  const width = SLIDE.w - left - 0.9;
-  return { left, width, kickerY: 1.75, titleY: 2.15, titleH: 1.3, subtitleY: 3.45, lineY: 3.95, ruleY: 4.55, entriesY: 4.7, agencyY: 6.15, logo: { x: SLIDE.w - 0.9 - 2.0, y: 0.75, w: 2.0, h: 0.8 } };
+  const left = x.t.title.strip?.side === "left" ? x.t.title.strip.size + 0.75 : x.t.title.panel === "rounded" ? 1.1 : 0.9;
+  const width = 8.4 - left;
+  return { left, width, kickerY: 1.75, titleY: 2.15, titleH: 1.6, metaY: 5.55, right: { x: 8.85, y: 0.8, w: 3.95, h: 5.9 }, logo: { x: 12.83 - 2.4, y: 0.85, w: 2.4, h: 1.0 } };
 }
 
-/** The cover look: the band, panel and strip, and minimal's rule under the cover block. */
+/** The frame the cover and the closing share (the bookends): friendly's rounded panel and the theme's strip. */
 export function coverDecorations(x: Ctx, nextId: () => number): string[] {
   const out: string[] = [];
   const fill = coverFill(x);
-  const g = coverGeometry(x);
   if (fill && x.t.title.panel === "rounded") out.push(shape({ id: nextId(), name: "Cover panel", box: { x: 0.4, y: 0.4, w: SLIDE.w - 0.8, h: SLIDE.h - 0.8 }, geom: "roundRect", radius: 6000, fill, line: null }));
   const s = x.t.title.strip;
   if (s) {
@@ -182,7 +188,6 @@ export function coverDecorations(x: Ctx, nextId: () => number): string[] {
     const box: Box = s.side === "top" ? { x: 0, y: 0, w: SLIDE.w, h: s.size } : s.side === "bottom" ? { x: 0, y: SLIDE.h - s.size, w: SLIDE.w, h: s.size } : { x: 0, y: 0, w: s.size, h: SLIDE.h };
     out.push(rect(nextId(), "Cover strip", box, color));
   }
-  if (x.id === "minimal") out.push(rect(nextId(), "Cover rule", { x: g.left, y: g.ruleY, w: g.width, h: 0.75 / 72 }, NEUTRAL.ink));
   return out;
 }
 

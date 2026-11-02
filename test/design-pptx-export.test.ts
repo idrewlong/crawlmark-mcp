@@ -61,7 +61,7 @@ async function manySections(n: number): Promise<{ report: TemplateReport; narrat
   const r = await fixtureReport();
   const search = r.sections.find((s) => s.id === "search")!;
   r.sections = Array.from({ length: n }, (_, i) => ({ ...search, id: `s${i + 1}`, title: `Section ${i + 1}` }));
-  return { report: r, narrative: { sections: Object.fromEntries(r.sections.map((s) => [s.id, "Clicks rose on the service pages."])) } };
+  return { report: r, narrative: { sections: Object.fromEntries(r.sections.map((s) => [s.id, "Clicks rose on the service pages.\n\n- Keep the FAQ blocks"])) } };
 }
 
 describe("export_report pptx", () => {

@@ -93,7 +93,9 @@ describe("renderDeck package", () => {
       const xml = await text(zip, `ppt/slides/slide${i + 1}.xml`);
       const sp = (xml.match(/<p:sp>.*?<\/p:sp>/g) ?? []).find((x) => /<p:ph type="(ctrTitle|title)"/.test(x));
       expect(sp, `slide ${i + 1}`).toBeDefined();
-      expect([...sp!.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]).join("")).toBe(s.title.replace(/&/g, "&amp;"));
+      // A continuation slide's title ends in a muted "continued" tag instead of "(continued)".
+      const title = "continued" in s && s.continued ? s.title.replace(/ \(continued\)$/, "   continued") : s.title;
+      expect([...sp!.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]).join("")).toBe(title.replace(/&/g, "&amp;"));
       expect(xml.indexOf("<p:sp>")).toBe(xml.indexOf(sp!));
     }
   });

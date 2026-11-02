@@ -142,6 +142,59 @@ describe("buildDeck: the monthly fixture", () => {
   });
 });
 
+describe("buildDeck: takeaways (action subtitles)", () => {
+  const sections = (deck: { slides: DeckSlide[] }) => deck.slides.filter((s): s is Extract<DeckSlide, { kind: "section" }> => s.kind === "section");
+
+  it("a section's takeaway is its commentary's first sentence, which then isn't a bullet as well", async () => {
+    const doc = await withSections([sec("a", [{ kind: "chart", chart }], [p("Clicks rose on the service pages. Impressions followed."), { kind: "ul", items: [R("Keep the FAQ blocks"), R("Refresh the pricing post")] }])]);
+    const s = sections(buildDeck(doc))[0]!;
+    expect(s.takeaway).toBe("Clicks rose on the service pages.");
+    expect(s.bullets).toEqual(["Keep the FAQ blocks", "Refresh the pricing post"]);
+  });
+
+  it("without commentary it is the chart's own summary (first sentence); a section with neither has none", async () => {
+    const summary = { ...chart, summary: "Clicks are up for the third month in a row. Mostly from service pages." };
+    const deck = buildDeck(await withSections([sec("a", [{ kind: "chart", chart: summary }, table(3)]), sec("b", [table(3)])]));
+    const [a, b] = sections(deck);
+    expect(a!.takeaway).toBe("Clicks are up for the third month in a row.");
+    expect(b!.takeaway).toBeUndefined();
+    expect(b!.bullets).toEqual([]);
+  });
+
+  it("the key numbers verdict is the summary's first point; a short agenda carries the section takeaways as descriptions", async () => {
+    const d = await withSections([sec("a", [table(3)], [p("Alpha rose.")]), sec("b", [table(3)]), sec("c", [table(3)], [p("Gamma fell.")]), sec("d", [table(3)])]);
+    const deck = buildDeck({ ...d, summary: { title: "Summary", caption: "", narrative: [p("Clicks grew 12%. More text."), { kind: "ul", items: [R("one")] }] } });
+    const kpis = deck.slides.find((s) => s.kind === "kpis") as Extract<DeckSlide, { kind: "kpis" }>;
+    expect(kpis.takeaway).toBe("Clicks grew 12%.");
+    const agenda = deck.slides.find((s) => s.kind === "agenda") as Extract<DeckSlide, { kind: "agenda" }>;
+    expect(agenda.details).toEqual(["Alpha rose.", "", "Gamma fell.", ""]);
+    // A long agenda (a list, not a grid) has no descriptions.
+    const long = await withSections(Array.from({ length: 8 }, (_, i) => sec(`s${i}`, [table(1)], [p(`Point ${i}.`)])));
+    expect((buildDeck(long).slides.find((s) => s.kind === "agenda") as Extract<DeckSlide, { kind: "agenda" }>).details).toBeUndefined();
+  });
+
+  it("takeaways are client text only: never internal notes, and white-label wording is already applied", async () => {
+    const narrative = {
+      summary: { client: "Clicks grew 17.6% in September. Impressions followed.", internal: "SECRET-INTERNAL-NOTE summary." },
+      sections: { search: { client: "Search held up well. Position improved.", internal: "SECRET-INTERNAL-NOTE search." } },
+      internal: "SECRET-INTERNAL-NOTE general.",
+    };
+    const doc = buildReportDoc(await fixtureReport(), { ...v, branding: { hideCrawlmark: true, agencyName: "Example Agency" }, narrative });
+    const deck = buildDeck(doc);
+    const takeaways = deck.slides.flatMap((s) => (s.kind === "section" || s.kind === "kpis") && s.takeaway ? [s.takeaway] : []);
+    const details = deck.slides.flatMap((s) => (s.kind === "agenda" ? (s.details ?? []) : []));
+    expect(takeaways).toContain("Search held up well.");
+    expect(takeaways).toContain("Clicks grew 17.6% in September.");
+    for (const t of [...takeaways, ...details]) {
+      expect(t).not.toContain("SECRET-INTERNAL-NOTE");
+      expect(t).not.toMatch(/crawlmark|dataforseo|claude/i);
+    }
+    // Every takeaway is text the client's report already shows: commentary or a chart summary.
+    const docText = JSON.stringify(doc);
+    for (const t of takeaways) expect(docText).toContain(t.replace(/…$/, ""));
+  });
+});
+
 describe("buildDeck: meta", () => {
   it("author is crawlmark, or the agency name (or empty) with hideCrawlmark", async () => {
     const d = await baseDoc();
@@ -155,10 +208,11 @@ describe("buildDeck: meta", () => {
 
 describe("buildDeck: the slide plan", () => {
   it("chart + table + commentary: two slides, chart and bullets first, the table (8 rows) on the continuation", async () => {
-    const doc = await withSections([sec("a", [{ kind: "chart", chart }, table(20)], [p("One. Two."), p("Three")])]);
+    const doc = await withSections([sec("a", [{ kind: "chart", chart }, table(20)], [p("One. Two."), p("Three"), p("Four")])]);
     const slides = sectionSlides(buildDeck(doc)) as Extract<DeckSlide, { kind: "section" }>[];
     expect(slides).toHaveLength(2);
-    expect(slides[0]).toMatchObject({ continued: false, number: 1, bullets: ["One.", "Three"], notes: "One. Two.\n\nThree" });
+    // The first commentary sentence is the takeaway (under the title), not a bullet as well.
+    expect(slides[0]).toMatchObject({ continued: false, number: 1, takeaway: "One.", bullets: ["Three", "Four"], notes: "One. Two.\n\nThree\n\nFour" });
     expect(slides[0]!.chart).toBeDefined();
     expect(slides[0]!.table).toBeUndefined();
     expect(slides[1]).toMatchObject({ title: "Title a (continued)", continued: true, bullets: [] });
@@ -202,7 +256,8 @@ describe("buildDeck: the slide plan", () => {
     expect(s.table!.numeric).toEqual([false, true, true, true, true, true]);
     expect(s.table!.rows[0]![0]).toBe("x".repeat(59) + "…");
     expect(s.table!.rows[1]![1]).toBe("Gain good");
-    expect(s.bullets).toEqual(["Note."]);
+    expect(s.takeaway).toBe("Note.");
+    expect(s.bullets).toEqual([]);
     expect(s.footnotes).toEqual(["Top 8 of 10 rows; the full table is in the report."]);
   });
 
@@ -210,7 +265,8 @@ describe("buildDeck: the slide plan", () => {
     const doc = await withSections([sec("a", [{ kind: "kpiRow", items: Array.from({ length: 10 }, (_, i) => kpi(i)) }], [p("Fine.")])]);
     const s = sectionSlides(buildDeck(doc))[0] as Extract<DeckSlide, { kind: "section" }>;
     expect(s.tiles).toHaveLength(8);
-    expect(s.bullets).toEqual(["Fine."]);
+    expect(s.takeaway).toBe("Fine.");
+    expect(s.bullets).toEqual([]);
     expect(s.footnotes).toEqual([DECK_MORE]);
   });
 
@@ -231,10 +287,10 @@ describe("buildDeck: the slide plan", () => {
     expect(sectionSlides(deck)).toHaveLength(0);
   });
 
-  it("keeps a 'Source:' note as a footnote even when it is the only note", async () => {
-    const doc = await withSections([sec("a", [table(2), { kind: "note", text: R("Source: Ahrefs. Figures as of 1 Oct 2026.") }, { kind: "note", text: R("Other remark") }])]);
+  it("keeps a 'Source:' note as a footnote; other remarks and sub-headings don't add the 'more detail' line", async () => {
+    const doc = await withSections([sec("a", [table(2), { kind: "heading", level: 3, text: "Sub" }, { kind: "note", text: R("Source: Ahrefs. Figures as of 1 Oct 2026.") }, { kind: "note", text: R("Other remark") }])]);
     const s = sectionSlides(buildDeck(doc))[0] as Extract<DeckSlide, { kind: "section" }>;
-    expect(s.footnotes).toEqual(["Source: Ahrefs. Figures as of 1 Oct 2026.", DECK_MORE]);
+    expect(s.footnotes).toEqual(["Source: Ahrefs. Figures as of 1 Oct 2026."]);
   });
 
   it("summary: narrative bullets and notes, else plain item text; closing notes are the About lines", async () => {
@@ -276,7 +332,7 @@ describe("buildDeck: the 50-slide cap", () => {
   it("drops continuation slides, then text slides, then sections from the end, and rebuilds the agenda", async () => {
     // 40 chart+table sections (80 slides) and 10 two-slide text blocks (20), plus the fixed slides.
     const sections = [
-      ...Array.from({ length: 40 }, (_, i) => sec(`s${i}`, [{ kind: "chart", chart }, table(9)], [p("c")])),
+      ...Array.from({ length: 40 }, (_, i) => sec(`s${i}`, [{ kind: "chart", chart }, table(9)], [p("c."), p("d")])),
       ...Array.from({ length: 10 }, (_, i) => sec(`t${i}`, [{ kind: "rich", blocks: Array.from({ length: 9 }, (_, j) => p(`P${j}.`)) }])),
     ];
     const deck = buildDeck(await withSections(sections));
