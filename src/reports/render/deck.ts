@@ -82,6 +82,22 @@ const firstSentence = (text: string) => {
   return m ? text.slice(0, m.index) : text;
 };
 
+/**
+ * Exported for tests. The key-numbers verdict, computed only from the KPI labels and changes in the report ("Clicks up
+ * 17.6% and impressions up 17.6% vs August 2026"). It never repeats summary text; undefined when no KPI has a change.
+ */
+export function kpiVerdict(kpis: Kpi[], caption?: string): string | undefined {
+  const parts = kpis.flatMap((k, i) => {
+    if (!k.delta || k.delta.dir === "flat") return [];
+    const label = i && /^[A-Z][a-z]/.test(k.label) ? k.label[0]!.toLowerCase() + k.label.slice(1) : k.label;
+    return [/ (better|worse)$/.test(k.delta.text) ? `${label} ${k.delta.text}` : `${label} ${k.delta.dir} ${k.delta.text}`];
+  });
+  if (!parts.length) return undefined;
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0]!;
+  const vs = /^Change vs (.+?) \(/.exec(caption ?? "")?.[1];
+  return vs ? `${list} vs ${vs}` : list;
+}
+
 /** Exported for tests. Deterministic condensation of commentary into at most `max` bullets (first sentences, 140 characters). */
 export function condense(blocks: DocNarrativeBlock[], max: number): string[] {
   const out: string[] = [];
@@ -309,8 +325,7 @@ export function buildDeck(doc: ReportDoc): Deck {
     },
   ];
   if (doc.contents || agendaItems(body).length >= DECK.agendaMinSections) slides.push({ kind: "agenda", title: "Agenda", items: [] });
-  // The key-numbers verdict: the summary's first sentence (client text; already on the summary slide in full).
-  const verdict = body.find((s): s is Extract<DeckSlide, { kind: "summary" }> => s.kind === "summary")?.bullets[0];
+  const verdict = kpiVerdict(doc.kpis, doc.kpiCaption);
   if (doc.kpis.length) slides.push({ kind: "kpis", title: "Key numbers", kpis: doc.kpis, ...(doc.kpiCaption ? { caption: doc.kpiCaption } : {}), ...(verdict ? { takeaway: verdict } : {}) });
   slides.push(...body);
   const about = doc.about.map(plain).filter(Boolean).join("\n");
