@@ -468,6 +468,8 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
 
 /** The caption under the key figures: which period the chips compare with. */
 function kpiComparison(report: TemplateReport): string {
+  // C2a: Search Console covers only part of the period, so the key figures aren't compared.
+  if (report.gscPartial) return `Search Console figures: ${report.gscPartial.label} only (Google keeps 16 months); no comparison.`;
   const s = report.sections.find((x) => x.type === "search_overview" && x.status === "ok");
   const data = s && s.status === "ok" ? (s.data as { vsPreviousPeriod: { previous: unknown } | null; vsPreviousYear: { previous: unknown } | null }) : undefined;
   const pp = report.period.comparisons.previous_period;

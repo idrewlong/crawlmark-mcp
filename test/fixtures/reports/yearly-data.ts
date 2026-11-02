@@ -209,3 +209,48 @@ export function yearlyReport(over: Partial<TemplateReport> = {}): TemplateReport
   if (!over.highlights) report.highlights = computeHighlights(report);
   return report;
 }
+
+// ------------------------------------------------------------------------------------------------ partial year (C2a)
+
+export const H2_2025 = { startDate: "2025-07-01", endDate: "2025-12-31" };
+export const PARTIAL_LABEL = "Jul–Dec 2025";
+export const PARTIAL_NOTE =
+  "Search Console: Jul–Dec 2025 only. Google keeps 16 months of data and the saved history doesn't cover 2025-01…2025-06, so Search Console figures cover Jul–Dec 2025 and aren't compared with an earlier period.";
+
+/**
+ * Y0b (C2a): the builtin `yearly` template's report for 2025 run on 2026-11-01 with nothing saved before 2025-07: the
+ * Search Console sections cover Jul–Dec 2025 only (labelled, no comparison), page movers are unavailable, wins and
+ * misses keeps its GA4 goal and skips the Search Console one; GA4 (channels) keeps all of 2025 against 2024.
+ */
+export function partialYearReport(over: Partial<TemplateReport> = {}): TemplateReport {
+  const gscRange = { range: H2_2025, label: PARTIAL_LABEL };
+  const labelled = (id: string, type: keyof typeof SECTION_TITLES, data: unknown): SectionResult => ({ id, type, title: SECTION_TITLES[type], gscRange, status: "ok", data });
+  const cur = d.gscTotals(null, H2_2025);
+  const search: SearchOverviewData = { metrics: ["clicks", "impressions", "ctr", "position"], current: cur, vsPreviousPeriod: null, vsPreviousYear: null, daily: { current: daily(H2_2025), previous: null, comparedWith: null } };
+  const pageGroups: PageGroupsData = { ...PAGE_GROUPS, comparedWith: null, rows: PAGE_GROUPS.rows.map((r) => ({ ...r, previous: null, change: null })) };
+  const wins: WinsMissesData = {
+    comparedWith: null,
+    goals: [{ kind: "miss", rule: "goal", text: "Goal missed: sessions 1,500 of 2,000 (75%)", metric: "sessions", current: 1500, previous: null, target: 2000 }],
+    wins: [],
+    misses: [],
+    skippedGoals: ["Search clicks"],
+    gscSkippedGoals: ["Search clicks"],
+  };
+  const sections: SectionResult[] = [
+    labelled("search", "search_overview", search),
+    ok("channels", "channel_yoy", CHANNEL_YOY),
+    labelled("page-types", "page_groups", pageGroups),
+    labelled("pages", "top_pages", { rows: pageRows(H2_2025).slice(0, 15) } satisfies TopRowsData),
+    { id: "page-movers", type: "page_movers", title: SECTION_TITLES.page_movers, gscRange, status: "unavailable", reason: "Search Console covers only Jul–Dec 2025 of this period, so there's nothing to compare with (Google keeps 16 months)" },
+    labelled("content-years", "content_by_year", CONTENT_BY_YEAR),
+    labelled("wins", "wins_misses", wins),
+  ];
+  return yearlyReport({
+    reportId: `rpt_01JPARTIAL${"0".repeat(16)}`,
+    generatedAt: "2026-11-01T09:00:00.000Z",
+    sections,
+    notes: [PARTIAL_NOTE],
+    gscPartial: { range: H2_2025, requested: YEAR_2025, label: PARTIAL_LABEL, source: "google", missing: ["2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06"] },
+    ...over,
+  });
+}

@@ -217,6 +217,20 @@ export function resolvePeriod(period: Period, compare: readonly Comparison[], ov
 }
 
 /**
+ * Release 0.5.0 (C2a): the name of a part of a period, by months only, so it can't read like a whole period: "Dec 2025"
+ * (one month), "Jul–Dec 2025" (one year), "Nov 2025 – Oct 2026" (across years), or `rangeLabel` ("1 Jul – 28 Oct 2026")
+ * when the range isn't whole months. Never a quarter or a year name.
+ */
+export function monthSpanLabel(r: DateRange): string {
+  const n = wholeMonthCount(r);
+  if (n === null || n < 1) return rangeLabel(r);
+  const [sy, sm] = [r.startDate.slice(0, 4), MONTHS[Number(r.startDate.slice(5, 7)) - 1]];
+  const [ey, em] = [r.endDate.slice(0, 4), MONTHS[Number(r.endDate.slice(5, 7)) - 1]];
+  if (n === 1) return `${em} ${ey}`;
+  return sy === ey ? `${sm}–${em} ${ey}` : `${sm} ${sy} – ${em} ${ey}`;
+}
+
+/**
  * A period's name for sentences: "August 2026", "Q2 2026", "2025" (a calendar year), "Jan–Oct 2026" or
  * "Nov 2025 – Oct 2026" (4 to 24 whole months), else "1 Jul – 30 Sep 2025".
  */

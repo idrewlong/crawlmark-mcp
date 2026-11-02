@@ -16,13 +16,19 @@ import type { YearlyCtx } from "./context.js";
 const DEFAULT_LIMIT = 5;
 const ROW_LIMIT = 1000;
 const GA4_METRICS = new Set<GoalMetric>(["sessions", "keyEvents"]);
+const GSC_METRICS = new Set<GoalMetric>(["clicks", "impressions"]);
 
 const asRow = (t: PeriodTotals): GscRow => ({ keys: [], clicks: t.clicks, impressions: t.impressions, ctr: t.ctr, position: t.position });
 
 export async function winsMissesSection(s: Extract<SectionSpec, { type: "wins_misses" }>, ctx: YearlyCtx): Promise<WinsMissesData> {
-  const goals = s.goals ?? [];
   const limit = s.limit ?? DEFAULT_LIMIT;
-  const current = ctx.period.current;
+  // Search Console reads its own range (the labelled partial range on C2a); GA4 always the whole period.
+  const current = ctx.gscPeriod.current;
+  const ga4Current = ctx.period.current;
+  // C2a: on a labelled partial range, Search Console goals are left out (a whole-period target against part of the
+  // period would read as a miss); GA4 goals still run on the whole period.
+  const gscSkipped = ctx.gscPartial ? (s.goals ?? []).filter((g) => GSC_METRICS.has(g.metric)).map((g) => g.label ?? g.metric) : [];
+  const goals = ctx.gscPartial ? (s.goals ?? []).filter((g) => !GSC_METRICS.has(g.metric)) : (s.goals ?? []);
   // Year over year first, else the previous period; only comparisons Search Console can answer in full.
   const cmp: { which: Comparison; range: DateRange } | undefined = ctx.gscPeriod.comparisons.previous_year
     ? { which: "previous_year", range: ctx.gscPeriod.comparisons.previous_year }
@@ -41,7 +47,7 @@ export async function winsMissesSection(s: Extract<SectionSpec, { type: "wins_mi
   if (needsGa4 && ctx.client.ga4PropertyId) {
     const read = (r: DateRange) => ctx.once(`g:${r.startDate}:${r.endDate}`, () => ctx.deps.ga4OrganicSummary(ctx.client, r));
     try {
-      const [c, p] = await Promise.all([read(current), cmp ? read(cmp.range) : Promise.resolve(null)]);
+      const [c, p] = await Promise.all([read(ga4Current), cmp ? read(cmp.range) : Promise.resolve(null)]);
       ga4 = { cur: c, prev: p };
     } catch {
       ctx.note("Google Analytics couldn't be read, so session and key-event figures are left out.");
@@ -64,5 +70,6 @@ export async function winsMissesSection(s: Extract<SectionSpec, { type: "wins_mi
     limit,
     isBranded: (q) => isBranded(q, ctx.client),
   });
+  if (gscSkipped.length) return { comparedWith: cmp?.which ?? null, ...result, skippedGoals: [...gscSkipped, ...result.skippedGoals], gscSkippedGoals: gscSkipped };
   return { comparedWith: cmp?.which ?? null, ...result };
 }

@@ -151,6 +151,11 @@ export function keyFigures(report: TemplateReport): Kpi[] {
   const s = report.sections.find((x) => x.type === "search_overview" && x.status === "ok");
   if (!s || s.status !== "ok") return [];
   const data = s.data as SearchOverviewData;
+  // C2a: a labelled partial range has no comparison; each tile says which months it covers.
+  const partial = report.gscPartial?.label;
+  if (partial) {
+    return (["clicks", "impressions", "ctr", "position"] as const).map((m) => ({ label: METRIC_LABEL[m], value: metricValue(m, data.current[m]), detail: m === "position" ? `${partial} only · lower is better` : `${partial} only` }));
+  }
   const vs = data.vsPreviousPeriod?.previous ? data.vsPreviousPeriod : data.vsPreviousYear?.previous ? data.vsPreviousYear : null;
   const prev = vs?.previous;
   return (["clicks", "impressions", "ctr", "position"] as const).map((m) => {
@@ -252,6 +257,17 @@ function dailyChart(title: string, label: string, cur: { date: string; v: number
 // ---- Mappers ----
 
 type Mapper = (data: never, report: TemplateReport, ctx: MapContext) => Block[];
+
+/**
+ * The current period's name for Search Console figures: the labelled partial range when Search Console covers only part
+ * of the period (C2a, "Jul–Dec 2025"), else the period's name.
+ */
+export const gscName = (report: TemplateReport) => report.gscPartial?.label ?? periodName(report.period.current);
+
+/** C2a: the first block of a Search Console section on a labelled partial range (a deck footnote: it starts with "Source:"). */
+export const partialSourceNote = (label: string) => `Source: Search Console, ${label} only (Google keeps 16 months, and earlier months weren't saved). Not compared with an earlier period.`;
+/** C2a: why the wins and misses section has no Search Console goals. */
+export const partialGoalsNote = (label: string) => `Search Console goals are left out: Search Console covers only ${label} of this period.`;
 
 const vsLabel = (report: TemplateReport, which: "previous_period" | "previous_year" | null) => {
   const r = which ? report.period.comparisons[which] : undefined;
@@ -602,7 +618,7 @@ export const PAGE_FILTER_NOTE = "Search Console counts by page when you filter b
 function pageGroupsBlocks(data: PageGroupsData, report: TemplateReport): Block[] {
   const any = (r: PageGroupsData["rows"][number]) => r.clicks > 0 || r.impressions > 0 || (r.previous !== null && (r.previous.clicks > 0 || r.previous.impressions > 0));
   if (!data.rows.some(any)) return [];
-  const cur = periodName(report.period.current);
+  const cur = gscName(report);
   const prev = data.comparedWith ? vsLabel(report, data.comparedWith) : "";
   const hasPrev = Boolean(prev) && data.rows.some((r) => r.previous !== null);
   const total = data.rows.reduce((s, r) => s + r.clicks, 0);
@@ -694,7 +710,7 @@ function ruleText(s: string, domain: string): Text {
   return out;
 }
 
-function winsMissesBlocks(data: WinsMissesData, ctx: MapContext): Block[] {
+function winsMissesBlocks(data: WinsMissesData, report: TemplateReport, ctx: MapContext): Block[] {
   const items = [...data.wins, ...data.misses];
   if (!data.goals.length && !items.length && !data.comparedWith && !data.skippedGoals.length) return [];
   const blocks: Block[] = [];
@@ -717,7 +733,14 @@ function winsMissesBlocks(data: WinsMissesData, ctx: MapContext): Block[] {
       numeric: [false, false, true, true],
     });
   } else if (data.comparedWith) blocks.push({ kind: "paragraph", text: [t("No change passed the thresholds this time.")] });
-  if (data.skippedGoals.length) blocks.push({ kind: "note", text: [t(`Goals not checked (their data isn't in this report): ${data.skippedGoals.join(", ")}.`)] });
+  // C2a: Search Console goals left out on a labelled partial range get their own note, not the generic one.
+  const other = [...data.skippedGoals];
+  for (const g of data.gscSkippedGoals ?? []) {
+    const i = other.indexOf(g);
+    if (i >= 0) other.splice(i, 1);
+  }
+  if (other.length) blocks.push({ kind: "note", text: [t(`Goals not checked (their data isn't in this report): ${other.join(", ")}.`)] });
+  if (data.gscSkippedGoals?.length) blocks.push({ kind: "note", text: [t(partialGoalsNote(gscName(report)))] });
   if (data.comparedWith) blocks.push({ kind: "note", text: [t(WINS_RULES_NOTE)] });
   return blocks;
 }
@@ -734,13 +757,15 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
   competitor_overview: (data: CompetitorOverviewData, report, ctx) => competitorBlocks(data, report, ctx),
   search_overview: (data: SearchOverviewData, report, ctx) => {
     const blocks: Block[] = [];
-    const cur = periodName(report.period.current);
+    const cur = gscName(report);
     const daily = data.daily;
+    // C2a: on a labelled partial range the chart titles carry the label.
+    const titled = (title: string) => (report.gscPartial ? `${title}, ${report.gscPartial.label}` : title);
     if (daily && daily.current.length >= 2) {
       const prevName = daily.comparedWith ? vsLabel(report, daily.comparedWith) : "";
-      const clicks = dailyChart("Clicks per day", "Clicks", daily.current.map((p) => ({ date: p.date, v: p.clicks })), daily.previous?.map((p) => ({ date: p.date, v: p.clicks })) ?? null, cur, prevName, daily.comparedWith);
+      const clicks = dailyChart(titled("Clicks per day"), "Clicks", daily.current.map((p) => ({ date: p.date, v: p.clicks })), daily.previous?.map((p) => ({ date: p.date, v: p.clicks })) ?? null, cur, prevName, daily.comparedWith);
       if (ctx.onepage) return [{ kind: "chart", chart: clicks }];
-      const impressions = dailyChart("Impressions per day", "Impressions", daily.current.map((p) => ({ date: p.date, v: p.impressions })), daily.previous?.map((p) => ({ date: p.date, v: p.impressions })) ?? null, cur, prevName, daily.comparedWith);
+      const impressions = dailyChart(titled("Impressions per day"), "Impressions", daily.current.map((p) => ({ date: p.date, v: p.impressions })), daily.previous?.map((p) => ({ date: p.date, v: p.impressions })) ?? null, cur, prevName, daily.comparedWith);
       blocks.push({ kind: "columns", columns: [[{ kind: "chart", chart: clicks }], [{ kind: "chart", chart: impressions }]] });
     }
     // One page shows only the clicks chart; without the daily rows (a failed or short daily fetch) it says so in one line.
@@ -748,7 +773,8 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     // A comparison column only when that period has data; otherwise one note (unless the fetch failure already has one).
     const usable = (which: "previous_period" | "previous_year", vs: ComparedTotals | null) => {
       const r = report.period.comparisons[which];
-      if (!r) return null;
+      // C2a: no Search Console comparison at all on a labelled partial range (its Source note says so).
+      if (!r || report.gscPartial) return null;
       if (vs?.previous && vs.previous.impressions > 0) return { name: periodName(r), vs };
       if (!report.notes.some((n) => n.includes(`the ${which === "previous_period" ? "previous period" : "previous year"} comparison couldn't be fetched`))) {
         ctx.note(`Search Console has no data for ${periodName(r)}, so that comparison is left out.`);
@@ -765,7 +791,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
   branded_split: (data: BrandedSplitData, report, ctx) => {
     const prev = vsLabel(report, data.comparedWith);
     const hasPrev = Boolean(prev) && data.branded.previous.clicks + data.nonBranded.previous.clicks > 0;
-    const cur = periodName(report.period.current);
+    const cur = gscName(report);
     const share = data.brandedShareOfClicks;
     const blocks: Block[] = [];
     if (share.current !== null) {
@@ -1406,7 +1432,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
   channel_yoy: (data: ChannelYoyData) => channelYoyBlocks(data),
   page_groups: (data: PageGroupsData, report) => pageGroupsBlocks(data, report),
   content_by_year: (data: ContentByYearData) => contentByYearBlocks(data),
-  wins_misses: (data: WinsMissesData, _r, ctx) => winsMissesBlocks(data, ctx),
+  wins_misses: (data: WinsMissesData, report, ctx) => winsMissesBlocks(data, report, ctx),
 };
 
 /**
@@ -1483,6 +1509,8 @@ export function sectionBlocks(s: SectionResult, report: TemplateReport, ctx: Map
   if (s.status !== "ok") return [];
   const mapper = SECTION_MAPPERS[s.type];
   if (!mapper) return [{ kind: "note", text: [t(`${s.title}: this version can't render "${s.type}" sections.`)] }];
-  if (!ctx.hideProviders) return mapper(s.data as never, report, ctx);
-  return scrubBlocks(mapper(scrubProviderData(s.data) as never, report, ctx));
+  const blocks = ctx.hideProviders ? scrubBlocks(mapper(scrubProviderData(s.data) as never, report, ctx)) : mapper(s.data as never, report, ctx);
+  // C2a: a Search Console section on a labelled partial range opens with its source and range.
+  if (s.gscRange && blocks.length) return [{ kind: "note", text: [t(partialSourceNote(s.gscRange.label))] }, ...blocks];
+  return blocks;
 }

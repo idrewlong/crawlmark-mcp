@@ -89,14 +89,15 @@ export async function pageGroupsSection(s: Extract<SectionSpec, { type: "page_gr
   const groupsSource: PageGroupsData["groupsSource"] = fromTemplate ? "template" : ctx.client.pageGroupsSource === "yaml" ? "yaml" : "default";
   const names = [...groups.map((g) => g.name.trim()), OTHER_GROUP];
 
-  // Search Console's first comparison, as the other Search Console sections use it (period before year).
+  // Search Console's range and first comparison, as the other Search Console sections use them (period before year);
+  // on a labelled partial range (C2a) that is the partial range with no comparison.
   const cmp: { which: Comparison; range: DateRange } | undefined = ctx.gscPeriod.comparisons.previous_period
     ? { which: "previous_period", range: ctx.gscPeriod.comparisons.previous_period }
     : ctx.gscPeriod.comparisons.previous_year
       ? { which: "previous_year", range: ctx.gscPeriod.comparisons.previous_year }
       : undefined;
 
-  const [cur, prev] = await Promise.all([readRange(ctx, ctx.period.current, groups), cmp ? readRange(ctx, cmp.range, groups) : Promise.resolve(undefined)]);
+  const [cur, prev] = await Promise.all([readRange(ctx, ctx.gscPeriod.current, groups), cmp ? readRange(ctx, cmp.range, groups) : Promise.resolve(undefined)]);
 
   const total = cur.aggs.reduce((a, r) => a + r.clicks, 0);
   const rows: PageGroupRow[] = cur.aggs.map((a, i) => {

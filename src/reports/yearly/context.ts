@@ -6,7 +6,7 @@
  */
 import type { Client } from "../../lib/clients.js";
 import type { DateRange } from "../../lib/dates.js";
-import type { GscCoverage } from "../../lib/gsc-coverage.js";
+import type { GscCoverage, GscPartial } from "../../lib/gsc-coverage.js";
 import type { PeriodTotals } from "../report-types.js";
 import type { ResolvedPeriod } from "../templates/period.js";
 import type { RunDeps } from "../templates/run.js";
@@ -18,8 +18,17 @@ export interface YearlyCtx {
   today: Date;
   /** The period as resolved, with every comparison the template asked for (GA4 uses it). */
   period: ResolvedPeriod;
-  /** The same period with only the comparisons Search Console can answer in full (the coverage guard, C2). */
+  /**
+   * The period as Search Console sees it: only the comparisons it can answer in full (the coverage guard, C2), and on a
+   * labelled partial range (C2a) the partial range as `current` with no comparison. Search Console reads use
+   * `gscPeriod.current`, never `period.current`.
+   */
   gscPeriod: ResolvedPeriod;
+  /**
+   * C2a: set when Search Console covers only part of the period (its label is "Jul–Dec 2025"); null otherwise. runTemplate
+   * always sets it; optional so a hand-built context (the section tests) means "Search Console covers the period".
+   */
+  gscPartial?: GscPartial | null;
   /** Search Console coverage of a range on the run's clock: "google", "stored" (saved monthly history) or incomplete. */
   coverage(r: DateRange): GscCoverage;
   /** The run's memo: one fetch per key across every section (yearly keys use their own prefixes, e.g. `wp:` / `wq:`). */

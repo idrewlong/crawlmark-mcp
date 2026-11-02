@@ -65,7 +65,8 @@ export async function contentByYear(s: Extract<SectionSpec, { type: "content_by_
   const considered = wanted === undefined ? counted : counted.filter((p) => groupOf(p.url, client.pageGroups).toLowerCase() === wanted);
 
   // Search Console clicks for the current range, joined by address. Stored history answers this itself when it covers the range.
-  const cur = ctx.period.current;
+  // On a labelled partial range (C2a) that is the partial range.
+  const cur = ctx.gscPeriod.current;
   const gscRows = considered.length
     ? await ctx.once(`cby:pages:${cur.startDate}:${cur.endDate}`, () => ctx.deps.gscQuery(client, { ...cur, dimensions: ["page"], rowLimit: PAGE_ROW_LIMIT }))
     : [];

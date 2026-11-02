@@ -10,7 +10,7 @@ import { markBranded } from "../../analysis/branded.js";
 import { isBranded } from "../../lib/brand.js";
 import { cacheKey, peekCache, putCache, TTL } from "../../lib/cache.js";
 import { fillDays, type DateRange } from "../../lib/dates.js";
-import { coverageNote, gscRangeCoverage, type GscCoverage } from "../../lib/gsc-coverage.js";
+import { coverageNote, gscPartialRange, gscRangeCoverage, partialNoComparisonReason, partialNote, type GscCoverage, type GscPartial } from "../../lib/gsc-coverage.js";
 import { GoogleNotConfiguredError } from "../../lib/google-auth.js";
 import { ProviderUnavailableError } from "../../lib/provider-ids.js";
 import { BudgetExceededError } from "../../lib/budget.js";
@@ -113,6 +113,8 @@ export interface RunDeps {
   ga4ChannelReport?(client: Client, range: DateRange): Promise<{ channel: string; sessions: number; users: number; engagedSessions: number; keyEvents: number }[]>;
   /** Release 0.5.0 (C2): Search Console coverage of a range (optional: without it, gscRangeCoverage on the run's clock). */
   gscStoredCoverage?(client: Client, range: DateRange): GscCoverage;
+  /** Release 0.5.0 (C2a): the labelled partial range for an incomplete current range (optional: without it, gscPartialRange on the run's clock). */
+  gscPartialRange?(client: Client, range: DateRange): GscPartial | null;
   opportunitiesForMonth(client: Client, range: DateRange, n: number): Promise<OpportunityLists>;
   latestAudit(client: string): StoredAudit | undefined;
   latestAuditBefore(client: string, beforeMs: number): StoredAudit | undefined;
@@ -451,6 +453,10 @@ export class SectionUnavailableError extends Error {
 
 const GSC_TYPES = new Set(["search_overview", "branded_split", "top_queries", "query_movers", "top_pages", "page_movers", "tracked_keywords", "opportunities", "indexing_issues", "page_groups", "content_by_year", "wins_misses"]);
 const GA4_TYPES = new Set(["organic_traffic", "landing_pages", "channel_yoy"]);
+/** C2a: the Search Console sections that read the period's range (indexing_issues is URL Inspection, not period-based). */
+const GSC_RANGE_TYPES = new Set([...GSC_TYPES].filter((t) => t !== "indexing_issues"));
+/** C2a: the Search Console sections that need a comparison, unavailable on a labelled partial range. */
+const GSC_COMPARISON_TYPES = new Set(["query_movers", "page_movers"]);
 
 /** C2: the note for a range Search Console data comes from saved monthly history. */
 const storedHistoryNote = (r: DateRange) =>
@@ -590,12 +596,22 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       } else if (cov.source === "stored") note(storedHistoryNote(r));
     }
   }
-  const gscPeriod: ResolvedPeriod = { ...period, comparisons: gscComparisons };
+  // C2a (C-D6): a current range Search Console can't answer in full shows its available whole months, labelled, with no
+  // comparison at all; with no such month its sections stay unavailable (C2).
+  const partial: GscPartial | null =
+    usesGsc && !curCoverage.complete ? (deps.gscPartialRange ? deps.gscPartialRange(client, cur) : gscPartialRange(client, cur, now)) : null;
+  if (partial) {
+    note(partialNote(partial));
+    if (partial.source === "stored") note(storedHistoryNote(partial.range));
+  }
+  /** The range Search Console sections read: the period's, or the labelled partial range (C2a). */
+  const gscCur = partial ? partial.range : cur;
+  const gscPeriod: ResolvedPeriod = partial ? { ...period, current: partial.range, comparisons: {} } : { ...period, comparisons: gscComparisons };
   /** The first comparison for GA4 and Bing sections. */
   const prim = primary(period);
   /** The first comparison Search Console can answer in full, for Search Console sections. */
   const gscPrim = primary(gscPeriod);
-  const yearlyCtx: YearlyCtx = { client, deps, today: opts.today ?? new Date(), period, gscPeriod, coverage, once, totals, note };
+  const yearlyCtx: YearlyCtx = { client, deps, today: opts.today ?? new Date(), period, gscPeriod, gscPartial: partial, coverage, once, totals, note };
 
   // Daily series for the report files' charts (free). Extra data only: a failure leaves the chart out, never the section.
   // Search Console and GA4 leave out days with nothing: every day between the first and last reported day gets a
@@ -609,8 +625,9 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   const searchDaily = async (): Promise<SearchOverviewData["daily"]> => {
     // Saved monthly history has no days: a range served from it gets no daily series (C2).
     if (curCoverage.complete && curCoverage.source === "stored") return undefined;
+    if (partial?.source === "stored") return undefined;
     try {
-      const current = byDate(await daysOf(cur), cur);
+      const current = byDate(await daysOf(gscCur), gscCur);
       if (current.length < 2) return undefined;
       const prevCov = gscPrim ? compCoverage[gscPrim.which] : undefined;
       const prevDays = !prevCov || (prevCov.complete && prevCov.source === "google");
@@ -640,7 +657,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
 
   const fetchers: Record<SectionSpec["type"], (s: never) => Promise<unknown>> = {
     search_overview: async (s: Extract<SectionSpec, { type: "search_overview" }>): Promise<SearchOverviewData> => {
-      const c = await totals(cur);
+      const c = await totals(gscCur);
       const exclusionNote = gscExclusionNote(c.excluded);
       if (exclusionNote) note(exclusionNote);
       for (const n of c.notes ?? []) note(n);
@@ -669,7 +686,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       };
     },
     branded_split: async (): Promise<BrandedSplitData> => {
-      const qc = await queries(cur);
+      const qc = await queries(gscCur);
       const qp = gscPrim ? await queries(gscPrim.range) : [];
       return { comparedWith: gscPrim?.which ?? null, ...brandedSplitFor(client, qc, qp) };
     },
@@ -685,7 +702,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       return { metrics, comparedWith: prim!.which, ...organicTrafficCompare(c, p), previous: { sessions: p.sessions, users: p.users, engagementRate: p.engagementRate, keyEvents: p.keyEvents }, ...extra };
     },
     top_queries: async (s: Extract<SectionSpec, { type: "top_queries" }>): Promise<TopRowsData> => {
-      const rows = markBranded(await queries(cur), client);
+      const rows = markBranded(await queries(gscCur), client);
       const kept = s.includeBranded === false ? rows.filter((r) => !r.branded) : rows;
       if (s.intent === "local") {
         const local = kept.filter((r) => isLocalIntent(r.keys[0] ?? "", client.area));
@@ -695,17 +712,17 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
     },
     query_movers: async (s: Extract<SectionSpec, { type: "query_movers" }>): Promise<MoversData> => {
       if (!gscPrim) throw new SectionUnavailableError(prim ? "Search Console can't cover the comparison period" : "the template has no comparison period");
-      const m = movers(await queries(cur), await queries(gscPrim.range), s.limit ?? 10, (q) => isBranded(q, client));
+      const m = movers(await queries(gscCur), await queries(gscPrim.range), s.limit ?? 10, (q) => isBranded(q, client));
       return { comparedWith: gscPrim.which, ...m };
     },
     page_movers: async (s: Extract<SectionSpec, { type: "page_movers" }>): Promise<MoversData> => {
       if (!gscPrim) throw new SectionUnavailableError(prim ? "Search Console can't cover the comparison period" : "the template has no comparison period");
-      return { comparedWith: gscPrim.which, ...movers(await pages(cur), await pages(gscPrim.range), s.limit ?? 10) };
+      return { comparedWith: gscPrim.which, ...movers(await pages(gscCur), await pages(gscPrim.range), s.limit ?? 10) };
     },
-    top_pages: async (s: Extract<SectionSpec, { type: "top_pages" }>): Promise<TopRowsData> => ({ rows: (await pages(cur)).slice(0, s.limit ?? 15) }),
+    top_pages: async (s: Extract<SectionSpec, { type: "top_pages" }>): Promise<TopRowsData> => ({ rows: (await pages(gscCur)).slice(0, s.limit ?? 15) }),
     landing_pages: async (s: Extract<SectionSpec, { type: "landing_pages" }>): Promise<LandingPagesData> => ({ rows: await deps.ga4TopLandingPages(client, cur, s.limit ?? 15) }),
     tracked_keywords: async (s: Extract<SectionSpec, { type: "tracked_keywords" }>): Promise<TrackedKeywordsData> => {
-      const qc = await queries(cur);
+      const qc = await queries(gscCur);
       const qp = gscPrim ? await queries(gscPrim.range) : undefined;
       const live = s.liveRanks ? liveRanksAvailability(client) : undefined;
       const rows = await trackedKeywordRows(client, qc, live?.available ? deps.serp : undefined);
@@ -716,7 +733,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       return { comparedWith: gscPrim?.which ?? null, keywords, ...(live ? { liveRanks: live } : {}) };
     },
     opportunities: async (s: Extract<SectionSpec, { type: "opportunities" }>): Promise<OpportunityLists> => {
-      const o = await deps.opportunitiesForMonth(client, cur, s.limit ?? 5);
+      const o = await deps.opportunitiesForMonth(client, gscCur, s.limit ?? 5);
       if (o.warning) note(`Opportunities: ${o.warning}`);
       return o;
     },
@@ -900,17 +917,20 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       if (!deps.googleConfigured()) return { ...base, status: "unavailable", reason: `Google isn't set up (run ${cliHint()} setup --step google)` };
       if (GSC_TYPES.has(s.type) && !client.gscProperty) return { ...base, status: "unavailable", reason: `no Search Console property for ${client.domain}` };
       if (GA4_TYPES.has(s.type) && !client.ga4PropertyId) return { ...base, status: "unavailable", reason: `no GA4 property for ${client.domain}` };
-      if (GSC_TYPES.has(s.type) && !curCoverage.complete) {
+      if (GSC_TYPES.has(s.type) && !curCoverage.complete && !partial) {
         return { ...base, status: "unavailable", reason: `Search Console doesn't cover ${periodName(cur)} (older than Google's 16 months and not in the saved history; run ${cliHint()} gsc-history backfill)` };
       }
     }
+    // C2a: a Search Console section on a labelled partial range carries the range and its label.
+    const labelled = partial && GSC_RANGE_TYPES.has(s.type) ? { ...base, gscRange: { range: partial.range, label: partial.label } } : base;
+    if (partial && GSC_COMPARISON_TYPES.has(s.type)) return { ...labelled, status: "unavailable", reason: partialNoComparisonReason(partial.label) };
     try {
-      return { ...base, status: "ok", data: await fetchers[s.type](s as never) };
+      return { ...labelled, status: "ok", data: await fetchers[s.type](s as never) };
     } catch (err) {
       if (err instanceof SectionUnavailableError || err instanceof ProviderUnavailableError || err instanceof GoogleNotConfiguredError) {
-        return { ...base, status: "unavailable", reason: errorText(err) };
+        return { ...labelled, status: "unavailable", reason: errorText(err) };
       }
-      return { ...base, status: "error", error: errorText(err) };
+      return { ...labelled, status: "error", error: errorText(err) };
     }
   };
 
@@ -936,7 +956,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   const sections =
     reservedUsd <= 0 ? await runAll() : aiReserved > 0 ? await deps.withUsdReservation(client, reservedUsd, runAll, { aiUsd: aiReserved }) : await deps.withUsdReservation(client, reservedUsd, runAll);
   if (sections.some((s) => s.status === "ok" && ["top_queries", "query_movers", "branded_split"].includes(s.type))) {
-    const qc = await queries(cur).catch(() => []);
+    const qc = await queries(gscCur).catch(() => []);
     if (qc.length >= QUERY_ROW_LIMIT) note(`Search Console returned its ${QUERY_ROW_LIMIT}-row limit of queries, so the long tail is missing from the query tables.`);
   }
   // D3 / D4 / D5: scope notes, query spikes and the history save, after the sections' own data. Extra: a failure adds no note.
@@ -951,7 +971,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   if (sections.some((s) => s.status === "ok" && GSC_TYPES.has(s.type))) {
     if (deps.querySpikes) {
       try {
-        for (const spike of await deps.querySpikes(client, cur)) note(spikeNote(spike));
+        for (const spike of await deps.querySpikes(client, gscCur)) note(spikeNote(spike));
       } catch {
         /* spike detection is extra */
       }
@@ -981,6 +1001,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       usd: Number(Math.max(0, spentAfter.usd - spentBefore.usd).toFixed(4)),
       units: { ahrefs: Math.max(0, spentAfter.ahrefs - spentBefore.ahrefs), semrush: Math.max(0, spentAfter.semrush - spentBefore.semrush) },
     },
+    ...(partial ? { gscPartial: { range: partial.range, requested: partial.requested, label: partial.label, source: partial.source, missing: partial.missing } } : {}),
   };
   // An invalid template file is ignored on this path (the CLI refuses to run instead): tell the operator,
   // not the client, so it goes in `warnings`, which no renderer reads.

@@ -335,6 +335,11 @@ interface SectionBase {
   title: string;
   /** Release B: start this section on a new page. Absent in reports made before 0.3.0. */
   pageBreakBefore?: true;
+  /**
+   * Release 0.5.0 (C2a): set on a Search Console section when Search Console covers only part of the period: the range
+   * its figures cover and that range's label ("Jul–Dec 2025"). Absent otherwise.
+   */
+  gscRange?: { range: DateRange; label: string };
 }
 
 /** A `block` section's data: the text is resolved from the template files' blocks library when the report runs. */
@@ -370,6 +375,12 @@ export interface TemplateReport {
   spend: { usd: number; units: { ahrefs: number; semrush: number } };
   /** Operator-only problems (for example an invalid template file that was ignored). Never rendered into report files. */
   warnings?: string[];
+  /**
+   * Release 0.5.0 (C2a): Search Console covers only part of the period (Google keeps 16 months and the earlier months
+   * weren't saved), so its sections show `range`, labelled, with no comparison. Absent when Search Console covers the
+   * period (and on every report made before 0.5.0).
+   */
+  gscPartial?: { range: DateRange; requested: DateRange; label: string; source: "google" | "stored"; missing: string[] };
 }
 
 /** llms.txt and AI crawler access from the newest saved audit's site hygiene (ai_readiness section). Text fields are stripControl'd. */
@@ -721,4 +732,9 @@ export interface WinsMissesData {
   misses: WinMissItem[];
   /** Goals whose source is unavailable (their label or metric name). */
   skippedGoals: string[];
+  /**
+   * Release 0.5.0 (C2a): the Search Console goals in `skippedGoals` that were left out because Search Console covers
+   * only part of the period. Absent otherwise.
+   */
+  gscSkippedGoals?: string[];
 }
