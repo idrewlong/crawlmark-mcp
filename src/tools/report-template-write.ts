@@ -256,7 +256,7 @@ const sectionLike = z.record(z.string(), z.unknown());
 const templateArg = z
   .record(z.string(), z.unknown())
   .describe(
-    "The template as JSON, validated with the template schema: { title, description?, period?: { range: last_month | last_quarter | last_n_days (days) | custom (start, end) }, compare?: [previous_period, previous_year], layout?: standard | onepage, cover?: { subtitle?, preparedFor?, preparedBy?, fields?: [domain | period | compare | generated | preparedFor | preparedBy | badge] }, contents?: boolean (a contents list after the cover), sections: [{ id, type, optional?, paid?, pageBreakBefore?, title?, ...type options }] }. " +
+    "The template as JSON, validated with the template schema: { title, description?, period?: { range: last_month | last_quarter | last_n_days (days) | custom (start, end) }, compare?: [previous_period, previous_year], layout?: standard | onepage, cover?: { subtitle?, preparedFor?, preparedBy?, fields?: [domain | period | compare | generated | preparedFor | preparedBy | badge] }, contents?: boolean (a contents list after the cover), theme?: cards | minimal | editorial | bold | consulting | friendly (the look of this template's reports; beats the branding theme), sections: [{ id, type, optional?, paid?, pageBreakBefore?, title?, ...type options }] }. " +
       "A `block` section ({ id, type: block, block: <block id> }) shows a reusable text block from the template file's file-level `blocks` (add blocks with update_report_template's patch.setBlocks; a client template can use the global file's blocks). " +
       "Section types and what they cost: get_report_template's `catalogue`. Paid section types need paid: true. Prefer optional: true for paid sections.",
   );
@@ -326,7 +326,7 @@ export function registerTemplateWriteTools(server: McpServer, opts: { homeDir?: 
     {
       title: "Update a report template",
       description:
-        "Change a template that is already in the global template file or a client's file: either the whole `template`, or a `patch` (addSections, removeSectionIds, set title/description/period/compare/layout/cover/contents; null in set removes a field; setBlocks adds or replaces file-level text blocks as { <id>: { title?, text } }; removeBlockIds removes blocks no section uses). " +
+        "Change a template that is already in the global template file or a client's file: either the whole `template`, or a `patch` (addSections, removeSectionIds, set title/description/period/compare/layout/cover/contents/theme; null in set removes a field; setBlocks adds or replaces file-level text blocks as { <id>: { title?, text } }; removeBlockIds removes blocks no section uses). " +
         "Builtin templates aren't in a file: copy one with create_report_template and replace: true instead." +
         DESCRIPTION_TAIL,
       inputSchema: {
@@ -337,7 +337,7 @@ export function registerTemplateWriteTools(server: McpServer, opts: { homeDir?: 
             addSections: z.array(sectionLike).max(40).optional(),
             removeSectionIds: z.array(z.string().min(1).max(40)).max(40).optional(),
             set: z
-              .object({ title: z.unknown().optional(), description: z.unknown().optional(), period: z.unknown().optional(), compare: z.unknown().optional(), layout: z.unknown().optional(), cover: z.unknown().optional(), contents: z.unknown().optional() })
+              .object({ title: z.unknown().optional(), description: z.unknown().optional(), period: z.unknown().optional(), compare: z.unknown().optional(), layout: z.unknown().optional(), cover: z.unknown().optional(), contents: z.unknown().optional(), theme: z.unknown().optional() })
               .strict()
               .optional(),
             setBlocks: z

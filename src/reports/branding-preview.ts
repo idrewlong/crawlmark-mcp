@@ -15,6 +15,7 @@ import { buildReportDoc } from "./render/doc.js";
 import { toHtml } from "./render/html.js";
 import { footerFont, type PdfPrinter } from "./render/pdf.js";
 import type { ResolvedBranding } from "./templates/load.js";
+import { THEME_IDS, type ThemeId } from "./templates/schema.js";
 
 const day = (start: string, i: number) => new Date(Date.parse(`${start}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10);
 
@@ -29,7 +30,7 @@ function series(start: string, days: number, total: number, wave: number): { dat
 }
 
 /** Made-up example.com numbers for the preview (fixed, so the preview looks the same every time). */
-export function sampleReport(generatedAt = new Date(), opts: { fonts?: { body?: string | undefined; heading?: string | undefined } } = {}): TemplateReport {
+export function sampleReport(generatedAt = new Date(), opts: { fonts?: { body?: string | undefined; heading?: string | undefined }; standard?: boolean } = {}): TemplateReport {
   const cur = { startDate: "2026-09-01", endDate: "2026-09-30" };
   const prev = { startDate: "2026-08-01", endDate: "2026-08-31" };
   const py = { startDate: "2025-09-01", endDate: "2025-09-30" };
@@ -83,7 +84,9 @@ export function sampleReport(generatedAt = new Date(), opts: { fonts?: { body?: 
   const report: TemplateReport = {
     reportId: "rpt_00000000000000000000SAMPLE",
     client: { slug: "example.com", name: "Example Co", domain: "example.com" },
-    template: { id: "executive", title: "Executive summary", source: "builtin", layout: "onepage" },
+    template: opts.standard
+      ? { id: "executive", title: "Executive summary", source: "builtin", contents: true, cover: { subtitle: "Sample data" } }
+      : { id: "executive", title: "Executive summary", source: "builtin", layout: "onepage" },
     period: { current: cur, label: "September 2026", folderMonth: "2026-09", comparisons: { previous_period: prev, previous_year: py } },
     generatedAt: generatedAt.toISOString(),
     sections: [
@@ -137,4 +140,47 @@ export async function renderBrandingPreview(homeDir: string, branding: ResolvedB
     writeFileAtomic(path, html, 0o600);
     return { path, format: "html", warning: `The PDF preview couldn't be made (${stripControl((err as Error).message).slice(0, 200)}), so it's HTML.`, ...extra };
   }
+}
+
+export interface ThemePreviewResult {
+  dir: string;
+  files: { theme: ThemeId; path: string; format: "pdf" | "html" }[];
+  warnings: string[];
+  logoWarning?: string;
+}
+
+/**
+ * Render the sample report (standard layout, a contents page, cover subtitle "Sample data") in each of the six
+ * themes with the given branding: `<home>/branding/themes/<n>-<theme>.pdf` (n = 1 to 6 in THEME_IDS order), or
+ * `.html` for a theme whose PDF can't be printed (one warning per file). Directories 0700, files 0600, never
+ * through a symlinked `branding` or `themes` directory; files are overwritten. Prints run one after another.
+ */
+export async function renderThemePreviews(homeDir: string, branding: ResolvedBranding, opts: { printer: PdfPrinter; version: string; now?: Date }): Promise<ThemePreviewResult> {
+  const { logo, warning: logoWarning } = loadLogo(branding);
+  const base = join(homeDir, "branding");
+  const dir = join(base, "themes");
+  for (const d of [base, dir]) {
+    if (lstatSync(d, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`Refusing to write through a symlink: ${d}`);
+    mkdirSync(d, { recursive: true, mode: 0o700 });
+    chmodSync(d, 0o700);
+  }
+  const files: ThemePreviewResult["files"] = [];
+  const warnings: string[] = [];
+  for (const [i, theme] of THEME_IDS.entries()) {
+    const name = `${i + 1}-${theme}`;
+    const doc = buildReportDoc(sampleReport(opts.now, { standard: true, fonts: { body: branding.bodyFont, heading: branding.headingFont } }), { branding, logo, version: opts.version, sample: true, theme });
+    const html = toHtml(doc);
+    try {
+      const pdf = await opts.printer(html, { paper: doc.branding.paper, footer: doc.footer, fontFamily: footerFont(doc.branding.fonts, doc.branding.theme) });
+      const path = join(dir, `${name}.pdf`);
+      writeFileAtomic(path, pdf, 0o600);
+      files.push({ theme, path, format: "pdf" });
+    } catch (err) {
+      const path = join(dir, `${name}.html`);
+      writeFileAtomic(path, html, 0o600);
+      files.push({ theme, path, format: "html" });
+      warnings.push(`The ${theme} PDF preview couldn't be made (${stripControl((err as Error).message).slice(0, 200)}), so it's HTML.`);
+    }
+  }
+  return { dir, files, warnings, ...(logoWarning ? { logoWarning } : {}) };
 }

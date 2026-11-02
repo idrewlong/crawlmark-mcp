@@ -63,8 +63,9 @@ function ctxFor(h: string, answers: Answer[]) {
   return { ctx, prompt, previews };
 }
 
-// name, logo, primary, accent, body font, heading font, fallback, footer, white label, hide providers, note, paper, formats
+// name, logo, primary, accent, theme, body font, heading font, fallback, footer, white label, hide providers, note, paper, formats
 const fields = (o: { body?: string; heading?: string; fallback?: string; whiteLabel?: boolean; providers?: boolean; note?: string } = {}): Answer[] => [
+  "",
   "",
   "",
   "",
@@ -120,7 +121,7 @@ describe("setup --step branding: fonts, providers and the commentary note", () =
 
   it("asks a bad font name again with the reason, and never saves it", async () => {
     const h = home();
-    const { ctx, prompt } = ctxFor(h, [...fields({ body: "Inter;" }).slice(0, 4), "Inter;", "Inter", ...fields().slice(5), "save"]);
+    const { ctx, prompt } = ctxFor(h, [...fields({ body: "Inter;" }).slice(0, 5), "Inter;", "Inter", ...fields().slice(6), "save"]);
     await stepBranding(ctx);
     expect(prompt.asked.filter((q) => q.startsWith("Body font"))).toHaveLength(2);
     expect((ctx.ui as ReturnType<typeof recordingUi>).events).toContainEqual(expect.stringMatching(/^fail: .*isn't a font family name/));

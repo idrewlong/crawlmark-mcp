@@ -22,9 +22,10 @@ import {
   type BrandingSettings,
   type SettingField,
 } from "../reports/branding-settings.js";
-import type { PreviewResult } from "../reports/branding-preview.js";
+import type { PreviewResult, ThemePreviewResult } from "../reports/branding-preview.js";
 import { loadTemplates } from "../reports/templates/load.js";
-import type { Format } from "../reports/templates/schema.js";
+import { THEMES } from "../reports/render/themes/index.js";
+import { DEFAULT_THEME, THEME_IDS, type Format, type ThemeId } from "../reports/templates/schema.js";
 import type { Choice } from "./prompter.js";
 import { uiFor } from "./ui.js";
 import type { StepResult, WizardContext } from "./wizard.js";
@@ -36,6 +37,7 @@ export const FIELD_LABELS: Record<SettingField, string> = {
   logo: "Logo",
   primaryColor: "Primary colour",
   accentColor: "Accent colour",
+  theme: "Report theme",
   bodyFont: "Body font",
   headingFont: "Heading font",
   fontFallback: "Font fallback",
@@ -63,7 +65,8 @@ export function describeBranding(s: BrandingSettings): string[] {
     `${FIELD_LABELS.logo}: ${s.logo ?? "none"}`,
     `${FIELD_LABELS.primaryColor}: ${s.primaryColor ?? `not set (default ${DEFAULT_PRIMARY})`}`,
     `${FIELD_LABELS.accentColor}: ${s.accentColor ?? `not set (default ${DEFAULT_ACCENT})`}`,
-    `${FIELD_LABELS.bodyFont}: ${s.bodyFont ?? "not set (the report's own font)"}`,
+    `${FIELD_LABELS.theme}: ${THEMES[s.theme ?? DEFAULT_THEME].label}${s.theme === undefined ? " (default)" : ""}`,
+    `${FIELD_LABELS.bodyFont}: ${s.bodyFont ?? "not set (the theme's own font)"}`,
     `${FIELD_LABELS.headingFont}: ${s.headingFont ?? "same as the body font"}`,
     `${FIELD_LABELS.fontFallback}: ${s.fontFallback ?? "sans-serif"}`,
     `${FIELD_LABELS.footer}: ${s.footer ?? "not set"}`,
@@ -145,10 +148,17 @@ export async function askField(ctx: WizardContext, field: SettingField, draft: B
       break;
     }
     case "accentColor":
-      s.accentColor = await askColor(ctx, "Accent colour: the stripe under the cover band", s.accentColor, DEFAULT_ACCENT);
+      s.accentColor = await askColor(ctx, "Accent colour: the stripe under the cover band (used by the Cards theme)", s.accentColor, DEFAULT_ACCENT);
       break;
+    case "theme": {
+      const choices: Choice<ThemeId>[] = THEME_IDS.map((id) => ({ value: id, label: `${THEMES[id].label}: ${THEMES[id].description}` }));
+      const pick = await ctx.prompt.choose("Report theme: the look of your report files. Your colours, logo and fonts apply in every theme", choices, s.theme ?? DEFAULT_THEME);
+      // Keeping the default (Cards) with nothing saved stays unset (Q2).
+      s.theme = pick === DEFAULT_THEME && s.theme === undefined ? undefined : pick;
+      break;
+    }
     case "bodyFont":
-      s.bodyFont = await askFont(ctx, "Body font: a font family name (Enter keeps, - for the report's own font). It shows only where it is installed; Word and Google Docs swap in another when it isn't", s.bodyFont);
+      s.bodyFont = await askFont(ctx, "Body font: a font family name (Enter keeps, - for the theme's own fonts). It shows only where it is installed; Word and Google Docs swap in another when it isn't", s.bodyFont);
       break;
     case "headingFont":
       s.headingFont = await askFont(ctx, "Heading font (Enter keeps, - for the same as the body font)", s.headingFont);
@@ -225,8 +235,9 @@ export async function stepBranding(ctx: WizardContext): Promise<StepResult> {
   let draft: BrandingDraft = { s: { ...current } };
   for (const f of Object.keys(FIELD_LABELS) as SettingField[]) draft = await askField(ctx, f, draft);
 
+  let skipPreview = false;
   for (;;) {
-    if (ctx.brandingPreview) {
+    if (ctx.brandingPreview && !skipPreview) {
       let preview: PreviewResult | undefined;
       try {
         preview = await ui.spin("Making a one-page preview with sample data...", () => ctx.brandingPreview!(draft.s));
@@ -243,15 +254,34 @@ export async function stepBranding(ctx: WizardContext): Promise<StepResult> {
         }
       }
     }
-    const next = await ctx.prompt.choose(
-      "Save this branding?",
-      [
-        { value: "save", label: "Looks good, save" },
-        { value: "change", label: "Change something" },
-        { value: "cancel", label: "Cancel (save nothing)" },
-      ] as const,
-      "save",
-    );
+    skipPreview = false;
+    const options: Choice<"save" | "change" | "themes" | "cancel">[] = [
+      { value: "save", label: "Looks good, save" },
+      { value: "change", label: "Change something" },
+      ...(ctx.brandingThemePreviews ? [{ value: "themes" as const, label: "See your branding in all six themes" }] : []),
+      { value: "cancel", label: "Cancel (save nothing)" },
+    ];
+    const next = await ctx.prompt.choose("Save this branding?", options, "save");
+    if (next === "themes" && ctx.brandingThemePreviews) {
+      skipPreview = true;
+      let result: ThemePreviewResult | undefined;
+      try {
+        result = await ui.spin("Making a sample report in each theme...", () => ctx.brandingThemePreviews!(draft.s));
+      } catch (err) {
+        ui.warn(`The theme previews couldn't be made: ${cleanText((err as Error).message, 300)}`);
+      }
+      if (result) {
+        for (const w of result.warnings) ui.warn(w);
+        if (result.logoWarning) ui.warn(result.logoWarning);
+        ui.info(`Six previews (sample data, not a client report) are in ${result.dir}`);
+        const first = result.files[0];
+        if (first && ctx.openPath && ui.fancy && !ctx.dryRun && !ctx.yes) {
+          const a = await ctx.prompt.ask("Press Enter to open the first one (or s to skip)");
+          if (a.trim() === "" && !ctx.openPath(first.path)) ui.info(`Couldn't open it. The first preview is ${first.path}`);
+        }
+      }
+      continue;
+    }
     if (next === "cancel") return { step, outcome: "skipped", message: "Nothing saved; the branding is unchanged." };
     if (next === "save") break;
     const field = await ctx.prompt.choose("Which one?", FIELD_CHOICES, "agencyName");

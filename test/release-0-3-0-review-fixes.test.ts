@@ -311,8 +311,8 @@ describe("Q2: branding setup keeps unset values unset", () => {
       cliDisplay: "crawlmark-cli",
       dryRun: false,
     }) as unknown as WizardContext;
-  // 13 fields, Enter at each, then "save" (the default).
-  const enterEverywhere = (): Answer[] => [...Array.from({ length: 13 }, () => ""), ""];
+  // 14 fields, Enter at each, then "save" (the default).
+  const enterEverywhere = (): Answer[] => [...Array.from({ length: 14 }, () => ""), ""];
 
   it("Enter at every prompt writes no colours, paper or formats the file didn't have", async () => {
     const h = tmp();

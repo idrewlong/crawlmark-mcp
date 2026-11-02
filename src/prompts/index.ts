@@ -139,7 +139,7 @@ export function registerPrompts(server: McpServer) {
     {
       title: "Template report",
       description:
-        "Build a client report from a report template (run_report_template), write commentary per section with the same number-reading rules as the monthly write-up, save it as Markdown, HTML, PDF or Word files (export_report), and offer a Google Doc only when a Drive tool is available and you agree. Free unless you ask for paid sections.",
+        "Build a client report from a report template (run_report_template), write commentary per section with the same number-reading rules as the monthly write-up, save it as Markdown, HTML, PDF, Word or PowerPoint (.pptx) files (export_report; for Google Slides, upload the .pptx to Drive and open it with Google Slides), and offer a Google Doc only when a Drive tool is available and you agree. Free unless you ask for paid sections.",
       argsSchema: {
         client: clientArg,
         template: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/, "Use a template id such as monthly.").optional().describe("Template id (see list_report_templates). Leave empty to choose from the list."),
