@@ -5,6 +5,7 @@
  */
 import type { StoredAudit } from "../../../src/analysis/diff.js";
 import type { Finding } from "../../../src/analysis/findings.js";
+import { RE2JS } from "re2js";
 import type { GscQueryOptions, GscRow } from "../../../src/providers/gsc.js";
 
 export const CLIENT = {
@@ -38,8 +39,8 @@ const row = (keys: string[], clicks: number, impressions: number, position: numb
   position,
 });
 
-/** Multiplier per period: current, previous month, same month last year. */
-const SCALE: Record<string, number> = { "2026-09-01": 1, "2026-08-01": 0.85, "2025-09-01": 0.6, "2026-07-01": 0.8, "2025-07-01": 0.5, "2026-04-01": 0.7 };
+/** Multiplier per period: current, previous month, same month last year (and 0.5.0's yearly: 2025 against 2024). */
+const SCALE: Record<string, number> = { "2026-09-01": 1, "2026-08-01": 0.85, "2025-09-01": 0.6, "2026-07-01": 0.8, "2025-07-01": 0.5, "2026-04-01": 0.7, "2025-01-01": 1, "2024-01-01": 0.75 };
 const scale = (startDate: string) => SCALE[startDate] ?? 0.9;
 
 const QUERIES: [string, number, number, number][] = [
@@ -58,9 +59,24 @@ const PAGES: [string, number, number, number][] = [
   ["https://example.com/contact", 40, 800, 5.5],
 ];
 
+/** Release 0.5.0: Search Console's page filters on the fixture pages (RE2 on full URLs, as Google applies them). */
+const pageFilter = (opts: GscQueryOptions) => (url: string) =>
+  (!opts.pageRegex || RE2JS.compile(opts.pageRegex).matcher(url).find()) && (!opts.pageExcludeRegex || !RE2JS.compile(opts.pageExcludeRegex).matcher(url).find());
+
 export function gscQuery(_client: unknown, opts: GscQueryOptions): GscRow[] {
   const k = scale(opts.startDate);
   const dims = (opts.dimensions ?? []).join(",");
+  if (opts.pageRegex !== undefined || opts.pageExcludeRegex !== undefined) {
+    const pages = PAGES.filter(([u]) => pageFilter(opts)(u)).map(([u, c, i, p]) => row([u], Math.round(c * k), Math.round(i * k), p + (k < 1 ? 0.4 : 0)));
+    if (dims === "page") return pages;
+    if (dims !== "") return [];
+    // A page-filtered totals request: Search Console aggregates the matching pages (no row when none match).
+    const clicks = pages.reduce((a, r) => a + r.clicks, 0);
+    const impressions = pages.reduce((a, r) => a + r.impressions, 0);
+    if (!impressions) return [];
+    const position = Number((pages.reduce((a, r) => a + r.position * r.impressions, 0) / impressions).toFixed(1));
+    return [row([], clicks, impressions, position)];
+  }
   // In the previous month "leak detection" did much better, so it shows up as a loser.
   const adj = (q: string, c: number) => (q === "leak detection" && opts.startDate === "2026-08-01" ? c * 3 : c);
   if (dims === "query") return QUERIES.map(([q, c, i, p]) => row([q], Math.round(adj(q, c) * k), Math.round(i * k), p + (k < 1 ? 0.7 : 0)));
@@ -113,6 +129,22 @@ export function ga4OrganicSummary(_client: unknown, range: { startDate: string }
 
 export function ga4OrganicDaily(_client: unknown, range: { startDate: string; endDate: string }) {
   return dailySplit(range.startDate, range.endDate, ga4OrganicSummary(_client, range).sessions).map((d) => ({ date: d.date, sessions: d.value }));
+}
+
+/** Release 0.5.0: all traffic per GA4 default channel group. "Affiliates" exists only in 2024 (a channel only last year). */
+const CHANNELS: [string, number, number, number, number][] = [
+  ["Organic Search", 1500, 1200, 900, 40],
+  ["Direct", 900, 800, 500, 30],
+  ["Paid Search", 600, 520, 380, 25],
+  ["Referral", 300, 260, 200, 6],
+  ["Organic Social", 250, 230, 120, 2],
+  ["Email", 120, 100, 90, 8],
+  ["Unassigned", 40, 38, 5, 0],
+];
+export function ga4ChannelReport(_client: unknown, range: { startDate: string }) {
+  const k = scale(range.startDate);
+  const rows = CHANNELS.map(([channel, s, u, e, ke]) => ({ channel, sessions: Math.round(s * k), users: Math.round(u * k), engagedSessions: Math.round(e * k), keyEvents: Math.round(ke * k) }));
+  return range.startDate.startsWith("2024") ? [...rows, { channel: "Affiliates", sessions: 60, users: 55, engagedSessions: 30, keyEvents: 3 }] : rows;
 }
 
 export function ga4TopLandingPages(_client: unknown, _range: unknown, limit = 20) {

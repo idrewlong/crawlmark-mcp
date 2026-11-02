@@ -3,7 +3,7 @@
  * (channel_yoy), against a fake googleapis that records every request body.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fake, filtersOf, row } from "./helpers/fake-analytics.js";
+import { fake, filtersOf, ga4Response, row } from "./helpers/fake-analytics.js";
 
 vi.mock("googleapis", async () => (await import("./helpers/fake-analytics.js")).googleapisMock);
 vi.mock("../src/providers/google.js", async () => (await import("./helpers/fake-analytics.js")).googleProviderMock);
@@ -116,15 +116,12 @@ describe("saved history and Google's window", () => {
 
 describe("ga4ChannelReport", () => {
   it("asks for the default channel group with four metrics, limit 50, the hostname filter and no organic filter", async () => {
-    fake.ga4 = () => ({
-      dimensionHeaders: [{ name: "sessionDefaultChannelGroup" }],
-      metricHeaders: [{ name: "sessions" }, { name: "totalUsers" }, { name: "engagedSessions" }, { name: "keyEvents" }],
-      rows: [
-        { dimensionValues: [{ value: "Organic Search" }], metricValues: [{ value: "1200" }, { value: "900" }, { value: "700" }, { value: "40" }] },
-        { dimensionValues: [{ value: "Direct" }], metricValues: [{ value: "800" }, { value: "650" }, { value: "300" }, { value: "12" }] },
-        { dimensionValues: [{ value: "Bad\u0007Name" }], metricValues: [{ value: "1" }, { value: "1" }, { value: "0" }, { value: "0" }] },
-      ],
-    });
+    fake.ga4 = () =>
+      ga4Response(["sessionDefaultChannelGroup"], ["sessions", "totalUsers", "engagedSessions", "keyEvents"], [
+        [["Organic Search"], [1200, 900, 700, 40]],
+        [["Direct"], [800, 650, 300, 12]],
+        [["Bad\u0007Name"], [1, 1, 0, 0]],
+      ]);
     const rows = await ga4ChannelReport(mk(), RANGE);
     expect(fake.ga4Calls).toHaveLength(1);
     const body = fake.ga4Calls[0];

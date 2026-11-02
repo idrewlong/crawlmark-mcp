@@ -44,6 +44,10 @@ export function fakeDeps(over: Partial<RunDeps> = {}): RunDeps {
     ga4OrganicSummary: async (c, r) => d.ga4OrganicSummary(c, r),
     ga4TopLandingPages: async (c, r, n) => d.ga4TopLandingPages(c, r, n),
     ga4OrganicDaily: async (c, r) => d.ga4OrganicDaily(c, r),
+    // Release 0.5.0: GA4 channels (channel_yoy), and Search Console coverage that is always Google's (the fixture
+    // Google has every day); tests of the coverage guard override it or delete it to use the real one.
+    ga4ChannelReport: async (c, r) => d.ga4ChannelReport(c, r),
+    gscStoredCoverage: () => ({ complete: true, source: "google" }),
     opportunitiesForMonth: async (_c, r, n) => ({
       window: r,
       method: "Fixture method.",

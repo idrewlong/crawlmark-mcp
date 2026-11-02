@@ -78,3 +78,10 @@ export const row = (keys: string[], clicks: number, impressions: number, positio
 
 /** Which filters (by operator) a request carried. */
 export const filtersOf = (b: GscBody) => b.dimensionFilterGroups?.[0]?.filters ?? [];
+
+/** A GA4 runReport response (Release 0.5.0): dimension and metric names, then rows of [dimension values, metric values]. */
+export const ga4Response = (dimensions: string[], metrics: string[], rows: [string[], number[]][]) => ({
+  dimensionHeaders: dimensions.map((name) => ({ name })),
+  metricHeaders: metrics.map((name) => ({ name })),
+  rows: rows.map(([dv, mv]) => ({ dimensionValues: dv.map((value) => ({ value })), metricValues: mv.map((v) => ({ value: String(v) })) })),
+});
