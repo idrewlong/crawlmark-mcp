@@ -77,6 +77,8 @@ export interface LineChart {
   bands?: { good: number; poor: number };
   /** Join points across missing values (sparse stored checks). */
   connectGaps?: boolean;
+  /** One point per calendar month (a daily series over 100 days, 0.5.0); the deck gives such a chart the full height. */
+  perMonth?: true;
   /** One sentence for screen readers and the alt text. */
   summary: string;
   /** What Markdown, DOCX and the Google Docs copy show instead (left out when a table already has the numbers). */

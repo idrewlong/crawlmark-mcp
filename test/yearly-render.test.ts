@@ -293,7 +293,8 @@ describe("long periods: daily series become one point per month, with a table by
       expect(c.series.map((x) => [x.name, x.role])).toEqual([["2025", "current"], ["2024", "previous"]]);
       expect(c.series[0]!.values.map((x) => fmtInt(x))).toEqual(c.fallback!.rows.map((r) => plain(r[1]!)));
       expect(c.series[1]!.values.map((x) => fmtInt(x))).toEqual(c.fallback!.rows.map((r) => plain(r[2]!)));
-      expect(c.summary).toMatch(/^(Clicks|Impressions) per month: [\d,]+ (clicks|impressions) in 2025 against [\d,]+ in 2024, from 1 Jan to 31 Dec\.$/);
+      // The title says "per month"; the summary (the deck's takeaway line) is the plain total, without a span that is the year itself.
+      expect(c.summary).toMatch(/^[\d,]+ (clicks|impressions) in 2025 against [\d,]+ in 2024\.$/);
       const f = c.fallback!;
       expect(f.header).toEqual(["Month", "2025", "2024", "Change"]);
       expect(f.rows).toHaveLength(12);
