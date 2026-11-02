@@ -196,7 +196,7 @@ describe("client override and the preview", () => {
     const resolved = asResolvedBranding(h, cur);
     expect(resolved).toMatchObject({ bodyFont: "Inter", headingFont: "Merriweather", fontFallback: "serif", hideProviders: true, commentaryNote: "" });
     const doc = buildReportDoc(sampleReport(), { branding: resolved, logo: undefined, version: "0.0.0", sample: true });
-    expect(doc.branding.fonts).toEqual({ body: "Inter", heading: "Merriweather", fallback: "serif" });
+    expect(doc.branding.fonts).toEqual({ body: "Inter", heading: "Merriweather", fallback: "serif", fallbackSet: true });
   });
 
   it("the preview names the fonts on the page, and says nothing about fonts when none are set", async () => {

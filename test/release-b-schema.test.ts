@@ -350,7 +350,7 @@ describe("the report document carries the Release B layout without rendering it"
   it("fonts, hideProviders and commentaryNote come from the branding", async () => {
     const r = await fixtureReport();
     const b = (branding: object) => buildReportDoc(r, { version: "0.3.0", branding }).branding;
-    expect(b({ bodyFont: "Inter", headingFont: "Merriweather", fontFallback: "serif" }).fonts).toEqual({ body: "Inter", heading: "Merriweather", fallback: "serif" });
+    expect(b({ bodyFont: "Inter", headingFont: "Merriweather", fontFallback: "serif" }).fonts).toEqual({ body: "Inter", heading: "Merriweather", fallback: "serif", fallbackSet: true });
     expect(b({}).hideProviders).toBeUndefined();
     expect(b({ hideCrawlmark: true }).hideProviders).toBe(true);
     expect(b({ hideCrawlmark: true, hideProviders: false }).hideProviders).toBeUndefined();
