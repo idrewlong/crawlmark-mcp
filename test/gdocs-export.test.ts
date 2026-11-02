@@ -42,8 +42,11 @@ describe("the gdocs format (Word copy for Google Docs)", () => {
     const dir = join(tmp(), "r");
     const out = await exportReport(await fixtureReport(), base(dir));
     const f = out.files[0]!;
-    expect(statSync(f.path).mode & 0o777).toBe(0o600);
-    expect(statSync(join(f.path, "..")).mode & 0o777).toBe(0o700);
+    // Windows has no POSIX modes.
+    if (process.platform !== "win32") {
+      expect(statSync(f.path).mode & 0o777).toBe(0o600);
+      expect(statSync(join(f.path, "..")).mode & 0o777).toBe(0o700);
+    }
     expect(await (await zipOf(f.path)).file("word/document.xml")!.async("string")).toContain("example.com");
   });
 
