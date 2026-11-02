@@ -33,7 +33,7 @@ function harness() {
 }
 
 describe("the builtin yearly template", () => {
-  it("runs 2025 against 2024: the four yearly sections are not built yet (Y0), the others are ok", async () => {
+  it("runs 2025 against 2024: the yearly sections run; content by year needs a saved crawl", async () => {
     const home = mkdtempSync(join(tmpdir(), "crawlmark-yearly-run-"));
     const r = await runTemplate(client, { homeDir: home, today, template: "yearly", include: ["content-years"], store: false }, fakeDeps());
     expect(r.template).toEqual({ id: "yearly", title: "Yearly SEO review", source: "builtin", contents: true });
@@ -45,12 +45,12 @@ describe("the builtin yearly template", () => {
     });
     expect(r.sections.map((s) => [s.id, s.status, s.status === "unavailable" ? s.reason : null])).toEqual([
       ["search", "ok", null],
-      ["channels", "unavailable", "not built yet"],
-      ["page-types", "unavailable", "not built yet"],
+      ["channels", "ok", null],
+      ["page-types", "ok", null],
       ["pages", "ok", null],
       ["page-movers", "ok", null],
       ["content-years", "unavailable", `no saved local crawl for example.com yet (run ${cliHint()} crawl, free)`],
-      ["wins", "unavailable", "not built yet"],
+      ["wins", "ok", null],
     ]);
     expect(r.sections.find((s) => s.id === "channels")!.title).toBe("Traffic by channel, year over year");
   });
