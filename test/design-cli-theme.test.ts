@@ -37,6 +37,13 @@ describe("report --theme and --format pptx", () => {
     }
   });
 
+  it("--format accepts gdocs", async () => {
+    const h = harness();
+    const code = await reportCommand([], flags({ client: "example.com", month: "2026-09", format: "gdocs" }), h.io, h.deps);
+    expect(h.errs.join("\n")).not.toMatch(/--format takes/);
+    expect(code).not.toBe(1);
+  });
+
   it("--format accepts pptx", async () => {
     const h = harness();
     const code = await reportCommand([], flags({ client: "example.com", month: "2026-09", format: "md,pptx" }), h.io, h.deps);
@@ -44,7 +51,7 @@ describe("report --theme and --format pptx", () => {
     expect(code).not.toBe(1);
   });
 
-  it("the picker lists PowerPoint last and PDF first (pptx is never a default)", () => {
-    expect(FORMAT_CHOICES.map((c) => c.value)).toEqual(["pdf", "docx", "html", "md", "pptx"]);
+  it("the picker lists PDF first, then the Word copy for Google Docs last (pptx and gdocs are never a default)", () => {
+    expect(FORMAT_CHOICES.map((c) => c.value)).toEqual(["pdf", "docx", "html", "md", "pptx", "gdocs"]);
   });
 });

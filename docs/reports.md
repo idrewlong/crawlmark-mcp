@@ -458,9 +458,10 @@ Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `
 | `html` | One self-contained page: no scripts and nothing loaded from the network (the logo is embedded) |
 | `pdf` | The HTML printed by the Chrome crawlmark already uses for Lighthouse, with JavaScript and network access off. Letter by default; `paper: A4` in branding. If Chrome isn't installed, an HTML file is written in the PDF's place (unless HTML was asked for too), `warnings` gives the setup hint, and the other formats are still written |
 | `docx` | A Word document with real headings, lists, tables and native charts, built with the `docx` library for Word, Google Docs and LibreOffice |
+| `gdocs` | A Word copy to upload to Google Drive, named `<template>-<period>.google-docs.docx` ([Google Docs](#google-docs)) |
 | `pptx` | A PowerPoint deck of 16:9 slides with native, editable charts and speaker notes ([PowerPoint decks](#powerpoint-decks)). No Chrome needed |
 
-`formats` defaults to the template file's `defaults.formats`, else **PDF only**: a report is never exported in every format unless you ask. On an interactive terminal, `crawlmark-cli report --client` without `--format` shows a list with the default ticked (PDF, Word, HTML, Markdown, PowerPoint); `--all`, `--dry-run`, `--yes`, CI and pipes use the saved default without asking, and `--format` always wins. In Claude, the report prompts ask which format(s) you want (PDF by default) and export exactly those. If the PDF can't be made (Chrome isn't installed), an HTML file is written in its place and the result's `warnings` says so; the file itself never mentions it.
+`formats` defaults to the template file's `defaults.formats`, else **PDF only**: a report is never exported in every format unless you ask. On an interactive terminal, `crawlmark-cli report --client` without `--format` shows a list with the default ticked (PDF, Word, HTML, Markdown, PowerPoint, Word for Google Docs); `--all`, `--dry-run`, `--yes`, CI and pipes use the saved default without asking, and `--format` always wins. In Claude, the report prompts ask which format(s) you want (PDF by default) and export exactly those. If the PDF can't be made (Chrome isn't installed), an HTML file is written in its place and the result's `warnings` says so; the file itself never mentions it.
 
 ## PowerPoint decks
 
@@ -489,14 +490,13 @@ crawlmark never writes to Google, so there is no export to Slides. Upload the `.
 
 ## Google Docs
 
-crawlmark never writes to Google and has no Google Drive access. If your Claude has a Google Drive connector that can create files, the report prompts offer to save the report as a Google Doc, and only do it after you say yes. Nothing is shared and no permissions change. Without such a connector, the prompts don't mention Google Docs.
+crawlmark never writes to Google and has no Google Drive access. To get a themed Google Doc, export the Word copy and upload it yourself.
 
-- **The Word copy.** Claude asks `export_report` for `inline: "docx"` with `formats: []` (no file is written again) and passes the result to the Drive connector, which converts it to a Google Doc. The copy is the themed Word file: cover, styled tables, contents links, fonts, and header and footer. Charts become tables, and chart workbooks are left out. The logo is included only when it is 48 KB or smaller; otherwise it is left out with a warning.
-- **The size limit.** The base64 text that passes through the chat is limited to 120,000 characters (about 90 KB of file). Over the limit, the result has no `inline` but an `inlineError`, with the path of the `.docx` on your computer so you can upload it yourself. A report that is over only because of the logo is retried without the logo.
-- **The HTML fallback.** `inline: "html"` returns a plain docs-friendly HTML copy (no logo; key figures and charts as tables; green and red changes kept). Claude uses it when the Word copy is too big, when the Drive tool can't take `base64Content`, or when the upload fails.
-- **What Google Docs changes.** It keeps the theme, layout and tables, and swaps fonts it doesn't have.
-- **Manual upload.** Upload the `.docx` to Drive and open it with Google Docs, or turn on "Convert uploads to Google Docs editor format" in Drive's settings.
-- **Slides.** There is no inline route to Google Slides; upload the `.pptx` yourself ([Google Slides](#google-slides)).
+- **The Word copy.** Add `gdocs` to the formats (`--format pdf,gdocs` on the CLI, `formats: ["gdocs"]` on `export_report`). It is saved next to the other files as `<template>-<period>.google-docs.docx`, for example `yearly-2025.google-docs.docx`. It is the report's theme in Word form: cover, styled tables, contents links, fonts, and header and footer. Charts become tables, because Google Docs turns Word charts into pictures anyway. The logo is included. The term check, white label and internal notes work as for every other file.
+- **Upload it.** Go to drive.google.com, choose New, then File upload. With Settings, "Convert uploads to Google Docs editor format" turned on, Drive makes a Google Doc; otherwise open the uploaded `.docx` with Google Docs. Google Docs swaps fonts it doesn't have.
+- **In Claude.** The report prompts ask whether you want a Google Doc. If you do, Claude exports the Word copy and tells you its path and how to upload it. Nothing is shared and no permissions change.
+- **A Drive connector instead.** If your Claude has a Google Drive connector that can create files and you would rather it did the upload, Claude uses `inline: "html"`: a plain docs-friendly HTML copy (no logo; key figures and charts as tables; green and red changes kept), and only after you say yes. The Word file is never passed through the chat, since a single wrong character breaks it.
+- **Slides.** There is no route to Google Slides; upload the `.pptx` yourself ([Google Slides](#google-slides)).
 
 ## In Claude
 

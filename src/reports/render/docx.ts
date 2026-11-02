@@ -413,21 +413,14 @@ function cover(doc: ReportDoc, ctx: Ctx): Table {
   );
 }
 
-/** The largest logo the Google Docs copy keeps (48 KB); a bigger one is left out so the file can pass through the chat. */
-export const MAX_DOCS_LOGO_BYTES = 49_152;
-
 export interface DocxOptions {
-  /** "file" (default) is the report file; "docs" is the smaller copy for Google Docs (charts as tables, logo up to 48 KB). */
+  /** "file" (default) is the report file; "docs" is the copy to upload to Google Docs (charts as tables, the logo kept). */
   variant?: "file" | "docs";
 }
 
 export async function toDocx(report: ReportDoc, opts: DocxOptions = {}): Promise<Buffer> {
   const docs = opts.variant === "docs";
-  let doc = report;
-  if (docs && report.branding.logo && report.branding.logo.data.length > MAX_DOCS_LOGO_BYTES) {
-    const { logo: _logo, ...branding } = report.branding;
-    doc = { ...report, branding };
-  }
+  const doc = report;
   const primary = safeColor(doc.branding.primaryColor, DEFAULT_PRIMARY);
   const page = PAGE[doc.branding.paper];
   const theme = docxTheme(doc.branding.theme);

@@ -222,29 +222,29 @@ describe("report prompts (Phase 12)", () => {
       expect(t).toContain(NUMBER_RULES);
       expect(t).toContain(DOCS_OFFER);
     }
-    expect(DOCS_OFFER).toMatch(/^\*\*Google Docs \(only if available\)\.\*\* Only if this conversation has a Google Drive tool that can create files/);
-    expect(DOCS_OFFER).toContain("Only after a yes");
-    expect(DOCS_OFFER).toContain("If no such tool is available, don't mention Google Docs.");
-    expect(DOCS_OFFER).toContain("Never share the file or change its permissions.");
-    // 0.5.0 (Y4): the themed Word copy first, the HTML copy as the fallback.
-    expect(DOCS_OFFER).toContain('`inline: "docx"`');
-    expect(DOCS_OFFER).toContain("`base64Content`");
-    expect(DOCS_OFFER).toContain("`contentMimeType` = `inline.mimeType`");
-    expect(DOCS_OFFER).toContain("copied exactly");
-    expect(DOCS_OFFER).toContain("`inlineError`");
+    // C-D7: the themed Word copy is a saved file the user uploads; only the HTML copy goes through a Drive connector.
+    expect(DOCS_OFFER).toMatch(/^\*\*Google Docs\.\*\* After the report is written, ask whether they want it as a Google Doc\./);
+    expect(DOCS_OFFER).toContain('`formats: ["gdocs"]`');
+    expect(DOCS_OFFER).toContain("`.google-docs.docx`");
+    expect(DOCS_OFFER).toContain("drive.google.com (New, then File upload)");
+    expect(DOCS_OFFER).toContain("Convert uploads to Google Docs editor format");
+    expect(DOCS_OFFER).toContain("charts appear as tables");
     expect(DOCS_OFFER).toContain('`inline: "html"`');
     expect(DOCS_OFFER).toContain("`textContent`");
     expect(DOCS_OFFER).toContain('`contentMimeType: "text/html"`');
-    expect(DOCS_OFFER).toContain("`disableConversionToGoogleType` unset");
-    expect(DOCS_OFFER).toContain("charts appear as tables");
-    expect(DOCS_OFFER.indexOf('`inline: "docx"`')).toBeLessThan(DOCS_OFFER.indexOf('`inline: "html"`'));
-    // R-2: the Docs export writes no files (without formats, export_report would fall back to the default formats).
+    expect(DOCS_OFFER).toContain("after a yes");
+    expect(DOCS_OFFER).toContain("Never share the file or change its permissions.");
+    expect(DOCS_OFFER.indexOf('`formats: ["gdocs"]`')).toBeLessThan(DOCS_OFFER.indexOf('`inline: "html"`'));
+    // No base64 route.
+    expect(DOCS_OFFER).not.toContain("base64Content");
+    expect(DOCS_OFFER).not.toContain('`inline: "docx"`');
+    expect(DOCS_OFFER).not.toContain("inlineError");
     expect(DOCS_OFFER).toContain("`formats: []`");
   });
 
   it("monthly-report-writeup keeps steps 1 to 5 and adds the export and Docs steps", async () => {
     const t = await textOf("monthly-report-writeup", { client: "example.com", month: "2026-09" });
-    for (const h of ["1. **Get the data.**", "2. **Read the numbers correctly.**", "3. **Write the report**", "4. **Style rules.**", "5. **Unavailable data.**", "6. **Offer to save it.**", "7. **Google Docs (only if available).**"]) expect(t).toContain(h);
+    for (const h of ["1. **Get the data.**", "2. **Read the numbers correctly.**", "3. **Write the report**", "4. **Style rules.**", "5. **Unavailable data.**", "6. **Offer to save it.**", "7. **Google Docs.**"]) expect(t).toContain(h);
     expect(t.indexOf("5. **Unavailable data.**")).toBeLessThan(t.indexOf("6. **Offer to save it.**"));
     expect(t).toContain('`template: "monthly"`, `month: "2026-09"`');
   });

@@ -60,6 +60,7 @@ const FORMAT_CHOICES: Choice<Format>[] = [
   { value: "html", label: "HTML" },
   { value: "md", label: "Markdown" },
   { value: "pptx", label: "PowerPoint (.pptx)" },
+  { value: "gdocs", label: "Word copy for Google Docs (.google-docs.docx)" },
 ];
 type PeriodChoice = "last_month" | "last_quarter" | "last_28_days" | "last_n_days";
 const PERIOD_CHOICES: readonly Choice<PeriodChoice>[] = [

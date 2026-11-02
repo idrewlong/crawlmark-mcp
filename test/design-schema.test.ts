@@ -13,10 +13,10 @@ describe("theme and pptx schema additions", () => {
     expect(r.valid).toBe(true);
   });
 
-  it("exports the ids, the default and pptx last in FORMATS", () => {
+  it("exports the ids, the default, and pptx and gdocs last in FORMATS", () => {
     expect(THEME_IDS).toEqual(["cards", "minimal", "editorial", "bold", "consulting", "friendly"]);
     expect(DEFAULT_THEME).toBe("cards");
-    expect(FORMATS).toEqual(["md", "html", "pdf", "docx", "pptx"]);
+    expect(FORMATS).toEqual(["md", "html", "pdf", "docx", "pptx", "gdocs"]);
   });
 
   it.each(THEME_IDS)("accepts %s in branding and in a template", (id) => {
@@ -33,9 +33,9 @@ describe("theme and pptx schema additions", () => {
     expect(t.errors.some((e) => e.path === "templates.mine.theme")).toBe(true);
   });
 
-  it("allows five default formats and rejects six", () => {
-    expect(validateTemplateText(file({ formats: "[md, html, pdf, docx, pptx]" })).errors).toEqual([]);
-    const six = validateTemplateText(file({ formats: "[md, html, pdf, docx, pptx, md]" }));
+  it("allows six default formats and rejects seven", () => {
+    expect(validateTemplateText(file({ formats: "[md, html, pdf, docx, pptx, gdocs]" })).errors).toEqual([]);
+    const six = validateTemplateText(file({ formats: "[md, html, pdf, docx, pptx, gdocs, md]" }));
     expect(six.valid).toBe(false);
     expect(six.errors.some((e) => e.path === "defaults.formats")).toBe(true);
   });

@@ -265,6 +265,7 @@ export const FORMAT_CHOICES: readonly { value: Format; label: string }[] = [
   { value: "html", label: "HTML" },
   { value: "md", label: "Markdown" },
   { value: "pptx", label: "PowerPoint (.pptx)" },
+  { value: "gdocs", label: "Word copy for Google Docs (.google-docs.docx)" },
 ];
 
 export interface ReportCliDeps {

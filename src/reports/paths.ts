@@ -25,7 +25,7 @@ export const globalTemplatesFile = (homeDir: string) => join(homeDir, "config", 
 /** `<home>/config/report-templates/<client>.yaml`. */
 export const clientTemplatesFile = (homeDir: string, clientSlug: string) => join(homeDir, "config", "report-templates", `${safeSegment(clientSlug)}.yaml`);
 
-export const FORMAT_EXT: Record<Format, string> = { md: "md", html: "html", pdf: "pdf", docx: "docx", pptx: "pptx" };
+export const FORMAT_EXT: Record<Format, string> = { md: "md", html: "html", pdf: "pdf", docx: "docx", pptx: "pptx", gdocs: "google-docs.docx" };
 
 /**
  * Relative report path parts: `<client>/<YYYY-MM>/<template>-<period>.<ext>` (D7). The internal-notes variant (B-C5)

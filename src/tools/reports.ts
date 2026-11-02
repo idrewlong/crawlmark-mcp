@@ -207,7 +207,7 @@ export function registerReportTools(server: McpServer) {
         "`narrative` is your commentary: `summary` plus text per section id. Format: paragraphs, `- ` bullets, `1.` lists, `###` sub-headings, pipe tables, `{{chart <sectionId>}}` (a chart the report already draws) and **bold**; up to 20,000 characters per text and 100,000 in total, and at most 20 `{{chart}}` lines per report. Without a narrative the files are labelled data-only. " +
         "Any text can be `{ client, internal }`: the internal part goes to a separate `<template>-<period>.internal.md` file (audience `internal`; with `formats: []` it comes back as `internalNotes`), never to the client files; `narrative.internal` holds general internal notes. " +
         "Client text must not name crawlmark, Claude, Anthropic, DataForSEO, tool names or credential names: the export is refused, nothing is written, and the result lists every hit (`refused: true`, `hits`). Rewrite the passage or move it to internal notes. `allowTerms` can allow a tool name or blocked term that is fine to show; with white label on, built-in terms (crawlmark, Claude, Anthropic, DataForSEO) can only be allowed by the user in the branding allowTerms. " +
-        "`inline: \"docx\"` returns the report as a base64 Word file in the report's theme (charts as tables, logo only up to 48 KB, at most 120,000 base64 characters) for saving to Google Docs with the user's own Drive tool, only after the user agrees; when it is too big the result has `inlineError` (and no `inline`) naming the local .docx path, and `inline: \"html\"` (a plain docs-friendly HTML copy, no logo) is the fallback. `formats: []` with inline writes no file. " +
+        "`formats: [\"gdocs\"]` saves a Word copy for Google Docs next to the other files (`<template>-<period>.google-docs.docx`): the report's theme, charts as tables, the logo kept; the user uploads it to Google Drive themselves (nothing passes through the chat). `inline: \"html\"` returns a plain docs-friendly HTML copy (no logo) for a Drive connector that can create files, only after the user agrees. `formats: []` with inline writes no file. " +
         "Re-exporting the same template and period overwrites its files. `pptx` writes a PowerPoint deck from the same report (no extra data cost); Google Slides users upload it to Drive and open it with Slides. Ask the user which format(s) they want (default PDF) and pass exactly those. PDF needs Chrome; if it fails, an HTML file is written instead (unless HTML was asked for too), the other formats are still written, and `warnings` says why.",
       inputSchema: {
         client: clientArg,
@@ -221,7 +221,7 @@ export function registerReportTools(server: McpServer) {
         include: z.array(z.string().min(1).max(40)).max(40).optional(),
         allowPaid: z.boolean().optional(),
         estimateOnly: z.boolean().optional().describe("Price the paid sections without running anything or writing files (as run_report_template's estimateOnly). Not with reportId."),
-        formats: z.array(z.enum(FORMATS)).max(5).optional().describe("Default: the saved default (the template file's defaults.formats), PDF unless changed. Pass exactly the formats the user chose."),
+        formats: z.array(z.enum(FORMATS)).max(6).optional().describe("Default: the saved default (the template file's defaults.formats), PDF unless changed. Pass exactly the formats the user chose."),
         theme: z.enum(THEME_IDS).optional().describe("One export only: cards, minimal, editorial, bold, consulting or friendly. Default: the template's theme, else the branding's, else cards."),
         narrative: z
           .strictObject({
@@ -232,7 +232,7 @@ export function registerReportTools(server: McpServer) {
           .optional()
           .describe("Your commentary: `summary`, and text keyed by section id (e.g. search, brand, traffic, opportunities, audit). A text is a string for the client, or { client, internal }."),
         allowTerms: z.array(z.string().min(2).max(60)).max(20).optional().describe("Terms the client text may contain for this export (added to the branding allowTerms), for example a client whose own name matches a blocked word. With white label on it can't allow built-in terms such as crawlmark, Claude or DataForSEO. The result's warnings list the terms applied."),
-        inline: z.enum(["html", "md", "docx"]).optional().describe("Also return the report as a copy to pass on: docx (the themed Word file as base64, for Google Docs through the user's Drive tool; charts become tables), html (plain Google Docs fallback) or md."),
+        inline: z.enum(["html", "md"]).optional().describe("Also return the report as a copy to pass on: html (a plain docs-friendly copy, no logo, for a Google Doc through the user's Drive tool) or md."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

@@ -1,7 +1,7 @@
 /**
  * export_report and `crawlmark-cli report` (D7): render a TemplateReport to
- * Markdown, HTML, PDF, DOCX and PPTX files under REPORTS_DIR, and/or return an inline
- * docs-friendly copy for the Google Docs handoff. Files are client data: 0600
+ * Markdown, HTML, PDF, DOCX, PPTX and Google Docs Word copy (gdocs) files under REPORTS_DIR, and/or return an inline
+ * docs-friendly HTML or Markdown copy. Files are client data: 0600
  * files in 0700 directories, written atomically, never through a symlinked
  * client or month directory, never outside REPORTS_DIR. Re-running the same
  * template and period overwrites (`overwritten: true`).
@@ -14,7 +14,7 @@ import { stripControl } from "../lib/terminal-text.js";
 import { reportRelPath } from "./paths.js";
 import type { TemplateReport, WinMissItem } from "./report-types.js";
 import { buildReportDoc, type DocBranding } from "./render/doc.js";
-import { MAX_DOCS_LOGO_BYTES, toDocx } from "./render/docx.js";
+import { toDocx } from "./render/docx.js";
 import { toHtml } from "./render/html.js";
 import { MAX_LOGO_BYTES, sniffImage } from "./render/image.js";
 import { internalNotesMarkdown } from "./render/internal-notes.js";
@@ -34,20 +34,10 @@ export { ClientTextLintError } from "./render/term-lint.js";
 
 export const MAX_INLINE_CHARS = 1_000_000;
 
-/** The Google Docs Word copy passes through the chat as base64; above this many characters it is not returned (C8). */
-export const MAX_INLINE_DOCX_BASE64 = 120_000;
-
-export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-export const DOCS_LOGO_BIG_WARNING = "Logo left out of the Google Docs copy (it is over 48 KB); a smaller PNG or JPEG would appear.";
-export const DOCS_LOGO_SIZE_WARNING = "Logo left out of the Google Docs copy to keep it small enough to pass through the chat.";
-
 export interface ExportOptions {
   formats: Format[];
   narrative?: Narrative | undefined;
-  inline?: "html" | "md" | "docx" | undefined;
-  /** Test hook: the base64 character cap for inline "docx" (default MAX_INLINE_DOCX_BASE64). */
-  maxInlineDocxBase64?: number | undefined;
+  inline?: "html" | "md" | undefined;
   reportsDir: string;
   branding: ResolvedBranding;
   version: string;
@@ -83,11 +73,7 @@ export interface ExportResult {
   files: ExportedFile[];
   /** The internal notes as Markdown, when there are some and no file was asked for (`formats: []`). Never for the client. */
   internalNotes?: string;
-  inline?:
-    | { mimeType: "text/html" | "text/markdown"; title: string; content: string }
-    | { mimeType: typeof DOCX_MIME; title: string; content?: undefined; theme: ThemeId; base64: string; bytes: number; base64Chars: number };
-  /** The Word copy for Google Docs was too large to return; nothing else failed. */
-  inlineError?: string;
+  inline?: { mimeType: "text/html" | "text/markdown"; title: string; content: string };
   sectionErrors: { id: string; error: string }[];
   /** Paid data this report's run used (operator-only: never rendered into the files). Present when anything was spent. */
   spend?: TemplateReport["spend"];
@@ -297,6 +283,7 @@ export async function exportReport(report: TemplateReport, opts: ExportOptions):
       if (format === "md") data = toMarkdown(doc);
       else if (format === "html") data = toHtml(doc);
       else if (format === "docx") data = await toDocx(doc);
+      else if (format === "gdocs") data = await toDocx(doc, { variant: "docs" });
       else if (format === "pptx") {
         const deck = await toPptx(doc);
         data = deck.data;
@@ -332,29 +319,7 @@ export async function exportReport(report: TemplateReport, opts: ExportOptions):
   }
 
   let inline: ExportResult["inline"];
-  let inlineError: string | undefined;
-  if (opts.inline === "docx") {
-    const cap = opts.maxInlineDocxBase64 ?? MAX_INLINE_DOCX_BASE64;
-    const logoIn = Boolean(doc.branding.logo) && doc.branding.logo!.data.length <= MAX_DOCS_LOGO_BYTES;
-    if (doc.branding.logo && !logoIn) warnings.push(DOCS_LOGO_BIG_WARNING);
-    let data = await toDocx(doc, { variant: "docs" });
-    if (data.toString("base64").length > cap && logoIn) {
-      const { logo: _logo, ...branding } = doc.branding;
-      const smaller = await toDocx({ ...doc, branding }, { variant: "docs" });
-      if (smaller.toString("base64").length <= cap) {
-        data = smaller;
-        warnings.push(DOCS_LOGO_SIZE_WARNING);
-      }
-    }
-    const base64 = data.toString("base64");
-    if (base64.length > cap) {
-      const docxPath = reportFilePath(opts.reportsDir, report, "docx");
-      const where = existsSync(docxPath) ? docxPath : `export with formats: ["docx"] and upload that file (Drive converts it to a Google Doc when "Convert uploads" is on)`;
-      inlineError = `The Google Docs copy is ${Math.round(data.length / 1024)} KB (${base64.length.toLocaleString("en-US")} characters as base64; the limit is ${cap.toLocaleString("en-US")} so it can pass through the chat). Save it with inline: "html" instead (no logo, plain tables), or upload the Word file to Google Drive yourself: ${where}.`;
-    } else {
-      inline = { mimeType: DOCX_MIME, title: doc.meta.title, theme: doc.branding.theme, base64, bytes: data.length, base64Chars: base64.length };
-    }
-  } else if (opts.inline) {
+  if (opts.inline) {
     const content = opts.inline === "html" ? toHtml(doc, { variant: "docs" }) : toMarkdown(doc);
     if (content.length > MAX_INLINE_CHARS) {
       throw new Error(`The inline ${opts.inline} is ${content.length.toLocaleString("en-US")} characters (limit ${MAX_INLINE_CHARS.toLocaleString("en-US")}). Use inline: "md", or fewer sections or rows.`);
@@ -370,7 +335,6 @@ export async function exportReport(report: TemplateReport, opts: ExportOptions):
     files,
     ...(internalNotes ? { internalNotes } : {}),
     ...(inline ? { inline } : {}),
-    ...(inlineError ? { inlineError } : {}),
     sectionErrors: report.sections.flatMap((s) => (s.status === "error" ? [{ id: s.id, error: s.error }] : [])),
     ...(report.spend.usd > 0 || report.spend.units.ahrefs > 0 || report.spend.units.semrush > 0 ? { spend: report.spend } : {}),
     warnings,

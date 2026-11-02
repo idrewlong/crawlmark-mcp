@@ -15,7 +15,7 @@ export const THEME_IDS = ["cards", "minimal", "editorial", "bold", "consulting",
 export type ThemeId = (typeof THEME_IDS)[number];
 export const DEFAULT_THEME: ThemeId = "cards";
 
-export const FORMATS = ["md", "html", "pdf", "docx", "pptx"] as const;
+export const FORMATS = ["md", "html", "pdf", "docx", "pptx", "gdocs"] as const;
 export type Format = (typeof FORMATS)[number];
 
 /** Template and section ids: lowercase letters, digits and hyphens, starting with a letter or digit. */
@@ -374,7 +374,7 @@ export type BlockSpec = z.infer<typeof BlockSchema>;
 export const TemplateFileSchema = z.strictObject({
   version: z.literal(1),
   branding: BrandingSchema.optional(),
-  defaults: z.strictObject({ template: id.optional(), formats: z.array(z.enum(FORMATS)).min(1).max(5).optional() }).optional(),
+  defaults: z.strictObject({ template: id.optional(), formats: z.array(z.enum(FORMATS)).min(1).max(6).optional() }).optional(),
   // Optional: a file can hold only branding and defaults (a per-client branding override, say).
   templates: z.record(id, TemplateSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 templates").optional(),
   blocks: z.record(id, BlockSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 blocks").optional(),

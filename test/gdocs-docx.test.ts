@@ -2,7 +2,7 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildReportDoc, type Chart, type ReportDoc } from "../src/reports/render/doc.js";
-import { MAX_DOCS_LOGO_BYTES, toDocx } from "../src/reports/render/docx.js";
+import { toDocx } from "../src/reports/render/docx.js";
 import { THEME_IDS } from "../src/reports/templates/schema.js";
 import { fixtureReport, TINY_PNG } from "./fixtures/reports/report.js";
 
@@ -74,14 +74,10 @@ describe("docx docs variant", () => {
     expect(xml).toContain("w:anchor=");
   });
 
-  it("keeps a 40 KB logo and leaves out a 60 KB one", async () => {
+  it("keeps both a 40 KB and a 60 KB logo (the file is saved, not passed through the chat)", async () => {
     const withLogo = await parts(await toDocx(await monthly({ logo: png(40_000) }), { variant: "docs" }));
     expect(withLogo.names.some((n) => n.startsWith("word/media/"))).toBe(true);
     const big = await parts(await toDocx(await monthly({ logo: png(60_000) }), { variant: "docs" }));
-    expect(big.names.some((n) => n.startsWith("word/media/"))).toBe(false);
-    // The file variant keeps the big logo.
-    const file = await parts(await toDocx(await monthly({ logo: png(60_000) })));
-    expect(file.names.some((n) => n.startsWith("word/media/"))).toBe(true);
-    expect(MAX_DOCS_LOGO_BYTES).toBe(48 * 1024);
+    expect(big.names.some((n) => n.startsWith("word/media/"))).toBe(true);
   });
 });
