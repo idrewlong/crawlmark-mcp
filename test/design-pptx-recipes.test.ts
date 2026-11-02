@@ -151,6 +151,30 @@ describe("summary", () => {
     expect(one(consulting, "Item 1").x).toBeGreaterThanOrEqual(SLIDE.margin + 2.2);
   });
 
+  it("one point: a statement slide in every theme (large heading-font sentence, no number, centred, 60-80% wide)", async () => {
+    const sentence = "Clicks grew 12% on last month.";
+    const area = contentArea(false);
+    for (const id of THEME_IDS) {
+      const t = deckTheme(id);
+      const all = shapes(await slideXml(withBullets([sentence]), id, 3));
+      const st = one(all, "Statement");
+      expect(st.xml, id).toContain(`<a:t>${sentence}</a:t>`);
+      expect(all.some((s) => /<a:t>01<\/a:t>/.test(s.xml)), `${id} number`).toBe(false);
+      expect(named(all, /^(Insight|Item|Lead)/), id).toHaveLength(0);
+      const size = Number(/ sz="(\d+)"/.exec(st.xml)![1]) / 100;
+      expect(size, `${id} size`).toBeGreaterThanOrEqual(32);
+      expect(st.xml, `${id} font`).toContain(`typeface="${t.fonts.heading}"`);
+      // The text box is 60-80% of the content width, and the block sits around the middle of the content area.
+      expect(st.w / area.w, `${id} width`).toBeGreaterThanOrEqual(0.55);
+      expect(st.w / area.w, `${id} width`).toBeLessThanOrEqual(0.8);
+      const mid = st.y + st.h / 2;
+      expect(Math.abs(mid - (area.y + area.h / 2)) / area.h, `${id} centred`).toBeLessThan(0.12);
+      if (t.surface.card) expect(named(all, "Statement card"), id).toHaveLength(1);
+      if (t.surface.labelColumn) expect(one(all, "Label").xml, id).toContain("<a:t>Key point</a:t>");
+      if (!t.surface.card && !t.surface.labelColumn) expect(named(all, "Statement rule"), id).toHaveLength(1);
+    }
+  });
+
   it("editorial: the first point is a large serif lead, the rest numbered rows", async () => {
     const all = shapes(await slideXml(withBullets(["Clicks grew 12% month over month.", "Service pages", "One post"]), "editorial", 3));
     const lead = one(all, "Lead");

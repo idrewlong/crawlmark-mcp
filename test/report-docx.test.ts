@@ -92,4 +92,20 @@ describe("image helper", () => {
     expect(sniffImage(Buffer.from("GIF89a....................."))).toBeUndefined();
     expect(fit({ width: 1000, height: 100 }, 200, 56)).toEqual({ width: 200, height: 20 });
   });
+
+  it("treats a zero width or height as unreadable (no NaN layout from a 0x0 logo)", () => {
+    const png = (w: number, h: number) => {
+      const b = Buffer.from(TINY_PNG);
+      b.writeUInt32BE(w, 16);
+      b.writeUInt32BE(h, 20);
+      return b;
+    };
+    expect(imageSize(png(0, 0))).toBeUndefined();
+    expect(imageSize(png(0, 10))).toBeUndefined();
+    expect(imageSize(png(10, 0))).toBeUndefined();
+    const jpeg = (w: number, h: number) => Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 255, w >> 8, w & 255, 0x03, 0, 0, 0, 0, 0, 0]);
+    expect(imageSize(jpeg(0, 0))).toBeUndefined();
+    expect(imageSize(jpeg(64, 0))).toBeUndefined();
+    expect(imageSize(jpeg(64, 32))).toEqual({ width: 64, height: 32 });
+  });
 });

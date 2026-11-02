@@ -1,7 +1,9 @@
 /**
  * Writes sample decks to PPTX_SAMPLES_DIR so CI can check every XML part with xmllint and open each deck with
  * LibreOffice Impress: the monthly fixture in all six themes, a logo + white-label deck, and the technical and local
- * builtins in cards. `slides.json` maps each file to its slide count (CI compares it with the converted PDF's pages).
+ * builtins in cards. `slides.json` maps each file to its slide count (CI compares it with the converted PDF's pages),
+ * and `clients.json` to the client name the deck shows (CI looks for it in the converted text; decks show the client
+ * name, not the domain).
  * Skipped unless PPTX_SAMPLES_DIR is set.
  *
  * While deck.ts is still the T0 stub (the T3a branch before T3c is merged), the decks come from the hand-written
@@ -21,6 +23,7 @@ import { layoutReport } from "./fixtures/reports/release-b-render.js";
 
 const out = process.env.PPTX_SAMPLES_DIR;
 const counts: Record<string, number> = {};
+const clients: Record<string, string> = {};
 
 const narrative = {
   summary: "Clicks grew **12%** month over month. Two pages moved onto page one.\n\n- Service pages drove most of the growth\n- One blog post slipped",
@@ -41,6 +44,13 @@ async function write(name: string, doc: ReportDoc) {
   writeFileSync(join(out!, name), buf);
   counts[name] = deck.slides.length;
   writeFileSync(join(out!, "slides.json"), `${JSON.stringify(counts, null, 2)}\n`);
+  // The title slide shows the client name; CI checks the converted deck for it.
+  const title = deck.slides[0];
+  expect(title?.kind).toBe("title");
+  expect(title?.title).toBe(doc.meta.clientName);
+  expect(doc.meta.clientName).not.toMatch(/\.(com|org|net)$/);
+  clients[name] = doc.meta.clientName;
+  writeFileSync(join(out!, "clients.json"), `${JSON.stringify(clients, null, 2)}\n`);
 }
 
 describe.skipIf(!out)("PPTX samples for CI", () => {

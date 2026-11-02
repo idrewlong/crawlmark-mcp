@@ -67,7 +67,8 @@ describe("help", () => {
   it("0.4.0 T4: report help names preview-branding --all-themes and the six preview files", () => {
     const report = groupHelp("report", plain);
     expect(report).toContain("report preview-branding [--client <domain>] [--all-themes]");
-    expect(report).toMatch(/--all-themes\s+Render the same sample in all six themes/);
+    expect(report).toMatch(/--all-themes\s+Render a short standard-layout sample report with a\s+contents page \(2-3 pages, sample data\) in each of the six/);
+    expect(report).not.toContain("same sample");
     expect(report).toContain("1-cards.pdf");
     expect(report).toContain("6-friendly.pdf");
     for (const l of report.split("\n")) expect(l.length).toBeLessThanOrEqual(80);

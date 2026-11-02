@@ -39,6 +39,8 @@ export interface SlideEnv {
 
 export const LOGO_TARGET = (mime: "image/png" | "image/jpeg") => `../media/logo.${mime === "image/png" ? "png" : "jpeg"}`;
 export const MORE_DETAIL = "More detail in the full report.";
+/** Shown in the chart area when a chart can't be drawn and has no table to show instead. */
+export const CHART_UNAVAILABLE = "Chart not available in this format; see the full report.";
 
 /** The gap between blocks and the inner padding of every panel (inches). */
 const GAP = 0.25;
@@ -1189,10 +1191,46 @@ function textBlock(x: Ctx, b: Builder, area: Box, items: string[], o: { cards: b
   spreadItems(x, b, { ...box, x: box.x + colW + 0.5, w: colW }, items.slice(half), { sizes: [20, 18], bg, name: "Item b", numbered: true, start: half + 1 });
 }
 
+/**
+ * A summary of one point, as a statement: the sentence large in the heading font (54 → 32 pt, at most three lines in
+ * three quarters of the content width), no number, centred in the content area on the theme's surface: a card
+ * (cards, friendly), consulting's label column, else the theme's top rule (bold's accent bar, editorial's ink rule,
+ * minimal's hairline).
+ */
+function statement(x: Ctx, b: Builder, area: Box, text: string): void {
+  const labelled = !!x.t.surface.labelColumn;
+  const card = !!x.t.surface.card;
+  const w = Math.min(area.w * 0.75, labelled ? area.w - 2.25 : area.w);
+  const style = (size: number): RunStyle => ({ size, bold: x.t.heading.bold, color: NEUTRAL.ink, font: x.fonts.heading });
+  const size = fitSize([54, 48, 44, 40, 36, 32], (sz) => lineCount(text, style(sz), w) <= 3 && textH(text, style(sz), w, 1.05) <= area.h * 0.6);
+  const st = style(size);
+  const th = textH(text, st, w, 1.05) + 0.1;
+  const para1 = [line1(text, st, { lineSpacing: 105 })];
+  if (card) {
+    const pad = 0.6;
+    const h = Math.min(area.h, th + 2 * pad);
+    const box: Box = { ...area, y: area.y + (area.h - h) / 2, h };
+    contentCard(x, b, box, "Statement card");
+    b.add(textBox(b, "Statement", { x: box.x + pad, y: box.y, w, h }, para1, { anchor: "ctr", autofit: true }));
+    return;
+  }
+  if (labelled) {
+    const h = Math.min(area.h, th + 0.4);
+    const box = labelColumn(x, b, { ...area, y: area.y + (area.h - h) / 2, h }, "Key point");
+    b.add(textBox(b, "Statement", { x: box.x, y: box.y + 0.15, w, h: th }, para1, { autofit: true }));
+    return;
+  }
+  const gap = 0.35;
+  const top = area.y + Math.max(0, (area.h - th - gap) / 2);
+  const r = topRule(x, b, { x: area.x, y: top, w: x.id === "minimal" ? w : 1.2, h: 0 }, "Statement rule");
+  b.add(textBox(b, "Statement", { x: area.x, y: top + r + gap, w, h: th }, para1, { autofit: true }));
+}
+
 function summarySlide(x: Ctx, s: Of<"summary">, env: SlideEnv): BuiltSlide {
   const b = bodySlide(x, s.title);
   sourceLine(x, b, s.caption ? [s.caption] : []);
-  textBlock(x, b, contentArea(false), s.bullets, { cards: true, label: "Key points" });
+  if (s.bullets.length === 1) statement(x, b, contentArea(false), s.bullets[0]!);
+  else textBlock(x, b, contentArea(false), s.bullets, { cards: true, label: "Key points" });
   footer(x, b, env.number);
   return { xml: b.xml(), rels: b.rels, logo: false, notes: s.notes };
 }
@@ -1239,6 +1277,11 @@ function sectionSlide(x: Ctx, s: Of<"section">, env: SlideEnv): BuiltSlide & { c
       b.add(chartFrame(b.next(), "Chart", s.chart.summary || s.chart.title, rId, { ...c, y: c.y + CAPTION_H, h: c.h - CAPTION_H }));
       chart = { no: env.chartNo, part: env.chart };
     } else if (fallback) planTable(x, fallback, box.w, box.h, { bars: false }).draw(b, box);
+    else if (s.chart) {
+      // No chart and no table to stand in for it: say so rather than leave the area empty.
+      const c = contentCard(x, b, box, "Chart card");
+      b.add(textBox(b, "Chart placeholder", c, [line1(CHART_UNAVAILABLE, { ...bodyStyle(x, 16), color: NEUTRAL.muted }, { align: "ctr" })], { anchor: "ctr" }));
+    }
   };
 
   if (s.chart) {

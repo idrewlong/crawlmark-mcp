@@ -149,13 +149,15 @@ describe("docx themes", () => {
       const text = (p: string) => [...p.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).join("");
       const heads = heading2Paras(document).map(text);
       expect(heads[0]).toBe("Contents");
-      const numbered = heads.slice(1);
+      const numbered = heads.slice(1, -1);
       expect(numbered.length).toBeGreaterThan(2);
       numbered.forEach((h, i) => expect(h.startsWith(String(i + 1).padStart(2, "0")), h).toBe(true));
+      // As in the HTML: "About this report" closes the report without a section number (the contents list still
+      // numbers every entry, like the HTML's ordered list).
+      expect(heads.at(-1)).toBe("About this report");
       const entries = [...document.matchAll(/<w:p>(?:(?!<\/w:p>)[\s\S])*?<w:hyperlink[\s\S]*?<\/w:p>/g)].map((m) => text(m[0]));
-      expect(entries.length).toBe(numbered.length);
+      expect(entries.length).toBe(numbered.length + 1);
       entries.forEach((e, i) => expect(e.startsWith(`${String(i + 1).padStart(2, "0")}.`), e).toBe(true));
-      expect(numbered.at(-1)).toContain("About this report");
     });
     it("other themes do not number", async () => {
       const heads = heading2Paras((await files("minimal", {}, true)).document);

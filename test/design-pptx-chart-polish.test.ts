@@ -131,6 +131,44 @@ describe("share chart polish", () => {
     expect(small).not.toContain("<a:t>");
   });
 
+  /** Each label's idx, and its text (or "deleted"), from one series. */
+  const labels = (s: string): Map<number, string> =>
+    new Map([...s.matchAll(/<c:dLbl><c:idx val="(\d+)"\/>(?:<c:delete val="1"\/>|[\s\S]*?<a:t>([^<]*)<\/a:t>)/g)].map((m) => [Number(m[1]), m[2] ?? "deleted"]));
+  /** idx -> value from the series' own c:val cache, and idx -> category from its c:cat cache. */
+  const cache = (s: string, tag: "val" | "cat"): Map<number, string> =>
+    new Map([...(new RegExp(`<c:${tag}>[\\s\\S]*?<\\/c:${tag}>`).exec(s)?.[0] ?? "").matchAll(/<c:pt idx="(\d+)"><c:v>([^<]*)<\/c:v>/g)].map((m) => [Number(m[1]), m[2]!]));
+
+  it.each([
+    [[{ label: "September 2026", values: [10, 90] }, { label: "August 2026", values: [80, 20] }]],
+    [[{ label: "September 2026", values: [10, 90] }, { label: "August 2026", values: [80, 20] }, { label: "July 2026", values: [45, 55] }]],
+  ])("each label sits on the point whose value it states (%#: rows are drawn bottom-up)", async (rows) => {
+    const c = share(rows);
+    const xml = await deck(c);
+    sers(xml).forEach((s, k) => {
+      const vals = cache(s, "val");
+      const cats = cache(s, "cat");
+      const lbl = labels(s);
+      expect(lbl.size).toBe(rows.length);
+      for (const [idx, text] of lbl) {
+        const row = rows.find((r) => r.label === cats.get(idx))!;
+        expect(Number(vals.get(idx))).toBe(row.values[k]);
+        const total = row.values.reduce((a, b) => a + b, 0);
+        expect(text).toBe(`${((row.values[k]! / total) * 100).toFixed(1)}%`);
+      }
+    });
+  });
+
+  it("drops the narrow-segment label on the narrow point, not on another row's", async () => {
+    const rows = [{ label: "September 2026", values: [98, 2] }, { label: "August 2026", values: [50, 50] }];
+    const [, small] = sers(await deck(share(rows)));
+    const cats = cache(small, "cat");
+    const lbl = labels(small);
+    const narrow = [...cats].find(([, v]) => v === "September 2026")![0];
+    const wide = [...cats].find(([, v]) => v === "August 2026")![0];
+    expect(lbl.get(narrow)).toBe("deleted");
+    expect(lbl.get(wide)).toBe("50.0%");
+  });
+
   it("handles an all-zero bar without a NaN label", async () => {
     const xml = await deck(share([{ label: "None", values: [0, 0] }]));
     expect(xml).not.toContain("NaN");

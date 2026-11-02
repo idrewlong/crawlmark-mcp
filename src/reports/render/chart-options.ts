@@ -5,7 +5,7 @@
  */
 import type { ChartRunOptions } from "docx/charts";
 import { NEUTRAL, SERIES, inkOn } from "./color.js";
-import type { Chart, LineChart } from "./doc.js";
+import type { Chart, LineChart, ShareChart } from "./doc.js";
 import { docxText } from "./escape.js";
 import { niceStep, shareColors, wholeStep } from "./svg.js";
 
@@ -21,6 +21,15 @@ export function wholeInterval(c: LineChart): number {
 }
 
 /**
+ * A share chart's rows in the order the chart stores its points (point idx 0 first). A bar chart draws idx 0 at the
+ * bottom, so the rows are reversed to read top-down. Anything that addresses points by idx (the deck's per-point
+ * labels) must use this order too.
+ */
+export function shareRowsInChartOrder(c: ShareChart): ShareChart["rows"] {
+  return [...c.rows].reverse();
+}
+
+/**
  * The options for a native chart (Word and PowerPoint both build charts from this): line charts for the daily and
  * trend series, a 100% stacked bar for shares. `widthPx` is the final chart width (already halved for a half-width
  * chart); `half` only changes the height.
@@ -29,7 +38,8 @@ export function chartRunOptions(c: Chart, o: { primary: string; font: string; wi
   const px = o.widthPx;
   const half = o.half;
   const ctx = { primary: o.primary };
-  const font = { name: o.font };
+  // The font name lands in the chart XML: drop control characters (a valid name is unchanged).
+  const font = { name: docxText(o.font) };
   const axisFont = { size: 8, color: H.muted };
   let opts: ChartRunOptions;
   if (c.type === "line") {
@@ -61,8 +71,8 @@ export function chartRunOptions(c: Chart, o: { primary: string; font: string; wi
       type: "bar",
       font,
       title: { text: docxText(c.title), font: { size: 10, bold: true, color: H.ink } },
-      categories: [...c.rows].reverse().map((r) => docxText(r.label)),
-      series: c.parts.map((p, i) => ({ name: docxText(p), values: [...c.rows].reverse().map((r) => { const x = r.values[i]; return x !== undefined && Number.isFinite(x) ? x : 0; }), color: colors[i % colors.length]! })),
+      categories: shareRowsInChartOrder(c).map((r) => docxText(r.label)),
+      series: c.parts.map((p, i) => ({ name: docxText(p), values: shareRowsInChartOrder(c).map((r) => { const x = r.values[i]; return x !== undefined && Number.isFinite(x) ? x : 0; }), color: colors[i % colors.length]! })),
       stacking: "percent",
       gapWidth: 60,
       legend: { position: "top", font: { size: 8, color: H.muted } },

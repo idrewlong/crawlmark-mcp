@@ -18,7 +18,7 @@ Every format follows the same layout, like an agency dashboard export:
 
 Client files never show operator detail: a section with no data is left out (not "None."), a comparison column with no data is dropped (with one note), and tool hints, internal thresholds, a missing-logo warning and paid-data spend stay in the tool and CLI results (`export_report` and `crawlmark-cli report` return `spend` when the run used paid data). Add the optional `spend` section if you want spend in the file.
 
-Set the branding up with `crawlmark-cli setup --step branding` (also "Set up report branding" in the setup menu). It shows the current values, asks for each one (Enter keeps it, and a value that isn't set stays unset so the report keeps its default): agency name, logo (PNG or JPEG up to 512 KB, copied into `<home>/branding/`), primary and accent colours (with a darker shade suggested when white text on the primary wouldn't meet WCAG AA), body and heading fonts and the fallback family ([Fonts](#fonts)), footer, white label, whether to hide data-provider names, the commentary note, paper size and the default report format(s). Then it renders a one-page preview with sample example.com data (`<home>/branding/preview.pdf`, or `.html` without Chrome) and lets you change any field and preview again before saving; nothing is written until you choose save, and cancelling saves nothing. `--client <domain>` writes that client's override file instead, `--dry-run` previews without saving, and `--yes` keeps the current values. `crawlmark-cli report preview-branding [--client <domain>]` renders the saved branding again any time. The preview never uses client data and makes no network or paid call.
+Set the branding up with `crawlmark-cli setup --step branding` (also "Set up report branding" in the setup menu). It shows the current values, asks for each one (Enter keeps it, and a value that isn't set stays unset so the report keeps its default): agency name, logo (PNG or JPEG up to 512 KB, copied into `<home>/branding/`), primary and accent colours (with a darker shade suggested when white text on the primary wouldn't meet WCAG AA), body and heading fonts and the fallback family ([Fonts](#fonts)), footer, white label, whether to hide data-provider names, the commentary note, paper size and the default report format(s). Then it renders a one-page preview with sample example.com data (`<home>/branding/preview.pdf`, or `.html` without Chrome) and lets you change any field and preview again before saving; nothing is written until you choose save, and cancelling saves nothing. `--client <domain>` writes that client's override file instead, `--dry-run` previews without saving, and `--yes` keeps the current values. `crawlmark-cli report preview-branding [--client <domain>]` renders the saved branding again any time, and `--all-themes` renders a short standard-layout sample report with a contents page (2–3 pages per theme) in each of the six themes ([Themes](#themes)). The preview never uses client data and makes no network or paid call.
 
 ### White label
 
@@ -87,7 +87,7 @@ Your logo, colours, footer and fonts apply in every theme. The accent colour is 
 | `consulting` | Helvetica Neue, Segoe UI, then Arial | Arial | Arial |
 | `friendly` | Avenir Next, Nunito, Segoe UI, then Arial | Trebuchet MS | Trebuchet MS |
 
-Word gets the closest match to each theme (its own cover, heading, table and callout styles), not a pixel copy of the PDF. See all six with your own branding and sample example.com data:
+Word gets the closest match to each theme (its own cover, heading, table and callout styles), not a pixel copy of the PDF. See all six with your own branding on a short standard-layout sample report (sample example.com data, a contents page, 2–3 pages per theme; it is longer than the one-page branding preview so the contents, headings and tables show):
 
 ```bash
 crawlmark-cli report preview-branding --all-themes
@@ -403,14 +403,14 @@ Add `pptx` to the formats and the same report is also written as a `.pptx` deck:
 
 1. Title: client, report title, subtitle, period and compare lines, and your logo and agency name.
 2. Agenda, when the report has contents on or four or more sections; short agendas also show each section's takeaway.
-3. Key numbers: the key-figure cards with a verdict banner, which is the first sentence of the summary.
-4. Summary: up to 5 bullets.
+3. Key numbers: the key-figure cards with a verdict banner. The banner is a computed line naming each key figure's change against the comparison period (for example "Clicks up 17.6% and impressions up 17.6% vs August 2026"), built from the figures alone, not from the summary; it appears only when at least one figure changed.
+4. Summary: up to 5 bullets. A summary of a single point is shown as one large statement instead.
 5. One slide per section: a chart with its commentary bullets beside it, or a table, or both on a continuation slide. A takeaway line under the title is the commentary's first sentence, or the chart's own summary. Text blocks and `text` sections get text slides (up to 6 bullets, 2 slides per block).
 6. Closing ("Thank you"), with the footer and the date.
 
 **Limits.** A deck has at most 50 slides; if the report is bigger, continuation slides go first, then text slides, then sections from the end, and `warnings` names what was left out (it is all in the full report). Tables show 8 rows (5 under a chart) and 6 columns, cells are cut at 60 characters, and a note says "Top 8 of 42 rows; the full table is in the report." A section shows 3 bullets, and bullets are cut at 140 characters; where more was left out, the slide says the detail is in the report.
 
-**Text.** Everything on a slide is condensed from the report's own client text (the commentary, summary and highlights) by fixed rules; crawlmark writes no new interpretation. The speaker notes hold the full client commentary for that slide. Internal notes never reach a deck or its notes. The closing slide's notes carry the "About this report" text. Under white label the file properties name your agency, not crawlmark.
+**Text.** Everything on a slide is condensed from the report's own client text (the commentary, summary and highlights) by fixed rules; crawlmark writes no new interpretation. The speaker notes hold the full client commentary for that slide. Speaker notes travel with the file: anyone you send the `.pptx` to can read them (in PowerPoint's notes pane, Keynote's presenter notes or Google Slides), so they hold the same client-facing text as the report and nothing else. Internal notes never reach a deck or its notes. The closing slide's notes carry the "About this report" text. Under white label the file properties name your agency, not crawlmark.
 
 **Charts** are native PowerPoint charts with their data embedded, so "Edit Data" works in PowerPoint (and LibreOffice Impress); Keynote shows the charts. The chart caption row shows the latest value for line charts, because Keynote and macOS Quick Look drop per-point labels.
 

@@ -65,6 +65,13 @@ describe("chartPart", () => {
     expect(part!.xml).toContain("<c:lineChart>");
   });
 
+  it("drops control characters from the chart font name; a valid name is written as given", async () => {
+    const bad = (await chartPart(withPrevious, { ...O, font: "Cali\u0007bri\u0000" }))!.xml;
+    expect(bad).not.toMatch(/[\u0000-\u0008]/);
+    expect(bad).toContain('typeface="Calibri"');
+    expect((await chartPart(withPrevious, O))!.xml).toBe((await chartPart(withPrevious, { ...O, font: "Calibri" }))!.xml);
+  });
+
   it("dashes only the previous-period series", async () => {
     const { xml } = (await chartPart(withPrevious, O))!;
     const [first, second] = xml.split(/<c:ser>/).slice(1);

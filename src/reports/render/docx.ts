@@ -473,7 +473,8 @@ export async function toDocx(doc: ReportDoc): Promise<Buffer> {
     for (const b of s.blocks) children.push(...block(b, ctx));
     if (s.commentary) children.push(commentary(s.commentary, ctx), spacer());
   }
-  children.push(sectionHeading("About this report", ctx, { ...(doc.contents ? { bookmark: names.get("about-this-report")! } : {}), ...(numbered ? { number: doc.sections.length + 1 } : {}) }));
+  // No section number on "About this report" (as in the HTML); the contents list still numbers its entry.
+  children.push(sectionHeading("About this report", ctx, { ...(doc.contents ? { bookmark: names.get("about-this-report")! } : {}) }));
   children.push(...doc.about.map((a) => new Paragraph({ bullet: { level: 0 }, children: runs(a, { color: H.muted, size: 16 }) })));
 
   const small = { color: H.faint, size: 15 };

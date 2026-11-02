@@ -181,6 +181,19 @@ describe("renderDeck package", () => {
     expect(await text(zip, "ppt/slides/_rels/slide7.xml.rels")).toContain("../charts/chart1.xml");
   });
 
+  it("a chart that can't be drawn and has no fallback table shows a short placeholder in the chart area", async () => {
+    vi.mocked(chartPart).mockResolvedValueOnce(null);
+    const d = structuredClone(deck);
+    const sec = d.slides[4]!;
+    if (sec.kind !== "section" || !sec.chart) throw new Error("fixture changed");
+    delete sec.chart.fallback;
+    const s5 = await text(await unzip(await renderDeck(d, style)), "ppt/slides/slide5.xml");
+    expect(s5).not.toContain("drawingml/2006/chart");
+    expect(s5).toContain('name="Chart placeholder"');
+    expect(s5).toContain("<a:t>Chart not available in this format; see the full report.</a:t>");
+    expect(s5).not.toMatch(/docx|chartPart|null|undefined/i);
+  });
+
   it("guards: a dangling target, an external target and a part without a content type throw", () => {
     const rels = (target: string, extra = "") => `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="${target}"${extra}/></Relationships>`;
     expect(() => checkPackage([{ name: "_rels/.rels", data: rels("ppt/missing.xml") }])).toThrow(/missing part/);

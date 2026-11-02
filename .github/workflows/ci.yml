@@ -108,7 +108,9 @@ jobs:
             echo "$f: $pages page(s) for $want slide(s), $words words"
             [ "$pages" = "$want" ] || { echo "::error::$f has $pages page(s) for $want slide(s)"; exit 1; }
             [ "$words" -ge 30 ] || { echo "::error::$f came out nearly empty"; exit 1; }
-            pdftotext "$pdf" - | grep -q "example.com" || { echo "::error::$f is missing the client domain"; exit 1; }
+            client=$(node -e "console.log(require('./clients.json')[process.argv[1]])" "$f")
+            [ -n "$client" ] && [ "$client" != "undefined" ] || { echo "::error::$f has no client name in clients.json"; exit 1; }
+            pdftotext "$pdf" - | grep -qF "$client" || { echo "::error::$f is missing the client name ($client)"; exit 1; }
           done
       # The gated Chrome layout test (themes): Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs.
       - name: Allow Chrome's sandbox

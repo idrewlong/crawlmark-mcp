@@ -13,6 +13,7 @@
  *   No area fill under the line: the combined area + line chart draws in Keynote, but Quick Look then draws only the
  *   area and loses both lines.
  */
+import { shareRowsInChartOrder } from "../chart-options.js";
 import { textOn } from "../color.js";
 import type { Chart, LineChart, ShareChart } from "../doc.js";
 
@@ -92,7 +93,7 @@ function shareLabels(xml: string, c: ShareChart): string {
     const fill = fillOf(ser);
     if (!fill || ser.includes("<c:dLbls>")) return ser;
     const ink = textOn(`#${fill}`).slice(1).toUpperCase();
-    const pts = c.rows.map((r, row) => {
+    const pts = shareRowsInChartOrder(c).map((r, row) => {
       const total = r.values.reduce((t, v) => t + (Number.isFinite(v) ? v : 0), 0);
       const v = r.values[k];
       const share = total > 0 && v !== undefined && Number.isFinite(v) ? v / total : 0;
