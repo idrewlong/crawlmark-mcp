@@ -129,11 +129,11 @@ export const CONTENT_BY_YEAR: ContentByYearData = {
 export const WINS_MISSES: WinsMissesData = {
   comparedWith: "previous_year",
   goals: [
-    { kind: "win", rule: "goal", text: "Goal met: Search clicks 1120 (target 1000)", metric: "clicks", current: 1120, previous: 840, target: 1000 },
-    { kind: "miss", rule: "goal", text: "Goal missed: sessions 1500 of 2000 (75%)", metric: "sessions", current: 1500, previous: 1125, target: 2000 },
+    { kind: "win", rule: "goal", text: "Goal met: Search clicks 1,120 (target 1,000)", metric: "clicks", current: 1120, previous: 840, target: 1000 },
+    { kind: "miss", rule: "goal", text: "Goal missed: sessions 1,500 of 2,000 (75%)", metric: "sessions", current: 1500, previous: 1125, target: 2000 },
   ],
   wins: [
-    { kind: "win", rule: "kpi", text: "Search clicks rose 33.3% (1120 against 840)", metric: "clicks", current: 1120, previous: 840 },
+    { kind: "win", rule: "kpi", text: "Search clicks rose 33.3% (1,120 against 840)", metric: "clicks", current: 1120, previous: 840 },
     { kind: "win", rule: "page", text: "https://example.com/ gained 105 clicks", metric: "clicks", current: 420, previous: 315 },
     { kind: "win", rule: "page_new", text: "https://example.com/blog/water-heaters is new, with 110 clicks", metric: "clicks", current: 110, previous: null },
     { kind: "win", rule: "query_top3", text: "\"leak detection\" moved into the top 3", metric: "position", current: 2.4, previous: 4.9 },

@@ -8,6 +8,8 @@ import { stripControl } from "../lib/terminal-text.js";
 import type { GscRow } from "../providers/gsc.js";
 import type { Ga4Summary } from "../reports/monthly.js";
 import type { WinMissItem, WinsMissesData } from "../reports/report-types.js";
+// Counts in rule text are formatted as everywhere else in the report ("20,000", not "20000").
+import { fmtInt } from "../reports/render/sections.js";
 
 export const WM = { kpiPct: 5, kpiAbs: 20, positionMove: 1.0, pageAbs: 20, pagePct: 25, queryMinImpr: 100 } as const;
 
@@ -57,7 +59,7 @@ function goalItems(input: WinsMissesInput): { goals: WinMissItem[]; skipped: str
     goals.push({
       kind: met ? "win" : "miss",
       rule: "goal",
-      text: met ? `Goal met: ${name} ${v.cur} (target ${g.target})` : `Goal missed: ${name} ${v.cur} of ${g.target} (${Math.floor((v.cur / g.target) * 100)}%)`,
+      text: met ? `Goal met: ${name} ${fmtInt(v.cur)} (target ${fmtInt(g.target)})` : `Goal missed: ${name} ${fmtInt(v.cur)} of ${fmtInt(g.target)} (${Math.floor((v.cur / g.target) * 100)}%)`,
       metric: g.metric,
       current: v.cur,
       previous: v.prev,
@@ -84,7 +86,7 @@ function kpiItems(input: WinsMissesInput): Candidate[] {
     if (!bigEnough) continue;
     const win = delta > 0;
     const pct = pctChange(c.cur, c.prev);
-    const text = c.prev === 0 ? `${c.name} rose from 0 to ${c.cur}` : `${c.name} ${win ? "rose" : "fell"} ${Math.abs(pct ?? 0)}% (${c.cur} against ${c.prev})`;
+    const text = c.prev === 0 ? `${c.name} rose from 0 to ${fmtInt(c.cur)}` : `${c.name} ${win ? "rose" : "fell"} ${Math.abs(pct ?? 0)}% (${fmtInt(c.cur)} against ${fmtInt(c.prev)})`;
     out.push({ item: { kind: win ? "win" : "miss", rule: "kpi", text, metric: c.metric, current: c.cur, previous: c.prev }, size: Math.abs(delta), tie: c.metric });
   }
   if (prev && cur.impressions > 0 && prev.impressions > 0) {
@@ -118,17 +120,17 @@ function pageItems(input: WinsMissesInput): { wins: WinMissItem[]; misses: WinMi
     const p = prev.get(url) ?? 0;
     const shown = shortText(url, 150);
     if (p === 0) {
-      if (c >= WM.pageAbs) add("page_new", url, true, `${shown} is new, with ${c} clicks`, c, null, c);
+      if (c >= WM.pageAbs) add("page_new", url, true, `${shown} is new, with ${fmtInt(c)} clicks`, c, null, c);
     } else if (c > 0) {
       const d = c - p;
       // |d| >= max(20, 25% of p), in integers.
       if (Math.abs(d) >= WM.pageAbs && Math.abs(d) * 100 >= WM.pagePct * p) {
-        add("page", url, d > 0, `${shown} ${d > 0 ? "gained" : "lost"} ${Math.abs(d)} clicks`, c, p, Math.abs(d));
+        add("page", url, d > 0, `${shown} ${d > 0 ? "gained" : "lost"} ${fmtInt(Math.abs(d))} clicks`, c, p, Math.abs(d));
       }
     }
   }
   for (const [url, p] of prev) {
-    if (p >= WM.pageAbs && (cur.get(url) ?? 0) === 0) add("page_lost", url, false, `${shortText(url, 150)} lost its ${p} clicks`, 0, p, p);
+    if (p >= WM.pageAbs && (cur.get(url) ?? 0) === 0) add("page_lost", url, false, `${shortText(url, 150)} lost its ${fmtInt(p)} clicks`, 0, p, p);
   }
   const all = [...sorted(by.page), ...sorted(by.page_new), ...sorted(by.page_lost)];
   return { wins: all.filter((i) => i.kind === "win"), misses: all.filter((i) => i.kind === "miss") };

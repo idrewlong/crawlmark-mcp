@@ -55,7 +55,7 @@ describe("kpi rule (clicks)", () => {
     expect(r.misses.filter((x) => x.rule === "kpi").length).toBe(side === "miss" ? 1 : 0);
   });
   it("words the item", () => {
-    expect(clicks(840, 1120).wins[0]).toEqual({ kind: "win", rule: "kpi", text: "Search clicks rose 33.3% (1120 against 840)", metric: "clicks", current: 1120, previous: 840 });
+    expect(clicks(840, 1120).wins[0]).toEqual({ kind: "win", rule: "kpi", text: "Search clicks rose 33.3% (1,120 against 840)", metric: "clicks", current: 1120, previous: 840 });
     expect(clicks(400, 380).misses[0]!.text).toBe("Search clicks fell 5% (380 against 400)");
   });
   it("covers impressions, GA4 sessions and key events the same way", () => {
@@ -166,9 +166,9 @@ describe("goals", () => {
   it("marks a goal met at the target and missed with the percentage", () => {
     const r = winsAndMisses(input({ totals: { cur: row("", 1120, 19_999, 7), prev: row("", 840, 15_000, 7) }, ga4, goals: [...goals] }));
     expect(r.goals.map((g) => [g.kind, g.text])).toEqual([
-      ["win", "Goal met: Search clicks 1120 (target 1000)"],
-      ["miss", "Goal missed: impressions 19999 of 20000 (99%)"],
-      ["miss", "Goal missed: sessions 1500 of 2000 (75%)"],
+      ["win", "Goal met: Search clicks 1,120 (target 1,000)"],
+      ["miss", "Goal missed: impressions 19,999 of 20,000 (99%)"],
+      ["miss", "Goal missed: sessions 1,500 of 2,000 (75%)"],
       ["win", "Goal met: keyEvents 40 (target 40)"],
     ]);
     expect(r.goals[0]).toMatchObject({ rule: "goal", metric: "clicks", current: 1120, previous: 840, target: 1000 });
@@ -206,7 +206,7 @@ describe("ordering and the limit", () => {
       }),
     );
     expect(texts(r).wins).toEqual([
-      "kpi:Search clicks rose 6% (106000 against 100000)",
+      "kpi:Search clicks rose 6% (106,000 against 100,000)",
       "page:https://example.com/b gained 100 clicks",
       "page:https://example.com/c gained 60 clicks",
       "page:https://example.com/a gained 30 clicks",
@@ -260,9 +260,9 @@ describe("winsMissesSection", () => {
     expect(data.skippedGoals).toEqual([]);
     expect(texts(data).wins).toEqual([
       // larger change first within the rule
-      "kpi:Search impressions rose 33.3% (20000 against 15000)",
-      "kpi:Organic sessions rose 33.3% (1500 against 1125)",
-      "kpi:Search clicks rose 33.3% (1120 against 840)",
+      "kpi:Search impressions rose 33.3% (20,000 against 15,000)",
+      "kpi:Organic sessions rose 33.3% (1,500 against 1,125)",
+      "kpi:Search clicks rose 33.3% (1,120 against 840)",
       "page:https://example.com/ gained 105 clicks",
       "page:https://example.com/services/emergency gained 50 clicks",
       "page:https://example.com/blog/water-heaters gained 27 clicks",
@@ -297,7 +297,7 @@ describe("winsMissesSection", () => {
     const gscQuery = vi.fn(async (c: unknown, o: never) => fakeDeps().gscQuery(c as never, o));
     const data = await winsMissesSection(spec({ goals: [{ metric: "clicks", target: 1000, label: "Search clicks" }] }), ctx({ gscPeriod: noComparison, deps: { gscQuery } }));
     expect(data).toMatchObject({ comparedWith: null, wins: [], misses: [], skippedGoals: [] });
-    expect(data.goals).toEqual([{ kind: "win", rule: "goal", text: "Goal met: Search clicks 1120 (target 1000)", metric: "clicks", current: 1120, previous: null, target: 1000 }]);
+    expect(data.goals).toEqual([{ kind: "win", rule: "goal", text: "Goal met: Search clicks 1,120 (target 1,000)", metric: "clicks", current: 1120, previous: null, target: 1000 }]);
     expect(gscQuery).not.toHaveBeenCalled();
   });
 

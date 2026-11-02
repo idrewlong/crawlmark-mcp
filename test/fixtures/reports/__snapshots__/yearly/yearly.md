@@ -141,7 +141,7 @@ Compared with 2024 · Generated 13 Oct 2026 · *Data-only report*
 
 | Result | What changed | Now | Before |
 | --- | --- | ---: | ---: |
-| *Win* | Search clicks rose 33.3% (1120 against 840) | 1,120 | 840 |
+| *Win* | Search clicks rose 33.3% (1,120 against 840) | 1,120 | 840 |
 | *Win* | / gained 105 clicks | 420 | 315 |
 | *Win* | /blog/water-heaters is new, with 110 clicks | 110 | 0 |
 | *Win* | "leak detection" moved into the top 3 | 2.4 | 4.9 |
