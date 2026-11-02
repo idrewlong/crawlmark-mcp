@@ -14,7 +14,7 @@ import type { DateRange } from "./lib/dates.js";
 import type { PdfPrinter } from "./reports/render/pdf.js";
 import { loadTemplates } from "./reports/templates/load.js";
 import { estimateTemplate, planRun, runTemplate, type RunDeps, type RunEstimate } from "./reports/templates/run.js";
-import { FORMATS, type Format } from "./reports/templates/schema.js";
+import { FORMATS, THEME_IDS, type Format, type ThemeId } from "./reports/templates/schema.js";
 import { initStarterFile, listReportTemplates, templatePlanFields, validateTemplateFileAt } from "./reports/templates/service.js";
 import { globalTemplatesFile } from "./reports/paths.js";
 import { PromptAbortedError } from "./setup/prompter.js";
@@ -224,6 +224,8 @@ export interface ReportFlags {
   start?: string | undefined;
   end?: string | undefined;
   format?: string | undefined;
+  /** --theme: one run's report theme (beats the template's and the branding's). */
+  theme?: string | undefined;
   include?: string | undefined;
   paid: boolean;
   "dry-run": boolean;
@@ -237,6 +239,7 @@ export const FORMAT_CHOICES: readonly { value: Format; label: string }[] = [
   { value: "docx", label: "Word (.docx)" },
   { value: "html", label: "HTML" },
   { value: "md", label: "Markdown" },
+  { value: "pptx", label: "PowerPoint (.pptx)" },
 ];
 
 export interface ReportCliDeps {
@@ -306,6 +309,8 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
   if (flags.all === (flags.client !== undefined)) return usage(io, "report takes --client <domain|slug> or --all.");
   const formats = list(flags.format);
   if (formats && (!formats.length || formats.some((f) => !(FORMATS as readonly string[]).includes(f)))) return usage(io, `--format takes a comma list of ${FORMATS.join(", ")}.`);
+  if (flags.theme !== undefined && !(THEME_IDS as readonly string[]).includes(flags.theme)) return usage(io, `--theme takes one of ${THEME_IDS.join(", ")}.`);
+  const theme = flags.theme as ThemeId | undefined;
   const include = list(flags.include) ?? [];
   if ((flags.start === undefined) !== (flags.end === undefined)) return usage(io, "--start and --end go together.");
   if ([flags.month, flags.quarter, flags.start].filter((v) => v !== undefined).length > 1) return usage(io, "Give only one of --month, --quarter, or --start and --end.");
@@ -423,7 +428,7 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
         if (counts.error) failed++;
         continue;
       }
-      const out = await exportReport(report, { formats: wanted, reportsDir: deps.reportsDir, branding: plan.loaded.branding, version: deps.version, printer: deps.printer, lintContext: "template" });
+      const out = await exportReport(report, { formats: wanted, reportsDir: deps.reportsDir, branding: plan.loaded.branding, version: deps.version, printer: deps.printer, lintContext: "template", ...(theme ? { theme } : {}) });
       // A requested format that wasn't written (a PDF without Chrome, even with the HTML fallback) needs attention.
       if (wanted.some((f) => !out.files.some((x) => x.format === f)) || counts.error) attention = true;
       written++;

@@ -136,7 +136,7 @@ branding:                                # optional; a per-client file can overr
   # hideCrawlmark: true                  # white label: no crawlmark name or version in client files
 defaults:
   template: monthly
-  formats: [pdf]                         # any of pdf, docx, html, md; --format (CLI) or formats (export_report) wins
+  formats: [pdf]                         # any of pdf, docx, html, md, pptx; --format (CLI) or formats (export_report) wins
 templates:
   monthly:
     title: Monthly SEO report

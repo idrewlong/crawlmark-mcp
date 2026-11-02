@@ -128,7 +128,7 @@ export async function renderBrandingPreview(homeDir: string, branding: ResolvedB
   chmodSync(dir, 0o700);
   const extra = logoWarning ? { logoWarning } : {};
   try {
-    const pdf = await opts.printer(html, { paper: doc.branding.paper, footer: doc.footer, fontFamily: footerFont(doc.branding.fonts) });
+    const pdf = await opts.printer(html, { paper: doc.branding.paper, footer: doc.footer, fontFamily: footerFont(doc.branding.fonts, doc.branding.theme) });
     const path = join(dir, "preview.pdf");
     writeFileAtomic(path, pdf, 0o600);
     return { path, format: "pdf", ...extra };

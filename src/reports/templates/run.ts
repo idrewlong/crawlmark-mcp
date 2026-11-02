@@ -915,6 +915,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       ...(template.spec.layout === "onepage" ? { layout: "onepage" as const } : {}),
       ...(template.spec.cover ? { cover: template.spec.cover } : {}),
       ...(template.spec.contents === true ? { contents: true as const } : {}),
+      ...(template.spec.theme ? { theme: template.spec.theme } : {}),
     },
     period: { current: period.current, label: period.label, folderMonth: period.folderMonth, comparisons: period.comparisons },
     generatedAt: new Date().toISOString(),

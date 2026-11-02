@@ -46,8 +46,8 @@ export const FIELD_LABELS: Record<SettingField, string> = {
   paper: "Paper size",
   formats: "Default report format(s)",
 };
-const FORMAT_LABELS: Record<Format, string> = { pdf: "PDF", docx: "Word (.docx)", html: "HTML", md: "Markdown" };
-const FORMATS_ORDER: Format[] = ["pdf", "docx", "html", "md"];
+const FORMAT_LABELS: Record<Format, string> = { pdf: "PDF", docx: "Word (.docx)", html: "HTML", md: "Markdown", pptx: "PowerPoint (.pptx)" };
+const FORMATS_ORDER: Format[] = ["pdf", "docx", "html", "md", "pptx"];
 
 /** The branding session: the settings so far, and a logo file the user picked that isn't copied yet. */
 export interface BrandingDraft {

@@ -605,6 +605,7 @@ async function main(argv: string[]): Promise<number> {
       start: { type: "string" },
       end: { type: "string" },
       format: { type: "string" },
+      theme: { type: "string" },
       include: { type: "string" },
       to: { type: "string" },
       force: { type: "boolean", default: false },

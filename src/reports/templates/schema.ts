@@ -9,7 +9,12 @@ import { z } from "zod";
 import { stripControl } from "../../lib/terminal-text.js";
 import { chartRefCount, MAX_CHART_REFS, NarrativeParseError, parseNarrative } from "../render/narrative-parse.js";
 
-export const FORMATS = ["md", "html", "pdf", "docx"] as const;
+/** Report themes (0.4.0). The schema owns the ids so it never imports renderer code. */
+export const THEME_IDS = ["cards", "minimal", "editorial", "bold", "consulting", "friendly"] as const;
+export type ThemeId = (typeof THEME_IDS)[number];
+export const DEFAULT_THEME: ThemeId = "cards";
+
+export const FORMATS = ["md", "html", "pdf", "docx", "pptx"] as const;
 export type Format = (typeof FORMATS)[number];
 
 /** Template and section ids: lowercase letters, digits and hyphens, starting with a letter or digit. */
@@ -82,6 +87,8 @@ export const BrandingSchema = z.strictObject({
   /** The line that replaces "Commentary written with Claude; ..."; an empty string removes it. */
   commentaryNote: z.string().max(200).refine((s) => stripControl(s) === s, NO_CONTROL).optional(),
   allowTerms: z.array(z.string().min(2).max(60)).max(50).optional(),
+  /** Report theme (0.4.0): the look of the HTML, PDF, Word and PowerPoint files. Default cards. */
+  theme: z.enum(THEME_IDS).optional(),
   blockTerms: z.array(z.string().min(2).max(60)).max(100).optional(),
 });
 export type Branding = z.infer<typeof BrandingSchema>;
@@ -297,6 +304,8 @@ export const TemplateSchema = z.strictObject({
   cover: CoverSchema.optional(),
   /** A contents page (a linked list of the sections) after the cover. Default false. */
   contents: z.boolean().optional(),
+  /** Report theme for this template (beats the branding's theme). */
+  theme: z.enum(THEME_IDS).optional(),
   sections: z.array(SectionSchema).min(1).max(40),
 });
 export type TemplateSpec = z.infer<typeof TemplateSchema>;
@@ -323,7 +332,7 @@ export type BlockSpec = z.infer<typeof BlockSchema>;
 export const TemplateFileSchema = z.strictObject({
   version: z.literal(1),
   branding: BrandingSchema.optional(),
-  defaults: z.strictObject({ template: id.optional(), formats: z.array(z.enum(FORMATS)).min(1).max(4).optional() }).optional(),
+  defaults: z.strictObject({ template: id.optional(), formats: z.array(z.enum(FORMATS)).min(1).max(5).optional() }).optional(),
   // Optional: a file can hold only branding and defaults (a per-client branding override, say).
   templates: z.record(id, TemplateSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 templates").optional(),
   blocks: z.record(id, BlockSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 blocks").optional(),

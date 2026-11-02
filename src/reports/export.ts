@@ -1,6 +1,6 @@
 /**
  * export_report and `crawlmark-cli report` (D7): render a TemplateReport to
- * Markdown, HTML, PDF and DOCX files under REPORTS_DIR, and/or return an inline
+ * Markdown, HTML, PDF, DOCX and PPTX files under REPORTS_DIR, and/or return an inline
  * docs-friendly copy for the Google Docs handoff. Files are client data: 0600
  * files in 0700 directories, written atomically, never through a symlinked
  * client or month directory, never outside REPORTS_DIR. Re-running the same
@@ -19,12 +19,13 @@ import { toHtml } from "./render/html.js";
 import { MAX_LOGO_BYTES, sniffImage } from "./render/image.js";
 import { internalNotesMarkdown } from "./render/internal-notes.js";
 import { toMarkdown } from "./render/markdown.js";
+import { toPptx } from "./render/pptx/index.js";
 import { clientText, validateNarrative, type Narrative } from "./render/narrative.js";
 import { ClientTextLintError, isFixedTerm, lintClientText, type LintContext, type LintField } from "./render/term-lint.js";
 import { TOOL_NAMES } from "../tools/names.js";
 import { footerFont, PDF_CHROME_HINT, type PdfPrinter } from "./render/pdf.js";
 import type { ResolvedBranding } from "./templates/load.js";
-import type { Format } from "./templates/schema.js";
+import type { Format, ThemeId } from "./templates/schema.js";
 
 export { safeSegment, reportRelPath } from "./paths.js";
 
@@ -50,6 +51,8 @@ export interface ExportOptions {
   lintContext?: LintContext | undefined;
   /** Warnings to pass through to the result first (for example an invalid template file). */
   warnings?: string[] | undefined;
+  /** This export's report theme (beats the template's and the branding's). */
+  theme?: ThemeId | undefined;
 }
 
 export interface ExportedFile {
@@ -252,7 +255,7 @@ export async function exportReport(report: TemplateReport, opts: ExportOptions):
   }
   const { logo, warning } = loadLogo(opts.branding);
   if (warning) warnings.push(warning);
-  const doc = buildReportDoc(report, { narrative: opts.narrative, branding: opts.branding, logo, version: opts.version });
+  const doc = buildReportDoc(report, { narrative: opts.narrative, branding: opts.branding, logo, version: opts.version, theme: opts.theme });
   // Operator-only problems found while building the document (for example a chart reference with no chart).
   for (const w of doc.warnings) if (!warnings.includes(w)) warnings.push(w);
 
@@ -264,7 +267,11 @@ export async function exportReport(report: TemplateReport, opts: ExportOptions):
       if (format === "md") data = toMarkdown(doc);
       else if (format === "html") data = toHtml(doc);
       else if (format === "docx") data = await toDocx(doc);
-      else data = await opts.printer(toHtml(doc), { paper: doc.branding.paper, footer: doc.footer, fontFamily: footerFont(doc.branding.fonts), signal: opts.signal });
+      else if (format === "pptx") {
+        const deck = await toPptx(doc);
+        data = deck.data;
+        for (const w of deck.warnings) if (!warnings.includes(w)) warnings.push(w);
+      } else data = await opts.printer(toHtml(doc), { paper: doc.branding.paper, footer: doc.footer, fontFamily: footerFont(doc.branding.fonts, doc.branding.theme), signal: opts.signal });
     } catch (err) {
       failed.push(format);
       warnings.push(`${format.toUpperCase()} not written: ${message(err)}${format === "pdf" ? ` ${PDF_CHROME_HINT}` : ""}`);
