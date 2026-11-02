@@ -8,7 +8,14 @@ import type { AddressInfo } from "node:net";
  *   /a11y      page with accessibility problems (no alt, no lang, no label, low contrast, empty button and link)
  *   /redirect  302 to /fast on the same host
  *   /offsite   302 to the same site under the host name `localhost` (a different host from 127.0.0.1)
+ * Release 0.5.0 publish dates (crawl them from /posts):
+ *   /posts               links to the four pages below
+ *   /posts/jsonld        JSON-LD BlogPosting, datePublished 2023-04-02 (dateModified 2025-01-01 is never used)
+ *   /posts/meta          only an article:published_time meta tag, 2022-06-30
+ *   /2021/old-post/      no markup, a year in the address
+ *   /posts/lastmod-only  no date on the page; listed in SITEMAP_LASTMOD_ONLY with only a lastmod
  */
+export const DATED_PAGES = { jsonld: "2023-04-02", meta: "2022-06-30", url: "2021" } as const;
 export interface FixtureSite {
   /** http://127.0.0.1:<port> */
   origin: string;
@@ -40,6 +47,14 @@ const A11Y = `<!doctype html>
 <input type="text">
 </body></html>`;
 
+const doc = (title: string, head = "", body = "") => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>${title}</title><meta name="description" content="${title} on the fixture site.">${head}</head><body><main><h1>${title}</h1>${body}</main></body></html>`;
+const POSTS = doc("Posts", "", '<a href="/posts/jsonld">a</a> <a href="/posts/meta">b</a> <a href="/2021/old-post/">c</a> <a href="/posts/lastmod-only">d</a>');
+const JSONLD = doc("JSON-LD post", `<script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@type": "BlogPosting", headline: "x", datePublished: "2023-04-02T10:00:00Z", dateModified: "2025-01-01T00:00:00Z" })}</script>`);
+const META = doc("Meta post", '<meta property="article:published_time" content="2022-06-30T08:00:00+00:00">');
+const URL_ONLY = doc("Old post");
+const LASTMOD_ONLY = doc("Updated page");
+
 // 1x1 transparent PNG.
 const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -59,6 +74,16 @@ export async function startFixtureSite(): Promise<FixtureSite> {
         return send(200, "text/html; charset=utf-8", SLOW);
       case "/a11y":
         return send(200, "text/html; charset=utf-8", A11Y);
+      case "/posts":
+        return send(200, "text/html; charset=utf-8", POSTS);
+      case "/posts/jsonld":
+        return send(200, "text/html; charset=utf-8", JSONLD);
+      case "/posts/meta":
+        return send(200, "text/html; charset=utf-8", META);
+      case "/2021/old-post/":
+        return send(200, "text/html; charset=utf-8", URL_ONLY);
+      case "/posts/lastmod-only":
+        return send(200, "text/html; charset=utf-8", LASTMOD_ONLY, { "last-modified": "Wed, 01 Jan 2025 00:00:00 GMT" });
       case "/slow.css":
         await wait(1500);
         return send(200, "text/css", "body{font-family:sans-serif}" + "/* padding */".repeat(20_000));
