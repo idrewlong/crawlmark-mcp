@@ -751,7 +751,7 @@ function winsMissesBlocks(data: WinsMissesData, report: TemplateReport, ctx: Map
       items: data.goals.map((g): Kpi => {
         const met = g.kind === "win";
         const target = g.target ?? 0;
-        const pct = target > 0 ? Math.round((g.current / target) * 100) : null;
+        const pct = target > 0 ? Math.floor((g.current / target) * 100) : null;
         return { label: goalLabel(g), value: itemValue(g.metric, g.current), detail: `target ${fmtInt(target)} · ${met ? "met" : `${pct === null ? "n/a" : `${pct}%`} of target`}`, tone: met ? "good" : "bad" };
       }),
     });

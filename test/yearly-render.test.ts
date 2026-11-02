@@ -164,6 +164,10 @@ describe("yearly sections: block mapping (C6)", () => {
       { label: "Search clicks", value: "1,120", detail: "target 1,000 · met", tone: "good" },
       { label: "Sessions", value: "1,500", detail: "target 2,000 · 75% of target", tone: "bad" },
     ]);
+    // A miss just under target never reads as 100%, matching the rule text's floor.
+    const near = { ...WINS_MISSES, goals: [{ kind: "miss" as const, rule: "goal" as const, text: "Goal missed: sessions 999 of 1,000 (99%)", metric: "sessions" as const, current: 999, previous: null, target: 1000 }] };
+    const nk = section(buildReportDoc(withData("wins", near), v), "wins").blocks[0]!;
+    expect(nk.kind === "kpiRow" && nk.items[0]!.detail).toBe("target 1,000 · 99% of target");
     const t = tables(s.blocks)[0]!;
     expect(t.header).toEqual(["Result", "What changed", "Now", "Before"]);
     expect(t.rows.map((r) => r[0])).toEqual([...WINS_MISSES.wins.map(() => [{ t: "Win", tag: "good" }]), ...WINS_MISSES.misses.map(() => [{ t: "Miss", tag: "bad" }])]);

@@ -166,7 +166,7 @@ A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, 
 | `{ range: year_to_date }` | January to the last complete month of this year | None | The same months last year |
 | `{ range: last_12_months }` | The 12 whole months ending with the last complete month | None | The same 12 months a year earlier |
 
-A year-long period (`last_year`, `year_to_date`, `last_12_months`) compares only with `previous_year`. `compare: [previous_period]` alone shows no comparison and warns. In January, when no month of the new year is complete, `year_to_date` is the last year in full and its label says so ("2025 (full year; no complete month of 2026 yet)").
+A year-long period (`last_year`, `year_to_date`, `last_12_months`) compares only with `previous_year`. `compare: [previous_period]` gives that same comparison (shown as `previous_year`) and warns. In January, when no month of the new year is complete, `year_to_date` is the last year in full and its label says so ("2025 (full year; no complete month of 2026 yet)").
 
 `compare` picks which comparisons to show (default both; `[]` for none). At run time, `year`, `month`, `quarter` or `startDate` + `endDate` (CLI: `--year`, `--month`, `--quarter`, `--start` + `--end`) override the template's period; `year: "2025"` is that calendar year against the year before, and the current year means year to date; a month on a quarterly template makes a one-month report and its label says so.
 
@@ -237,7 +237,7 @@ crawlmark-cli gsc-history backfill --all
 
 When a range reaches back further than Google's window, crawlmark uses Google, or saved history when that goes back further, but never mixes the two to bridge a gap. If the months aren't all saved, the comparison is left out with a note naming the missing months (`Search Console: 2025 is older than Google's 16 months and the saved history doesn't cover 2025-01…2025-03; that comparison is left out.`). This also applies to custom and `last_n_days` ranges that cross the window: earlier versions could show partial days for them; now they are complete or left out.
 
-**A partly available current period.** When the current range itself starts before Google's window and some of its months aren't saved, the Search Console sections show the whole months that are available, as one unbroken run ending at the period's end, and say so in their title (for example "Search Console: Jul–Dec 2025 only"). There is no comparison for that run. Query and page movers are unavailable. Search Console goals in `wins_misses` are skipped, and the section names them. GA4 sections still cover the whole period and keep their comparison. Gaps are never bridged. `gsc-history backfill` closes gaps that are still inside Google's window; months older than that can't be recovered.
+**A partly available current period.** When the current range itself starts before Google's window and some of its months aren't saved, the Search Console sections show the whole months that are available, as one unbroken run ending at the period's end, and say so in a source note at the top of each section, in the chart titles and on the key-figure tiles (for example "Search Console: Jul–Dec 2025 only"). There is no comparison for that run. Query and page movers are unavailable. Search Console goals in `wins_misses` are skipped, and the section names them. GA4 sections still cover the whole period and keep their comparison. Gaps are never bridged. `gsc-history backfill` closes gaps that are still inside Google's window; months older than that can't be recovered.
 
 ### Long periods by month
 
@@ -249,7 +249,7 @@ For a period over 100 days, daily charts show one point per month ("Clicks per m
 
 ### Search clicks by page type
 
-`page_groups` shows clicks and impressions per [page group](clients.md#page-groups), as a share chart and a table with last year's figures. For a range inside Google's window it sends one free Search Console request for the site total and one per group (N+1 requests for N groups), filtered by page. Search Console counts by page when you filter by page, so the groups can add up to more than the site total; the section always says so. For a range older than 16 months it reads saved history, which keeps each month's top 250 pages, and notes what percentage of clicks couldn't be assigned to a page type.
+`page_groups` shows clicks and impressions per [page group](clients.md#page-groups), as a share chart and a table with last year's figures. For a range inside Google's window it sends one free Search Console request per group, filtered by page, plus one for "Other" (pages no group matches). Search Console counts by page when you filter by page, so the groups can add up to more than the site total; the section always says so. For a range older than 16 months it reads saved history, which keeps each month's top 250 pages, and notes what percentage of clicks couldn't be assigned to a page type.
 
 ### Content by publish year
 
