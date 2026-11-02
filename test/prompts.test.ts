@@ -225,8 +225,19 @@ describe("report prompts (Phase 12)", () => {
     expect(DOCS_OFFER).toMatch(/^\*\*Google Docs \(only if available\)\.\*\* Only if this conversation has a Google Drive tool that can create files/);
     expect(DOCS_OFFER).toContain("Only after a yes");
     expect(DOCS_OFFER).toContain("If no such tool is available, don't mention Google Docs.");
-    expect(DOCS_OFFER).toContain("Don't share the file or change its permissions.");
+    expect(DOCS_OFFER).toContain("Never share the file or change its permissions.");
+    // 0.5.0 (Y4): the themed Word copy first, the HTML copy as the fallback.
+    expect(DOCS_OFFER).toContain('`inline: "docx"`');
+    expect(DOCS_OFFER).toContain("`base64Content`");
+    expect(DOCS_OFFER).toContain("`contentMimeType` = `inline.mimeType`");
+    expect(DOCS_OFFER).toContain("copied exactly");
+    expect(DOCS_OFFER).toContain("`inlineError`");
     expect(DOCS_OFFER).toContain('`inline: "html"`');
+    expect(DOCS_OFFER).toContain("`textContent`");
+    expect(DOCS_OFFER).toContain('`contentMimeType: "text/html"`');
+    expect(DOCS_OFFER).toContain("`disableConversionToGoogleType` unset");
+    expect(DOCS_OFFER).toContain("charts appear as tables");
+    expect(DOCS_OFFER.indexOf('`inline: "docx"`')).toBeLessThan(DOCS_OFFER.indexOf('`inline: "html"`'));
     // R-2: the Docs export writes no files (without formats, export_report would fall back to the default formats).
     expect(DOCS_OFFER).toContain("`formats: []`");
   });

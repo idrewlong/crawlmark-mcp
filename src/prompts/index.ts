@@ -30,8 +30,10 @@ export const NUMBER_RULES = [
  */
 export const DOCS_OFFER =
   "**Google Docs (only if available).** Only if this conversation has a Google Drive tool that can create files (for example one named \"create_file\"): ask whether to save the report as a Google Doc in their Drive, and say that this puts the report in their Google Drive. " +
-  "Only after a yes: call `export_report` with the same `reportId`, `formats: []` (so no file is written again), `inline: \"html\"` and the same `narrative`, then call the Drive tool with `title` = the inline `title`, `textContent` = the inline `content`, `contentMimeType: \"text/html\"`, and no `parentId` unless the user names a folder. " +
-  "Don't share the file or change its permissions. If no such tool is available, don't mention Google Docs. If the Drive call fails, give the error and the local file path instead.";
+  "Only after a yes, and when that tool accepts `base64Content`: call `export_report` with the same `reportId`, `formats: []` (so no file is written again), `inline: \"docx\"`, the same `narrative` and the same `theme` if one was used. Then call the Drive tool with `title` = `inline.title`, `base64Content` = `inline.base64` copied exactly, in full (never shortened, re-wrapped or retyped), `contentMimeType` = `inline.mimeType`, and no `parentId` unless the user names a folder. Leave `disableConversionToGoogleType` unset so Drive converts the Word file to a Google Doc. " +
+  "Fall back to the HTML copy when the result has `inlineError` (the Word copy was too big to pass through the chat), when the Drive tool has no `base64Content`, or when the Drive call fails on the Word upload: call `export_report` again with `formats: []`, `inline: \"html\"` and the same `narrative`, then call the Drive tool with `title` = the inline `title`, `textContent` = the inline `content`, `contentMimeType: \"text/html\"`, and no `parentId` unless the user names a folder. When `inlineError` names a local .docx path, pass that path on so they can upload the Word file themselves. " +
+  "Tell the user once what to expect: the Google Doc keeps the report's theme, layout and tables; charts appear as tables; Google Docs swaps fonts it doesn't have. " +
+  "Never share the file or change its permissions. If no such tool is available, don't mention Google Docs. If the Drive call fails again, give the error and the local file path instead.";
 
 /** What the commentary may contain and where internal remarks go (export_report's `narrative`). */
 export const COMMENTARY_FORMAT = [
