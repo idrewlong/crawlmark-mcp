@@ -3,7 +3,7 @@
  * LibreOffice Impress: the monthly fixture in all six themes, a logo + white-label deck, and the technical and local
  * builtins in cards. `slides.json` maps each file to its slide count (CI compares it with the converted PDF's pages),
  * and `clients.json` to the client name the deck shows (CI looks for it in the converted text; decks show the client
- * name, not the domain).
+ * name, not the domain). 0.5.0 adds the yearly report (all four yearly sections) in all six themes.
  * Skipped unless PPTX_SAMPLES_DIR is set.
  *
  * While deck.ts is still the T0 stub (the T3a branch before T3c is merged), the decks come from the hand-written
@@ -20,6 +20,7 @@ import { THEME_IDS } from "../src/reports/templates/schema.js";
 import { fixtureDeck } from "./fixtures/pptx/decks.js";
 import { fixtureReport, TINY_PNG } from "./fixtures/reports/report.js";
 import { layoutReport } from "./fixtures/reports/release-b-render.js";
+import { yearlyReport } from "./fixtures/reports/yearly-data.js";
 
 const out = process.env.PPTX_SAMPLES_DIR;
 const counts: Record<string, number> = {};
@@ -71,6 +72,19 @@ describe.skipIf(!out)("PPTX samples for CI", () => {
     });
     await write("monthly-logo-white-label.pptx", doc);
   });
+
+  // 0.5.0: share charts by channel and page type, the wins table with goal tiles, the publish-year table.
+  for (const theme of THEME_IDS) {
+    it(`writes yearly-${theme}.pptx`, async () => {
+      const report = yearlyReport();
+      report.template = { ...report.template, cover: { preparedFor: "Jane Doe, Example Co", preparedBy: "Example Agency" } };
+      const yearlyNarrative = {
+        summary: "Clicks grew a third on 2024. Search brought the most sessions.\n\n- Service pages grew fastest\n- Two goals checked, one met",
+        sections: { channels: "Search led the growth. Direct traffic followed.\n\n- Paid search held its share" },
+      };
+      await write(`yearly-${theme}.pptx`, buildReportDoc(report, { version: "0.5.0", narrative: yearlyNarrative, branding: { agencyName: "Example Agency", footer: "Example Agency · hello@example.com" }, theme: theme as ThemeId }));
+    });
+  }
 
   for (const id of ["technical", "local"]) {
     it(`writes ${id}-cards.pptx`, async () => {

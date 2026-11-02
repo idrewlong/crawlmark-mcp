@@ -1,6 +1,7 @@
 /**
  * Writes one DOCX per builtin template (fixture data) to DOCX_SAMPLES_DIR, so CI can open each
- * file with LibreOffice. Skipped unless DOCX_SAMPLES_DIR is set.
+ * file with LibreOffice. Skipped unless DOCX_SAMPLES_DIR is set. The yearly builtin runs for the year 2025 (0.5.0 Y3.4),
+ * and the yearly report with all four yearly sections is written once per non-cards theme.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -11,13 +12,15 @@ import { toDocx } from "../src/reports/render/docx.js";
 import { BUILTIN_TEMPLATES } from "../src/reports/templates/builtin.js";
 import { fixtureReport } from "./fixtures/reports/report.js";
 import { layoutReport } from "./fixtures/reports/release-b-render.js";
+import { yearlyReport } from "./fixtures/reports/yearly-data.js";
 
 const out = process.env.DOCX_SAMPLES_DIR;
 
 describe.skipIf(!out)("DOCX samples for CI", () => {
   for (const id of Object.keys(BUILTIN_TEMPLATES)) {
     it(`writes ${id}.docx`, async () => {
-      const doc = buildReportDoc(await fixtureReport(id === "monthly" ? {} : { template: id, include: [] }), {
+      const run = id === "monthly" ? {} : id === "yearly" ? { template: id, month: undefined, year: "2025", include: [] } : { template: id, include: [] };
+      const doc = buildReportDoc(await fixtureReport(run), {
         version: "0.1.0",
         narrative: { summary: "Clicks grew **12%**.\n\n- One\n- Two", sections: {} },
       });
@@ -45,6 +48,27 @@ describe.skipIf(!out)("DOCX samples for CI", () => {
       expect(document).toContain("w:anchor=");
       mkdirSync(out!, { recursive: true });
       writeFileSync(join(out!, `theme-${theme}.docx`), buf);
+    });
+  }
+
+  // 0.5.0: the yearly report (all four yearly sections, two native share charts, monthly fallback tables) per non-cards theme.
+  for (const theme of ["minimal", "editorial", "bold", "consulting", "friendly"] as const) {
+    it(`writes theme-yearly-${theme}.docx`, async () => {
+      const doc = buildReportDoc(yearlyReport(), {
+        version: "0.5.0",
+        theme,
+        branding: { primaryColor: "#224466", accentColor: "#cc6600", hideCrawlmark: true },
+        narrative: { summary: "Clicks grew **a third** on 2024.\n\n- Search led\n- Direct followed", sections: { channels: "Search brought **40%** of sessions." } },
+      });
+      const buf = await toDocx(doc);
+      expect(buf.subarray(0, 2).toString()).toBe("PK");
+      const zip = await JSZip.loadAsync(buf);
+      const document = await zip.file("word/document.xml")!.async("string");
+      expect(document).toContain("Traffic by channel, year over year");
+      expect(document).toContain("Wins and misses");
+      expect(Object.keys(zip.files).some((f) => /^word\/charts\/chart\d+\.xml$/.test(f))).toBe(true);
+      mkdirSync(out!, { recursive: true });
+      writeFileSync(join(out!, `theme-yearly-${theme}.docx`), buf);
     });
   }
 
