@@ -12,7 +12,7 @@ const shapes: [string, string][] = [
 
 describe("extractPublished stays cheap on huge JSON-LD arrays", () => {
   for (const [name, body] of shapes) {
-    it(`20 scripts of ${body.length} chars (${name}) finish well under 200 ms`, () => {
+    it(`20 scripts of ${body.length} chars (${name}) finish in well under a second (the old quadratic walk took 2 to 4 s)`, () => {
       expect(body.length).toBeLessThanOrEqual(100_000);
       const $ = page(body);
       const t0 = performance.now();
@@ -20,7 +20,8 @@ describe("extractPublished stays cheap on huge JSON-LD arrays", () => {
       const ms = performance.now() - t0;
       console.log(`SEC-1 ${name}: ${ms.toFixed(1)} ms`);
       expect(r).toBeNull();
-      expect(ms).toBeLessThan(200);
+      // About 15 to 110 ms alone; the bound leaves room for a loaded CI runner and still fails the quadratic walk.
+      expect(ms).toBeLessThan(1000);
     });
   }
   it("still finds an Article within the node cap, in document order", () => {

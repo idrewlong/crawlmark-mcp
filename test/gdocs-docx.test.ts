@@ -40,9 +40,15 @@ describe("docx docs variant", () => {
     expect(pb.names).toEqual(pa.names);
     // docProps carry a timestamp and the library draws random relationship ids and a running drawing id for charts; compare the rest.
     const norm = (x: string) => x.replace(/rId[^"<\s]{15,}/g, "rIdX").replace(/<wp:docPr id="\d+"/g, '<wp:docPr id="N"');
+    // Embedded chart workbooks are zips with their own file timestamps; compare what's inside them.
+    const xlsx = async (z: JSZip, n: string) => {
+      const inner = await JSZip.loadAsync(await z.file(n)!.async("uint8array"));
+      const names = Object.keys(inner.files).filter((f) => !inner.files[f]!.dir).sort();
+      return (await Promise.all(names.map(async (f) => `${f}\n${await inner.file(f)!.async("string")}`))).join("\n");
+    };
     for (const n of pa.names) {
       if (n.startsWith("docProps/")) continue;
-      const [x, y] = [norm(await pa.text(n)), norm(await pb.text(n))];
+      const [x, y] = n.endsWith(".xlsx") ? [await xlsx(pa.zip, n), await xlsx(pb.zip, n)] : [norm(await pa.text(n)), norm(await pb.text(n))];
       let i = 0;
       while (i < x.length && x[i] === y[i]) i++;
       expect(y, `${n} differs at ${i}: ${x.slice(Math.max(0, i - 60), i + 60)} | ${y.slice(Math.max(0, i - 60), i + 60)}`).toBe(x);
