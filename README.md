@@ -111,7 +111,7 @@ Update with `npx -y crawlmark-mcp@latest init` (or `npm i -g crawlmark-mcp@lates
 - **Crawl again to get publish dates.** Content by publish year reads dates recorded by crawls made with 0.5.0 or later. Run `crawlmark-cli crawl` for each client you want it for.
 - **Page groups are new.** Page types come from `pageGroups` in clients.yaml, `set_client_profile`, or `crawlmark-cli clients set example.com --page-group "Blog=/blog/"`. Without them: Home, Blog, Services and Locations ([Page groups](docs/clients.md#page-groups)).
 - **Google Docs gets a Word copy you upload.** The `gdocs` format saves a themed Word file named `<template>-<period>.google-docs.docx` next to your other report files; you upload it to Google Drive yourself. A Drive connector can still save the plain HTML copy (`inline: "html"`) for you ([Google Docs](docs/reports.md#google-docs)).
-- **Update every computer before you use the new ranges or sections in a template file.** A template file that uses them doesn't load in 0.4.0 or earlier: the older version marks the whole file invalid and falls back to the builtin templates and branding. Older versions also ignore `pageGroups` in clients.yaml. Files that don't use the new features load in both.
+- **Update every computer before you use the new ranges, sections or the `gdocs` format in a template file.** A template file that uses them doesn't load in 0.4.0 or earlier: the older version marks the whole file invalid and falls back to the builtin templates and branding. Older versions also ignore `pageGroups` in clients.yaml. Files that don't use the new features load in both.
 
 Upgrading to 0.4.0
 ------------------
