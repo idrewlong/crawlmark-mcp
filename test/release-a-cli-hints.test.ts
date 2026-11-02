@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { stringLiterals } from "./helpers/string-literals.js";
 import { cliHint, cliHintDeps, NPX_COMMAND, resetCliHint } from "../src/lib/cli-hint.js";
@@ -28,7 +28,7 @@ function literalHits(file: string): string[] {
 describe("D9a: command hints come from one helper", () => {
   it("no hardcoded crawlmark-cli in user-facing strings", () => {
     const hits = walk(SRC)
-      .filter((f) => f.endsWith(".ts") && !ALLOWED.has(relative(SRC, f)))
+      .filter((f) => f.endsWith(".ts") && !ALLOWED.has(relative(SRC, f).split(sep).join("/")))
       .flatMap(literalHits);
     expect(hits).toEqual([]);
   });
