@@ -9,7 +9,8 @@ import { toDocx } from "../src/reports/render/docx.js";
 import { toHtml } from "../src/reports/render/html.js";
 import { toMarkdown } from "../src/reports/render/markdown.js";
 import { toPptx } from "../src/reports/render/pptx/index.js";
-import { MAX_SHARE_PARTS, PAGE_FILTER_NOTE, WINS_RULES_NOTE } from "../src/reports/render/sections.js";
+import { fmtInt, MAX_SHARE_PARTS, PAGE_FILTER_NOTE, WINS_RULES_NOTE } from "../src/reports/render/sections.js";
+import { latestLabel } from "../src/reports/render/pptx/slides.js";
 import type { ChannelYoyData, ContentByYearData, PageGroupsData, SearchOverviewData, SectionResult, TemplateReport, WinsMissesData } from "../src/reports/report-types.js";
 import { SECTION_TITLES, THEME_IDS } from "../src/reports/templates/schema.js";
 import { XSS } from "./fixtures/reports/release-b-render.js";
@@ -276,14 +277,23 @@ describe("yearly sections: white label and escaping", () => {
   });
 });
 
-describe("long periods: daily charts fall back to a table by month (C6)", () => {
+describe("long periods: daily series become one point per month, with a table by month (C6, Y0b)", () => {
   const searchCharts = (doc: ReportDoc) => charts(section(doc, "search").blocks).filter((c) => c.type === "line");
 
-  it("a 365-day series gives 12 monthly rows matched to the same months a year earlier", () => {
+  it("a 365-day series gives a monthly chart and 12 monthly rows matched to the same months a year earlier", () => {
     const doc = buildReportDoc(yearlyReport(), v);
     const [clicks, impressions] = searchCharts(doc);
+    expect(clicks!.title).toBe("Clicks per month");
+    expect(impressions!.title).toBe("Impressions per month");
+    const MONTH_NAMES = ["Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025", "Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025"];
     for (const c of [clicks!, impressions!]) {
-      expect(c.type === "line" && c.x).toHaveLength(365);
+      if (c.type !== "line") throw new Error("line chart expected");
+      // One point per month; the previous year's line is matched by month, the same figures as the table.
+      expect(c.x).toEqual(MONTH_NAMES);
+      expect(c.series.map((x) => [x.name, x.role])).toEqual([["2025", "current"], ["2024", "previous"]]);
+      expect(c.series[0]!.values.map((x) => fmtInt(x))).toEqual(c.fallback!.rows.map((r) => plain(r[1]!)));
+      expect(c.series[1]!.values.map((x) => fmtInt(x))).toEqual(c.fallback!.rows.map((r) => plain(r[2]!)));
+      expect(c.summary).toMatch(/^(Clicks|Impressions) per month: [\d,]+ (clicks|impressions) in 2025 against [\d,]+ in 2024, from 1 Jan to 31 Dec\.$/);
       const f = c.fallback!;
       expect(f.header).toEqual(["Month", "2025", "2024", "Change"]);
       expect(f.rows).toHaveLength(12);
@@ -308,7 +318,10 @@ describe("long periods: daily charts fall back to a table by month (C6)", () => 
     const prev = { startDate: "2024-01-15", endDate: "2024-06-20" };
     const r = yearlyReport({ period: { current: cur, label: "15 Jan – 20 Jun 2025", folderMonth: "2025-06", comparisons: { previous_year: prev } } });
     r.sections = r.sections.map((s): SectionResult => (s.id === "search" && s.status === "ok" ? { ...s, data: { ...(s.data as SearchOverviewData), daily: { current: days(cur.startDate, cur.endDate, 1), previous: days(prev.startDate, prev.endDate, 2), comparedWith: "previous_year" } } } : s));
-    const f = searchCharts(buildReportDoc(r, v))[0]!.fallback!;
+    const chart = searchCharts(buildReportDoc(r, v))[0]!;
+    expect(chart.type === "line" && chart.x).toEqual(["Jan 2025 (from 15 Jan)", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025 (to 20 Jun)"]);
+    expect(chart.type === "line" && chart.series[1]!.values).toEqual([34, 58, 62, 60, 62, 40]);
+    const f = chart.fallback!;
     expect(f.rows.map((x) => x.map(plain))).toEqual([
       ["Jan 2025 (from 15 Jan)", "17", "34", "−50.0%"],
       ["Feb 2025", "28", "58", "−51.7%"],
@@ -319,9 +332,28 @@ describe("long periods: daily charts fall back to a table by month (C6)", () => 
     ]);
   });
 
-  it("a 30-day month keeps the weekly table", async () => {
+  it("the deck caption's latest value is the last month, named by month", () => {
+    const c = searchCharts(buildReportDoc(yearlyReport(), v))[0]!;
+    expect(latestLabel(c)).toMatch(/^Latest: [\d,]+ \(Dec 2025\)$/);
+    expect(latestLabel(c)).toBe(`Latest: ${c.type === "line" ? c.series[0]!.values.at(-1) : ""} (Dec 2025)`);
+  });
+
+  it("a 92-day quarter and a 30-day month keep the daily chart and the weekly table", async () => {
+    const q = { startDate: "2025-07-01", endDate: "2025-09-30" };
+    const days = (from: string, to: string) => {
+      const out: { date: string; clicks: number; impressions: number }[] = [];
+      for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) out.push({ date: new Date(t).toISOString().slice(0, 10), clicks: 3, impressions: 30 });
+      return out;
+    };
+    const r = yearlyReport({ period: { current: q, label: "Q3 2025", folderMonth: "2025-09", comparisons: {} } });
+    r.sections = r.sections.map((s): SectionResult => (s.id === "search" && s.status === "ok" ? { ...s, data: { ...(s.data as SearchOverviewData), daily: { current: days(q.startDate, q.endDate), previous: null, comparedWith: null } } } : s));
+    const qc = searchCharts(buildReportDoc(r, v))[0]!;
+    expect(qc.title).toBe("Clicks per day");
+    expect(qc.type === "line" && qc.x).toHaveLength(92);
+    expect(qc.fallback!.title).toBe("Clicks by week");
     const doc = buildReportDoc(await fixtureReport(), v);
     const c = searchCharts(doc)[0]!;
+    expect(c.title).toBe("Clicks per day");
     expect(c.fallback!.title).toBe("Clicks by week");
     expect(c.fallback!.header[0]).toBe("Days");
   });

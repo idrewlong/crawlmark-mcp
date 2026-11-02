@@ -198,12 +198,12 @@ const prevYearMonth = (ym: string) => `${Number(ym.slice(0, 4)) - 1}${ym.slice(4
 export const MONTHLY_FALLBACK_DAYS = 100;
 
 /**
- * Monthly totals for a long daily chart's table fallback (0.5.0, C6): one row per calendar month the current series
+ * Monthly totals for a long daily series (0.5.0, C6), shared by its chart and its table fallback: one per calendar month the current series
  * touches ("Jan 2025", or "Jan 2025 (from 15 Jan)" for a partial month). Against the previous year, each month is
  * matched by date (the same days a year earlier, so a leap day lands in its own February); otherwise by position, as the
- * chart lines up its two series. A month without every matching previous day shows "n/a".
+ * daily chart lines up its two series. A month without every matching previous day has no previous value ("n/a").
  */
-function monthlyTable(label: string, cur: { date: string; v: number }[], prev: { date?: string; v: number }[] | null, byDate: boolean, curName: string, prevName: string): TableBlock {
+function monthlyGroups(cur: { date: string; v: number }[], prev: { date?: string; v: number }[] | null, byDate: boolean): { name: string; a: number; b: number | null }[] {
   const groups: { ym: string; from: number; to: number }[] = [];
   cur.forEach((p, i) => {
     const ym = p.date.slice(0, 7);
@@ -214,7 +214,7 @@ function monthlyTable(label: string, cur: { date: string; v: number }[], prev: {
   const dated = byDate && prev !== null && prev.length > 0 && prev.every((p) => typeof p.date === "string");
   const prevFirst = dated ? prev![0]!.date! : "";
   const prevLast = dated ? prev!.at(-1)!.date! : "";
-  const rows: Text[][] = groups.map((g) => {
+  return groups.map((g) => {
     const block = cur.slice(g.from, g.to + 1);
     const a = block.reduce((s, x) => s + x.v, 0);
     const first = block[0]!.date;
@@ -232,6 +232,12 @@ function monthlyTable(label: string, cur: { date: string; v: number }[], prev: {
       const pb = prev.slice(g.from, g.to + 1);
       b = pb.length === block.length ? pb.reduce((s, x) => s + x.v, 0) : null;
     }
+    return { name, a, b };
+  });
+}
+
+function monthlyTable(label: string, cur: { date: string; v: number }[], prev: { date?: string; v: number }[] | null, byDate: boolean, curName: string, prevName: string): TableBlock {
+  const rows: Text[][] = monthlyGroups(cur, prev, byDate).map(({ name, a, b }) => {
     const ch = b ? ((a - b) / b) * 100 : null;
     return [cell(name), cell(fmtInt(a)), ...(prev ? [cell(b === null ? "n/a" : fmtInt(b)), changeCell(ch, fmtPct(ch))] : [])];
   });
@@ -243,6 +249,22 @@ function dailyChart(title: string, label: string, cur: { date: string; v: number
   const prevAligned = prev ? cur.map((_, i) => prev[i]?.v ?? null) : null;
   // Monthly, quarterly and shorter periods keep the weekly table; a year (or anything over 100 days) gets months.
   const long = spanDays(cur[0]!.date, cur.at(-1)!.date) > MONTHLY_FALLBACK_DAYS;
+  if (long) {
+    // Over 100 days, 365 daily points draw a flat, noisy line: one point per calendar month instead, matched to the
+    // previous year by month as the table is (partial months labelled as in the table: "Jan 2025 (from 15 Jan)").
+    const byDate = comparedWith === "previous_year";
+    const months = monthlyGroups(cur, prev, byDate);
+    const monthly = title.replace(/ per day\b/, " per month");
+    return {
+      type: "line",
+      title: monthly,
+      x: months.map((m) => m.name),
+      format: "count",
+      series: [{ name: curName, values: months.map((m) => m.a), role: "current" }, ...(prev ? [{ name: prevName, values: months.map((m) => m.b), role: "previous" as const }] : [])],
+      summary: `${monthly}: ${fmtInt(sum(cur))} ${label.toLowerCase()} in ${curName}${prev ? ` against ${fmtInt(sum(prev))} in ${prevName}` : ""}, from ${shortDay(cur[0]!.date)} to ${shortDay(cur.at(-1)!.date)}.`,
+      fallback: monthlyTable(label, cur, prev, byDate, curName, prevName),
+    };
+  }
   return {
     type: "line",
     title,

@@ -382,13 +382,14 @@ describe("rendering the partial year (Y0b.5)", () => {
     expect(doc.kpiCaption).toBe("Search Console figures: Jul–Dec 2025 only (Google keeps 16 months); no comparison.");
   });
 
-  it("daily charts: titles end with the label, one series, the summary names the label; no comparison note", () => {
+  it("search charts (monthly, the range is over 100 days): titles end with the label, one series, the summary names the label; no comparison note", () => {
     const search = doc.sections.find((x) => x.id === "search")!;
     const lines = charts(search.blocks).filter((c) => c.type === "line");
-    expect(lines.map((c) => c.title)).toEqual(["Clicks per day, Jul–Dec 2025", "Impressions per day, Jul–Dec 2025"]);
+    expect(lines.map((c) => c.title)).toEqual(["Clicks per month, Jul–Dec 2025", "Impressions per month, Jul–Dec 2025"]);
     for (const c of lines) {
       expect(c.type === "line" && c.series.map((x) => x.name)).toEqual(["Jul–Dec 2025"]);
-      expect(c.summary).toMatch(/^(Clicks|Impressions) per day, Jul–Dec 2025: [\d,]+ (clicks|impressions) in Jul–Dec 2025, from 1 Jul to 31 Dec\.$/);
+      expect(c.type === "line" && c.x).toEqual(["Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025"]);
+      expect(c.summary).toMatch(/^(Clicks|Impressions) per month, Jul–Dec 2025: [\d,]+ (clicks|impressions) in Jul–Dec 2025, from 1 Jul to 31 Dec\.$/);
       expect(c.fallback?.header).toEqual(["Month", "Jul–Dec 2025"]);
     }
     const table = search.blocks.find((b) => b.kind === "table");
@@ -478,10 +479,10 @@ describe("rendering the partial year (Y0b.5)", () => {
         expect(text).toContain(caption);
       }
 
-      // Daily chart titles: HTML (title / aria-label), the Word chart part, the deck's chart caption.
-      expect(html).toContain("Clicks per day, Jul–Dec 2025");
-      expect(docx.charts.join("\n") + docx.document).toContain("Clicks per day, Jul–Dec 2025");
-      expect(slides.join("\n")).toContain("Clicks per day, Jul–Dec 2025");
+      // Chart titles: HTML (title / aria-label), the Word chart part, the deck's chart caption.
+      expect(html).toContain("Clicks per month, Jul–Dec 2025");
+      expect(docx.charts.join("\n") + docx.document).toContain("Clicks per month, Jul–Dec 2025");
+      expect(slides.join("\n")).toContain("Clicks per month, Jul–Dec 2025");
 
       // No Search Console figure is labelled 2025 alone: every 2025 left is the label or a month row.
       const sectionText = (text: string, from: string) => text.slice(text.indexOf(from));
