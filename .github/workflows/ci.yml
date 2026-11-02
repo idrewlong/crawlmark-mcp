@@ -61,8 +61,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libreoffice-writer libreoffice-impress poppler-utils libxml2-utils
-      - name: Write one DOCX per builtin template
-        run: npx vitest run test/docx-samples.test.ts
+      - name: Write one DOCX per builtin template, and the Google Docs variants
+        run: npx vitest run test/docx-samples.test.ts test/gdocs-samples.test.ts
         env:
           DOCX_SAMPLES_DIR: ${{ runner.temp }}/docx
       - name: Convert each DOCX to PDF and check it has pages and text

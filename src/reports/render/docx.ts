@@ -70,6 +70,8 @@ interface Ctx {
   pal: ThemePalette;
   /** Numbered commentary lists: each list gets its own instance so numbering restarts. */
   ol: { next(): number };
+  /** The Google Docs variant: charts are drawn as their fallback tables (no chart parts or workbooks in the file). */
+  docs: boolean;
 }
 
 /** A theme colour reference as an uppercase hex string without the #. */
@@ -298,6 +300,8 @@ function kpiCells(items: Kpi[], ctx: Ctx, big: boolean, perRow: number): Table {
 
 /** A native Word chart: the options come from chart-options.ts (shared with the PowerPoint export). */
 function chart(c: Chart, ctx: Ctx, half: boolean): (Paragraph | Table)[] {
+  // Docs variant: the fallback table stands in for the chart; a chart without one is left out (as in Markdown).
+  if (ctx.docs) return c.fallback ? table(c.fallback, ctx) : [];
   const widthPx = Math.round((ctx.width / 1440) * 96 * (half ? 0.49 : 1));
   const opts = chartRunOptions(c, { primary: ctx.primary, font: ctx.font, widthPx, half });
   return [new Paragraph({ keepNext: false, spacing: { after: 80 }, children: [new ChartRun(opts)] })];
@@ -409,7 +413,21 @@ function cover(doc: ReportDoc, ctx: Ctx): Table {
   );
 }
 
-export async function toDocx(doc: ReportDoc): Promise<Buffer> {
+/** The largest logo the Google Docs copy keeps (48 KB); a bigger one is left out so the file can pass through the chat. */
+export const MAX_DOCS_LOGO_BYTES = 49_152;
+
+export interface DocxOptions {
+  /** "file" (default) is the report file; "docs" is the smaller copy for Google Docs (charts as tables, logo up to 48 KB). */
+  variant?: "file" | "docs";
+}
+
+export async function toDocx(report: ReportDoc, opts: DocxOptions = {}): Promise<Buffer> {
+  const docs = opts.variant === "docs";
+  let doc = report;
+  if (docs && report.branding.logo && report.branding.logo.data.length > MAX_DOCS_LOGO_BYTES) {
+    const { logo: _logo, ...branding } = report.branding;
+    doc = { ...report, branding };
+  }
   const primary = safeColor(doc.branding.primaryColor, DEFAULT_PRIMARY);
   const page = PAGE[doc.branding.paper];
   const theme = docxTheme(doc.branding.theme);
@@ -419,7 +437,7 @@ export async function toDocx(doc: ReportDoc): Promise<Buffer> {
   const fontsOn = doc.branding.fonts.body !== null || doc.branding.fonts.heading !== null;
   let instance = 0;
   const pal = themePalette(primary, safeColor(doc.branding.accentColor, DEFAULT_ACCENT));
-  const ctx: Ctx = { primary, primaryInk: inkOn(primary), width: page.width - 2 * MARGIN, font: bodyFont, headFont, t: theme, pal, ol: { next: () => ++instance } };
+  const ctx: Ctx = { primary, primaryInk: inkOn(primary), width: page.width - 2 * MARGIN, font: bodyFont, headFont, t: theme, pal, ol: { next: () => ++instance }, docs };
   const themed = doc.branding.theme !== "cards";
   const numbered = theme.heading2.numbered;
   const children: (Paragraph | Table)[] = [cover(doc, ctx), spacer(160)];
