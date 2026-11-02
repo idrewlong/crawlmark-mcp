@@ -7,6 +7,7 @@
  */
 import type { Browser } from "puppeteer";
 import { withBrowser } from "../../providers/browser.js";
+import type { ThemeId } from "../templates/schema.js";
 import type { DocBranding } from "./doc.js";
 import { escapeHtml } from "./escape.js";
 import { fontStacks } from "./html.js";
@@ -47,8 +48,8 @@ const templateStyle = (fontFamily: string) => `font-size:8px;width:100%;padding:
  * The footer's font stack: the body stack of the branding fonts (the same one the HTML uses), else the system stack.
  * Built from the branding, never read back out of the HTML (SEC-4: commentary text can't set it).
  */
-export function footerFont(fonts: DocBranding["fonts"]): string {
-  const stacks = fontStacks(fonts);
+export function footerFont(fonts: DocBranding["fonts"], theme: ThemeId = "cards"): string {
+  const stacks = fontStacks(fonts, theme);
   // The stack goes into a double-quoted style attribute, so its quotes become single quotes. fontStacks escapes every
   // character of a name that isn't a letter, digit, space or hyphen.
   return stacks ? stacks.body.replace(/"/g, "'") : DEFAULT_FOOTER_FONT;

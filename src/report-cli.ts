@@ -14,11 +14,11 @@ import type { DateRange } from "./lib/dates.js";
 import type { PdfPrinter } from "./reports/render/pdf.js";
 import { loadTemplates } from "./reports/templates/load.js";
 import { estimateTemplate, planRun, runTemplate, type RunDeps, type RunEstimate } from "./reports/templates/run.js";
-import { FORMATS, type Format } from "./reports/templates/schema.js";
+import { FORMATS, THEME_IDS, type Format, type ThemeId } from "./reports/templates/schema.js";
 import { initStarterFile, listReportTemplates, templatePlanFields, validateTemplateFileAt } from "./reports/templates/service.js";
 import { globalTemplatesFile } from "./reports/paths.js";
 import { PromptAbortedError } from "./setup/prompter.js";
-import type { PreviewResult } from "./reports/branding-preview.js";
+import type { PreviewResult, ThemePreviewResult } from "./reports/branding-preview.js";
 import type { ResolvedBranding } from "./reports/templates/load.js";
 import { globalBlockIds, readTemplateFile } from "./reports/templates/load.js";
 import { defaultSection, estimateSectionsFor, templateCatalogue } from "./reports/templates/builder.js";
@@ -40,6 +40,8 @@ export interface CliIo {
 export interface PreviewBrandingDeps {
   /** Render the one-page preview (sample data only) with this branding. */
   render(branding: ResolvedBranding): Promise<PreviewResult>;
+  /** Render the sample report in all six themes (`--all-themes`). */
+  renderThemes?(branding: ResolvedBranding): Promise<ThemePreviewResult>;
   /** Offer to open it (the real CLI sets this in fancy mode on a terminal only). */
   open?(path: string): Promise<void>;
   /** `--client` to the client's slug (clients.yaml, offline); throws for an unknown client. */
@@ -47,12 +49,13 @@ export interface PreviewBrandingDeps {
 }
 
 /**
- * `report preview-branding [--client <domain>]`: render the saved branding (the client's override merged over the
+ * `report preview-branding [--client <domain>] [--all-themes]`: render the saved branding (the client's override merged over the
  * global file) on a one-page sample report, print where it went, and offer to open it. Sample data only; no
- * client data, no network, no paid call. Writes nothing but `<home>/branding/preview.pdf` (or .html).
+ * client data, no network, no paid call. Writes nothing but `<home>/branding/preview.pdf` (or .html). With
+ * `--all-themes` it writes the six theme previews to `<home>/branding/themes/` instead and prints the six paths.
  */
-export async function previewBrandingCommand(args: string[], flags: { client?: string | undefined }, io: CliIo, deps: PreviewBrandingDeps): Promise<number> {
-  if (args.length) return usage(io, `report preview-branding takes only --client, got: ${args.join(" ")}`);
+export async function previewBrandingCommand(args: string[], flags: { client?: string | undefined; "all-themes"?: boolean | undefined }, io: CliIo, deps: PreviewBrandingDeps): Promise<number> {
+  if (args.length) return usage(io, `report preview-branding takes only --client and --all-themes, got: ${args.join(" ")}`);
   let slug: string | undefined;
   try {
     slug = flags.client !== undefined ? deps.resolveClient(flags.client).slug : undefined;
@@ -65,6 +68,26 @@ export async function previewBrandingCommand(args: string[], flags: { client?: s
   if (bad.length) {
     for (const f of bad) io.warn(`Error: ${f!.path} is not valid; fix it first (${cliHint()} report templates validate).`);
     return 1;
+  }
+  if (flags["all-themes"]) {
+    if (!deps.renderThemes) return usage(io, "report preview-branding --all-themes isn't available here.");
+    const t = await deps.renderThemes(loaded.branding);
+    for (const w of t.warnings) io.warn(w);
+    if (t.logoWarning) io.warn(t.logoWarning);
+    io.out("Theme previews (sample data, not a client report):");
+    for (const f of t.files) io.out(`  ${f.path}`);
+    if (deps.open && t.files[0]) {
+      try {
+        await deps.open(t.files[0].path);
+      } catch (err) {
+        if (err instanceof PromptAbortedError) {
+          io.warn("Cancelled; nothing else written.");
+          return 130;
+        }
+        throw err;
+      }
+    }
+    return 0;
   }
   const r = await deps.render(loaded.branding);
   if (r.warning) io.warn(r.warning);
@@ -224,6 +247,8 @@ export interface ReportFlags {
   start?: string | undefined;
   end?: string | undefined;
   format?: string | undefined;
+  /** --theme: one run's report theme (beats the template's and the branding's). */
+  theme?: string | undefined;
   include?: string | undefined;
   paid: boolean;
   "dry-run": boolean;
@@ -237,6 +262,7 @@ export const FORMAT_CHOICES: readonly { value: Format; label: string }[] = [
   { value: "docx", label: "Word (.docx)" },
   { value: "html", label: "HTML" },
   { value: "md", label: "Markdown" },
+  { value: "pptx", label: "PowerPoint (.pptx)" },
 ];
 
 export interface ReportCliDeps {
@@ -306,6 +332,8 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
   if (flags.all === (flags.client !== undefined)) return usage(io, "report takes --client <domain|slug> or --all.");
   const formats = list(flags.format);
   if (formats && (!formats.length || formats.some((f) => !(FORMATS as readonly string[]).includes(f)))) return usage(io, `--format takes a comma list of ${FORMATS.join(", ")}.`);
+  if (flags.theme !== undefined && !(THEME_IDS as readonly string[]).includes(flags.theme)) return usage(io, `--theme takes one of ${THEME_IDS.join(", ")}.`);
+  const theme = flags.theme as ThemeId | undefined;
   const include = list(flags.include) ?? [];
   if ((flags.start === undefined) !== (flags.end === undefined)) return usage(io, "--start and --end go together.");
   if ([flags.month, flags.quarter, flags.start].filter((v) => v !== undefined).length > 1) return usage(io, "Give only one of --month, --quarter, or --start and --end.");
@@ -423,7 +451,7 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
         if (counts.error) failed++;
         continue;
       }
-      const out = await exportReport(report, { formats: wanted, reportsDir: deps.reportsDir, branding: plan.loaded.branding, version: deps.version, printer: deps.printer, lintContext: "template" });
+      const out = await exportReport(report, { formats: wanted, reportsDir: deps.reportsDir, branding: plan.loaded.branding, version: deps.version, printer: deps.printer, lintContext: "template", ...(theme ? { theme } : {}) });
       // A requested format that wasn't written (a PDF without Chrome, even with the HTML fallback) needs attention.
       if (wanted.some((f) => !out.files.some((x) => x.format === f)) || counts.error) attention = true;
       written++;

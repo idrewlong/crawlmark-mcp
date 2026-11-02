@@ -1,0 +1,1566 @@
+{
+  "meta": {
+    "title": "Example Co - SEO report - September 2026",
+    "subject": "Monthly SEO report",
+    "author": "crawlmark",
+    "company": "",
+    "generatedAt": "2026-10-13T00:00:00.000Z"
+  },
+  "slides": [
+    {
+      "kind": "title",
+      "title": "Example Co",
+      "kicker": "Monthly SEO report",
+      "subtitle": "Quarterly check-in",
+      "entries": [
+        {
+          "label": "Prepared for",
+          "value": "Jane Doe, Example Co"
+        },
+        {
+          "label": "Period",
+          "value": "September 2026 · 1–30 Sep 2026"
+        },
+        {
+          "label": "Generated",
+          "value": "13 Oct 2026"
+        }
+      ],
+      "logo": false
+    },
+    {
+      "kind": "agenda",
+      "title": "Agenda",
+      "items": [
+        "Search performance",
+        "Branded vs non-branded",
+        "Organic traffic (GA4)",
+        "Top queries",
+        "Query movers",
+        "Top pages",
+        "Page movers",
+        "Top organic landing pages",
+        "Tracked keywords",
+        "Opportunities",
+        "Changes since the last audit",
+        "Core Web Vitals history (real users)",
+        "Tag Manager findings"
+      ]
+    },
+    {
+      "kind": "kpis",
+      "title": "Key numbers",
+      "kpis": [
+        {
+          "label": "Clicks",
+          "value": "1,120",
+          "delta": {
+            "text": "17.6%",
+            "dir": "up",
+            "tone": "good"
+          },
+          "detail": "vs 952"
+        },
+        {
+          "label": "Impressions",
+          "value": "20,000",
+          "delta": {
+            "text": "17.6%",
+            "dir": "up",
+            "tone": "good"
+          },
+          "detail": "vs 17,000"
+        },
+        {
+          "label": "CTR",
+          "value": "5.60%",
+          "delta": {
+            "text": "0.0 pts",
+            "dir": "flat",
+            "tone": "neutral"
+          },
+          "detail": "vs 5.60%"
+        },
+        {
+          "label": "Average position",
+          "value": "7.5",
+          "delta": {
+            "text": "0.7 better",
+            "dir": "down",
+            "tone": "good"
+          },
+          "detail": "from 8.2 · lower is better"
+        }
+      ],
+      "caption": "Change vs August 2026 (previous period)",
+      "takeaway": "Clicks up 17.6%, impressions up 17.6% and average position 0.7 better vs August 2026"
+    },
+    {
+      "kind": "summary",
+      "title": "Summary",
+      "bullets": [
+        "Clicks grew 17.6% in September.",
+        "Update the services pages",
+        "Fix the broken links"
+      ],
+      "caption": "Commentary written with Claude; all figures come from the data below.",
+      "notes": "Clicks grew 17.6% in September. Impressions followed.\n\n- Update the services pages\n- Fix the broken links"
+    },
+    {
+      "kind": "section",
+      "sectionId": "search",
+      "title": "Search performance",
+      "number": 1,
+      "continued": false,
+      "takeaway": "Search held up well.",
+      "chart": {
+        "type": "line",
+        "title": "Clicks per day",
+        "x": [
+          "2026-09-01",
+          "2026-09-02",
+          "2026-09-03",
+          "2026-09-04",
+          "2026-09-05",
+          "2026-09-06",
+          "2026-09-07",
+          "2026-09-08",
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-12",
+          "2026-09-13",
+          "2026-09-14",
+          "2026-09-15",
+          "2026-09-16",
+          "2026-09-17",
+          "2026-09-18",
+          "2026-09-19",
+          "2026-09-20",
+          "2026-09-21",
+          "2026-09-22",
+          "2026-09-23",
+          "2026-09-24",
+          "2026-09-25",
+          "2026-09-26",
+          "2026-09-27",
+          "2026-09-28",
+          "2026-09-29",
+          "2026-09-30"
+        ],
+        "format": "count",
+        "series": [
+          {
+            "name": "September 2026",
+            "values": [
+              37,
+              39,
+              41,
+              42,
+              29,
+              30,
+              45,
+              45,
+              45,
+              44,
+              43,
+              29,
+              28,
+              40,
+              39,
+              38,
+              37,
+              36,
+              24,
+              24,
+              36,
+              36,
+              37,
+              39,
+              40,
+              28,
+              30,
+              45,
+              47,
+              48
+            ],
+            "role": "current"
+          },
+          {
+            "name": "August 2026",
+            "values": [
+              21,
+              22,
+              34,
+              35,
+              36,
+              37,
+              37,
+              25,
+              25,
+              37,
+              36,
+              35,
+              34,
+              33,
+              22,
+              21,
+              31,
+              30,
+              30,
+              30,
+              30,
+              21,
+              21,
+              32,
+              33,
+              35,
+              36,
+              38,
+              26,
+              27
+            ],
+            "role": "previous"
+          }
+        ],
+        "summary": "Clicks per day: 1,121 clicks in September 2026 against 951 in August 2026, from 1 Sep to 30 Sep.",
+        "fallback": {
+          "kind": "table",
+          "title": "Clicks by week",
+          "header": [
+            "Days",
+            "September 2026",
+            "August 2026",
+            "Change"
+          ],
+          "rows": [
+            [
+              [
+                {
+                  "t": "1–7 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "263"
+                }
+              ],
+              [
+                {
+                  "t": "222"
+                }
+              ],
+              [
+                {
+                  "t": "+18.5%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "8–14 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "274"
+                }
+              ],
+              [
+                {
+                  "t": "225"
+                }
+              ],
+              [
+                {
+                  "t": "+21.8%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "15–21 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "234"
+                }
+              ],
+              [
+                {
+                  "t": "194"
+                }
+              ],
+              [
+                {
+                  "t": "+20.6%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "22–28 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "255"
+                }
+              ],
+              [
+                {
+                  "t": "216"
+                }
+              ],
+              [
+                {
+                  "t": "+18.1%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "29–30 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "95"
+                }
+              ],
+              [
+                {
+                  "t": "53"
+                }
+              ],
+              [
+                {
+                  "t": "+79.2%",
+                  "tone": "good"
+                }
+              ]
+            ]
+          ],
+          "numeric": [
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      },
+      "table": {
+        "header": [
+          "Metric",
+          "September 2026",
+          "August 2026",
+          "Change",
+          "September 2025",
+          "Change"
+        ],
+        "rows": [
+          [
+            "Clicks",
+            "1,120",
+            "952",
+            "+17.6%",
+            "672",
+            "+66.7%"
+          ],
+          [
+            "Impressions",
+            "20,000",
+            "17,000",
+            "+17.6%",
+            "12,000",
+            "+66.7%"
+          ],
+          [
+            "CTR",
+            "5.60%",
+            "5.60%",
+            "0.0 pts",
+            "5.60%",
+            "0.0 pts"
+          ],
+          [
+            "Average position",
+            "7.5",
+            "8.2",
+            "0.7 better",
+            "8.2",
+            "0.7 better"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "shown": 4,
+        "total": 4,
+        "tones": [
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            "good"
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            "good"
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            "good"
+          ]
+        ]
+      },
+      "bullets": [],
+      "footnotes": [
+        "More detail in the full report."
+      ],
+      "notes": "Search held up well. Position improved."
+    },
+    {
+      "kind": "section",
+      "sectionId": "brand",
+      "title": "Branded vs non-branded",
+      "number": 2,
+      "continued": false,
+      "takeaway": "Branded queries brought 39.5% of clicks in September 2026 (34.1% in August 2026).",
+      "chart": {
+        "type": "share",
+        "title": "Share of clicks",
+        "parts": [
+          "Branded",
+          "Non-branded"
+        ],
+        "rows": [
+          {
+            "label": "September 2026",
+            "values": [
+              300,
+              459
+            ]
+          },
+          {
+            "label": "August 2026",
+            "values": [
+              255,
+              492
+            ]
+          }
+        ],
+        "summary": "Branded queries brought 39.5% of clicks in September 2026 (34.1% in August 2026)."
+      },
+      "table": {
+        "header": [
+          "Queries",
+          "Clicks",
+          "Change vs August 2026",
+          "Impressions",
+          "CTR",
+          "Average position"
+        ],
+        "rows": [
+          [
+            "Branded",
+            "300",
+            "+17.6%",
+            "1,200",
+            "25.00%",
+            "1.2"
+          ],
+          [
+            "Non-branded",
+            "459",
+            "−6.7%",
+            "13,960",
+            "3.29%",
+            "8.8"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "shown": 2,
+        "total": 2,
+        "tones": [
+          [
+            null,
+            null,
+            "good",
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            "bad",
+            null,
+            null,
+            null
+          ]
+        ]
+      },
+      "bullets": [],
+      "footnotes": [
+        "More detail in the full report."
+      ]
+    },
+    {
+      "kind": "section",
+      "sectionId": "traffic",
+      "title": "Organic traffic (GA4)",
+      "number": 3,
+      "continued": false,
+      "takeaway": "Organic sessions per day: 1,499 sessions in September 2026 against 1,274 in August 2026, from 1 Sep to 30 Sep.",
+      "chart": {
+        "type": "line",
+        "title": "Organic sessions per day",
+        "x": [
+          "2026-09-01",
+          "2026-09-02",
+          "2026-09-03",
+          "2026-09-04",
+          "2026-09-05",
+          "2026-09-06",
+          "2026-09-07",
+          "2026-09-08",
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-12",
+          "2026-09-13",
+          "2026-09-14",
+          "2026-09-15",
+          "2026-09-16",
+          "2026-09-17",
+          "2026-09-18",
+          "2026-09-19",
+          "2026-09-20",
+          "2026-09-21",
+          "2026-09-22",
+          "2026-09-23",
+          "2026-09-24",
+          "2026-09-25",
+          "2026-09-26",
+          "2026-09-27",
+          "2026-09-28",
+          "2026-09-29",
+          "2026-09-30"
+        ],
+        "format": "count",
+        "series": [
+          {
+            "name": "September 2026",
+            "values": [
+              50,
+              52,
+              54,
+              56,
+              39,
+              40,
+              60,
+              60,
+              60,
+              59,
+              58,
+              39,
+              38,
+              54,
+              52,
+              50,
+              49,
+              48,
+              32,
+              32,
+              48,
+              49,
+              50,
+              52,
+              54,
+              38,
+              40,
+              60,
+              62,
+              64
+            ],
+            "role": "current"
+          },
+          {
+            "name": "August 2026",
+            "values": [
+              28,
+              30,
+              45,
+              47,
+              48,
+              49,
+              50,
+              34,
+              34,
+              49,
+              48,
+              47,
+              46,
+              45,
+              29,
+              29,
+              41,
+              40,
+              40,
+              40,
+              40,
+              28,
+              28,
+              43,
+              45,
+              47,
+              48,
+              50,
+              35,
+              36
+            ],
+            "role": "previous"
+          }
+        ],
+        "summary": "Organic sessions per day: 1,499 sessions in September 2026 against 1,274 in August 2026, from 1 Sep to 30 Sep.",
+        "fallback": {
+          "kind": "table",
+          "title": "Sessions by week",
+          "header": [
+            "Days",
+            "September 2026",
+            "August 2026",
+            "Change"
+          ],
+          "rows": [
+            [
+              [
+                {
+                  "t": "1–7 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "351"
+                }
+              ],
+              [
+                {
+                  "t": "297"
+                }
+              ],
+              [
+                {
+                  "t": "+18.2%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "8–14 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "368"
+                }
+              ],
+              [
+                {
+                  "t": "303"
+                }
+              ],
+              [
+                {
+                  "t": "+21.5%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "15–21 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "311"
+                }
+              ],
+              [
+                {
+                  "t": "259"
+                }
+              ],
+              [
+                {
+                  "t": "+20.1%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "22–28 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "343"
+                }
+              ],
+              [
+                {
+                  "t": "289"
+                }
+              ],
+              [
+                {
+                  "t": "+18.7%",
+                  "tone": "good"
+                }
+              ]
+            ],
+            [
+              [
+                {
+                  "t": "29–30 Sep"
+                }
+              ],
+              [
+                {
+                  "t": "126"
+                }
+              ],
+              [
+                {
+                  "t": "71"
+                }
+              ],
+              [
+                {
+                  "t": "+77.5%",
+                  "tone": "good"
+                }
+              ]
+            ]
+          ],
+          "numeric": [
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      },
+      "tiles": [
+        {
+          "label": "Sessions",
+          "value": "1,500",
+          "delta": {
+            "text": "17.6%",
+            "dir": "up",
+            "tone": "good"
+          },
+          "detail": "vs 1,275"
+        },
+        {
+          "label": "Users",
+          "value": "1,200",
+          "delta": {
+            "text": "17.6%",
+            "dir": "up",
+            "tone": "good"
+          },
+          "detail": "vs 1,020"
+        },
+        {
+          "label": "Engagement rate",
+          "value": "61.2%",
+          "delta": {
+            "text": "2.8 pts",
+            "dir": "up",
+            "tone": "good"
+          },
+          "detail": "vs 58.4%"
+        },
+        {
+          "label": "Key events",
+          "value": "40",
+          "delta": {
+            "text": "17.6%",
+            "dir": "up",
+            "tone": "good"
+          },
+          "detail": "vs 34"
+        }
+      ],
+      "bullets": [],
+      "footnotes": []
+    },
+    {
+      "kind": "section",
+      "sectionId": "queries",
+      "title": "Top queries",
+      "number": 4,
+      "continued": false,
+      "table": {
+        "header": [
+          "Query",
+          "Clicks",
+          "Impressions",
+          "CTR",
+          "Position"
+        ],
+        "rows": [
+          [
+            "example co brand",
+            "300",
+            "1,200",
+            "25.00%",
+            "1.2"
+          ],
+          [
+            "emergency plumber",
+            "180",
+            "4,200",
+            "4.29%",
+            "6.4"
+          ],
+          [
+            "water heater repair",
+            "120",
+            "3,100",
+            "3.87%",
+            "8.1"
+          ],
+          [
+            "drain cleaning near me",
+            "90",
+            "5,200",
+            "1.73%",
+            "11.3"
+          ],
+          [
+            "leak detection",
+            "60",
+            "900",
+            "6.67%",
+            "4.2"
+          ],
+          [
+            "<img src=x onerror=alert(1)>",
+            "5",
+            "300",
+            "1.67%",
+            "15.0"
+          ],
+          [
+            "pipe | fitting",
+            "4",
+            "260",
+            "1.54%",
+            "12.5"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "shown": 7,
+        "total": 7,
+        "bar": {
+          "col": 1,
+          "values": [
+            300,
+            180,
+            120,
+            90,
+            60,
+            5,
+            4
+          ]
+        }
+      },
+      "bullets": [],
+      "footnotes": []
+    },
+    {
+      "kind": "section",
+      "sectionId": "query-movers",
+      "title": "Query movers",
+      "number": 5,
+      "continued": false,
+      "table": {
+        "header": [
+          "Query",
+          "Clicks",
+          "Change",
+          "Position"
+        ],
+        "rows": [
+          [
+            "example co",
+            "300",
+            "+45",
+            "1.2"
+          ],
+          [
+            "emergency plumber",
+            "180",
+            "+27",
+            "6.4"
+          ],
+          [
+            "water heater repair",
+            "120",
+            "+18",
+            "8.1"
+          ],
+          [
+            "drain cleaning near me",
+            "90",
+            "+13",
+            "11.3"
+          ],
+          [
+            "<img src=x onerror=alert(1)>",
+            "5",
+            "+1",
+            "15.0"
+          ],
+          [
+            "pipe | fitting",
+            "4",
+            "+1",
+            "12.5"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true
+        ],
+        "shown": 6,
+        "total": 6,
+        "tones": [
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ]
+        ]
+      },
+      "bullets": [],
+      "footnotes": [
+        "More detail in the full report."
+      ]
+    },
+    {
+      "kind": "section",
+      "sectionId": "pages",
+      "title": "Top pages",
+      "number": 6,
+      "continued": false,
+      "table": {
+        "header": [
+          "Page",
+          "Clicks",
+          "Impressions",
+          "CTR",
+          "Position"
+        ],
+        "rows": [
+          [
+            "/",
+            "420",
+            "6,000",
+            "7.00%",
+            "3.1"
+          ],
+          [
+            "/services/emergency",
+            "200",
+            "5,100",
+            "3.92%",
+            "6.0"
+          ],
+          [
+            "/blog/water-heaters",
+            "110",
+            "4,100",
+            "2.68%",
+            "9.2"
+          ],
+          [
+            "/contact",
+            "40",
+            "800",
+            "5.00%",
+            "5.5"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "shown": 4,
+        "total": 4,
+        "bar": {
+          "col": 1,
+          "values": [
+            420,
+            200,
+            110,
+            40
+          ]
+        }
+      },
+      "bullets": [],
+      "footnotes": []
+    },
+    {
+      "kind": "section",
+      "sectionId": "page-movers",
+      "title": "Page movers",
+      "number": 7,
+      "continued": false,
+      "table": {
+        "header": [
+          "Page",
+          "Clicks",
+          "Change",
+          "Position"
+        ],
+        "rows": [
+          [
+            "/",
+            "420",
+            "+63",
+            "3.1"
+          ],
+          [
+            "/services/emergency",
+            "200",
+            "+30",
+            "6.0"
+          ],
+          [
+            "/blog/water-heaters",
+            "110",
+            "+16",
+            "9.2"
+          ],
+          [
+            "/contact",
+            "40",
+            "+6",
+            "5.5"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true
+        ],
+        "shown": 4,
+        "total": 4,
+        "tones": [
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            "good",
+            null
+          ]
+        ]
+      },
+      "bullets": [],
+      "footnotes": []
+    },
+    {
+      "kind": "section",
+      "sectionId": "landing",
+      "title": "Top organic landing pages",
+      "number": 8,
+      "continued": false,
+      "table": {
+        "header": [
+          "Landing page",
+          "Sessions",
+          "Engagement rate",
+          "Key events"
+        ],
+        "rows": [
+          [
+            "/",
+            "700",
+            "64.0%",
+            "20"
+          ],
+          [
+            "/services/emergency",
+            "400",
+            "58.0%",
+            "15"
+          ],
+          [
+            "/blog/water-heaters",
+            "210",
+            "49.0%",
+            "2"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true
+        ],
+        "shown": 3,
+        "total": 3,
+        "bar": {
+          "col": 1,
+          "values": [
+            700,
+            400,
+            210
+          ]
+        }
+      },
+      "bullets": [],
+      "footnotes": []
+    },
+    {
+      "kind": "section",
+      "sectionId": "tracked",
+      "title": "Tracked keywords",
+      "number": 9,
+      "continued": false,
+      "table": {
+        "header": [
+          "Keyword",
+          "Average position",
+          "August 2026",
+          "Change",
+          "Clicks",
+          "Impressions"
+        ],
+        "rows": [
+          [
+            "emergency plumber",
+            "6.4",
+            "7.1",
+            "0.7 better",
+            "180",
+            "4,200"
+          ],
+          [
+            "example co",
+            "1.2",
+            "1.9",
+            "0.7 better",
+            "300",
+            "1,200"
+          ],
+          [
+            "water heater repair",
+            "8.1",
+            "8.8",
+            "0.7 better",
+            "120",
+            "3,100"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "shown": 3,
+        "total": 3,
+        "tones": [
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "good",
+            null,
+            null
+          ]
+        ]
+      },
+      "bullets": [],
+      "footnotes": []
+    },
+    {
+      "kind": "section",
+      "sectionId": "opportunities",
+      "title": "Opportunities",
+      "number": 10,
+      "continued": false,
+      "table": {
+        "header": [
+          "Query",
+          "Page",
+          "Position",
+          "Impressions",
+          "Est. extra clicks"
+        ],
+        "rows": [
+          [
+            "drain cleaning near me",
+            "/services/emergency",
+            "11.3",
+            "5,200",
+            "400"
+          ]
+        ],
+        "numeric": [
+          false,
+          false,
+          true,
+          true,
+          true
+        ],
+        "shown": 1,
+        "total": 1
+      },
+      "bullets": [],
+      "footnotes": []
+    },
+    {
+      "kind": "section",
+      "sectionId": "audit",
+      "title": "Changes since the last audit",
+      "number": 11,
+      "continued": false,
+      "table": {
+        "header": [
+          "Severity",
+          "Finding",
+          "Page"
+        ],
+        "rows": [
+          [
+            "high",
+            "On-page check failed: is broken",
+            "/"
+          ]
+        ],
+        "numeric": [
+          false,
+          false,
+          false
+        ],
+        "shown": 1,
+        "total": 1,
+        "tones": [
+          [
+            "bad",
+            null,
+            null
+          ]
+        ]
+      },
+      "tiles": [
+        {
+          "label": "Resolved",
+          "value": "1",
+          "tone": "good"
+        },
+        {
+          "label": "New",
+          "value": "1",
+          "tone": "bad"
+        },
+        {
+          "label": "Still open",
+          "value": "1"
+        },
+        {
+          "label": "Not re-checked",
+          "value": "1"
+        }
+      ],
+      "bullets": [],
+      "footnotes": [
+        "More detail in the full report."
+      ]
+    },
+    {
+      "kind": "section",
+      "sectionId": "cwv",
+      "title": "Core Web Vitals history (real users)",
+      "number": 12,
+      "continued": false,
+      "takeaway": "Largest Contentful Paint for real users went from 2,900 ms to 2,300 ms over 3 weekly periods.",
+      "chart": {
+        "type": "line",
+        "title": "LCP · Largest Contentful Paint",
+        "x": [
+          "2026-03-28",
+          "2026-04-04",
+          "2026-04-11"
+        ],
+        "series": [
+          {
+            "name": "LCP",
+            "values": [
+              2900,
+              2600,
+              2300
+            ],
+            "role": "current"
+          }
+        ],
+        "format": "ms",
+        "bands": {
+          "good": 2500,
+          "poor": 4000
+        },
+        "connectGaps": true,
+        "summary": "Largest Contentful Paint for real users went from 2,900 ms to 2,300 ms over 3 weekly periods."
+      },
+      "table": {
+        "header": [
+          "Metric",
+          "First period",
+          "Latest period",
+          "Change",
+          "Rating now",
+          "Trend"
+        ],
+        "rows": [
+          [
+            "Largest Contentful Paint",
+            "2,900 ms",
+            "2,300 ms",
+            "600 ms better",
+            "good",
+            "improving"
+          ],
+          [
+            "Cumulative Layout Shift",
+            "0.05",
+            "0.06",
+            "0.01 worse",
+            "good",
+            "insufficient data"
+          ]
+        ],
+        "numeric": [
+          false,
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "shown": 2,
+        "total": 2,
+        "tones": [
+          [
+            null,
+            null,
+            null,
+            "good",
+            "good",
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            "bad",
+            "good",
+            null
+          ]
+        ]
+      },
+      "bullets": [],
+      "footnotes": [
+        "More detail in the full report."
+      ]
+    },
+    {
+      "kind": "section",
+      "sectionId": "gtm",
+      "title": "Tag Manager findings",
+      "number": 13,
+      "continued": false,
+      "table": {
+        "header": [
+          "Severity",
+          "Finding",
+          "Item"
+        ],
+        "rows": [
+          [
+            "medium",
+            "Universal Analytics tag <b>Old UA</b>",
+            "tag Old UA"
+          ],
+          [
+            "low",
+            "Paused tag: Test",
+            "tag Test"
+          ]
+        ],
+        "numeric": [
+          false,
+          false,
+          false
+        ],
+        "shown": 2,
+        "total": 2,
+        "tones": [
+          [
+            "warn",
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ]
+        ]
+      },
+      "bullets": [],
+      "footnotes": [
+        "More detail in the full report."
+      ]
+    },
+    {
+      "kind": "closing",
+      "title": "Thank you",
+      "lines": [
+        "crawlmark 0.4.0",
+        "Generated 13 Oct 2026"
+      ],
+      "logo": false,
+      "notes": "Period: September 2026 (1–30 Sep 2026), compared with August 2026 (1–31 Aug 2026) and September 2025 (1–30 Sep 2025, the same period a year earlier).\nCommentary written with Claude; all figures come from the data below.\nSources: Google Search Console (search), Google Analytics 4 (organic traffic), saved crawlmark audits, the Chrome UX Report and Google Tag Manager when those sections are included.\nSearch Console counts anonymized queries in its totals but not in the query tables, so the query tables don't add up to the totals."
+    }
+  ],
+  "warnings": []
+}

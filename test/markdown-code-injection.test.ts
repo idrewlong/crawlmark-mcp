@@ -14,7 +14,7 @@ const doc = (value: string): ReportDoc => ({
   about: [],
   warnings: [],
   footer: "f",
-  branding: { primaryColor: "#000000", accentColor: "#000000", paper: "Letter", fonts: { body: null, heading: null, fallback: "sans-serif" }, commentaryNote: null },
+  branding: { primaryColor: "#000000", accentColor: "#000000", paper: "Letter", fonts: { body: null, heading: null, fallback: "sans-serif" }, commentaryNote: null, theme: "cards" },
 });
 
 describe("markdownCode backslash handling", () => {

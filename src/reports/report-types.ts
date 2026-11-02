@@ -3,7 +3,7 @@
  * every renderer. Types only, so renderers never load provider code.
  */
 import type { DateRange } from "../lib/dates.js";
-import type { Comparison, CoverSpec } from "./templates/schema.js";
+import type { Comparison, CoverSpec, ThemeId } from "./templates/schema.js";
 import type { TemplateSource } from "./templates/load.js";
 
 export type { Comparison, DateRange, TemplateSource };
@@ -360,8 +360,8 @@ export interface Highlight {
 export interface TemplateReport {
   reportId: string;
   client: { slug: string; name: string; domain: string };
-  /** `cover` and `contents` are stored with the report, so exporting a reportId renders the same layout. Absent before 0.3.0. */
-  template: { id: string; title: string; source: TemplateSource; layout?: "onepage"; cover?: CoverSpec; contents?: true };
+  /** `cover`, `contents` and `theme` are stored with the report, so exporting a reportId renders the same layout. Absent before 0.3.0. */
+  template: { id: string; title: string; source: TemplateSource; layout?: "onepage"; cover?: CoverSpec; contents?: true; theme?: ThemeId };
   period: { current: DateRange; label: string; folderMonth: string; comparisons: { previous_period?: DateRange; previous_year?: DateRange } };
   generatedAt: string;
   sections: SectionResult[];

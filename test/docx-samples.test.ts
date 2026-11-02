@@ -28,6 +28,26 @@ describe.skipIf(!out)("DOCX samples for CI", () => {
     });
   }
 
+  // One file per non-cards theme (monthly fixture, linked contents), so CI's LibreOffice job opens each Word theme.
+  for (const theme of ["minimal", "editorial", "bold", "consulting", "friendly"] as const) {
+    it(`writes theme-${theme}.docx`, async () => {
+      const report = await fixtureReport();
+      report.template = { ...report.template, contents: true };
+      const doc = buildReportDoc(report, {
+        version: "0.4.0",
+        theme,
+        branding: { primaryColor: "#224466", accentColor: "#cc6600", hideCrawlmark: true },
+        narrative: { summary: "Clicks grew **12%**.\n\n- One\n- Two", sections: { search: "Search is **up**.\n\n- Clicks rose" } },
+      });
+      const buf = await toDocx(doc);
+      expect(buf.subarray(0, 2).toString()).toBe("PK");
+      const document = await (await JSZip.loadAsync(buf)).file("word/document.xml")!.async("string");
+      expect(document).toContain("w:anchor=");
+      mkdirSync(out!, { recursive: true });
+      writeFileSync(join(out!, `theme-${theme}.docx`), buf);
+    });
+  }
+
   // Release B features the builtin samples don't touch: cover fields, linked contents, page breaks, fonts, and
   // commentary with a sub-heading, numbered list, table (nested in the callout) and a repeated chart. CI converts this
   // file with LibreOffice like the others, so a structure Word-compatible readers reject fails there.

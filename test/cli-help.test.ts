@@ -58,10 +58,20 @@ describe("help", () => {
 
   it("Release B: setup help names the new branding fields and report help the contents and block choices, within 80 columns", () => {
     const setup = groupHelp("setup", plain);
-    expect(setup).toMatch(/fonts, footer, white label,\s+provider names, commentary note/);
+    expect(setup).toMatch(/colours, theme, fonts, footer,\s+white label, provider names, commentary note/);
     const report = groupHelp("report", plain);
     expect(report).toMatch(/a contents page and a\s+reusable text block/);
     for (const text of [setup, report]) for (const l of text.split("\n")) expect(l.length).toBeLessThanOrEqual(80);
+  });
+
+  it("0.4.0 T4: report help names preview-branding --all-themes and the six preview files", () => {
+    const report = groupHelp("report", plain);
+    expect(report).toContain("report preview-branding [--client <domain>] [--all-themes]");
+    expect(report).toMatch(/--all-themes\s+Render a short standard-layout sample report with a\s+contents page \(2-3 pages, sample data\) in each of the six/);
+    expect(report).not.toContain("same sample");
+    expect(report).toContain("1-cards.pdf");
+    expect(report).toContain("6-friendly.pdf");
+    for (const l of report.split("\n")) expect(l.length).toBeLessThanOrEqual(80);
   });
 
   it("headings are bold only when asked", () => {

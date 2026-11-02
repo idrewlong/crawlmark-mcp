@@ -10,6 +10,9 @@ import { DEFAULT_ACCENT, DEFAULT_PRIMARY, NEUTRAL, TONE, inkOn, mix, softTextOn,
 import { ABOUT_ANCHOR, coverEntries, type Block, type Chart, type DocNarrativeBlock, type DocSection, type DocBranding, type Kpi, type ReportDoc, type TableBlock, type Text } from "./doc.js";
 import { clean, escapeHtml, safeColor } from "./escape.js";
 import type { Run } from "./narrative.js";
+import type { ThemeId } from "../templates/schema.js";
+import { htmlTheme } from "./themes/html-themes.js";
+import { themePalette } from "./themes/palette.js";
 import { lineChartSvg, seriesColor, shareChartSvg, shareColors } from "./svg.js";
 
 export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'";
@@ -210,12 +213,26 @@ function fontString(name: string): string {
   return `"${Array.from(clean(name)).map((ch) => (/[A-Za-z0-9 -]/.test(ch) ? ch : `\\${ch.codePointAt(0)!.toString(16)} `)).join("")}"`;
 }
 
-/** The CSS font stacks for the branding's fonts, or null when no font setting is used (the file then matches 0.2.0 exactly). */
-export function fontStacks(fonts: DocBranding["fonts"]): { body: string; heading: string } | null {
-  if (fonts.body === null && fonts.heading === null && fonts.fallback === "sans-serif") return null;
-  const generic = fonts.fallback === "serif" ? SERIF_STACK : SANS_STACK;
-  const stack = (name: string | null) => (name ? `${fontString(name)}, ${generic}` : generic);
-  return { body: stack(fonts.body), heading: stack(fonts.heading ?? fonts.body) };
+/**
+ * The CSS font stacks for the branding's fonts. Cards: null when no font setting is used (the file then matches 0.2.0
+ * exactly). Every other theme always has stacks: the branding's names in front of the theme's own tails, or in front
+ * of the generic serif tail when the branding's fallback is serif.
+ * (DocBranding.fonts.fallback defaults to "sans-serif", so an explicit sans fallback can't be told from none: the
+ * non-cards themes keep their own tails for it.)
+ */
+export function fontStacks(fonts: DocBranding["fonts"], theme: ThemeId = "cards"): { body: string; heading: string } | null {
+  const themed = htmlTheme(theme).fonts;
+  if (!themed) {
+    if (fonts.body === null && fonts.heading === null && fonts.fallback === "sans-serif") return null;
+    const generic = fonts.fallback === "serif" ? SERIF_STACK : SANS_STACK;
+    const stack = (name: string | null) => (name ? `${fontString(name)}, ${generic}` : generic);
+    return { body: stack(fonts.body), heading: stack(fonts.heading ?? fonts.body) };
+  }
+  // An explicit fallback replaces the theme's own tails; unset keeps them.
+  const tails = fonts.fallback === "serif" ? { body: SERIF_STACK, heading: SERIF_STACK } : fonts.fallbackSet ? { body: SANS_STACK, heading: SANS_STACK } : themed;
+  const body = fonts.body ? `${fontString(fonts.body)}, ${tails.body}` : tails.body;
+  const heading = fonts.heading ? `${fontString(fonts.heading)}, ${tails.heading}` : fonts.body ? `${fontString(fonts.body)}, ${tails.heading}` : tails.heading;
+  return { body, heading };
 }
 
 interface Extras {
@@ -248,6 +265,13 @@ function extraStyle(x: Extras, runningHeader: string): string {
   if (x.h4) out.push("h4 { font-size: 12px; font-weight: 600; margin: 10px 0 4px; break-after: avoid; }");
   if (x.pageBreaks) out.push("@media print { .page-break { break-before: page; } }");
   return out.length ? `\n${out.join("\n")}` : "";
+}
+
+/** The theme's block, appended after everything else in <style>. Nothing for cards, so cards output is the 0.3.0 file. */
+function themeStyle(theme: ThemeId, primary: string, accent: string, onepage: boolean): string {
+  if (theme === "cards") return "";
+  const t = htmlTheme(theme);
+  return `\n/* theme: ${theme} */\n${[t.vars(themePalette(primary, accent)), t.css, onepage ? t.onepageCss : ""].filter(Boolean).join("\n").replace(/\n+$/, "")}`;
 }
 
 function style(primary: string, accent: string, onepage: boolean, runningHeader: string, extras: string): string {
@@ -394,9 +418,9 @@ export function toHtml(doc: ReportDoc, opts: HtmlOptions = {}): string {
   const ctx: Ctx = { docs, width: 680, primary, onepage, ...(doc.contents ? { anchors: true } : {}) };
   const allNarrative = [...(doc.summary?.narrative ? [doc.summary.narrative] : []), ...doc.sections.flatMap((x) => [...(x.commentary ? [x.commentary] : []), ...x.blocks.flatMap((bl) => (bl.kind === "rich" ? [bl.blocks] : []))])];
   const extras = extraStyle(
-    { fonts: fontStacks(b.fonts), contents: Boolean(doc.contents), pageBreaks: doc.sections.some((x) => x.pageBreakBefore), subtitle: Boolean(doc.meta.cover.subtitle), h4: allNarrative.some((bs) => bs.some((n) => n.kind === "h")) },
+    { fonts: fontStacks(b.fonts, b.theme), contents: Boolean(doc.contents), pageBreaks: doc.sections.some((x) => x.pageBreakBefore), subtitle: Boolean(doc.meta.cover.subtitle), h4: allNarrative.some((bs) => bs.some((n) => n.kind === "h")) },
     doc.meta.runningHeader,
-  );
+  ) + themeStyle(b.theme, primary, accent, onepage);
   const head = [
     "<!doctype html>",
     '<html lang="en">',

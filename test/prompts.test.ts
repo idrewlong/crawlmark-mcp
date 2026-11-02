@@ -193,6 +193,8 @@ describe("report prompts (Phase 12)", () => {
     await expect(textOf("template-report", { client: "example.com", period: "last month" })).rejects.toThrow();
     expect(q).toContain("PDF (the default), Word, HTML or Markdown");
     expect(q).toContain("Don't export them all");
+    expect(q).toContain("upload the .pptx to Drive and open it with Google Slides");
+    expect(q).toContain("PowerPoint deck");
     expect(q).toContain("`export_report`");
   });
 

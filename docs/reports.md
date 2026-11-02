@@ -1,6 +1,6 @@
 # Report files and templates
 
-crawlmark turns a client's data into a report file: Markdown, HTML, PDF or Word (`.docx`). The same templates drive both ways of making one:
+crawlmark turns a client's data into a report file: Markdown, HTML, PDF, Word (`.docx`) or a PowerPoint deck (`.pptx`). The same templates drive both ways of making one:
 
 - **In Claude**, the `template-report` prompt (or `monthly-report-writeup`) runs a template, writes commentary per section, and calls `export_report`. The files say "Commentary written with Claude; all figures come from the data below," and each commentary box sits next to the data it discusses. [Commentary](#commentary) covers what the text can contain and what it may not say.
 - **From cron**, `crawlmark-cli report` writes the same files without commentary. They say "Data-only report" at the top. There is no model in cron, so crawlmark never writes interpretation itself; the only sentences it adds are computed highlights (facts such as "Clicks rose 12.0% (from 1,000 to 1,120) vs August 2026.").
@@ -18,7 +18,7 @@ Every format follows the same layout, like an agency dashboard export:
 
 Client files never show operator detail: a section with no data is left out (not "None."), a comparison column with no data is dropped (with one note), and tool hints, internal thresholds, a missing-logo warning and paid-data spend stay in the tool and CLI results (`export_report` and `crawlmark-cli report` return `spend` when the run used paid data). Add the optional `spend` section if you want spend in the file.
 
-Set the branding up with `crawlmark-cli setup --step branding` (also "Set up report branding" in the setup menu). It shows the current values, asks for each one (Enter keeps it, and a value that isn't set stays unset so the report keeps its default): agency name, logo (PNG or JPEG up to 512 KB, copied into `<home>/branding/`), primary and accent colours (with a darker shade suggested when white text on the primary wouldn't meet WCAG AA), body and heading fonts and the fallback family ([Fonts](#fonts)), footer, white label, whether to hide data-provider names, the commentary note, paper size and the default report format(s). Then it renders a one-page preview with sample example.com data (`<home>/branding/preview.pdf`, or `.html` without Chrome) and lets you change any field and preview again before saving; nothing is written until you choose save, and cancelling saves nothing. `--client <domain>` writes that client's override file instead, `--dry-run` previews without saving, and `--yes` keeps the current values. `crawlmark-cli report preview-branding [--client <domain>]` renders the saved branding again any time. The preview never uses client data and makes no network or paid call.
+Set the branding up with `crawlmark-cli setup --step branding` (also "Set up report branding" in the setup menu). It shows the current values, asks for each one (Enter keeps it, and a value that isn't set stays unset so the report keeps its default): agency name, logo (PNG or JPEG up to 512 KB, copied into `<home>/branding/`), primary and accent colours (with a darker shade suggested when white text on the primary wouldn't meet WCAG AA), body and heading fonts and the fallback family ([Fonts](#fonts)), footer, white label, whether to hide data-provider names, the commentary note, paper size and the default report format(s). Then it renders a one-page preview with sample example.com data (`<home>/branding/preview.pdf`, or `.html` without Chrome) and lets you change any field and preview again before saving; nothing is written until you choose save, and cancelling saves nothing. `--client <domain>` writes that client's override file instead, `--dry-run` previews without saving, and `--yes` keeps the current values. `crawlmark-cli report preview-branding [--client <domain>]` renders the saved branding again any time, and `--all-themes` renders a short standard-layout sample report with a contents page (2–3 pages per theme) in each of the six themes ([Themes](#themes)). The preview never uses client data and makes no network or paid call.
 
 ### White label
 
@@ -43,6 +43,57 @@ Brand colours: `primaryColor` fills the cover band and colours headings and the 
 | HTML, PDF | Inline SVG charts. The PDF is US Letter (or A4) with a running header (client, report, period) from page 2 on and "Page n of m" in the footer. Sections flow across pages so pages stay full; charts, key-figure rows, table rows and callouts never split, and a heading always stays with its first chart or row |
 | Word (`.docx`) | Native Word charts (data embedded in the file, so "Edit Data" works); no image and no Chrome needed |
 | Markdown, Google Docs copy | Each daily chart becomes a small "by week" table; the other charts' numbers are in the section's table |
+
+## Themes
+
+A theme is the look of the report files: the cover, headings, tables, key-figure cards and callouts. Six are available:
+
+| Theme | Look |
+|---|---|
+| `cards` | The default and today's look: a coloured cover band and boxed sections. |
+| `minimal` | No boxes or shading, thin rules and lots of white space. |
+| `editorial` | Large serif headings, a full-page cover and a two-column summary. |
+| `bold` | A dark cover band, heavy headings and big numbers. |
+| `consulting` | Numbered sections, a colour strip on the cover and grey caps labels. |
+| `friendly` | Rounded shapes, soft tints of your colour and pill headings. |
+
+Set the theme in any of these places:
+
+- the setup question "Report theme" (`crawlmark-cli setup --step branding`, or "Set up report branding" in the setup menu), which writes `theme` in `branding`;
+- `theme:` in `branding` (the global file, or a client's override file);
+- `theme:` on a template;
+- for one export: `theme` on `export_report`, or `--theme <id>` on `crawlmark-cli report`.
+
+```yaml
+branding:
+  theme: editorial
+templates:
+  board:
+    theme: bold          # beats the branding's theme for this template
+```
+
+When several are set, the first of these wins: the export's `theme`, the template's `theme`, the client's branding override, the global branding, then `cards`. A stored report made before a template had a theme uses the branding's. With no theme set anywhere, files are the same as in 0.3.0. Markdown and the docs-friendly HTML copy for Google Docs ignore the theme.
+
+Your logo, colours, footer and fonts apply in every theme. The accent colour is used only by Cards (the stripe under the cover band); the other themes work from the primary colour.
+
+**Fonts.** Each theme has its own default fonts, and every one is a local family name followed by fallbacks: reports never embed or download fonts, so a font shows only where it is installed. `bodyFont`, `headingFont` and `fontFallback` in `branding` override the theme's fonts ([Fonts](#fonts)). Cards keeps the builtin font stack (Calibri in Word, Arial in decks) unless you set fonts.
+
+| Theme | HTML and PDF | Word | PowerPoint |
+|---|---|---|---|
+| `cards` | builtin stack | Calibri | Arial |
+| `minimal` | Helvetica Neue, then Arial | Arial | Arial |
+| `editorial` | Georgia body, Iowan Old Style or Palatino headings | Georgia | Georgia |
+| `bold` | Avenir Next, then Segoe UI or Arial | Arial, Arial Black headings | Arial, Arial Black headings |
+| `consulting` | Helvetica Neue, Segoe UI, then Arial | Arial | Arial |
+| `friendly` | Avenir Next, Nunito, Segoe UI, then Arial | Trebuchet MS | Trebuchet MS |
+
+Word gets the closest match to each theme (its own cover, heading, table and callout styles), not a pixel copy of the PDF. See all six with your own branding on a short standard-layout sample report (sample example.com data, a contents page, 2–3 pages per theme; it is longer than the one-page branding preview so the contents, headings and tables show):
+
+```bash
+crawlmark-cli report preview-branding --all-themes
+```
+
+It writes `1-cards.pdf` to `6-friendly.pdf` into `<home>/branding/themes/` (HTML files without Chrome) and prints the paths. The branding step offers "See your branding in all six themes" after its preview too. Neither makes a network or paid call, and neither uses client data.
 
 ## Templates
 
@@ -277,6 +328,10 @@ with every hit listed (at most 5 per term per text). Rewrite those passages, mov
 
 `report templates validate` (and `validate_report_template`) run the same check on the template's own text (the template, section and block titles, the `text` sections, blocks, cover and footer) and show hits as warnings with their YAML path. `crawlmark-cli report` stops with exit 1 on them before it fetches or spends anything, since a report from cron has no commentary of its own; edit that text in the template file, or allow the term with `branding.allowTerms`.
 
+## Compatibility with 0.3.0
+
+Themes and decks are new in 0.4.0. A template or branding file that sets `theme`, or a template file that lists `pptx` in `defaults.formats`, doesn't load in crawlmark 0.3.0 or earlier: the older version reports the file as invalid and falls back to the builtin templates and branding. Update crawlmark everywhere the file is used (every computer and cron host) before you add them. Files that don't use them load in both. Existing files, templates and stored reports render as before, because the default theme is Cards.
+
 ## Compatibility with 0.2.0
 
 A template file that uses any new field (`cover`, `contents`, `pageBreakBefore`, `blocks` or `block` sections, the font, `hideProviders`, `commentaryNote`, `allowTerms` and `blockTerms` settings) doesn't load in crawlmark 0.2.0 or earlier: the older version reports the file as invalid and falls back to the builtin templates and branding. Update crawlmark everywhere the file is used (every computer and cron host) before you add these fields. Files that don't use them load in both. Existing templates and stored reports render as before, except that white-label reports now hide DataForSEO and the Claude commentary line, and `crawlmark-cli report` now exits 1 when a template's own text, titles, cover or footer names an internal term ([The term check](#the-term-check)). Run `crawlmark-cli report templates validate` after upgrading to see any hits.
@@ -328,7 +383,7 @@ The `build-report-template` prompt walks through this. The rules:
 
 ## Files and formats
 
-Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `quarterly-2026-q3.html` or `monthly-2026-07-01-to-2026-09-30.docx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Commentary kept internal goes to `<template>-<period>.internal.md` in the same folder ([Client and internal notes](#client-and-internal-notes)); exporting the same period again without internal notes removes that file, so it never belongs to an older version of the report. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.
+Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `quarterly-2026-q3.html` `monthly-2026-07-01-to-2026-09-30.docx` or `monthly-2026-09.pptx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Commentary kept internal goes to `<template>-<period>.internal.md` in the same folder ([Client and internal notes](#client-and-internal-notes)); exporting the same period again without internal notes removes that file, so it never belongs to an older version of the report. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.
 
 | Format | Notes |
 |---|---|
@@ -336,8 +391,34 @@ Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `
 | `html` | One self-contained page: no scripts and nothing loaded from the network (the logo is embedded) |
 | `pdf` | The HTML printed by the Chrome crawlmark already uses for Lighthouse, with JavaScript and network access off. Letter by default; `paper: A4` in branding. If Chrome isn't installed, an HTML file is written in the PDF's place (unless HTML was asked for too), `warnings` gives the setup hint, and the other formats are still written |
 | `docx` | A Word document with real headings, lists, tables and native charts, built with the `docx` library for Word, Google Docs and LibreOffice |
+| `pptx` | A PowerPoint deck of 16:9 slides with native, editable charts and speaker notes ([PowerPoint decks](#powerpoint-decks)). No Chrome needed |
 
-`formats` defaults to the template file's `defaults.formats`, else **PDF only**: a report is never exported in every format unless you ask. On an interactive terminal, `crawlmark-cli report --client` without `--format` shows a list with the default ticked (PDF, Word, HTML, Markdown); `--all`, `--dry-run`, `--yes`, CI and pipes use the saved default without asking, and `--format` always wins. In Claude, the report prompts ask which format(s) you want (PDF by default) and export exactly those. If the PDF can't be made (Chrome isn't installed), an HTML file is written in its place and the result's `warnings` says so; the file itself never mentions it.
+`formats` defaults to the template file's `defaults.formats`, else **PDF only**: a report is never exported in every format unless you ask. On an interactive terminal, `crawlmark-cli report --client` without `--format` shows a list with the default ticked (PDF, Word, HTML, Markdown, PowerPoint); `--all`, `--dry-run`, `--yes`, CI and pipes use the saved default without asking, and `--format` always wins. In Claude, the report prompts ask which format(s) you want (PDF by default) and export exactly those. If the PDF can't be made (Chrome isn't installed), an HTML file is written in its place and the result's `warnings` says so; the file itself never mentions it.
+
+## PowerPoint decks
+
+Add `pptx` to the formats and the same report is also written as a `.pptx` deck: `--format pdf,pptx` on the CLI, `formats: ["pptx"]` on `export_report`, or `defaults.formats` in a template file. A deck costs no extra data. It uses the report's theme, logo, colours and fonts, and it holds the same client text as the other files, so [white label](#white-label) and [the term check](#the-term-check) apply to it as they do to a PDF.
+
+**Slide plan**, in order:
+
+1. Title: client, report title, subtitle, period and compare lines, and your logo and agency name.
+2. Agenda, when the report has contents on or four or more sections; short agendas also show each section's takeaway.
+3. Key numbers: the key-figure cards with a verdict banner. The banner is a computed line naming each key figure's change against the comparison period (for example "Clicks up 17.6% and impressions up 17.6% vs August 2026"), built from the figures alone, not from the summary; it appears only when at least one figure changed.
+4. Summary: up to 5 bullets. A summary of a single point is shown as one large statement instead.
+5. One slide per section: a chart with its commentary bullets beside it, or a table, or both on a continuation slide. A takeaway line under the title is the commentary's first sentence, or the chart's own summary. Text blocks and `text` sections get text slides (up to 6 bullets, 2 slides per block).
+6. Closing ("Thank you"), with the footer and the date.
+
+**Limits.** A deck has at most 50 slides; if the report is bigger, continuation slides go first, then text slides, then sections from the end, and `warnings` names what was left out (it is all in the full report). Tables show 8 rows (5 under a chart) and 6 columns, cells are cut at 60 characters, and a note says "Top 8 of 42 rows; the full table is in the report." A section shows 3 bullets, and bullets are cut at 140 characters; where more was left out, the slide says the detail is in the report.
+
+**Text.** Everything on a slide is condensed from the report's own client text (the commentary, summary and highlights) by fixed rules; crawlmark writes no new interpretation. The speaker notes hold the full client commentary for that slide. Speaker notes travel with the file: anyone you send the `.pptx` to can read them (in PowerPoint's notes pane, Keynote's presenter notes or Google Slides), so they hold the same client-facing text as the report and nothing else. Internal notes never reach a deck or its notes. The closing slide's notes carry the "About this report" text. Under white label the file properties name your agency, not crawlmark.
+
+**Charts** are native PowerPoint charts with their data embedded, so "Edit Data" works in PowerPoint (and LibreOffice Impress); Keynote shows the charts. The chart caption row shows the latest value for line charts, because Keynote and macOS Quick Look drop per-point labels.
+
+**Where it opens.** PowerPoint and Keynote draw the deck as designed. macOS Quick Look (the Space-bar preview) draws charts in its own style and may differ.
+
+### Google Slides
+
+crawlmark never writes to Google, so there is no export to Slides. Upload the `.pptx` to Google Drive and open it with Google Slides (or turn on "Convert uploads to Google Docs editor format" in Drive's settings). Slides imports the layout and text; charts arrive as pictures, so they are no longer editable there. Edit the data in PowerPoint first if you need to change a figure.
 
 ## Google Docs
 
@@ -395,3 +476,6 @@ The `backlinks`, `organic_visibility` and `competitor_overview` sections (and th
 - **What's kept, for how long.** Only counts are kept long-term. Ahrefs row lists (keywords, competitors, keyword ideas, the keyword gap) are cached for at most a day so asking again is free, and are purged with the rest; Ahrefs Site Audit example URLs appear only in that run's result and its stored report (24 hours, for export).
 - **Retention.** Semrush figures are deleted 31 days after they were fetched (Semrush's API terms), so Semrush clients get month-over-month but not year-over-year for backlinks. Ahrefs figures are kept for 25 months, and deleted when you remove a client, when the Ahrefs key is removed from the `.env` (or from the Claude Desktop extension's settings), or on demand with `crawlmark-cli data purge --provider ahrefs [--client example.com]`. crawlmark reads Ahrefs only through its REST API v3, never Ahrefs' hosted MCP server.
 
+## Coming in 0.5.0
+
+Yearly reports and a Google Docs handoff are planned for 0.5.0. They aren't in this version.

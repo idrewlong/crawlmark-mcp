@@ -20,7 +20,7 @@ import { displayProviderValue, PROVIDER_LABELS, quoteProviderValue, type Provide
 import { checkPsiKey } from "./checks.js";
 import { checkCruxKey } from "../providers/crux.js";
 import { checkBingKey } from "../providers/bing.js";
-import type { PreviewResult } from "../reports/branding-preview.js";
+import type { PreviewResult, ThemePreviewResult } from "../reports/branding-preview.js";
 import type { BrandingSettings } from "../reports/branding-settings.js";
 import { stepBranding } from "./branding-step.js";
 import { NeedsInputError, PromptAbortedError, type Prompter } from "./prompter.js";
@@ -113,6 +113,8 @@ export interface WizardContext {
   brandingClient?: string | undefined;
   /** Render the branding preview (sample data only) and say where it went; unset means no preview (tests, plain contexts). */
   brandingPreview?: ((settings: BrandingSettings) => Promise<PreviewResult>) | undefined;
+  /** Render the sample report in all six themes with these settings (sample data only); unset means the menu entry is left out. */
+  brandingThemePreviews?: ((settings: BrandingSettings) => Promise<ThemePreviewResult>) | undefined;
   /** Open a local file (the preview) with the OS default app. The real CLI sets it in fancy mode only. */
   openPath?: ((path: string) => boolean) | undefined;
 }

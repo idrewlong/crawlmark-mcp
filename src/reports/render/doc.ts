@@ -16,7 +16,7 @@ import { periodName, rangeLabel } from "../templates/period.js";
 import type { ResolvedBranding } from "../templates/load.js";
 import { DEFAULT_ACCENT, DEFAULT_PRIMARY } from "./color.js";
 import { clientText, MAX_CHART_REFS, parseNarrative, type Narrative, type NarrativeBlock, type Run } from "./narrative.js";
-import type { CoverField } from "../templates/schema.js";
+import { DEFAULT_THEME, type CoverField, type ThemeId } from "../templates/schema.js";
 import { keyFigures, scrubDeep, sectionBlocks, statusLine, type MapContext } from "./sections.js";
 
 export type { Run };
@@ -133,11 +133,13 @@ export interface DocBranding {
   /** White label: no crawlmark name or version in the file. */
   hideCrawlmark?: boolean;
   /** Font family names from the branding (null: the renderer's own default). `heading` falls back to `body` in the renderers. */
-  fonts: { body: string | null; heading: string | null; fallback: FontFallback };
+  fonts: { body: string | null; heading: string | null; fallback: FontFallback; /** True when branding sets fontFallback itself (so a theme yields its own tails). */ fallbackSet?: true };
   /** White label for data providers (DataForSEO): `hideProviders`, else `hideCrawlmark`. Ahrefs and Semrush source lines stay. */
   hideProviders?: true;
   /** The line that says commentary is written by a person or a tool; null: no line. Resolved from the branding. */
   commentaryNote: string | null;
+  /** The resolved report theme (export override > template > client or global branding > cards). Always set. */
+  theme: ThemeId;
 }
 
 export interface ReportDoc {
@@ -206,6 +208,8 @@ export interface BuildOptions {
   version: string;
   /** The branding preview: made-up example.com data, badged "Sample data" on the cover. */
   sample?: boolean | undefined;
+  /** The one-export theme override (export_report `theme`, `--theme`): beats the template's and the branding's theme. */
+  theme?: ThemeId | undefined;
 }
 
 const ONEPAGE_HIGHLIGHTS = 3;
@@ -442,9 +446,10 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
       paper: b.paper ?? "Letter",
       ...(opts.logo ? { logo: opts.logo } : {}),
       ...(whiteLabel ? { hideCrawlmark: true } : {}),
-      fonts: { body: b.bodyFont ?? null, heading: b.headingFont ?? null, fallback: b.fontFallback ?? "sans-serif" },
+      fonts: { body: b.bodyFont ?? null, heading: b.headingFont ?? null, fallback: b.fontFallback ?? "sans-serif", ...(b.fontFallback ? { fallbackSet: true as const } : {}) },
       ...(hideProviders ? { hideProviders: true as const } : {}),
       commentaryNote,
+      theme: opts.theme ?? report.template.theme ?? b.theme ?? DEFAULT_THEME,
     },
   };
 }

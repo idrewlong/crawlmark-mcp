@@ -8,10 +8,12 @@ export function sniffImage(data: Buffer): "image/png" | "image/jpeg" | undefined
   return undefined;
 }
 
-/** Width and height in pixels, or undefined when the header can't be read. */
+const sized = (width: number, height: number) => (width > 0 && height > 0 ? { width, height } : undefined);
+
+/** Width and height in pixels, or undefined when the header can't be read or a side is zero (a 0x0 image would lay out as NaN). */
 export function imageSize(data: Buffer): { width: number; height: number } | undefined {
   const mime = sniffImage(data);
-  if (mime === "image/png") return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  if (mime === "image/png") return sized(data.readUInt32BE(16), data.readUInt32BE(20));
   if (mime === "image/jpeg") {
     let i = 2;
     while (i + 9 < data.length) {
@@ -19,7 +21,7 @@ export function imageSize(data: Buffer): { width: number; height: number } | und
       const marker = data[i + 1]!;
       const len = data.readUInt16BE(i + 2);
       // SOF0..SOF15 except DHT (C4), JPG (C8) and DAC (CC).
-      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return { height: data.readUInt16BE(i + 5), width: data.readUInt16BE(i + 7) };
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return sized(data.readUInt16BE(i + 7), data.readUInt16BE(i + 5));
       i += 2 + len;
     }
   }

@@ -138,6 +138,21 @@ run(process.execPath, [
   "-e",
   "const d = await import('docx'); await import('docx/charts'); const b = await d.Packer.toBuffer(new d.Document({ sections: [{ children: [new d.Paragraph('ok')] }] })); if (b.subarray(0, 2).toString() !== 'PK') throw new Error('docx output is not a zip');",
 ], { cwd: stage });
+// Fail the build if the PowerPoint writer can't run in the pruned stage (it needs jszip, docx and docx/charts):
+// render a one-slide title deck with the staged code.
+run(process.execPath, [
+  "--input-type=module",
+  "-e",
+  [
+    "const { renderDeck } = await import('./dist/reports/render/pptx/index.js');",
+    "const { deckTheme } = await import('./dist/reports/render/themes/deck-themes.js');",
+    "const { themePalette } = await import('./dist/reports/render/themes/palette.js');",
+    "const deck = { meta: { title: 'Check', subject: 'Check', author: '', company: '', generatedAt: '2026-01-01T00:00:00.000Z' }, warnings: [], slides: [{ kind: 'title', title: 'Example Co', kicker: 'Check', entries: [], logo: false }] };",
+    "const t = deckTheme('cards');",
+    "const b = await renderDeck(deck, { theme: 'cards', palette: themePalette('#1f5ea8', '#5b9bd5'), deck: t, fonts: t.fonts, footer: '' });",
+    "if (b.subarray(0, 2).toString() !== 'PK') throw new Error('pptx output is not a zip');",
+  ].join(" "),
+], { cwd: stage });
 // The lockfile is only needed for npm ci.
 rmSync(join(stage, "package-lock.json"), { force: true });
 

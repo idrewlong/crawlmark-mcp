@@ -10,5 +10,5 @@ The report is for the client, so write it in plain language. Templates are free 
 6. **Style rules.**
 {{numberRules}}
 {{commentaryFormat}}
-7. **Save it.** Ask which format or formats I want: PDF (the default), Word, HTML or Markdown. Don't export them all; call `export_report` with `client: "{{client}}"`, the same `reportId`, exactly the formats I picked (`["pdf"]` if I just say yes) and your text as `narrative` (`summary` plus `sections` keyed by section id). Tell me the file paths it returns, and any `warnings` (for example a PDF that needs Chrome, in which case an HTML file is written instead).
+7. **Save it.** Ask which format or formats I want: PDF (the default), Word, HTML or Markdown. Don't export them all. A PowerPoint deck (`pptx`) is also available on request: for Google Slides, upload the .pptx to Drive and open it with Google Slides (crawlmark doesn't upload it). To change the look, `theme` is one of cards, minimal, editorial, bold, consulting or friendly. Then call `export_report` with `client: "{{client}}"`, the same `reportId`, exactly the formats I picked (`["pdf"]` if I just say yes) and your text as `narrative` (`summary` plus `sections` keyed by section id). Tell me the file paths it returns, and any `warnings` (for example a PDF that needs Chrome, in which case an HTML file is written instead).
 8. {{docsOffer}}

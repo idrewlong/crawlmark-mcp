@@ -605,6 +605,8 @@ async function main(argv: string[]): Promise<number> {
       start: { type: "string" },
       end: { type: "string" },
       format: { type: "string" },
+      theme: { type: "string" },
+      "all-themes": { type: "boolean", default: false },
       include: { type: "string" },
       to: { type: "string" },
       force: { type: "boolean", default: false },
@@ -705,6 +707,10 @@ async function main(argv: string[]): Promise<number> {
         render: async (branding) => {
           const [{ renderBrandingPreview }, { chromePdfPrinter }] = await Promise.all([import("./reports/branding-preview.js"), import("./reports/render/pdf.js")]);
           return renderBrandingPreview(HOME.dir, branding, { printer: chromePdfPrinter, version: packageVersion(import.meta.url) });
+        },
+        renderThemes: async (branding) => {
+          const [{ renderThemePreviews }, { chromePdfPrinter }] = await Promise.all([import("./reports/branding-preview.js"), import("./reports/render/pdf.js")]);
+          return renderThemePreviews(HOME.dir, branding, { printer: chromePdfPrinter, version: packageVersion(import.meta.url) });
         },
         ...(fancy
           ? {

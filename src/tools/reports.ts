@@ -9,7 +9,7 @@ import { packageVersion } from "../lib/entry.js";
 import { ClientTextLintError, exportReport } from "../reports/export.js";
 import { chromePdfPrinter } from "../reports/render/pdf.js";
 import { loadTemplates, templateFileWarnings } from "../reports/templates/load.js";
-import { FORMATS, FREE_ISSUE_SOURCES, ISSUE_SOURCES, PAID_ISSUE_SOURCES } from "../reports/templates/schema.js";
+import { FORMATS, THEME_IDS, FREE_ISSUE_SOURCES, ISSUE_SOURCES, PAID_ISSUE_SOURCES } from "../reports/templates/schema.js";
 import { canonicalSpendNames, spendKeys } from "../lib/spend.js";
 import { spendSummary, unitsThisMonth } from "../lib/budget.js";
 import { purgeExpired } from "../lib/cache.js";
@@ -207,7 +207,7 @@ export function registerReportTools(server: McpServer) {
         "Any text can be `{ client, internal }`: the internal part goes to a separate `<template>-<period>.internal.md` file (audience `internal`; with `formats: []` it comes back as `internalNotes`), never to the client files; `narrative.internal` holds general internal notes. " +
         "Client text must not name crawlmark, Claude, Anthropic, DataForSEO, tool names or credential names: the export is refused, nothing is written, and the result lists every hit (`refused: true`, `hits`). Rewrite the passage or move it to internal notes. `allowTerms` can allow a tool name or blocked term that is fine to show; with white label on, built-in terms (crawlmark, Claude, Anthropic, DataForSEO) can only be allowed by the user in the branding allowTerms. " +
         "`inline: \"html\"` also returns a docs-friendly HTML copy (no logo, plain tables) for saving to Google Docs with the user's own Drive tool, only after the user agrees; `formats: []` with inline writes no file. " +
-        "Re-exporting the same template and period overwrites its files. Ask the user which format(s) they want (default PDF) and pass exactly those. PDF needs Chrome; if it fails, an HTML file is written instead (unless HTML was asked for too), the other formats are still written, and `warnings` says why.",
+        "Re-exporting the same template and period overwrites its files. `pptx` writes a PowerPoint deck from the same report (no extra data cost); Google Slides users upload it to Drive and open it with Slides. Ask the user which format(s) they want (default PDF) and pass exactly those. PDF needs Chrome; if it fails, an HTML file is written instead (unless HTML was asked for too), the other formats are still written, and `warnings` says why.",
       inputSchema: {
         client: clientArg,
         reportId: z.string().max(40).optional().describe("From run_report_template. Leave out the template and period arguments when you pass it."),
@@ -219,7 +219,8 @@ export function registerReportTools(server: McpServer) {
         include: z.array(z.string().min(1).max(40)).max(40).optional(),
         allowPaid: z.boolean().optional(),
         estimateOnly: z.boolean().optional().describe("Price the paid sections without running anything or writing files (as run_report_template's estimateOnly). Not with reportId."),
-        formats: z.array(z.enum(FORMATS)).max(4).optional().describe("Default: the saved default (the template file's defaults.formats), PDF unless changed. Pass exactly the formats the user chose."),
+        formats: z.array(z.enum(FORMATS)).max(5).optional().describe("Default: the saved default (the template file's defaults.formats), PDF unless changed. Pass exactly the formats the user chose."),
+        theme: z.enum(THEME_IDS).optional().describe("One export only: cards, minimal, editorial, bold, consulting or friendly. Default: the template's theme, else the branding's, else cards."),
         narrative: z
           .strictObject({
             summary: textOrSplit.optional(),
@@ -235,7 +236,7 @@ export function registerReportTools(server: McpServer) {
     },
     handler(
       "export_report",
-      async ({ client, reportId, formats, narrative, allowTerms, inline, estimateOnly, ...runArgs }, { signal }) => {
+      async ({ client, reportId, formats, theme, narrative, allowTerms, inline, estimateOnly, ...runArgs }, { signal }) => {
         const c = await resolveClient(client);
         if (estimateOnly) {
           if (reportId) throw new Error("estimateOnly prices a new run: pass the template and period arguments, not a reportId (a stored report has already been paid for).");
@@ -258,6 +259,7 @@ export function registerReportTools(server: McpServer) {
             narrative,
             allowTerms,
             inline,
+            ...(theme ? { theme } : {}),
             reportsDir: env.REPORTS_DIR,
             branding: loaded.branding,
             version: packageVersion(new URL("../index.js", import.meta.url).href),
