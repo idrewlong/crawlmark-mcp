@@ -32,6 +32,14 @@ clients:
     gscExcludeQueries: # default: none. Search Console queries left out of totals and query lists
       - example login # a plain string matches the whole query exactly (ignoring case and extra spaces)
       - "/^site:example\\.com/" # /.../ is an RE2 regular expression (case-insensitive; no lookarounds or backreferences)
+    # pageGroups: # page types for the yearly report sections (search clicks by page type, content by publish year).
+    #   # Default: Home, Blog, Services, Locations. First match wins; anything else is "Other". At most 12 groups.
+    #   - name: Blog
+    #     prefix: [/blog/, /news/] # path prefixes, from the leading "/"
+    #   - name: Services
+    #     prefix: [/services/]
+    #   - name: Product pages
+    #     regex: ["/products/[^/]+/$"] # RE2, matched against the path from its leading "/" (no lookarounds or backreferences)
     locationCode: 2840 # DataForSEO market; default DEFAULT_LOCATION_CODE (2840 = United States)
     languageCode: en # default DEFAULT_LANGUAGE_CODE
     area: Austin,Texas,United States # DataForSEO location_name for local searches (suggest_competitors); default: use locationCode

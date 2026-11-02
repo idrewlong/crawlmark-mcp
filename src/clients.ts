@@ -23,6 +23,7 @@ import {
   removeEntry,
   removeListItems,
   setEntryFields,
+  setObjectList,
   setStringList,
   setIgnore,
 } from "./lib/clients-file.js";
@@ -59,6 +60,7 @@ import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, squash, toBrandTerms } from 
 import { mapLimit } from "./lib/concurrency.js";
 import { validateGa4Hostnames } from "./lib/ga4-hostnames.js";
 import { validateExclusions } from "./lib/gsc-exclusions.js";
+import { validatePageGroups, type PageGroup } from "./lib/page-groups.js";
 import { isProviderId, PROVIDER_IDS, type ProviderId } from "./lib/provider-ids.js";
 import { GOOGLE_NOT_CONFIGURED_MESSAGE } from "./lib/google-auth.js";
 import { listGa4Properties, listGscSites } from "./providers/discovery.js";
@@ -564,6 +566,8 @@ export interface ProfileUpdate {
   gscExcludeQueries?: string[] | undefined;
   /** D2: "GTM-XXXX" or the numeric container ID. Pins the container and removes gtmAccountId (it is looked up from the public ID). Empty string clears both. */
   gtmContainerId?: string | undefined;
+  /** Release 0.5.0: page types for the yearly sections, replacing the stored list in this order; [] removes the key (back to the defaults). */
+  pageGroups?: PageGroup[] | undefined;
 }
 
 /** "GTM-ABC1234" (stored uppercase) or a numeric container ID. */
@@ -574,7 +578,7 @@ export interface ProfileResult {
   set: Record<string, string>;
   cleared: string[];
   /** dataProvider and country are included when the update set or cleared either of them. */
-  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null; ahrefsSiteAuditProject?: string | null; ga4Hostnames?: string[]; gscExcludeQueries?: string[]; gtm?: { containerId: string | null; pinned: boolean } };
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null; ahrefsSiteAuditProject?: string | null; ga4Hostnames?: string[]; gscExcludeQueries?: string[]; gtm?: { containerId: string | null; pinned: boolean }; pageGroups?: PageGroup[]; pageGroupsSource?: "default" | "yaml" };
   clientsFile: string;
 }
 
@@ -661,14 +665,27 @@ export async function setClientProfile(
       if (problem) throw new Error(`gscExcludeQueries: ${problem}`);
     }
   }
+  let pageGroups: PageGroup[] | undefined;
+  if (update.pageGroups !== undefined) {
+    // Names trimmed; only the keys that are set, in the order prefix then regex.
+    pageGroups = update.pageGroups.map((g) => ({
+      name: typeof g.name === "string" ? g.name.trim() : g.name,
+      ...(g.prefix?.length ? { prefix: g.prefix.map((p) => p.trim()) } : {}),
+      ...(g.regex?.length ? { regex: [...g.regex] } : {}),
+    }));
+    if (pageGroups.length > 0) {
+      const problem = validatePageGroups(pageGroups);
+      if (problem) throw new Error(`pageGroups: ${problem}`);
+    }
+  }
   let brandTerms: string[] | undefined;
   if (update.brandTerms !== undefined) {
     brandTerms = toBrandTerms(update.brandTerms);
     const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
     if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
   }
-  if (Object.keys(fields).length === 0 && brandTerms === undefined && ga4Hostnames === undefined && gscExcludeQueries === undefined) {
-    throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ahrefsSiteAuditProject, ga4Hostnames, gscExcludeQueries or gtmContainerId.");
+  if (Object.keys(fields).length === 0 && brandTerms === undefined && ga4Hostnames === undefined && gscExcludeQueries === undefined && pageGroups === undefined) {
+    throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ahrefsSiteAuditProject, ga4Hostnames, gscExcludeQueries, gtmContainerId or pageGroups.");
   }
   const client = await resolveClient(idOrDomain);
   if (fields.bingSite && !bingSiteOnDomain(fields.bingSite, client.domain)) {
@@ -687,6 +704,7 @@ export async function setClientProfile(
     if (brandTerms !== undefined) next = setStringList(next, entry.slug, "brandTerms", brandTerms, { objectKey: "term", same: (a, b) => squash(a) === squash(b) });
     if (ga4Hostnames !== undefined) next = setStringList(next, entry.slug, "ga4Hostnames", ga4Hostnames);
     if (gscExcludeQueries !== undefined) next = setStringList(next, entry.slug, "gscExcludeQueries", gscExcludeQueries);
+    if (pageGroups !== undefined) next = setObjectList(next, entry.slug, "pageGroups", pageGroups);
     return { text: next, result: undefined };
   });
   const updated = await resolveClient(client.domain);
@@ -697,12 +715,14 @@ export async function setClientProfile(
       ...(brandTerms?.length ? { brandTerms: brandTerms.join(", ") } : {}),
       ...(ga4Hostnames?.length ? { ga4Hostnames: ga4Hostnames.join(", ") } : {}),
       ...(gscExcludeQueries?.length ? { gscExcludeQueries: gscExcludeQueries.join(", ") } : {}),
+      ...(pageGroups?.length ? { pageGroups: pageGroups.map((g) => g.name).join(", ") } : {}),
     },
     cleared: [
       ...Object.entries(fields).filter(([, v]) => v === "").map(([k]) => k),
       ...(brandTerms?.length === 0 ? ["brandTerms"] : []),
       ...(ga4Hostnames?.length === 0 ? ["ga4Hostnames"] : []),
       ...(gscExcludeQueries?.length === 0 ? ["gscExcludeQueries"] : []),
+      ...(pageGroups?.length === 0 ? ["pageGroups"] : []),
     ],
     profile: {
       name: updated.name,
@@ -716,6 +736,7 @@ export async function setClientProfile(
       ...(ga4Hostnames !== undefined ? { ga4Hostnames: updated.ga4Hostnames } : {}),
       ...(gscExcludeQueries !== undefined ? { gscExcludeQueries: updated.gscExcludeQueries } : {}),
       ...(update.gtmContainerId !== undefined ? { gtm: { containerId: updated.gtmContainerId ?? null, pinned: updated.gtmPinned } } : {}),
+      ...(pageGroups !== undefined ? { pageGroups: updated.pageGroups, pageGroupsSource: updated.pageGroupsSource } : {}),
     },
     clientsFile: env.CLIENTS_FILE,
   };

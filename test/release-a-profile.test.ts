@@ -183,7 +183,7 @@ describe("setClientProfile (C3)", () => {
 
   it("\"Nothing to set\" lists the new fields", async () => {
     start();
-    await expect(setClientProfile("example.com", {})).rejects.toThrow(/ga4Hostnames, gscExcludeQueries or gtmContainerId/);
+    await expect(setClientProfile("example.com", {})).rejects.toThrow(/ga4Hostnames, gscExcludeQueries, gtmContainerId or pageGroups/);
   });
 });
 
@@ -248,7 +248,7 @@ describe("clients set flags (C3, CLI)", () => {
 
     const nothing = cli(file, dir, "example.com");
     expect(nothing.status).toBe(2);
-    expect(nothing.stderr).toMatch(/--ga4-hostname, --gsc-exclude-query, or --gtm-container/);
+    expect(nothing.stderr).toMatch(/--ga4-hostname, --gsc-exclude-query, --gtm-container, or --page-group/);
   }, 6 * SPAWN_TIMEOUT_MS);
 });
 

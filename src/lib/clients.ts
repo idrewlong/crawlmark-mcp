@@ -11,6 +11,7 @@ import { gtmNotes, joinGtmContainers, type GtmListing, type GtmMatch } from "./g
 import { resolveCountry } from "./country.js";
 import { defaultGa4Hostnames, ga4HostnameProblem, MAX_GA4_HOSTNAMES, validateGa4Hostnames } from "./ga4-hostnames.js";
 import { exclusionProblem, MAX_EXCLUSION_LENGTH, MAX_EXCLUSIONS, validateExclusions } from "./gsc-exclusions.js";
+import { defaultPageGroups, validatePageGroups, type PageGroup } from "./page-groups.js";
 import { PROVIDER_IDS, type ProviderId } from "./provider-ids.js";
 
 // ---------------------------------------------------------------- normalisation
@@ -439,6 +440,8 @@ const OverrideSchema = z.object({
   semrushProject: z.coerce.string().optional(),
   /** Hide this domain: it isn't a client, and discovery never re-adds it. */
   ignore: z.boolean().optional(),
+  /** Release 0.5.0: page types for the yearly sections (first match wins; the rest is "Other"). Unset = the built-in defaults. */
+  pageGroups: z.array(z.object({ name: z.string(), prefix: z.array(z.string()).optional(), regex: z.array(z.string()).optional() })).optional(),
 });
 
 export type ClientOverride = z.infer<typeof OverrideSchema> & { slug: string };
@@ -499,6 +502,10 @@ export function parseOverrides(raw: unknown, source = "clients.yaml"): ClientOve
       const problem = validateExclusions(entry.gscExcludeQueries);
       if (problem) throw new Error(`Invalid ${source}: clients.${slug}.gscExcludeQueries ${problem}`);
     }
+    if (entry.pageGroups) {
+      const problem = validatePageGroups(entry.pageGroups);
+      if (problem) throw new Error(`Invalid ${source}: clients.${slug}.pageGroups ${problem}`);
+    }
     entry.brandTerms?.forEach((t, i) => {
       if (!normalizeBrandTerm(brandTermText(t))) throw new Error(`Invalid ${source}: clients.${slug}.brandTerms[${i}] must contain a letter or digit and be at most 100 characters.`);
     });
@@ -553,6 +560,9 @@ export interface Client {
   ga4HostnamesSource: "default" | "yaml";
   /** D4: Search Console exclusion items as written in clients.yaml ([] when unset). */
   gscExcludeQueries: string[];
+  /** Release 0.5.0: page types for the yearly sections (names trimmed); a copy of DEFAULT_PAGE_GROUPS when clients.yaml sets none. */
+  pageGroups: PageGroup[];
+  pageGroupsSource: "default" | "yaml";
   locationCode: number;
   languageCode: string;
   /** Competitor domains (normalised, de-duplicated). Details in competitorEntries. */
@@ -590,6 +600,11 @@ export interface Client {
   alternates: { gsc: string[]; ga4: Ga4Ref[] };
 }
 
+/** Page groups as stored on the Client: names trimmed, only the keys that are set. */
+export function cleanPageGroups(groups: readonly PageGroup[]): PageGroup[] {
+  return groups.map((g) => ({ name: g.name.trim(), ...(g.prefix?.length ? { prefix: [...g.prefix] } : {}), ...(g.regex?.length ? { regex: [...g.regex] } : {}) }));
+}
+
 /** Merge discovered clients and clients.yaml overrides. yaml wins field by field; arrays replace. */
 export function mergeClients(
   discovered: DiscoveredClient[],
@@ -623,6 +638,8 @@ export function mergeClients(
         ga4Hostnames: y?.ga4Hostnames?.length ? y.ga4Hostnames : defaultGa4Hostnames(domain),
         ga4HostnamesSource: y?.ga4Hostnames?.length ? "yaml" : "default",
         gscExcludeQueries: y?.gscExcludeQueries ?? [],
+        pageGroups: y?.pageGroups?.length ? cleanPageGroups(y.pageGroups) : defaultPageGroups(),
+        pageGroupsSource: y?.pageGroups?.length ? "yaml" : "default",
         locationCode: y?.locationCode ?? defaults.locationCode,
         languageCode: y?.languageCode ?? defaults.languageCode,
         competitors: competitorEntries.map((c) => c.domain),

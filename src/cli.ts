@@ -50,6 +50,7 @@ import { dataCommand } from "./data-cli.js";
 import { gscHistoryCommand } from "./gsc-history-cli.js";
 import { seoSnapshotCommand } from "./seo-snapshot-cli.js";
 import { cliHint } from "./lib/cli-hint.js";
+import { stripControl } from "./lib/terminal-text.js";
 
 /** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
 async function updateNoticeAfterHelp(json = false): Promise<void> {
@@ -404,7 +405,30 @@ type ClientsSetFlags = {
   "ga4-hostname"?: string[] | undefined;
   "gsc-exclude-query"?: string[] | undefined;
   "gtm-container"?: string | undefined;
+  "page-group"?: string[] | undefined;
 };
+
+/**
+ * `--page-group "Blog=/blog/,/news/"` (repeatable, prefix-only groups in the order given; replaces the whole list),
+ * or `--page-group none` (back to the defaults). Undefined when the flag is absent; an Error for a malformed value.
+ */
+function parsePageGroupFlags(values: string[] | undefined): { name: string; prefix: string[] }[] | undefined | Error {
+  const list = listFlag("--page-group", values);
+  if (list === undefined || list instanceof Error) return list;
+  const out: { name: string; prefix: string[] }[] = [];
+  for (const v of list) {
+    const eq = v.indexOf("=");
+    if (eq < 0) return new Error(`--page-group takes Name=/prefix/,/prefix/ (got "${stripControl(v).slice(0, 80)}").`);
+    const name = v.slice(0, eq).trim();
+    if (!name) return new Error(`--page-group needs a name before "=" (got "${stripControl(v).slice(0, 80)}").`);
+    const prefix = v.slice(eq + 1).split(",").map((p) => p.trim()).filter(Boolean);
+    if (!prefix.length) return new Error(`--page-group ${stripControl(name).slice(0, 40)}: give at least one prefix after "=", e.g. ${stripControl(name).slice(0, 40)}=/blog/.`);
+    const bad = prefix.find((p) => !p.startsWith("/"));
+    if (bad !== undefined) return new Error(`--page-group ${stripControl(name).slice(0, 40)}: the prefix "${stripControl(bad).slice(0, 60)}" must start with "/".`);
+    out.push({ name, prefix });
+  }
+  return out;
+}
 
 /** `none` (any case) clears a value: the empty string setClientProfile expects. */
 const noneToEmpty = (v: string | undefined) => (v !== undefined && v.trim().toLowerCase() === "none" ? "" : v);
@@ -421,9 +445,11 @@ function listFlag(name: string, values: string[] | undefined): string[] | undefi
 async function clientsSet(args: string[], values: ClientsSetFlags): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
   if (values["semrush-project"] !== undefined) return usageError("--semrush-project is no longer supported: Semrush Site Audit needs Semrush's v3 API, which crawlmark no longer supports.");
-  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"], ah: values["ahrefs-site-audit-project"], gh: values["ga4-hostname"], gq: values["gsc-exclude-query"], gt: values["gtm-container"] }).every((v) => v === undefined)) {
-    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site, --place-id, --ahrefs-site-audit-project, --ga4-hostname, --gsc-exclude-query, or --gtm-container.");
+  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"], ah: values["ahrefs-site-audit-project"], gh: values["ga4-hostname"], gq: values["gsc-exclude-query"], gt: values["gtm-container"], pg: values["page-group"] }).every((v) => v === undefined)) {
+    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site, --place-id, --ahrefs-site-audit-project, --ga4-hostname, --gsc-exclude-query, --gtm-container, or --page-group.");
   }
+  const pageGroups = parsePageGroupFlags(values["page-group"]);
+  if (pageGroups instanceof Error) return usageError(pageGroups.message);
   const ga4Hostnames = listFlag("--ga4-hostname", values["ga4-hostname"]);
   if (ga4Hostnames instanceof Error) return usageError(ga4Hostnames.message);
   const gscExcludeQueries = listFlag("--gsc-exclude-query", values["gsc-exclude-query"]);
@@ -437,7 +463,7 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
     return usageError(`--country must be a two-letter ISO code such as US or GB, or none (got "${values.country}").`);
   }
   const brandTerms = values["brand-terms"] === undefined ? undefined : values["brand-terms"].split(",");
-  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]), ahrefsSiteAuditProject: noneToEmpty(values["ahrefs-site-audit-project"]), ga4Hostnames, gscExcludeQueries, gtmContainerId: noneToEmpty(values["gtm-container"]) }, { trustedPlaceId: true });
+  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]), ahrefsSiteAuditProject: noneToEmpty(values["ahrefs-site-audit-project"]), ga4Hostnames, gscExcludeQueries, gtmContainerId: noneToEmpty(values["gtm-container"]), pageGroups }, { trustedPlaceId: true });
   for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
   for (const k of r.cleared) out(`Cleared ${k}.`);
   out(
@@ -449,6 +475,7 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
       (r.profile.ga4Hostnames !== undefined ? `GA4 hostnames ${r.profile.ga4Hostnames.join(", ")}. ` : "") +
       (r.profile.gscExcludeQueries !== undefined ? `Search Console exclusions ${r.profile.gscExcludeQueries.join(", ") || "(none)"}. ` : "") +
       (r.profile.gtm !== undefined ? `Tag Manager container ${r.profile.gtm.containerId ?? "(not pinned)"}. ` : "") +
+      (r.profile.pageGroups !== undefined ? `Page groups ${r.profile.pageGroups.map((g) => stripControl(g.name)).join(", ")}${r.profile.pageGroupsSource === "default" ? " (defaults)" : ""}. ` : "") +
       `File: ${r.clientsFile}`,
   );
   return 0;
@@ -584,6 +611,7 @@ async function main(argv: string[]): Promise<number> {
       "ga4-hostname": { type: "string", multiple: true },
       "gsc-exclude-query": { type: "string", multiple: true },
       "gtm-container": { type: "string" },
+      "page-group": { type: "string", multiple: true },
       all: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
       "min-confidence": { type: "string" },

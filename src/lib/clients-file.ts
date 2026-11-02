@@ -166,6 +166,38 @@ export function setEntryFields(text: string, key: string, fields: Record<string,
 }
 
 /**
+ * Replace a list of mappings (e.g. pageGroups) on the entry under `key`, written as a block sequence of block maps.
+ * An empty list or undefined removes the field. Comments on the entry's other fields, and the comment on the field's
+ * own key line, are kept (the items themselves are replaced).
+ */
+export function setObjectList(text: string, key: string, field: string, items: object[] | undefined): string {
+  const doc = load(text);
+  const entry = entryMap(doc, key);
+  if (!items?.length) entry.delete(field);
+  else {
+    const seq = new YAMLSeq();
+    for (const item of items) {
+      const node = doc.createNode(item);
+      if (isMap(node)) {
+        node.flow = false;
+        // Short string lists (prefix, regex) read best inline: `prefix: [/blog/, /news/]`.
+        for (const pair of node.items) {
+          const v: unknown = pair.value;
+          if (isSeq(v)) v.flow = true;
+        }
+      }
+      seq.items.push(node);
+    }
+    const old = entry.get(field, true);
+    if (isSeq(old)) {
+      old.items = seq.items;
+      old.flow = false;
+    } else entry.set(field, seq);
+  }
+  return serialize(doc);
+}
+
+/**
  * Replace a list of plain strings on the entry under `key`. An empty list
  * removes the field. Comments on the entry's other fields are kept.
  * `same(written, item)` decides whether a written item (a string, or the

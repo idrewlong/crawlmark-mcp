@@ -137,6 +137,7 @@ export function registerCompetitorTools(server: McpServer) {
         'ga4Hostnames limits GA4 numbers to these hostnames (default: the domain and www.; "*.example.com" for subdomains; ["*"] for no filter). ' +
         "gscExcludeQueries leaves queries out of Search Console totals and query lists (exact text, or /regex/ in RE2). " +
         'gtmContainerId pins the Tag Manager container gtm_audit uses ("GTM-XXXX" or the numeric ID). ' +
+        'pageGroups sets the page types the yearly report sections use (search clicks by page type, content by publish year): an ordered list of { name, prefix?: ["/blog/"], regex?: ["/products/[^/]+/$"] } where the first match wins and anything else is "Other"; [] goes back to the defaults (Home, Blog, Services, Locations). ' +
         'Pass an empty string to clear a field. Free, local.',
       inputSchema: {
         client: clientArg,
@@ -178,12 +179,23 @@ export function registerCompetitorTools(server: McpServer) {
           .max(25)
           .optional()
           .describe('The Tag Manager container gtm_audit uses: "GTM-XXXX" or the numeric container ID. Also removes any stored gtmAccountId. "" clears the pin.'),
+        pageGroups: z
+          .array(
+            z.strictObject({
+              name: z.string().max(40),
+              prefix: z.array(z.string().max(200)).max(20).optional(),
+              regex: z.array(z.string().max(200)).max(20).optional(),
+            }),
+          )
+          .max(12)
+          .optional()
+          .describe('Page types for the yearly sections, replacing the stored list, in order (first match wins; other pages are "Other"). Each has a name (not "Other") and path prefixes starting with "/" and/or RE2 regexes matched against the path from its leading "/" (no lookarounds or backreferences). [] goes back to the defaults.'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     // Site Audit project IDs are set in a terminal only (crawlmark-cli clients set, SEC-1), never through chat.
-    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ga4Hostnames, gscExcludeQueries, gtmContainerId }) =>
-      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ga4Hostnames, gscExcludeQueries, gtmContainerId }),
+    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ga4Hostnames, gscExcludeQueries, gtmContainerId, pageGroups }) =>
+      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ga4Hostnames, gscExcludeQueries, gtmContainerId, pageGroups }),
     ),
   );
 

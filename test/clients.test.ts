@@ -270,6 +270,14 @@ describe("mergeClients", () => {
       ga4Hostnames: ["example.com", "www.example.com"],
       ga4HostnamesSource: "default",
       gscExcludeQueries: [],
+      // Release 0.5.0: the default page groups.
+      pageGroups: [
+        { name: "Home", regex: ["/(\\?.*)?$"] },
+        { name: "Blog", prefix: ["/blog/", "/news/", "/articles/", "/insights/", "/resources/"] },
+        { name: "Services", prefix: ["/services/", "/service/"] },
+        { name: "Locations", prefix: ["/locations/", "/location/", "/areas/", "/service-areas/"] },
+      ],
+      pageGroupsSource: "default",
       locationCode: 2840,
       languageCode: "en",
       competitors: [],
