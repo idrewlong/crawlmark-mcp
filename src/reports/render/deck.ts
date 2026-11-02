@@ -9,6 +9,8 @@ export const DECK = {
   maxSlides: 50,
   maxTableRows: 8,
   maxTableRowsUnderChart: 5,
+  /** A share chart keeps its table on the same slide only up to this many rows (0.5.0); longer tables continue. */
+  maxTableRowsUnderShare: 3,
   maxTableCols: 6,
   maxCellChars: 60,
   maxSectionBullets: 3,
@@ -155,13 +157,18 @@ function cellTone(runs: Text): DeckTone | null {
   return tag?.tag && tag.tag !== "neutral" ? tag.tag : null;
 }
 
+/** A closing "Total" row (every run bold, the first cell "Total"): kept when a table's rows are cut (0.5.0). */
+const isTotalRow = (r: Text[] | undefined) => !!r && plain(r[0] ?? []) === "Total" && r.every((c) => c.every((run) => run.b === true));
+
 function deckTable(t: TableBlock, limit: number): DeckTable {
   const cols = Math.min(t.header.length, DECK.maxTableCols);
-  const src = t.rows.slice(0, limit);
+  const pinTotal = t.rows.length > limit && limit > 1 && isTotalRow(t.rows.at(-1));
+  const idx = pinTotal ? [...t.rows.keys()].slice(0, limit - 1).concat(t.rows.length - 1) : [...t.rows.keys()].slice(0, limit);
+  const src = idx.map((i) => t.rows[i]!);
   const rows = src.map((r) => Array.from({ length: cols }, (_, i) => cell(plain(r[i] ?? []), DECK.maxCellChars)));
   const tones = src.map((r) => Array.from({ length: cols }, (_, i) => cellTone(r[i] ?? [])));
-  const bar = t.bar && t.bar.col < cols && t.bar.values.length >= src.length ? { col: t.bar.col, values: t.bar.values.slice(0, src.length) } : undefined;
-  return {
+  const bar = t.bar && t.bar.col < cols && t.bar.values.length >= t.rows.length ? { col: t.bar.col, values: idx.map((i) => t.bar!.values[i]!) } : undefined;
+  const out: DeckTable = {
     header: t.header.slice(0, cols).map((h) => cell(h.replace(/\s+/g, " ").trim(), DECK.maxCellChars)),
     rows,
     numeric: Array.from({ length: cols }, (_, i) => t.numeric?.[i] === true),
@@ -170,9 +177,18 @@ function deckTable(t: TableBlock, limit: number): DeckTable {
     ...(tones.some((r) => r.some((c) => c !== null)) ? { tones } : {}),
     ...(bar ? { bar } : {}),
   };
+  if (pinTotal) pinnedTotal.add(out);
+  return out;
 }
+/** Deck tables whose last row is a kept Total (for the "Top n of m rows" note). */
+const pinnedTotal = new WeakSet<DeckTable>();
 
-const topNote = (t: DeckTable) => (t.shown < t.total ? [`Top ${t.shown} of ${t.total} rows; the full table is in the report.`] : []);
+const topNote = (t: DeckTable) => {
+  if (t.shown >= t.total) return [];
+  // A kept Total row isn't one of the "top" rows.
+  if (pinnedTotal.has(t)) return [`Top ${t.shown - 1} of ${t.total - 1} rows and the total; the full table is in the report.`];
+  return [`Top ${t.shown} of ${t.total} rows; the full table is in the report.`];
+};
 
 /** Blocks in reading order, descending into columns. */
 function flat(blocks: Block[]): Block[] {
@@ -221,6 +237,11 @@ function sectionSlides(sec: DocSection, number: number): (SectionSlide | TextSli
       const t = deckTable(tableBlock, DECK.maxTableRows);
       cont = { ...base, title: `${sec.title} (continued)`, continued: true, table: t, bullets: [], footnotes: topNote(t) };
     }
+  } else if (chart && chart.type === "share" && tableBlock && tableBlock.rows.length > DECK.maxTableRowsUnderShare) {
+    // 0.5.0: under a share chart a drawn table keeps only two or three rows, so a longer table gets its own slide.
+    first = { ...base, ...lead, chart, bullets: [], footnotes: [] };
+    const t = deckTable(tableBlock, DECK.maxTableRows);
+    cont = { ...base, title: `${sec.title} (continued)`, continued: true, table: t, bullets: [], footnotes: topNote(t) };
   } else if (chart) {
     const t = tableBlock ? deckTable(tableBlock, DECK.maxTableRowsUnderChart) : undefined;
     tableNotes = t ? topNote(t) : [];
