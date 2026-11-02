@@ -8,8 +8,6 @@ import { stripControl } from "../lib/terminal-text.js";
 import type { GscRow } from "../providers/gsc.js";
 import type { Ga4Summary } from "../reports/monthly.js";
 import type { WinMissItem, WinsMissesData } from "../reports/report-types.js";
-// Counts in rule text are formatted as everywhere else in the report ("20,000", not "20000").
-import { fmtInt } from "../reports/render/sections.js";
 
 export const WM = { kpiPct: 5, kpiAbs: 20, positionMove: 1.0, pageAbs: 20, pagePct: 25, queryMinImpr: 100 } as const;
 
@@ -29,6 +27,12 @@ const UNSEEN_POSITION = 100;
 
 const shortText = (s: string, n: number) => stripControl(s).slice(0, n);
 const one = (n: number) => n.toFixed(1);
+/**
+ * A count as the report prints it ("20,000", not "20000"): the same formatting as fmtInt in render/sections.ts and
+ * int in highlights.ts. Kept here rather than imported: analysis must not load the renderer (a module cycle through
+ * render/narrative.js deadlocks when a test mocks it).
+ */
+const fmtInt = (n: number) => Math.round(n).toLocaleString("en-US");
 
 interface Candidate {
   item: WinMissItem;
