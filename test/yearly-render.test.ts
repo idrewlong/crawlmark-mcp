@@ -111,11 +111,11 @@ describe("yearly sections: block mapping (C6)", () => {
     expect(none.about.map(plain).join("\n")).toContain("Not included this time (no data for this period): Traffic by channel, year over year.");
   });
 
-  it("page types: share chart (this year, then last year), table with bar on Clicks, the page-filter note", () => {
+  it("page types: share chart (last year, then this year, as the channels), table with bar on Clicks, the page-filter note", () => {
     const s = section(doc, "page-types");
     expect(s.blocks.map((b) => b.kind)).toEqual(["chart", "table", "note"]);
     const c = charts(s.blocks)[0]!;
-    expect(c.type === "share" && c.rows.map((r) => r.label)).toEqual(["2025", "2024"]);
+    expect(c.type === "share" && c.rows.map((r) => r.label)).toEqual(["2024", "2025"]);
     // Locations has no clicks either year: left out of the chart, kept in the table.
     expect(c.type === "share" && c.parts).toEqual(["Home", "Blog", "Services", "Other"]);
     const t = tables(s.blocks)[0]!;
@@ -131,7 +131,7 @@ describe("yearly sections: block mapping (C6)", () => {
     const many: PageGroupsData = { ...PAGE_GROUPS, rows: ["A", "B", "C", "D", "E", "F", "G", "H"].map((n, i) => row(n, 100 - i * 10)).concat(row("Other", 500)) };
     const c = charts(section(buildReportDoc(withData("page-types", many), v), "page-types").blocks)[0]!;
     expect(c.type === "share" && c.parts).toEqual(["A", "B", "C", "D", "E", "F", "Other page types"]);
-    expect(c.type === "share" && c.rows[0]!.values.at(-1)).toBe(40 + 30 + 500); // G, H and the "Other" row
+    expect(c.type === "share" && c.rows[1]!.values.at(-1)).toBe(40 + 30 + 500); // G, H and the "Other" row, this year
 
     const solo: PageGroupsData = { ...PAGE_GROUPS, comparedWith: null, method: "stored_top_pages", rows: PAGE_GROUPS.rows.map((r) => ({ ...r, previous: null, change: null })), unattributed: { clicks: 230, impressions: 1000 } };
     const s = section(buildReportDoc(withData("page-types", solo), v), "page-types");

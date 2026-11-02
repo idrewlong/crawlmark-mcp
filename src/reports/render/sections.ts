@@ -611,7 +611,8 @@ function pageGroupsBlocks(data: PageGroupsData, report: TemplateReport): Block[]
 
   if (total > 0) {
     const withPrev = hasPrev && prevTotal > 0;
-    const items = data.rows.map((r) => ({ name: r.name, key: r.clicks, values: withPrev ? [r.clicks, r.previous?.clicks ?? 0] : [r.clicks], fold: r.name === "Other" }));
+    // Rows: the comparison, then this period (left to right in time, as the channel chart).
+    const items = data.rows.map((r) => ({ name: r.name, key: r.clicks, values: withPrev ? [r.previous?.clicks ?? 0, r.clicks] : [r.clicks], fold: r.name === "Other" }));
     const { parts, values } = shareParts(items, "Other page types");
     const top = [...data.rows].sort((a, b) => b.clicks - a.clicks)[0]!;
     blocks.push({
@@ -620,7 +621,7 @@ function pageGroupsBlocks(data: PageGroupsData, report: TemplateReport): Block[]
         type: "share",
         title: "Clicks by page type",
         parts,
-        rows: [{ label: cur, values: values[0]! }, ...(withPrev ? [{ label: prev, values: values[1]! }] : [])],
+        rows: withPrev ? [{ label: prev, values: values[0]! }, { label: cur, values: values[1]! }] : [{ label: cur, values: values[0]! }],
         summary: `${top.name} had ${pctText(shareOf(top.clicks, total))} of clicks in ${cur}${withPrev ? ` (${pctText(shareOf(top.previous?.clicks ?? 0, prevTotal))} in ${prev})` : ""}.`,
       },
     });
