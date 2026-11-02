@@ -253,15 +253,16 @@ const noComparison: ResolvedPeriod = { current: YEAR_2025, label: "2025", folder
 
 describe("winsMissesSection", () => {
   it("compares 2025 with 2024 from the fixture Search Console and GA4 data", async () => {
-    const data = await winsMissesSection(spec(), ctx());
+    const data = await winsMissesSection(spec({ limit: 10 }), ctx());
     expect(data.comparedWith).toBe("previous_year");
     expect(data.goals).toEqual([]);
     expect(data.misses).toEqual([]);
     expect(data.skippedGoals).toEqual([]);
     expect(texts(data).wins).toEqual([
-      "kpi:Search clicks rose 33.3% (1120 against 840)",
+      // larger change first within the rule
       "kpi:Search impressions rose 33.3% (20000 against 15000)",
       "kpi:Organic sessions rose 33.3% (1500 against 1125)",
+      "kpi:Search clicks rose 33.3% (1120 against 840)",
       "page:https://example.com/ gained 105 clicks",
       "page:https://example.com/services/emergency gained 50 clicks",
       "page:https://example.com/blog/water-heaters gained 27 clicks",
