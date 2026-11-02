@@ -244,7 +244,11 @@ function monthlyTable(label: string, cur: { date: string; v: number }[], prev: {
   return { kind: "table", title: `${label} by month`, header: ["Month", curName, ...(prev ? [prevName, "Change"] : [])], rows, numeric: [false, true, true, true] };
 }
 
-function dailyChart(title: string, label: string, cur: { date: string; v: number }[], prev: { date?: string; v: number }[] | null, curName: string, prevName: string, comparedWith: "previous_period" | "previous_year" | null = null): LineChart {
+/**
+ * `named` is the range `curName` names (the period, or the labelled partial Search Console range): a monthly chart's
+ * summary leaves out its dates when the series covers exactly that range, since the name already says it.
+ */
+function dailyChart(title: string, label: string, cur: { date: string; v: number }[], prev: { date?: string; v: number }[] | null, curName: string, prevName: string, comparedWith: "previous_period" | "previous_year" | null = null, named?: { startDate: string; endDate: string }): LineChart {
   const sum = (l: { v: number }[]) => l.reduce((s, x) => s + x.v, 0);
   const prevAligned = prev ? cur.map((_, i) => prev[i]?.v ?? null) : null;
   // Monthly, quarterly and shorter periods keep the weekly table; a year (or anything over 100 days) gets months.
@@ -255,13 +259,18 @@ function dailyChart(title: string, label: string, cur: { date: string; v: number
     const byDate = comparedWith === "previous_year";
     const months = monthlyGroups(cur, prev, byDate);
     const monthly = title.replace(/ per day\b/, " per month");
+    // The summary is also the deck's takeaway line: the totals only ("1,117 clicks in 2025 against 834 in 2024."), not
+    // "Clicks per month: …", which reads as a monthly figure; the dates only when they differ from the named range.
+    const whole = named !== undefined && cur[0]!.date === named.startDate && cur.at(-1)!.date === named.endDate;
+    const span = whole ? "" : `, from ${shortDay(cur[0]!.date)} to ${shortDay(cur.at(-1)!.date)}`;
     return {
       type: "line",
       title: monthly,
       x: months.map((m) => m.name),
       format: "count",
+      perMonth: true,
       series: [{ name: curName, values: months.map((m) => m.a), role: "current" }, ...(prev ? [{ name: prevName, values: months.map((m) => m.b), role: "previous" as const }] : [])],
-      summary: `${monthly}: ${fmtInt(sum(cur))} ${label.toLowerCase()} in ${curName}${prev ? ` against ${fmtInt(sum(prev))} in ${prevName}` : ""}, from ${shortDay(cur[0]!.date)} to ${shortDay(cur.at(-1)!.date)}.`,
+      summary: `${fmtInt(sum(cur))} ${label.toLowerCase()} in ${curName}${prev ? ` against ${fmtInt(sum(prev))} in ${prevName}` : ""}${span}.`,
       fallback: monthlyTable(label, cur, prev, byDate, curName, prevName),
     };
   }
@@ -785,9 +794,9 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     const titled = (title: string) => (report.gscPartial ? `${title}, ${report.gscPartial.label}` : title);
     if (daily && daily.current.length >= 2) {
       const prevName = daily.comparedWith ? vsLabel(report, daily.comparedWith) : "";
-      const clicks = dailyChart(titled("Clicks per day"), "Clicks", daily.current.map((p) => ({ date: p.date, v: p.clicks })), daily.previous?.map((p) => ({ date: p.date, v: p.clicks })) ?? null, cur, prevName, daily.comparedWith);
+      const clicks = dailyChart(titled("Clicks per day"), "Clicks", daily.current.map((p) => ({ date: p.date, v: p.clicks })), daily.previous?.map((p) => ({ date: p.date, v: p.clicks })) ?? null, cur, prevName, daily.comparedWith, report.gscPartial?.range ?? report.period.current);
       if (ctx.onepage) return [{ kind: "chart", chart: clicks }];
-      const impressions = dailyChart(titled("Impressions per day"), "Impressions", daily.current.map((p) => ({ date: p.date, v: p.impressions })), daily.previous?.map((p) => ({ date: p.date, v: p.impressions })) ?? null, cur, prevName, daily.comparedWith);
+      const impressions = dailyChart(titled("Impressions per day"), "Impressions", daily.current.map((p) => ({ date: p.date, v: p.impressions })), daily.previous?.map((p) => ({ date: p.date, v: p.impressions })) ?? null, cur, prevName, daily.comparedWith, report.gscPartial?.range ?? report.period.current);
       blocks.push({ kind: "columns", columns: [[{ kind: "chart", chart: clicks }], [{ kind: "chart", chart: impressions }]] });
     }
     // One page shows only the clicks chart; without the daily rows (a failed or short daily fetch) it says so in one line.
@@ -848,7 +857,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     const blocks: Block[] = [{ kind: "kpiRow", items }];
     if (data.daily && data.daily.current.length >= 2 && !ctx.onepage) {
       const prevName = data.daily.comparedWith ? vsLabel(report, data.daily.comparedWith) : "";
-      blocks.push({ kind: "chart", chart: dailyChart("Organic sessions per day", "Sessions", data.daily.current.map((p) => ({ date: p.date, v: p.sessions })), data.daily.previous?.map((p) => ({ date: p.date, v: p.sessions })) ?? null, periodName(report.period.current), prevName, data.daily.comparedWith) });
+      blocks.push({ kind: "chart", chart: dailyChart("Organic sessions per day", "Sessions", data.daily.current.map((p) => ({ date: p.date, v: p.sessions })), data.daily.previous?.map((p) => ({ date: p.date, v: p.sessions })) ?? null, periodName(report.period.current), prevName, data.daily.comparedWith, report.period.current) });
     }
     if (prev && data.previous) blocks.push({ kind: "note", text: [t(`Organic search visits from Google Analytics, compared with ${prev}.`)] });
     return blocks;

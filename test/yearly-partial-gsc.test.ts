@@ -389,7 +389,7 @@ describe("rendering the partial year (Y0b.5)", () => {
     for (const c of lines) {
       expect(c.type === "line" && c.series.map((x) => x.name)).toEqual(["Jul–Dec 2025"]);
       expect(c.type === "line" && c.x).toEqual(["Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025"]);
-      expect(c.summary).toMatch(/^(Clicks|Impressions) per month, Jul–Dec 2025: [\d,]+ (clicks|impressions) in Jul–Dec 2025, from 1 Jul to 31 Dec\.$/);
+      expect(c.summary).toMatch(/^[\d,]+ (clicks|impressions) in Jul–Dec 2025\.$/);
       expect(c.fallback?.header).toEqual(["Month", "Jul–Dec 2025"]);
     }
     const table = search.blocks.find((b) => b.kind === "table");

@@ -534,6 +534,8 @@ export interface TableLayout {
   height: number;
   /** In-cell bars in the table's bar column. */
   bars: boolean;
+  /** A body or header cell wraps onto a second line. */
+  wraps: boolean;
 }
 
 const headStyle = (x: Ctx): RunStyle => {
@@ -546,11 +548,12 @@ const cellStyle = (x: Ctx, t: DeckTable, size: number, col: number): RunStyle =>
 /**
  * Exported for tests. The table's type and row heights: the largest ladder step whose table fits `maxH` (rows of
  * 0.42–0.7 in at 14–20 pt). In-cell bars are added when asked for, the table is short and no cell wraps. A table too
- * tall even at 14 pt keeps 14 pt and tightens its rows (never the type).
+ * tall even at 14 pt keeps 14 pt and tightens its rows (never the type). With `rowMax`, a table that fits grows its body
+ * rows (up to `rowMax` each) to fill `maxH`.
  */
-export function tableLayout(x: Ctx, t: DeckTable, w: number, maxH: number, o: { bars?: boolean; maxStep?: number } = {}): TableLayout {
+export function tableLayout(x: Ctx, t: DeckTable, w: number, maxH: number, o: { bars?: boolean; maxStep?: number; rowMax?: number } = {}): TableLayout {
   const head = headStyle(x);
-  const at = (step: { size: number; row: number }, bars: boolean): TableLayout & { wraps: boolean } => {
+  const at = (step: { size: number; row: number }, bars: boolean): TableLayout & { headWraps: boolean } => {
     const body = bodyStyle(x, step.size);
     const first = cellStyle(x, t, step.size, 0);
     const extra: number[] = t.header.map((_, i) => (bars && t.bar?.col === i ? BAR_ROOM : 0));
@@ -561,7 +564,7 @@ export function tableLayout(x: Ctx, t: DeckTable, w: number, maxH: number, o: { 
     const headH = Math.max(HEADER_ROW, lines(t.header, () => head) * lineH(head) + 0.16);
     const bodyLines = t.rows.map((r) => lines(r, (j) => cellStyle(x, t, step.size, j)));
     const rowH = [headH, ...bodyLines.map((n) => Math.max(step.row, n * lineH(body) + 0.16))];
-    return { widths, rowH, size: step.size, height: rowH.reduce((a, v) => a + v, 0), bars, wraps: bodyLines.some((n) => n > 1) };
+    return { widths, rowH, size: step.size, height: rowH.reduce((a, v) => a + v, 0), bars, wraps: bodyLines.some((n) => n > 1), headWraps: lines(t.header, () => head) > 1 };
   };
   const wantBars = !!o.bars && !!t.bar && t.rows.length >= 2 && t.rows.length <= BAR_MAX_ROWS && Math.max(...t.bar.values) > 0;
   const top = Math.min(o.maxStep ?? TABLE_LADDER.length - 1, TABLE_LADDER.length - 1);
@@ -576,9 +579,13 @@ export function tableLayout(x: Ctx, t: DeckTable, w: number, maxH: number, o: { 
         const k = Math.max(0.34 / TABLE_LADDER[0].row, Math.min(1, spare / body.reduce((a, v) => a + v, 0)));
         l.rowH = [l.rowH[0]!, ...body.map((v) => Math.max(lineH(bodyStyle(x, 14)) + 0.08, v * k))];
         l.height = l.rowH.reduce((a, v) => a + v, 0);
+      } else if (o.rowMax !== undefined && t.rows.length) {
+        const fill = Math.min(o.rowMax, (maxH - l.rowH[0]!) / t.rows.length);
+        l.rowH = [l.rowH[0]!, ...l.rowH.slice(1).map((v) => Math.max(v, fill))];
+        l.height = l.rowH.reduce((a, v) => a + v, 0);
       }
-      const { wraps: _w, ...out } = l;
-      return out;
+      const { headWraps, ...out } = l;
+      return { ...out, wraps: out.wraps || headWraps };
     }
   }
   throw new Error("unreachable");
@@ -761,7 +768,7 @@ interface TableBlockPlan {
 
 const NOTE_H = 0.32;
 
-function planTable(x: Ctx, t: DeckTable, w: number, maxH: number, o: { note?: string; records?: boolean; bars?: boolean; maxStep?: number } = {}): TableBlockPlan {
+function planTable(x: Ctx, t: DeckTable, w: number, maxH: number, o: { note?: string; records?: boolean; bars?: boolean; maxStep?: number; rowMax?: number } = {}): TableBlockPlan {
   const pad = cardPad(x);
   const noteH = o.note ? NOTE_H : 0;
   const room = maxH - noteH;
@@ -778,7 +785,7 @@ function planTable(x: Ctx, t: DeckTable, w: number, maxH: number, o: { note?: st
     const r = recordLayout(x, t, w, room);
     return { h: r.h + noteH, draw: (b, at) => (drawRecords(x, b, t, { ...at, h: r.h }, r), note(b, at, r.h)) };
   }
-  const opts = { bars: o.bars ?? true, ...(o.maxStep !== undefined ? { maxStep: o.maxStep } : {}) };
+  const opts = { bars: o.bars ?? true, ...(o.maxStep !== undefined ? { maxStep: o.maxStep } : {}), ...(o.rowMax !== undefined ? { rowMax: o.rowMax } : {}) };
   let l = tableLayout(x, t, w - 2 * pad, room - 2 * pad, opts);
   if (l.height > room - 2 * pad + 1e-6 && t.rows.length > 1) {
     // Too tall even at 14 pt with tight rows: show fewer rows (never smaller type) and say so under the table.
@@ -1248,6 +1255,30 @@ function textSlide(x: Ctx, s: Of<"text">, env: SlideEnv): BuiltSlide {
 const TILE_ROW = { min: 1.5, max: 2.4 } as const;
 const isTableNote = (n: string) => /^Top \d+ of \d+ rows/.test(n);
 
+/** A monthly chart keeps at least this width when its table sits beside it (0.5.0). */
+const BESIDE_CHART_MIN_W = 6.2;
+/** Room a table beside a monthly chart gets past the narrowest width without wrapping, so its columns don't touch. */
+const BESIDE_SLACK = 0.35;
+/** The tallest body row of a table beside a monthly chart: rows grow toward the chart's height, up to this. */
+const BESIDE_ROW_MAX = 0.75;
+
+/**
+ * 0.5.0: the width (and ladder step) of a table beside a monthly chart: the narrowest width, from the side column's
+ * up to what the chart leaves, at which no cell wraps, at the largest step that allows it (16 pt, else 14 pt). Null when
+ * it wraps even at 14 pt (long page paths): such a table stays under the chart.
+ */
+function besideTable(x: Ctx, t: DeckTable, maxH: number): { w: number; step: number } | null {
+  const pad = cardPad(x);
+  const maxW = CONTENT_W - BESIDE_CHART_MIN_W - GAP;
+  for (let step = 1; step >= 0; step--) {
+    for (let w = SLIDE.sideW; w <= maxW + 1e-6; w += 0.05) {
+      const l = tableLayout(x, t, w - 2 * pad, maxH - 2 * pad, { bars: false, maxStep: step });
+      if (l.size === TABLE_LADDER[step]!.size && !l.wraps) return { w: Math.min(maxW, w + BESIDE_SLACK), step };
+    }
+  }
+  return null;
+}
+
 /** The P-C4 section layouts with the brief's recipes (chart + side column, KPI row + chart, chart over table, table + side, records, tiles, text). */
 function sectionSlide(x: Ctx, s: Of<"section">, env: SlideEnv): BuiltSlide & { chartFailed: boolean } {
   const b = bodySlide(x, s.title, s.number, s.continued);
@@ -1291,6 +1322,7 @@ function sectionSlide(x: Ctx, s: Of<"section">, env: SlideEnv): BuiltSlide & { c
       kpiCards(x, b, tiles.slice(0, 4), { ...A, h: TILE_ROW.min }, Math.min(4, tiles.length), "row", 40);
       rest = { ...A, y: A.y + TILE_ROW.min + GAP, h: A.h - TILE_ROW.min - GAP };
     }
+    const beside = s.table && s.tableBeside && !tiles.length && !bullets.length ? besideTable(x, s.table, rest.h) : null;
     if (bullets.length) {
       drawChart({ ...rest, w: mainW });
       side(rest.y, rest.h);
@@ -1298,6 +1330,11 @@ function sectionSlide(x: Ctx, s: Of<"section">, env: SlideEnv): BuiltSlide & { c
       // A narrow table goes in the side column, top-aligned with the chart.
       drawChart({ ...rest, w: mainW });
       planTable(x, s.table, SLIDE.sideW, rest.h, { maxStep: 0, bars: false, ...(tableNote ? { note: tableNote } : {}) }).draw(b, { x: SLIDE.sideX, y: rest.y, w: SLIDE.sideW, h: rest.h });
+    } else if (s.table && beside) {
+      // A monthly chart (a long period) keeps the full height; its wider table goes beside it, as wide as it needs.
+      const { w, step } = beside;
+      drawChart({ ...rest, w: rest.w - w - GAP });
+      planTable(x, s.table, w, rest.h, { maxStep: step, rowMax: BESIDE_ROW_MAX, bars: false, ...(tableNote ? { note: tableNote } : {}) }).draw(b, { x: rest.x + rest.w - w, y: rest.y, w, h: rest.h });
     } else if (s.table) {
       // Chart over table: the table takes what it needs (the chart keeps at least 2 in), the chart the rest.
       const plan = planTable(x, s.table, rest.w, Math.max(1.4, rest.h - 2.0 - GAP), { bars: false, maxStep: 1, ...(tableNote ? { note: tableNote } : {}) });

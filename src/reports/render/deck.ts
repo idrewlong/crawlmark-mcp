@@ -41,7 +41,7 @@ export type DeckSlide =
   | { kind: "agenda"; title: "Agenda"; items: string[]; details?: string[] }
   | { kind: "kpis"; title: "Key numbers"; kpis: Kpi[]; caption?: string; takeaway?: string }
   | { kind: "summary"; title: string; bullets: string[]; caption?: string; notes?: string }
-  | { kind: "section"; sectionId: string; title: string; number: number; continued: boolean; chart?: Chart; table?: DeckTable; tiles?: Kpi[]; bullets: string[]; footnotes: string[]; notes?: string; takeaway?: string }
+  | { kind: "section"; sectionId: string; title: string; number: number; continued: boolean; chart?: Chart; table?: DeckTable; tiles?: Kpi[]; bullets: string[]; footnotes: string[]; notes?: string; takeaway?: string; tableBeside?: true }
   | { kind: "text"; sectionId: string; title: string; continued: boolean; bullets: string[]; notes?: string }
   | { kind: "closing"; title: "Thank you"; agencyName?: string; lines: string[]; logo: boolean; notes?: string };
 
@@ -245,7 +245,10 @@ function sectionSlides(sec: DocSection, number: number): (SectionSlide | TextSli
   } else if (chart) {
     const t = tableBlock ? deckTable(tableBlock, DECK.maxTableRowsUnderChart) : undefined;
     tableNotes = t ? topNote(t) : [];
-    first = { ...base, ...lead, chart, ...(t ? { table: t } : {}), bullets: [], footnotes: [] };
+    // 0.5.0: a chart of one point per month (a long period) keeps the slide's full height, its table beside it; under
+    // the chart a five-row table left twelve points about an inch of plot.
+    const beside = t && chart.type === "line" && chart.perMonth ? { tableBeside: true as const } : {};
+    first = { ...base, ...lead, chart, ...(t ? { table: t } : {}), ...beside, bullets: [], footnotes: [] };
   } else if (tableBlock) {
     const s = side();
     // A tile row above the table leaves room for five rows.

@@ -11,7 +11,9 @@ import { buildDeck, DECK, type DeckSlide } from "../src/reports/render/deck.js";
 import { buildReportDoc } from "../src/reports/render/doc.js";
 import { toPptx } from "../src/reports/render/pptx/index.js";
 import { THEME_IDS } from "../src/reports/templates/schema.js";
-import { yearlyReport } from "./fixtures/reports/yearly-data.js";
+import type { SearchOverviewData } from "../src/reports/report-types.js";
+import { layoutReport } from "./fixtures/reports/release-b-render.js";
+import { partialYearReport, yearlyReport } from "./fixtures/reports/yearly-data.js";
 
 type SectionSlide = Extract<DeckSlide, { kind: "section" }>;
 const narrative = { summary: "Clicks grew a third. Sessions followed.", sections: { channels: "Search led the growth. Direct traffic followed.\n\n- Paid search held its share" } };
@@ -104,6 +106,65 @@ describe("yearly deck", () => {
     for (const theme of THEME_IDS) {
       const t = buildDeck(buildReportDoc(yearlyReport(), { version: "0.5.0", theme }));
       expect(t.slides.length).toBe(d.slides.length);
+    }
+  });
+});
+
+/** A slide part's graphic frames (chart and table) with their position and size in inches. */
+function frames(xml: string): { name: string; x: number; y: number; w: number; h: number }[] {
+  const EMU = 914_400;
+  return [...xml.matchAll(/<p:graphicFrame>[\s\S]*?<\/p:graphicFrame>/g)].map((m) => {
+    const g = m[0];
+    const name = /<p:cNvPr [^>]*name="([^"]*)"/.exec(g)![1]!;
+    const [, x, y] = /<a:off x="(\d+)" y="(\d+)"\/>/.exec(g)!;
+    const [, w, h] = /<a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(g)!;
+    return { name, x: Number(x) / EMU, y: Number(y) / EMU, w: Number(w) / EMU, h: Number(h) / EMU };
+  });
+}
+
+describe("search performance on a long period (one point per month)", () => {
+  const search = (slides: DeckSlide[]) => slidesOf(slides, "search")[0]!;
+
+  it("the takeaway is the plain total, without a 'per month' prefix or a span that is the period itself", () => {
+    expect(search(deck().slides).takeaway).toBe("1,117 clicks in 2025 against 834 in 2024.");
+    const partial = buildDeck(buildReportDoc(partialYearReport(), { version: "0.5.0" }));
+    expect(search(partial.slides).takeaway).toBe("565 clicks in Jul–Dec 2025.");
+  });
+
+  it("a series that stops short of the period keeps its dates", () => {
+    const report = yearlyReport();
+    const sec = report.sections.find((x) => x.id === "search")!;
+    if (sec.status !== "ok") throw new Error("ok section expected");
+    const data = sec.data as SearchOverviewData;
+    sec.data = { ...data, daily: { ...data.daily!, current: data.daily!.current.filter((p) => p.date <= "2025-12-28") } };
+    const s = search(buildDeck(buildReportDoc(report, { version: "0.5.0" })).slides);
+    expect(s.takeaway).toMatch(/^[\d,]+ clicks in 2025 against [\d,]+ in 2024, from 1 Jan to 28 Dec\.$/);
+  });
+
+  it("the deck puts the metric table beside the monthly chart; a monthly report keeps the chart over the table", async () => {
+    const s = search(deck().slides);
+    expect(s.chart?.type === "line" && s.chart.perMonth).toBe(true);
+    expect(s.table?.header).toEqual(["Metric", "2025", "2024", "Change"]);
+    expect(s.tableBeside).toBe(true);
+    const monthly = search(buildDeck(buildReportDoc(await layoutReport(), { version: "0.4.0" })).slides);
+    expect(monthly.chart).toBeDefined();
+    expect(monthly.tableBeside).toBeUndefined();
+  });
+
+  it("the drawn slide gives the chart the full height with the table beside it, in every theme", async () => {
+    for (const theme of THEME_IDS) {
+      const zip = await JSZip.loadAsync((await toPptx(buildReportDoc(yearlyReport(), { version: "0.5.0", theme }))).data);
+      const names = Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f));
+      const slides = await Promise.all(names.map((f) => zip.file(f)!.async("string")));
+      const xml = slides.find((x) => x.includes(">Clicks per month<"))!;
+      const f = frames(xml);
+      const chart = f.find((g) => g.name === "Chart")!;
+      const table = f.find((g) => g.name === "Table")!;
+      expect(chart.h, theme).toBeGreaterThan(3.5);
+      // Beside, not under: the table starts right of the chart, near the same top.
+      expect(table.x, theme).toBeGreaterThanOrEqual(chart.x + chart.w);
+      expect(table.x + table.w, theme).toBeLessThanOrEqual(13.333 - 0.5 + 1e-6);
+      expect(table.y, theme).toBeLessThan(chart.y + 0.5);
     }
   });
 });
