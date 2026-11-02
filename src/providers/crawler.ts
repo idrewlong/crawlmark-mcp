@@ -316,6 +316,7 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
     if (x.robots) page.robots = [text(x.robots), page.robots].filter(Boolean).join("; ");
     page.noindex = page.noindex || hasNoindex(x.robots);
     page.h1Count = x.h1Count;
+    page.published = x.published ?? null;
     page.outlinks = x.links.length;
     if (x.linksCapped) {
       incomplete = true;

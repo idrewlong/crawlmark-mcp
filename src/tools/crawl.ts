@@ -67,7 +67,7 @@ export function registerCrawlTools(server: McpServer) {
     {
       title: "Pages from a local crawl",
       description:
-        "Pages from a saved local_crawl (crawlmark keeps the newest 10 crawls per client): URL, status, depth, title, description, canonical, robots, H1 count, inlinks, outlinks, " +
+        "Pages from a saved local_crawl (crawlmark keeps the newest 10 crawls per client): URL, status, depth, title, description, canonical, robots, H1 count, publish date (when the page states one), inlinks, outlinks, " +
         "redirect chain and issues. Filter by issue rule or status code. Free and local: reads crawlmark's database only.",
       inputSchema: {
         crawlId: z.string().min(1).max(100).describe("crawlId from local_crawl."),
@@ -97,6 +97,7 @@ export function registerCrawlTools(server: McpServer) {
           canonical: p.canonical,
           robots: p.robots,
           h1Count: p.h1Count,
+          ...(p.published !== undefined ? { published: p.published } : {}),
           inlinks: p.inlinks,
           outlinks: p.outlinks,
           redirectChain: p.redirectChain,
