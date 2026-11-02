@@ -13,7 +13,7 @@ import { sampleReport } from "./branding-preview.js";
 import { loadLogo } from "./export.js";
 import { computeHighlights } from "./highlights.js";
 import { safeSegment } from "./paths.js";
-import type { MoversData, SectionResult, TemplateReport } from "./report-types.js";
+import type { BlockSectionData, MoversData, SectionResult, TemplateReport } from "./report-types.js";
 import { buildReportDoc } from "./render/doc.js";
 import { toHtml } from "./render/html.js";
 import type { ResolvedBranding } from "./templates/load.js";
@@ -33,22 +33,38 @@ const PAGE_MOVERS: MoversData = {
   losers: [{ key: "https://example.com/services/leaks", clicks: 70, clicksDelta: -40, position: 5.0, positionDelta: 0.6, branded: false }],
 };
 
+/** The text blocks a draft can use: this file's and the global file's, by id. */
+export type BlockLibrary = Record<string, { title?: string | undefined; text: string }>;
+
 /** The draft as a sample report (pure apart from the clock): example.com numbers, the draft's sections, titles and layout. */
-export function sampleTemplateReport(id: string, spec: TemplateSpec, now = new Date()): TemplateReport {
+export function sampleTemplateReport(id: string, spec: TemplateSpec, now = new Date(), blocks: BlockLibrary = {}): TemplateReport {
   const base = sampleReport(now);
   const byType = new Map(base.sections.map((s) => [s.type, s]));
   const compare = spec.compare ?? ["previous_period", "previous_year"];
   const sections: SectionResult[] = spec.sections.map((s) => {
+    const brk = s.pageBreakBefore === true ? { pageBreakBefore: true as const } : {};
+    if (s.type === "block") {
+      const b = blocks[s.block];
+      const data: BlockSectionData = { blockId: s.block, text: b?.text ?? `The text of the block "${s.block}" appears here.` };
+      return { id: s.id, type: "block", title: s.title ?? b?.title ?? SECTION_TITLES.block, status: "ok", data, ...brk };
+    }
     const title = s.title ?? SECTION_TITLES[s.type];
     const sample = byType.get(s.type);
-    if (sample && sample.status === "ok") return { id: s.id, type: s.type, title, status: "ok", data: sample.data };
-    if (s.type === "page_movers") return { id: s.id, type: s.type, title, status: "ok", data: PAGE_MOVERS };
-    if (s.type === "text") return { id: s.id, type: "text", title, status: "ok", data: { text: s.text } };
-    return { id: s.id, type: "text", title, status: "ok", data: { text: placeholderText(s) } };
+    if (sample && sample.status === "ok") return { id: s.id, type: s.type, title, status: "ok", data: sample.data, ...brk };
+    if (s.type === "page_movers") return { id: s.id, type: s.type, title, status: "ok", data: PAGE_MOVERS, ...brk };
+    if (s.type === "text") return { id: s.id, type: "text", title, status: "ok", data: { text: s.text }, ...brk };
+    return { id: s.id, type: "text", title, status: "ok", data: { text: placeholderText(s) }, ...brk };
   });
   const report: TemplateReport = {
     ...base,
-    template: { id, title: spec.title, source: "global", ...(spec.layout === "onepage" ? { layout: "onepage" as const } : {}) },
+    template: {
+      id,
+      title: spec.title,
+      source: "global",
+      ...(spec.layout === "onepage" ? { layout: "onepage" as const } : {}),
+      ...(spec.cover ? { cover: spec.cover } : {}),
+      ...(spec.contents === true ? { contents: true as const } : {}),
+    },
     period: {
       ...base.period,
       comparisons: {
@@ -73,10 +89,10 @@ function safeDir(dir: string): void {
 /** Render the preview HTML (sample data only) and write it. Returns the file's path. */
 export function renderTemplatePreview(
   reportsDir: string,
-  input: { clientSlug?: string | undefined; id: string; spec: TemplateSpec; branding: ResolvedBranding; version: string; now?: Date },
+  input: { clientSlug?: string | undefined; id: string; spec: TemplateSpec; branding: ResolvedBranding; version: string; now?: Date; blocks?: BlockLibrary },
 ): { path: string; logoWarning?: string } {
   const { logo, warning } = loadLogo(input.branding);
-  const doc = buildReportDoc(sampleTemplateReport(input.id, input.spec, input.now), { branding: input.branding, logo, version: input.version, sample: true });
+  const doc = buildReportDoc(sampleTemplateReport(input.id, input.spec, input.now, input.blocks), { branding: input.branding, logo, version: input.version, sample: true });
   const html = toHtml(doc);
   const root = resolve(reportsDir);
   const previewDir = join(root, ".preview");

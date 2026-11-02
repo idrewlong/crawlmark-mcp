@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { cliHint } from "../lib/cli-hint.js";
 import { z } from "zod";
 import { resolveClient } from "../clients.js";
 import { lastCompleteMonth, monthRange } from "../lib/dates.js";
@@ -117,7 +118,7 @@ export function registerRawTools(server: McpServer) {
         "Real-user Core Web Vitals over time from the Chrome UX Report History API: the 75th percentile of LCP, INP, CLS, FCP and TTFB per weekly period " +
         "(each a 28-day window; default 25 periods, up to 40, about 10 months), with a good / needs-improvement / poor rating per period and a trend " +
         "(the last 4 periods against the first 4; within 5% is flat). Give exactly one of client (its https origin), url or origin. " +
-        "Free with CRUX_API_KEY, or a PSI_API_KEY whose Google Cloud project has the Chrome UX Report API enabled (setup --step crux). " +
+        `Free with CRUX_API_KEY, or a PSI_API_KEY whose Google Cloud project has the Chrome UX Report API enabled (${cliHint()} setup --step crux). ` +
         "`available: false` means Chrome has too little traffic data for that origin or URL. Cached for a day.",
       inputSchema: {
         client: clientArg.optional(),
@@ -320,7 +321,7 @@ export function registerRawTools(server: McpServer) {
         "Check the Ahrefs API v3 key with Ahrefs' free limits-and-usage call: whether the key works, the plan, the key's and workspace's units used this billing month " +
         "and when they reset, plus the units crawlmark recorded this calendar month against its own cap (monthlyUnitCap). " +
         "Free (no API units), never cached, records no spend, and never shows the key. A missing or rejected key is reported in the result, not as a tool error; on a paid call a rejected key is an error that says how to fix the key or move that client to another configured provider (set_client_profile dataProvider), and crawlmark never switches providers by itself. " +
-        "Change the key in a terminal (setup --step ahrefs), never through chat.",
+        `Change the key in a terminal (${cliHint()} setup --step ahrefs), never through chat.`,
       inputSchema: {},
       annotations: READ_ONLY,
     },
@@ -334,7 +335,7 @@ export function registerRawTools(server: McpServer) {
       description:
         "Whether a Semrush API key (v4, from the profile > API keys page) is set, what Semrush serves in crawlmark (keyword volume and backlinks; its v4 API has no rankings, " +
         "competitors, visibility or Site Audit), and the units crawlmark recorded this calendar month against its own cap. Semrush has no free key check, so a rejected key shows " +
-        "on the first paid call, as an error that says how to fix the key or move that client to another configured provider (set_client_profile dataProvider); crawlmark never switches providers by itself. Free, never cached, records no spend, never shows a key. Change the key in a terminal (setup --step semrush), never through chat.",
+        `on the first paid call, as an error that says how to fix the key or move that client to another configured provider (set_client_profile dataProvider); crawlmark never switches providers by itself. Free, never cached, records no spend, never shows a key. Change the key in a terminal (${cliHint()} setup --step semrush), never through chat.`,
       inputSchema: {},
       annotations: READ_ONLY,
     },

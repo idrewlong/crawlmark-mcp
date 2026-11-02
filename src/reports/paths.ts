@@ -27,8 +27,11 @@ export const clientTemplatesFile = (homeDir: string, clientSlug: string) => join
 
 export const FORMAT_EXT: Record<Format, string> = { md: "md", html: "html", pdf: "pdf", docx: "docx" };
 
-/** Relative report path parts: `<client>/<YYYY-MM>/<template>-<period>.<ext>` (D7). */
-export function reportRelPath(clientSlug: string, folderMonth: string, templateId: string, period: DateRange, format: Format): { clientDir: string; monthDir: string; file: string } {
+/**
+ * Relative report path parts: `<client>/<YYYY-MM>/<template>-<period>.<ext>` (D7). The internal-notes variant (B-C5)
+ * is `<template>-<period>.internal.md`, written next to the client files.
+ */
+export function reportRelPath(clientSlug: string, folderMonth: string, templateId: string, period: DateRange, format: Format, variant?: "internal"): { clientDir: string; monthDir: string; file: string } {
   if (!/^\d{4}-\d{2}$/.test(folderMonth)) throw new Error(`Bad folder month "${folderMonth}".`);
-  return { clientDir: safeSegment(clientSlug), monthDir: folderMonth, file: `${safeSegment(templateId)}-${periodSlug(period)}.${FORMAT_EXT[format]}` };
+  return { clientDir: safeSegment(clientSlug), monthDir: folderMonth, file: `${safeSegment(templateId)}-${periodSlug(period)}${variant === "internal" ? ".internal" : ""}.${FORMAT_EXT[format]}` };
 }

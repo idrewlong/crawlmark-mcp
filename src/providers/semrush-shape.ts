@@ -3,6 +3,7 @@
  * responses (Get Keyword Metrics, Backlinks overview) to crawlmark's types. No I/O. crawlmark uses Semrush's
  * v4 API only; Semrush's older v3 keys and reports aren't supported.
  */
+import { cliHint } from "../lib/cli-hint.js";
 import type { KeywordVolume } from "./dataforseo.js";
 import type { BacklinksSummary } from "./dataforseo-shape.js";
 
@@ -51,8 +52,8 @@ export function parseSemrushV4Error(json: unknown): { code: number; message: str
 
 export type SemrushErrorKind = "auth" | "balance" | "rate" | "request" | "server";
 
-export const KEY_REJECTED =
-  "Semrush rejected the API key. crawlmark uses Semrush's v4 API: create a key under your profile > API keys and run setup --step semrush.";
+export const semrushKeyRejected = (): string =>
+  `Semrush rejected the API key. crawlmark uses Semrush's v4 API: create a key under your profile > API keys and run ${cliHint()} setup --step semrush.`;
 const ZERO_BALANCE = "Semrush API units balance is zero; check your units under Subscription info > API units.";
 const RATE = "Semrush request limit hit (10 requests/s, 10 at once); try again shortly.";
 
@@ -64,7 +65,7 @@ export function classifySemrushV4Error(status: number, body: { code: number; mes
   const code = body?.code ?? status;
   const message = body?.message ?? "";
   if (code === 132 || (status === 403 && /unit/i.test(message))) return { kind: "balance", message: ZERO_BALANCE };
-  if (status === 401 || status === 403 || code === 401 || code === 403) return { kind: "auth", message: KEY_REJECTED };
+  if (status === 401 || status === 403 || code === 401 || code === 403) return { kind: "auth", message: semrushKeyRejected() };
   if (status === 429 || code === 429) return { kind: "rate", message: RATE };
   if (status === 400 || status === 404 || status === 409) {
     return { kind: "request", message: `Semrush rejected the request (${code}: ${message || `HTTP ${status}`}). This is likely a crawlmark bug; please report it.` };

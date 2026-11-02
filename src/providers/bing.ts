@@ -47,9 +47,10 @@ import { cliHint } from "../lib/cli-hint.js";
 export const BING_READ_METHODS = ["GetUserSites", "GetRankAndTrafficStats", "GetQueryStats", "GetPageStats", "GetCrawlStats", "GetCrawlIssues", "GetUrlInfo"] as const;
 export type BingReadMethod = (typeof BING_READ_METHODS)[number];
 
-export const BING_SETUP_HINT = "Run setup --step bing.";
-export const NO_BING_KEY = "Bing Webmaster Tools needs BING_WEBMASTER_API_KEY (free: Bing Webmaster Tools > Settings > API Access > Generate API Key). Run setup --step bing.";
-export const BING_KEY_REJECTED = "Bing rejected the API key; run setup --step bing.";
+export const bingSetupHint = (): string => `Run ${cliHint()} setup --step bing.`;
+export const noBingKey = (): string =>
+  `Bing Webmaster Tools needs BING_WEBMASTER_API_KEY (free: Bing Webmaster Tools > Settings > API Access > Generate API Key). ${bingSetupHint()}`;
+export const bingKeyRejected = (): string => `Bing rejected the API key; run ${cliHint()} setup --step bing.`;
 export const BING_NOTES = ["Bing updates query stats weekly"] as const;
 
 /** No key, or Bing refused the key: the data is unavailable, not failed. */
@@ -122,7 +123,7 @@ export function bingErrorMessage(status: number, body: string): { unavailable: b
     if (m) code = Number(m[1]);
   }
   if (code === 3 || code === 6 || code === 10) {
-    return { unavailable: true, retryable: false, code, message: code === 3 ? BING_KEY_REJECTED : `Bing refused this API key (${ERROR_NAMES[code]}). ${BING_SETUP_HINT}` };
+    return { unavailable: true, retryable: false, code, message: code === 3 ? bingKeyRejected() : `Bing refused this API key (${ERROR_NAMES[code]}). ${bingSetupHint()}` };
   }
   if (code === 4 || code === 5 || status === 429) return { unavailable: false, retryable: true, code, message: "Bing Webmaster Tools is throttling requests for this key. Try again in a few minutes." };
   if (code === 7 || code === 13 || code === 14) return { unavailable: false, retryable: false, code, message: `Bing refused the site (${ERROR_NAMES[code]}): it isn't a site this key can read.` };
@@ -159,7 +160,7 @@ const RETRY_BASE_MS = 1_500;
 export async function bingGet<T = unknown>(method: BingReadMethod, params: BingParams = {}, opts: BingCallOptions = {}): Promise<{ value: T; fromCache: boolean }> {
   if (!(BING_READ_METHODS as readonly string[]).includes(method)) throw new Error(`Bing method ${String(method).slice(0, 60)} is not on crawlmark's read-only list.`);
   const key = opts.key ?? bingKey();
-  if (!key) throw new BingUnavailableError(NO_BING_KEY);
+  if (!key) throw new BingUnavailableError(noBingKey());
   const fetchImpl = opts.fetchImpl ?? fetch;
   const sleep = opts.sleep ?? defaultSleep;
 
@@ -215,7 +216,7 @@ export async function bingUserSites(opts: BingCallOptions = {}): Promise<{ sites
   const fetchSites = async () => parseUserSites((await bingGet("GetUserSites", {}, { ...opts, noCache: true })).value);
   if (opts.noCache) return { sites: await fetchSites(), fromCache: false };
   const key = opts.key ?? bingKey();
-  if (!key) throw new BingUnavailableError(NO_BING_KEY);
+  if (!key) throw new BingUnavailableError(noBingKey());
   const r = await cached(bingCacheKey(key, "GetUserSites"), TTL.day, fetchSites, { refresh: opts.refresh ?? false });
   return { sites: r.value, fromCache: r.fromCache };
 }

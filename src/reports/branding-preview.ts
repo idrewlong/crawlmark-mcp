@@ -13,7 +13,7 @@ import { computeHighlights } from "./highlights.js";
 import type { MoversData, OpportunityLists, SearchOverviewData, TemplateReport } from "./report-types.js";
 import { buildReportDoc } from "./render/doc.js";
 import { toHtml } from "./render/html.js";
-import type { PdfPrinter } from "./render/pdf.js";
+import { footerFont, type PdfPrinter } from "./render/pdf.js";
 import type { ResolvedBranding } from "./templates/load.js";
 
 const day = (start: string, i: number) => new Date(Date.parse(`${start}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10);
@@ -29,7 +29,7 @@ function series(start: string, days: number, total: number, wave: number): { dat
 }
 
 /** Made-up example.com numbers for the preview (fixed, so the preview looks the same every time). */
-export function sampleReport(generatedAt = new Date()): TemplateReport {
+export function sampleReport(generatedAt = new Date(), opts: { fonts?: { body?: string | undefined; heading?: string | undefined } } = {}): TemplateReport {
   const cur = { startDate: "2026-09-01", endDate: "2026-09-30" };
   const prev = { startDate: "2026-08-01", endDate: "2026-08-31" };
   const py = { startDate: "2025-09-01", endDate: "2025-09-30" };
@@ -95,6 +95,12 @@ export function sampleReport(generatedAt = new Date()): TemplateReport {
     notes: [],
     spend: { usd: 0, units: { ahrefs: 0, semrush: 0 } },
   };
+  const fonts = opts.fonts;
+  if (fonts?.body || fonts?.heading) {
+    const heading = fonts.heading ?? fonts.body;
+    const text = `Body text is set in ${fonts.body ?? "the report's own font"} and headings in ${heading}. A font shows only where it is installed; other apps use a fallback.`;
+    report.sections.push({ id: "fonts", type: "text", title: "Fonts", status: "ok", data: { text } });
+  }
   report.highlights = computeHighlights(report);
   return report;
 }
@@ -114,7 +120,7 @@ export interface PreviewResult {
  */
 export async function renderBrandingPreview(homeDir: string, branding: ResolvedBranding, opts: { printer: PdfPrinter; version: string; now?: Date }): Promise<PreviewResult> {
   const { logo, warning: logoWarning } = loadLogo(branding);
-  const doc = buildReportDoc(sampleReport(opts.now), { branding, logo, version: opts.version, sample: true });
+  const doc = buildReportDoc(sampleReport(opts.now, { fonts: { body: branding.bodyFont, heading: branding.headingFont } }), { branding, logo, version: opts.version, sample: true });
   const html = toHtml(doc);
   const dir = join(homeDir, "branding");
   if (lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`Refusing to write through a symlink: ${dir}`);
@@ -122,7 +128,7 @@ export async function renderBrandingPreview(homeDir: string, branding: ResolvedB
   chmodSync(dir, 0o700);
   const extra = logoWarning ? { logoWarning } : {};
   try {
-    const pdf = await opts.printer(html, { paper: doc.branding.paper, footer: doc.footer });
+    const pdf = await opts.printer(html, { paper: doc.branding.paper, footer: doc.footer, fontFamily: footerFont(doc.branding.fonts) });
     const path = join(dir, "preview.pdf");
     writeFileAtomic(path, pdf, 0o600);
     return { path, format: "pdf", ...extra };

@@ -1,0 +1,1384 @@
+{
+ "reportId": "rpt_01JFIXTURE0000000000000000",
+ "client": {
+  "slug": "example.com",
+  "name": "Example Co",
+  "domain": "example.com"
+ },
+ "template": {
+  "id": "monthly",
+  "title": "Monthly SEO report",
+  "source": "builtin"
+ },
+ "period": {
+  "current": {
+   "startDate": "2026-09-01",
+   "endDate": "2026-09-30"
+  },
+  "label": "September 2026",
+  "folderMonth": "2026-09",
+  "comparisons": {
+   "previous_period": {
+    "startDate": "2026-08-01",
+    "endDate": "2026-08-31"
+   },
+   "previous_year": {
+    "startDate": "2025-09-01",
+    "endDate": "2025-09-30"
+   }
+  }
+ },
+ "generatedAt": "2026-10-13T09:00:00.000Z",
+ "sections": [
+  {
+   "id": "search",
+   "type": "search_overview",
+   "title": "Search performance",
+   "status": "ok",
+   "data": {
+    "metrics": [
+     "clicks",
+     "impressions",
+     "ctr",
+     "position"
+    ],
+    "current": {
+     "keys": [],
+     "clicks": 1120,
+     "impressions": 20000,
+     "ctr": 5.6,
+     "position": 7.5
+    },
+    "vsPreviousPeriod": {
+     "clicks": {
+      "value": 1120,
+      "change": 17.6
+     },
+     "impressions": {
+      "value": 20000,
+      "change": 17.6
+     },
+     "ctr": {
+      "value": 5.6,
+      "change": 0
+     },
+     "position": {
+      "value": 7.5,
+      "change": -0.7
+     },
+     "previous": {
+      "clicks": 952,
+      "impressions": 17000,
+      "ctr": 5.6,
+      "position": 8.2
+     }
+    },
+    "vsPreviousYear": {
+     "clicks": {
+      "value": 1120,
+      "change": 66.7
+     },
+     "impressions": {
+      "value": 20000,
+      "change": 66.7
+     },
+     "ctr": {
+      "value": 5.6,
+      "change": 0
+     },
+     "position": {
+      "value": 7.5,
+      "change": -0.7
+     },
+     "previous": {
+      "clicks": 672,
+      "impressions": 12000,
+      "ctr": 5.6,
+      "position": 8.2
+     }
+    },
+    "daily": {
+     "current": [
+      {
+       "date": "2026-09-01",
+       "clicks": 37,
+       "impressions": 666
+      },
+      {
+       "date": "2026-09-02",
+       "clicks": 39,
+       "impressions": 695
+      },
+      {
+       "date": "2026-09-03",
+       "clicks": 41,
+       "impressions": 723
+      },
+      {
+       "date": "2026-09-04",
+       "clicks": 42,
+       "impressions": 749
+      },
+      {
+       "date": "2026-09-05",
+       "clicks": 29,
+       "impressions": 523
+      },
+      {
+       "date": "2026-09-06",
+       "clicks": 30,
+       "impressions": 534
+      },
+      {
+       "date": "2026-09-07",
+       "clicks": 45,
+       "impressions": 795
+      },
+      {
+       "date": "2026-09-08",
+       "clicks": 45,
+       "impressions": 799
+      },
+      {
+       "date": "2026-09-09",
+       "clicks": 45,
+       "impressions": 796
+      },
+      {
+       "date": "2026-09-10",
+       "clicks": 44,
+       "impressions": 788
+      },
+      {
+       "date": "2026-09-11",
+       "clicks": 43,
+       "impressions": 774
+      },
+      {
+       "date": "2026-09-12",
+       "clicks": 29,
+       "impressions": 514
+      },
+      {
+       "date": "2026-09-13",
+       "clicks": 28,
+       "impressions": 501
+      },
+      {
+       "date": "2026-09-14",
+       "clicks": 40,
+       "impressions": 714
+      },
+      {
+       "date": "2026-09-15",
+       "clicks": 39,
+       "impressions": 693
+      },
+      {
+       "date": "2026-09-16",
+       "clicks": 38,
+       "impressions": 673
+      },
+      {
+       "date": "2026-09-17",
+       "clicks": 37,
+       "impressions": 656
+      },
+      {
+       "date": "2026-09-18",
+       "clicks": 36,
+       "impressions": 644
+      },
+      {
+       "date": "2026-09-19",
+       "clicks": 24,
+       "impressions": 433
+      },
+      {
+       "date": "2026-09-20",
+       "clicks": 24,
+       "impressions": 432
+      },
+      {
+       "date": "2026-09-21",
+       "clicks": 36,
+       "impressions": 640
+      },
+      {
+       "date": "2026-09-22",
+       "clicks": 36,
+       "impressions": 652
+      },
+      {
+       "date": "2026-09-23",
+       "clicks": 37,
+       "impressions": 669
+      },
+      {
+       "date": "2026-09-24",
+       "clicks": 39,
+       "impressions": 691
+      },
+      {
+       "date": "2026-09-25",
+       "clicks": 40,
+       "impressions": 717
+      },
+      {
+       "date": "2026-09-26",
+       "clicks": 28,
+       "impressions": 507
+      },
+      {
+       "date": "2026-09-27",
+       "clicks": 30,
+       "impressions": 527
+      },
+      {
+       "date": "2026-09-28",
+       "clicks": 45,
+       "impressions": 805
+      },
+      {
+       "date": "2026-09-29",
+       "clicks": 47,
+       "impressions": 833
+      },
+      {
+       "date": "2026-09-30",
+       "clicks": 48,
+       "impressions": 857
+      }
+     ],
+     "previous": [
+      {
+       "date": "2026-08-01",
+       "clicks": 21,
+       "impressions": 377
+      },
+      {
+       "date": "2026-08-02",
+       "clicks": 22,
+       "impressions": 394
+      },
+      {
+       "date": "2026-08-03",
+       "clicks": 34,
+       "impressions": 603
+      },
+      {
+       "date": "2026-08-04",
+       "clicks": 35,
+       "impressions": 624
+      },
+      {
+       "date": "2026-08-05",
+       "clicks": 36,
+       "impressions": 641
+      },
+      {
+       "date": "2026-08-06",
+       "clicks": 37,
+       "impressions": 655
+      },
+      {
+       "date": "2026-08-07",
+       "clicks": 37,
+       "impressions": 663
+      },
+      {
+       "date": "2026-08-08",
+       "clicks": 25,
+       "impressions": 453
+      },
+      {
+       "date": "2026-08-09",
+       "clicks": 25,
+       "impressions": 451
+      },
+      {
+       "date": "2026-08-10",
+       "clicks": 37,
+       "impressions": 657
+      },
+      {
+       "date": "2026-08-11",
+       "clicks": 36,
+       "impressions": 645
+      },
+      {
+       "date": "2026-08-12",
+       "clicks": 35,
+       "impressions": 630
+      },
+      {
+       "date": "2026-08-13",
+       "clicks": 34,
+       "impressions": 613
+      },
+      {
+       "date": "2026-08-14",
+       "clicks": 33,
+       "impressions": 595
+      },
+      {
+       "date": "2026-08-15",
+       "clicks": 22,
+       "impressions": 393
+      },
+      {
+       "date": "2026-08-16",
+       "clicks": 21,
+       "impressions": 381
+      },
+      {
+       "date": "2026-08-17",
+       "clicks": 31,
+       "impressions": 547
+      },
+      {
+       "date": "2026-08-18",
+       "clicks": 30,
+       "impressions": 536
+      },
+      {
+       "date": "2026-08-19",
+       "clicks": 30,
+       "impressions": 530
+      },
+      {
+       "date": "2026-08-20",
+       "clicks": 30,
+       "impressions": 529
+      },
+      {
+       "date": "2026-08-21",
+       "clicks": 30,
+       "impressions": 534
+      },
+      {
+       "date": "2026-08-22",
+       "clicks": 21,
+       "impressions": 369
+      },
+      {
+       "date": "2026-08-23",
+       "clicks": 21,
+       "impressions": 379
+      },
+      {
+       "date": "2026-08-24",
+       "clicks": 32,
+       "impressions": 576
+      },
+      {
+       "date": "2026-08-25",
+       "clicks": 33,
+       "impressions": 598
+      },
+      {
+       "date": "2026-08-26",
+       "clicks": 35,
+       "impressions": 621
+      },
+      {
+       "date": "2026-08-27",
+       "clicks": 36,
+       "impressions": 646
+      },
+      {
+       "date": "2026-08-28",
+       "clicks": 38,
+       "impressions": 671
+      },
+      {
+       "date": "2026-08-29",
+       "clicks": 26,
+       "impressions": 472
+      },
+      {
+       "date": "2026-08-30",
+       "clicks": 27,
+       "impressions": 486
+      },
+      {
+       "date": "2026-08-31",
+       "clicks": 41,
+       "impressions": 731
+      }
+     ],
+     "comparedWith": "previous_period"
+    }
+   }
+  },
+  {
+   "id": "brand",
+   "type": "branded_split",
+   "title": "Branded vs non-branded",
+   "status": "ok",
+   "data": {
+    "comparedWith": "previous_period",
+    "branded": {
+     "current": {
+      "queries": 1,
+      "clicks": 300,
+      "impressions": 1200,
+      "ctr": 25,
+      "position": 1.2
+     },
+     "previous": {
+      "queries": 1,
+      "clicks": 255,
+      "impressions": 1020,
+      "ctr": 25,
+      "position": 1.9
+     },
+     "change": {
+      "clicks": 17.6,
+      "impressions": 17.6,
+      "ctr": 0,
+      "position": -0.7
+     }
+    },
+    "nonBranded": {
+     "current": {
+      "queries": 6,
+      "clicks": 459,
+      "impressions": 13960,
+      "ctr": 3.29,
+      "position": 8.8
+     },
+     "previous": {
+      "queries": 6,
+      "clicks": 492,
+      "impressions": 11866,
+      "ctr": 4.15,
+      "position": 9.5
+     },
+     "change": {
+      "clicks": -6.7,
+      "impressions": 17.6,
+      "ctr": -0.86,
+      "position": -0.7
+     }
+    },
+    "brandedShareOfClicks": {
+     "current": 39.5,
+     "previous": 34.1
+    },
+    "queryRows": {
+     "current": 7,
+     "previous": 7,
+     "limit": 5000
+    },
+    "note": "Branded and non-branded totals are built from Search Console query rows, which leave out anonymized queries (rare queries Google withholds), so branded + non-branded will not add up to the site totals in vsPreviousMonth. Use them for the split, not as site totals.",
+    "brandTerms": [
+     "example co"
+    ]
+   }
+  },
+  {
+   "id": "traffic",
+   "type": "organic_traffic",
+   "title": "Organic traffic (GA4)",
+   "status": "ok",
+   "data": {
+    "metrics": [
+     "sessions",
+     "users",
+     "engagementRate",
+     "keyEvents"
+    ],
+    "comparedWith": "previous_period",
+    "sessions": {
+     "value": 1500,
+     "change": 17.6
+    },
+    "users": {
+     "value": 1200,
+     "change": 17.6
+    },
+    "engagementRate": {
+     "value": 61.2,
+     "change": 2.8
+    },
+    "keyEvents": {
+     "value": 40,
+     "change": 17.6
+    },
+    "previous": {
+     "sessions": 1275,
+     "users": 1020,
+     "engagementRate": 58.4,
+     "keyEvents": 34
+    },
+    "daily": {
+     "current": [
+      {
+       "date": "2026-09-01",
+       "sessions": 50
+      },
+      {
+       "date": "2026-09-02",
+       "sessions": 52
+      },
+      {
+       "date": "2026-09-03",
+       "sessions": 54
+      },
+      {
+       "date": "2026-09-04",
+       "sessions": 56
+      },
+      {
+       "date": "2026-09-05",
+       "sessions": 39
+      },
+      {
+       "date": "2026-09-06",
+       "sessions": 40
+      },
+      {
+       "date": "2026-09-07",
+       "sessions": 60
+      },
+      {
+       "date": "2026-09-08",
+       "sessions": 60
+      },
+      {
+       "date": "2026-09-09",
+       "sessions": 60
+      },
+      {
+       "date": "2026-09-10",
+       "sessions": 59
+      },
+      {
+       "date": "2026-09-11",
+       "sessions": 58
+      },
+      {
+       "date": "2026-09-12",
+       "sessions": 39
+      },
+      {
+       "date": "2026-09-13",
+       "sessions": 38
+      },
+      {
+       "date": "2026-09-14",
+       "sessions": 54
+      },
+      {
+       "date": "2026-09-15",
+       "sessions": 52
+      },
+      {
+       "date": "2026-09-16",
+       "sessions": 50
+      },
+      {
+       "date": "2026-09-17",
+       "sessions": 49
+      },
+      {
+       "date": "2026-09-18",
+       "sessions": 48
+      },
+      {
+       "date": "2026-09-19",
+       "sessions": 32
+      },
+      {
+       "date": "2026-09-20",
+       "sessions": 32
+      },
+      {
+       "date": "2026-09-21",
+       "sessions": 48
+      },
+      {
+       "date": "2026-09-22",
+       "sessions": 49
+      },
+      {
+       "date": "2026-09-23",
+       "sessions": 50
+      },
+      {
+       "date": "2026-09-24",
+       "sessions": 52
+      },
+      {
+       "date": "2026-09-25",
+       "sessions": 54
+      },
+      {
+       "date": "2026-09-26",
+       "sessions": 38
+      },
+      {
+       "date": "2026-09-27",
+       "sessions": 40
+      },
+      {
+       "date": "2026-09-28",
+       "sessions": 60
+      },
+      {
+       "date": "2026-09-29",
+       "sessions": 62
+      },
+      {
+       "date": "2026-09-30",
+       "sessions": 64
+      }
+     ],
+     "previous": [
+      {
+       "date": "2026-08-01",
+       "sessions": 28
+      },
+      {
+       "date": "2026-08-02",
+       "sessions": 30
+      },
+      {
+       "date": "2026-08-03",
+       "sessions": 45
+      },
+      {
+       "date": "2026-08-04",
+       "sessions": 47
+      },
+      {
+       "date": "2026-08-05",
+       "sessions": 48
+      },
+      {
+       "date": "2026-08-06",
+       "sessions": 49
+      },
+      {
+       "date": "2026-08-07",
+       "sessions": 50
+      },
+      {
+       "date": "2026-08-08",
+       "sessions": 34
+      },
+      {
+       "date": "2026-08-09",
+       "sessions": 34
+      },
+      {
+       "date": "2026-08-10",
+       "sessions": 49
+      },
+      {
+       "date": "2026-08-11",
+       "sessions": 48
+      },
+      {
+       "date": "2026-08-12",
+       "sessions": 47
+      },
+      {
+       "date": "2026-08-13",
+       "sessions": 46
+      },
+      {
+       "date": "2026-08-14",
+       "sessions": 45
+      },
+      {
+       "date": "2026-08-15",
+       "sessions": 29
+      },
+      {
+       "date": "2026-08-16",
+       "sessions": 29
+      },
+      {
+       "date": "2026-08-17",
+       "sessions": 41
+      },
+      {
+       "date": "2026-08-18",
+       "sessions": 40
+      },
+      {
+       "date": "2026-08-19",
+       "sessions": 40
+      },
+      {
+       "date": "2026-08-20",
+       "sessions": 40
+      },
+      {
+       "date": "2026-08-21",
+       "sessions": 40
+      },
+      {
+       "date": "2026-08-22",
+       "sessions": 28
+      },
+      {
+       "date": "2026-08-23",
+       "sessions": 28
+      },
+      {
+       "date": "2026-08-24",
+       "sessions": 43
+      },
+      {
+       "date": "2026-08-25",
+       "sessions": 45
+      },
+      {
+       "date": "2026-08-26",
+       "sessions": 47
+      },
+      {
+       "date": "2026-08-27",
+       "sessions": 48
+      },
+      {
+       "date": "2026-08-28",
+       "sessions": 50
+      },
+      {
+       "date": "2026-08-29",
+       "sessions": 35
+      },
+      {
+       "date": "2026-08-30",
+       "sessions": 36
+      },
+      {
+       "date": "2026-08-31",
+       "sessions": 55
+      }
+     ],
+     "comparedWith": "previous_period"
+    }
+   }
+  },
+  {
+   "id": "queries",
+   "type": "top_queries",
+   "title": "Top queries",
+   "status": "ok",
+   "data": {
+    "rows": [
+     {
+      "keys": [
+       "example co"
+      ],
+      "clicks": 300,
+      "impressions": 1200,
+      "ctr": 25,
+      "position": 1.2,
+      "branded": true
+     },
+     {
+      "keys": [
+       "emergency plumber"
+      ],
+      "clicks": 180,
+      "impressions": 4200,
+      "ctr": 4.29,
+      "position": 6.4,
+      "branded": false
+     },
+     {
+      "keys": [
+       "water heater repair"
+      ],
+      "clicks": 120,
+      "impressions": 3100,
+      "ctr": 3.87,
+      "position": 8.1,
+      "branded": false
+     },
+     {
+      "keys": [
+       "drain cleaning near me"
+      ],
+      "clicks": 90,
+      "impressions": 5200,
+      "ctr": 1.73,
+      "position": 11.3,
+      "branded": false
+     },
+     {
+      "keys": [
+       "leak detection"
+      ],
+      "clicks": 60,
+      "impressions": 900,
+      "ctr": 6.67,
+      "position": 4.2,
+      "branded": false
+     },
+     {
+      "keys": [
+       "<img src=x onerror=alert(1)>"
+      ],
+      "clicks": 5,
+      "impressions": 300,
+      "ctr": 1.67,
+      "position": 15,
+      "branded": false
+     },
+     {
+      "keys": [
+       "pipe | fitting"
+      ],
+      "clicks": 4,
+      "impressions": 260,
+      "ctr": 1.54,
+      "position": 12.5,
+      "branded": false
+     }
+    ]
+   }
+  },
+  {
+   "id": "query-movers",
+   "type": "query_movers",
+   "title": "Query movers",
+   "status": "ok",
+   "data": {
+    "comparedWith": "previous_period",
+    "gainers": [
+     {
+      "key": "example co",
+      "clicks": 300,
+      "clicksDelta": 45,
+      "position": 1.2,
+      "positionDelta": -0.7,
+      "branded": true
+     },
+     {
+      "key": "emergency plumber",
+      "clicks": 180,
+      "clicksDelta": 27,
+      "position": 6.4,
+      "positionDelta": -0.7,
+      "branded": false
+     },
+     {
+      "key": "water heater repair",
+      "clicks": 120,
+      "clicksDelta": 18,
+      "position": 8.1,
+      "positionDelta": -0.7,
+      "branded": false
+     },
+     {
+      "key": "drain cleaning near me",
+      "clicks": 90,
+      "clicksDelta": 13,
+      "position": 11.3,
+      "positionDelta": -0.7,
+      "branded": false
+     },
+     {
+      "key": "<img src=x onerror=alert(1)>",
+      "clicks": 5,
+      "clicksDelta": 1,
+      "position": 15,
+      "positionDelta": -0.7,
+      "branded": false
+     },
+     {
+      "key": "pipe | fitting",
+      "clicks": 4,
+      "clicksDelta": 1,
+      "position": 12.5,
+      "positionDelta": -0.7,
+      "branded": false
+     }
+    ],
+    "losers": [
+     {
+      "key": "leak detection",
+      "clicks": 60,
+      "clicksDelta": -93,
+      "position": 4.2,
+      "positionDelta": -0.7,
+      "branded": false
+     }
+    ]
+   }
+  },
+  {
+   "id": "pages",
+   "type": "top_pages",
+   "title": "Top pages",
+   "status": "ok",
+   "data": {
+    "rows": [
+     {
+      "keys": [
+       "https://example.com/"
+      ],
+      "clicks": 420,
+      "impressions": 6000,
+      "ctr": 7,
+      "position": 3.1
+     },
+     {
+      "keys": [
+       "https://example.com/services/emergency"
+      ],
+      "clicks": 200,
+      "impressions": 5100,
+      "ctr": 3.92,
+      "position": 6
+     },
+     {
+      "keys": [
+       "https://example.com/blog/water-heaters"
+      ],
+      "clicks": 110,
+      "impressions": 4100,
+      "ctr": 2.68,
+      "position": 9.2
+     },
+     {
+      "keys": [
+       "https://example.com/contact"
+      ],
+      "clicks": 40,
+      "impressions": 800,
+      "ctr": 5,
+      "position": 5.5
+     }
+    ]
+   }
+  },
+  {
+   "id": "page-movers",
+   "type": "page_movers",
+   "title": "Page movers",
+   "status": "ok",
+   "data": {
+    "comparedWith": "previous_period",
+    "gainers": [
+     {
+      "key": "https://example.com/",
+      "clicks": 420,
+      "clicksDelta": 63,
+      "position": 3.1,
+      "positionDelta": -0.4
+     },
+     {
+      "key": "https://example.com/services/emergency",
+      "clicks": 200,
+      "clicksDelta": 30,
+      "position": 6,
+      "positionDelta": -0.4
+     },
+     {
+      "key": "https://example.com/blog/water-heaters",
+      "clicks": 110,
+      "clicksDelta": 16,
+      "position": 9.2,
+      "positionDelta": -0.4
+     },
+     {
+      "key": "https://example.com/contact",
+      "clicks": 40,
+      "clicksDelta": 6,
+      "position": 5.5,
+      "positionDelta": -0.4
+     }
+    ],
+    "losers": []
+   }
+  },
+  {
+   "id": "landing",
+   "type": "landing_pages",
+   "title": "Top organic landing pages",
+   "status": "ok",
+   "data": {
+    "rows": [
+     {
+      "landingPagePlusQueryString": "/",
+      "sessions": 700,
+      "engagementRate": 0.64,
+      "keyEvents": 20
+     },
+     {
+      "landingPagePlusQueryString": "/services/emergency",
+      "sessions": 400,
+      "engagementRate": 0.58,
+      "keyEvents": 15
+     },
+     {
+      "landingPagePlusQueryString": "/blog/water-heaters",
+      "sessions": 210,
+      "engagementRate": 0.49,
+      "keyEvents": 2
+     }
+    ]
+   }
+  },
+  {
+   "id": "tracked",
+   "type": "tracked_keywords",
+   "title": "Tracked keywords",
+   "status": "ok",
+   "data": {
+    "comparedWith": "previous_period",
+    "keywords": [
+     {
+      "keyword": "emergency plumber",
+      "branded": false,
+      "gscPosition": 6.4,
+      "gscClicks": 180,
+      "gscImpressions": 4200,
+      "liveRank": null,
+      "liveUrl": null,
+      "gscPositionPrevious": 7.1000000000000005,
+      "positionChange": -0.7
+     },
+     {
+      "keyword": "example co",
+      "branded": true,
+      "gscPosition": 1.2,
+      "gscClicks": 300,
+      "gscImpressions": 1200,
+      "liveRank": null,
+      "liveUrl": null,
+      "gscPositionPrevious": 1.9,
+      "positionChange": -0.7
+     },
+     {
+      "keyword": "water heater repair",
+      "branded": false,
+      "gscPosition": 8.1,
+      "gscClicks": 120,
+      "gscImpressions": 3100,
+      "liveRank": null,
+      "liveUrl": null,
+      "gscPositionPrevious": 8.799999999999999,
+      "positionChange": -0.7
+     }
+    ]
+   }
+  },
+  {
+   "id": "opportunities",
+   "type": "opportunities",
+   "title": "Opportunities",
+   "status": "ok",
+   "data": {
+    "window": {
+     "startDate": "2026-09-01",
+     "endDate": "2026-09-30"
+    },
+    "method": "Fixture method.",
+    "strikingDistance": {
+     "total": 1,
+     "top": [
+      {
+       "query": "drain cleaning near me",
+       "topPage": "https://example.com/services/emergency",
+       "position": 11.3,
+       "impressions": 5200,
+       "clicks": 90,
+       "ctr": 1.73,
+       "estimatedExtraClicks": 400
+      }
+     ]
+    },
+    "lowCtr": {
+     "total": 0,
+     "top": []
+    },
+    "cannibalization": {
+     "total": 0,
+     "top": []
+    }
+   }
+  },
+  {
+   "id": "audit",
+   "type": "audit_changes",
+   "title": "Changes since the last audit",
+   "status": "ok",
+   "data": {
+    "limit": 10,
+    "comparison": {
+     "auditId": "aud_latest",
+     "ranAt": "2026-09-25T10:00:00.000Z",
+     "summary": {
+      "avgScores": {
+       "performance": 78,
+       "accessibility": 90,
+       "bestPractices": 92,
+       "seo": 92
+      }
+     },
+     "diff": {
+      "base": {
+       "auditId": "aud_before",
+       "ranAt": "2026-08-20T10:00:00.000Z"
+      },
+      "target": {
+       "auditId": "aud_latest",
+       "ranAt": "2026-09-25T10:00:00.000Z"
+      },
+      "new": [
+       {
+        "id": "is_broken",
+        "source": "onpage",
+        "rule": "is_broken",
+        "url": "https://example.com/",
+        "severity": "high",
+        "title": "On-page check failed: is broken"
+       }
+      ],
+      "firstChecked": [],
+      "retired": [],
+      "resolved": [
+       {
+        "id": "no_description",
+        "source": "onpage",
+        "rule": "no_description",
+        "url": "https://example.com/",
+        "severity": "medium",
+        "title": "On-page check failed: no description"
+       }
+      ],
+      "persistent": [
+       {
+        "id": "no_h1_tag",
+        "source": "onpage",
+        "rule": "no_h1_tag",
+        "url": "https://example.com/",
+        "severity": "medium",
+        "title": "On-page check failed: no h1 tag"
+       }
+      ],
+      "unverified": [
+       {
+        "id": "gone",
+        "source": "axe",
+        "rule": "gone",
+        "url": "https://example.com/",
+        "severity": "low",
+        "title": "Old low issue"
+       }
+      ],
+      "scoreChanges": [
+       {
+        "url": "https://example.com",
+        "category": "performance",
+        "from": 71,
+        "to": 78
+       },
+       {
+        "url": "https://example.com",
+        "category": "seo",
+        "from": 90,
+        "to": 92
+       }
+      ],
+      "warnings": [],
+      "counts": {
+       "new": 1,
+       "firstChecked": 0,
+       "retired": 0,
+       "resolved": 1,
+       "persistent": 1,
+       "unverified": 1
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "cwv",
+   "type": "core_web_vitals_history",
+   "title": "Core Web Vitals history (real users)",
+   "status": "ok",
+   "data": {
+    "key": {
+     "origin": "https://example.com",
+     "formFactor": "PHONE"
+    },
+    "keySource": "CRUX_API_KEY",
+    "available": true,
+    "periods": [
+     {
+      "start": "2026-03-01",
+      "end": "2026-03-28"
+     },
+     {
+      "start": "2026-03-08",
+      "end": "2026-04-04"
+     },
+     {
+      "start": "2026-03-15",
+      "end": "2026-04-11"
+     }
+    ],
+    "metrics": {
+     "lcp": {
+      "unit": "ms",
+      "p75": [
+       2900,
+       2600,
+       2300
+      ],
+      "latest": 2300,
+      "first": 2900,
+      "change": -600,
+      "rating": [
+       "needs-improvement",
+       "needs-improvement",
+       "good"
+      ],
+      "trend": "improving"
+     },
+     "cls": {
+      "unit": "score",
+      "p75": [
+       0.05,
+       null,
+       0.06
+      ],
+      "latest": 0.06,
+      "first": 0.05,
+      "change": 0.01,
+      "rating": [
+       "good",
+       null,
+       "good"
+      ],
+      "trend": "insufficient-data"
+     }
+    },
+    "fromCache": false
+   }
+  },
+  {
+   "id": "gtm",
+   "type": "tag_manager",
+   "title": "Tag Manager findings",
+   "status": "ok",
+   "data": {
+    "limit": 20,
+    "container": {
+     "publicId": "GTM-EXAMPLE",
+     "name": "example.com"
+    },
+    "liveVersion": {
+     "versionId": "12",
+     "name": "Launch"
+    },
+    "summary": {
+     "tags": 4,
+     "triggers": 3,
+     "variables": 5,
+     "findings": 2,
+     "bySeverity": {
+      "medium": 1,
+      "low": 1
+     },
+     "consentModeDetected": false
+    },
+    "findings": [
+     {
+      "id": "g1",
+      "rule": "legacy-ua",
+      "severity": "medium",
+      "title": "Universal Analytics tag <b>Old UA</b>",
+      "entity": {
+       "kind": "tag",
+       "id": "7",
+       "name": "Old UA"
+      },
+      "evidence": "UA-1234-1"
+     },
+     {
+      "id": "g2",
+      "rule": "paused-tag",
+      "severity": "low",
+      "title": "Paused tag: Test",
+      "entity": {
+       "kind": "tag",
+       "id": "9",
+       "name": "Test"
+      }
+     }
+    ],
+    "notes": []
+   }
+  }
+ ],
+ "highlights": [
+  {
+   "kind": "clicks-vs-previous-period",
+   "sectionId": "search",
+   "text": "Clicks rose 17.6% (from 952 to 1,120) vs August 2026.",
+   "value": 17.6
+  },
+  {
+   "kind": "clicks-vs-previous-year",
+   "sectionId": "search",
+   "text": "Clicks rose 66.7% (from 672 to 1,120) vs September 2025.",
+   "value": 66.7
+  },
+  {
+   "kind": "non-branded-clicks",
+   "sectionId": "brand",
+   "text": "Non-branded clicks fell 6.7% (from 492 to 459) vs August 2026.",
+   "value": -6.7
+  },
+  {
+   "kind": "organic-sessions",
+   "sectionId": "traffic",
+   "text": "Organic sessions (GA4) rose 17.6% (from 1,275 to 1,500) vs August 2026.",
+   "value": 17.6
+  },
+  {
+   "kind": "top-gaining-query",
+   "sectionId": "query-movers",
+   "text": "Top gaining query: \"emergency plumber\" (+27 clicks, from 153 to 180).",
+   "value": 27
+  },
+  {
+   "kind": "top-losing-query",
+   "sectionId": "query-movers",
+   "text": "Top losing query: \"leak detection\" (-93 clicks, from 153 to 60).",
+   "value": -93
+  },
+  {
+   "kind": "audit-changes",
+   "sectionId": "audit",
+   "text": "1 audit issue resolved, 1 new critical or high-severity issue since the last audit.",
+   "value": 1
+  },
+  {
+   "kind": "cwv-rating-change",
+   "sectionId": "cwv",
+   "text": "LCP for real users (75th percentile) went from 2,900 ms (needs improvement) to 2,300 ms (good).",
+   "value": -600
+  }
+ ],
+ "notes": [],
+ "spend": {
+  "usd": 0,
+  "units": {
+   "ahrefs": 0,
+   "semrush": 0
+  }
+ }
+}

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Example Co - SEO report - September 2026</title>
+<style>
+:root { --primary: #224466; --primary-ink: #224466; --on-primary: #ffffff; --on-primary-soft: #c8d0d9; --cover-rule: #607891; --accent: #cc6600;
+  --ink: #1f2933; --muted: #52606d; --faint: #616c78; --rule: #e4e7eb; --zebra: #f7f8fa; --surface: #f4f6f9;
+  --bar: #8598ab; --tint: #f0f2f4;
+  --good: #13723a; --good-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fdecea; --neutral: #52606d; --neutral-bg: #eef1f4; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-scheme: light; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+.page { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+.cover { background: var(--primary); color: var(--on-primary); border-radius: 12px; padding: 18px 24px 16px; border-bottom: 4px solid var(--accent); margin-bottom: 14px; }
+.cover-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; }
+.brand img { height: 34px; max-width: 160px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+.badge { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; border: 1px solid var(--on-primary-soft); color: var(--on-primary-soft); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--on-primary-soft); margin: 14px 0 2px; font-weight: 600; }
+h1 { font-size: 28px; line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+.domain { color: var(--on-primary-soft); margin: 3px 0 14px; font-size: 14px; }
+.cover-meta { display: flex; flex-wrap: wrap; gap: 6px 32px; margin: 0; border-top: 1px solid var(--cover-rule); padding-top: 10px; font-size: 12.5px; }
+.cover-meta dt { color: var(--on-primary-soft); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.cover-meta dd { margin: 0; font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 4px; }
+.kpi, .tile { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; break-inside: avoid; }
+.tile { background: var(--zebra); border-color: transparent; padding: 10px 12px; }
+.kpi-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.15; margin: 4px 0 6px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.tile .kpi-value { font-size: 20px; margin: 2px 0 4px; }
+.kpi-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.kpi-caption { font-size: 11px; color: var(--faint); margin: 0 0 14px; text-align: right; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px 1px 6px; font-variant-numeric: tabular-nums; }
+.chip svg { width: 8px; height: 8px; fill: currentColor; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+.chip.neutral { color: var(--neutral); background: var(--neutral-bg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tiles { display: grid; gap: 8px; margin: 4px 0 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tiles-1, .tiles-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tiles-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tiles-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.summary { background: #fff; border: 1px solid var(--rule); border-left: 4px solid var(--primary); border-radius: 10px; padding: 14px 18px 12px; margin: 0 0 14px; break-inside: avoid; }
+.summary h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 6px; color: var(--primary-ink); }
+.summary ul { margin: 0; padding-left: 18px; } .summary li { margin: 3px 0; } .summary p { margin: 4px 0; }
+.caption { font-size: 11px; color: var(--faint); margin: 8px 0 0; }
+.card { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 18px 8px; margin: 0 0 14px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.card h2 { font-size: 15px; margin: 0 0 10px; color: var(--primary-ink); display: flex; align-items: center; gap: 8px; break-after: avoid; }
+.card h2::before { content: ""; width: 4px; height: 15px; border-radius: 2px; background: var(--primary); flex: none; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 0 0 14px; } .pair > .card { margin: 0; }
+.cols { display: grid; gap: 16px; } .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.col > :first-child { margin-top: 0; }
+h3, .table-title { font-size: 12px; font-weight: 600; color: var(--ink); margin: 10px 0 4px; break-after: avoid; }
+p { margin: 6px 0; }
+.note { font-size: 11px; color: var(--muted); margin: 4px 0 8px; }
+figure.chart, .cols, .tiles { break-inside: avoid; }
+figure.chart { margin: 2px 0 10px; }
+figure.chart figcaption.stack { flex-direction: column; align-items: flex-start; gap: 2px; }
+figure.chart figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-weight: 400; color: var(--muted); font-size: 11px; }
+.key-item { white-space: nowrap; }
+.key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.key.dashed { border-top-style: dashed; }
+.key.box { width: 10px; height: 10px; border: 0; border-radius: 2px; }
+.chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-svg .tick { font-size: 10px; fill: #52606d; font-family: inherit; font-variant-numeric: tabular-nums; }
+.chart-svg .strong { font-weight: 600; fill: #1f2933; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1.5px solid #cbd2d9; vertical-align: bottom; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; overflow-wrap: break-word; }
+tbody tr:nth-child(even) td { background: var(--zebra); }
+tr, .tile, .kpi { break-inside: avoid; }
+thead { display: table-header-group; }
+.num { text-align: right; white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+.table-wrap:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+td.lead { min-width: 34%; }
+.barbox { display: inline-grid; grid-template-columns: 70px auto; align-items: center; gap: 8px; }
+.track { display: block; height: 7px; }
+.bar { display: block; height: 7px; background: var(--bar); border-radius: 0 3px 3px 0; }
+.v { min-width: 3.2em; }
+.good { color: var(--good); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+.kpi-value.good, .kpi-value.bad { font-weight: 700; }
+.tag { display: inline-block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 999px; padding: 0 7px; line-height: 16px; white-space: nowrap; }
+.tag-good { color: #13723a; background: #e3f4e8; }
+.tag-bad { color: #b42318; background: #fdecea; }
+.tag-warn { color: #8a5300; background: #fdf0d5; }
+.tag-neutral { color: #52606d; background: #eef1f4; }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; background: var(--zebra); border-radius: 3px; padding: 0 3px; }
+.commentary { background: var(--tint); border-left: 3px solid var(--primary); border-radius: 6px; padding: 8px 14px; margin: 10px 0 8px; break-inside: avoid; }
+.commentary .label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; color: var(--primary-ink); margin: 2px 0 4px; }
+.about { margin: 20px 0 0; padding: 14px 18px; background: #fff; border: 1px solid var(--rule); border-radius: 10px; font-size: 11px; color: var(--muted); }
+.about h2 { break-after: avoid; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink); margin: 0 0 6px; }
+.about ul { margin: 0; padding-left: 16px; } .about li { margin: 2px 0; }
+.colophon { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--faint); padding: 12px 2px 24px; }
+@media (max-width: 640px) {
+  .kpis, .tiles, .tiles-5, .tiles-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pair, .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 24px; }
+}
+/* PDF running header in the page's top margin (CSS page-margin box), left off the first page where the cover band is. */
+@page { @top-left { content: "Example Co \b7  Executive summary \b7  September 2026"; font: 8px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #616c78; vertical-align: bottom; padding-bottom: 3mm; } }
+@page :first { @top-left { content: none; } }
+@media print {
+  /* Print density: a dashboard export fills its pages. */
+  body { background: #fff; font-size: 10.5px; line-height: 1.4; }
+  .page { max-width: none; margin: 0; padding: 0; }
+  .cover { padding: 14px 20px 12px; } .kind { margin-top: 8px; } h1 { font-size: 24px; } .domain { margin-bottom: 10px; }
+  .kpis { gap: 10px; } .kpi { padding: 10px 12px; } .kpi-value { font-size: 22px; margin: 2px 0 4px; } .kpi-caption { margin-bottom: 10px; }
+  .summary { padding: 10px 16px 8px; margin-bottom: 10px; } .summary li { margin: 1px 0; }
+  .card { padding: 10px 14px 4px; margin-bottom: 10px; } .card h2 { font-size: 13.5px; margin-bottom: 6px; } .pair { gap: 10px; margin-bottom: 10px; }
+  table { font-size: 10.5px; margin-bottom: 6px; } th { padding: 4px 6px; font-size: 9px; } td { padding: 3px 6px; }
+  .tiles { gap: 6px; margin-bottom: 8px; } .tile { padding: 7px 10px; } .tile .kpi-value { font-size: 17px; }
+  h3, .table-title { margin: 6px 0 3px; } p { margin: 4px 0; } .note { margin: 3px 0 6px; } figure.chart { margin-bottom: 6px; } .cols { gap: 12px; }
+  .about { margin-top: 10px; padding: 10px 14px; }
+  .pair .track { display: none; } .pair .barbox { grid-template-columns: auto; } .pair td.lead { min-width: 0; } .pair th { letter-spacing: 0; } .pair .num { white-space: normal; }
+  /* Only atomic blocks stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
+  .card h2, h3, .table-title, figcaption { break-after: avoid; }
+  .summary { font-size: 10px; }
+  .lead-in { break-inside: avoid; } p.note { break-before: avoid; }
+  .table-wrap { overflow: visible; }
+  .cover { margin-bottom: 12px; }
+  .colophon { padding-bottom: 0; }
+}
+/* One-page executive layout: tighter spacing so it fits one printed page. */
+.pair { break-inside: avoid; }
+.cover { padding: 12px 20px 10px; margin-bottom: 10px; } .kind { margin-top: 4px; } .brand img { height: 28px; } h1 { font-size: 22px; } .domain { margin: 1px 0 8px; font-size: 13px; } .cover-meta { padding-top: 7px; }
+.summary li { margin: 1px 0; } figure.chart { margin-bottom: 4px; } table { font-size: 11px; } .summary .caption { display: none; } figure.chart .chart-title { display: none; } figure.chart figcaption { justify-content: flex-end; margin-top: -26px; } .kpi-caption { margin: -2px 0 8px; } .card h2 { margin-bottom: 6px; } .kpis { gap: 10px; } .about p { margin: 0; } .colophon { padding-top: 6px; }
+.kpi { padding: 10px 12px; } .kpi-value { font-size: 22px; margin: 2px 0 4px; }
+.card { padding: 12px 16px 6px; margin-bottom: 10px; } .pair { margin-bottom: 10px; } .summary { padding: 10px 16px 8px; margin-bottom: 10px; }
+.about { margin-top: 6px; padding: 8px 14px; font-size: 10px; } .about h2 { margin-bottom: 2px; } .kpi-caption { margin-bottom: 10px; }
+td { padding: 4px 6px; } th { padding: 4px 6px; }
+</style>
+</head>
+<body class="onepage">
+<div class="page">
+<header class="cover">
+<div class="cover-top"><div class="brand"><span>Example Agency</span></div><span class="badge">With commentary</span></div>
+<p class="kind">Executive summary</p>
+<h1>Example Co</h1>
+<p class="domain">example.com</p>
+<dl class="cover-meta">
+<div><dt>Period</dt><dd>September 2026 · 1–30 Sep 2026</dd></div>
+<div><dt>Compared with</dt><dd>August 2026 and September 2025</dd></div>
+<div><dt>Generated</dt><dd>13 Oct 2026</dd></div>
+</dl>
+</header>
+<main>
+<section class="kpis" aria-label="Key figures"><div class="kpi"><div class="kpi-label">Clicks</div><div class="kpi-value">1,120</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>17.6%</div><div class="kpi-detail">vs 952</div></div><div class="kpi"><div class="kpi-label">Impressions</div><div class="kpi-value">20,000</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>17.6%</div><div class="kpi-detail">vs 17,000</div></div><div class="kpi"><div class="kpi-label">CTR</div><div class="kpi-value">5.60%</div><div class="chip neutral"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 4h8v2H1z"/></svg><span class="sr">no change </span>0.0 pts</div><div class="kpi-detail">vs 5.60%</div></div><div class="kpi"><div class="kpi-label">Average position</div><div class="kpi-value">7.5</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 8.5 1 1.5h8z"/></svg><span class="sr">down </span>0.7 better</div><div class="kpi-detail">from 8.2 · lower is better</div></div></section>
+<p class="kpi-caption">Change vs August 2026 (previous period)</p>
+<section class="summary" aria-label="Summary"><h2>Summary</h2>
+<p>Clicks grew <strong>12%</strong> in September.</p>
+<ul><li>Blog pages led the gain</li><li>Branded searches held steady</li></ul>
+<p>Next month we will look at the services pages.</p>
+<p class="caption">Written commentary; all figures come from the data below.</p></section>
+<section class="card" aria-label="Clicks this period"><div class="lead-in"><h2>Clicks this period</h2>
+<figure class="chart"><figcaption><span class="chart-title">Clicks per day</span><span class="legend"><span class="key-item"><span class="key" style="border-color:#224466"></span>September 2026</span><span class="key-item"><span class="key dashed" style="border-color:#9aa5b1"></span>August 2026</span></span></figcaption><svg class="chart-svg" viewBox="0 0 680 120" role="img" aria-label="Clicks per day: 1,121 clicks in September 2026 against 951 in August 2026, from 1 Sep to 30 Sep."><title>Clicks per day: 1,121 clicks in September 2026 against 951 in August 2026, from 1 Sep to 30 Sep.</title><line x1="40" x2="668" y1="98" y2="98" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="101.5" text-anchor="end" class="tick">0</text><line x1="40" x2="668" y1="68.7" y2="68.7" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="72.2" text-anchor="end" class="tick">20</text><line x1="40" x2="668" y1="39.3" y2="39.3" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="42.8" text-anchor="end" class="tick">40</text><line x1="40" x2="668" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">60</text><text x="40" y="114" text-anchor="start" class="tick">1 Sep</text><text x="169.9" y="114" text-anchor="middle" class="tick">7 Sep</text><text x="299.9" y="114" text-anchor="middle" class="tick">13 Sep</text><text x="408.1" y="114" text-anchor="middle" class="tick">18 Sep</text><text x="538.1" y="114" text-anchor="middle" class="tick">24 Sep</text><text x="668" y="114" text-anchor="end" class="tick">30 Sep</text><path d="M40,67.2 L61.7,65.7 L83.3,48.1 L105,46.7 L126.6,45.2 L148.3,43.7 L169.9,43.7 L191.6,61.3 L213.2,61.3 L234.9,43.7 L256.6,45.2 L278.2,46.7 L299.9,48.1 L321.5,49.6 L343.2,65.7 L364.8,67.2 L386.5,52.5 L408.1,54 L429.8,54 L451.4,54 L473.1,54 L494.8,67.2 L516.4,67.2 L538.1,51.1 L559.7,49.6 L581.4,46.7 L603,45.2 L624.7,42.3 L646.3,59.9 L668,58.4" fill="none" stroke="#9aa5b1" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 3"/><path d="M40,98 L40,43.7 L61.7,40.8 L83.3,37.9 L105,36.4 L126.6,55.5 L148.3,54 L169.9,32 L191.6,32 L213.2,32 L234.9,33.5 L256.6,34.9 L278.2,55.5 L299.9,56.9 L321.5,39.3 L343.2,40.8 L364.8,42.3 L386.5,43.7 L408.1,45.2 L429.8,62.8 L451.4,62.8 L473.1,45.2 L494.8,45.2 L516.4,43.7 L538.1,40.8 L559.7,39.3 L581.4,56.9 L603,54 L624.7,32 L646.3,29.1 L668,27.6 L668,98 Z" fill="#224466" fill-opacity="0.12" stroke="none"/><path d="M40,43.7 L61.7,40.8 L83.3,37.9 L105,36.4 L126.6,55.5 L148.3,54 L169.9,32 L191.6,32 L213.2,32 L234.9,33.5 L256.6,34.9 L278.2,55.5 L299.9,56.9 L321.5,39.3 L343.2,40.8 L364.8,42.3 L386.5,43.7 L408.1,45.2 L429.8,62.8 L451.4,62.8 L473.1,45.2 L494.8,45.2 L516.4,43.7 L538.1,40.8 L559.7,39.3 L581.4,56.9 L603,54 L624.7,32 L646.3,29.1 L668,27.6" fill="none" stroke="#224466" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="668" cy="27.6" r="3" fill="#224466" stroke="#ffffff" stroke-width="1.5"/></svg></figure></div>
+</section>
+<div class="pair"><section class="card" aria-label="Top wins"><div class="lead-in"><h2>Top wins</h2>
+</div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Query, Clicks, Change"><table>
+<thead><tr><th class="lead">Query</th><th class="num">Clicks</th><th class="num">Change</th></tr></thead>
+<tbody><tr><td class="lead">example co</td><td class="num">300</td><td class="num"><span class="good">+45</span></td></tr>
+<tr><td class="lead">emergency plumber</td><td class="num">180</td><td class="num"><span class="good">+27</span></td></tr>
+<tr><td class="lead">water heater repair</td><td class="num">120</td><td class="num"><span class="good">+18</span></td></tr></tbody>
+</table></div></section><section class="card" aria-label="Next steps"><div class="lead-in"><h2>Next steps</h2>
+</div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Query, Opportunity, Est. clicks"><table>
+<thead><tr><th class="lead">Query</th><th>Opportunity</th><th class="num">Est. clicks</th></tr></thead>
+<tbody><tr><td class="lead">drain cleaning near me</td><td>Near page one</td><td class="num">400</td></tr></tbody>
+</table></div>
+<p class="note">Estimated clicks are a guide from typical click-through rates, not a forecast.</p></section></div>
+</main>
+<footer class="about"><h2>About this report</h2><p>Period: September 2026 (1–30 Sep 2026), compared with August 2026 and September 2025. Written commentary; all figures come from the data below. Sources: Google Search Console and Google Analytics 4.</p></footer>
+<div class="colophon"><span>Example Agency, example.com</span><span>Generated 13 Oct 2026</span></div>
+</div>
+</body>
+</html>

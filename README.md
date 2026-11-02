@@ -100,6 +100,16 @@ npm run cli -- setup
 
 A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration). The wizard asks which SEO data providers you have; to change that later, run `npm run cli -- setup --step provider`, or run `npm run cli -- init` again and pick it from the menu. Set `CRAWLMARK_NO_UPDATE_CHECK=1` to turn off the daily update check.
 
+Upgrading to 0.3.0
+------------------
+
+Update with `npx -y crawlmark-mcp@latest init` (or `npm i -g crawlmark-mcp@latest`) **on every computer that uses your report template files**, then check these:
+
+- **Update every computer before you use the new template fields.** A template file that uses any new field (a cover, contents, page breaks, text blocks, fonts, `hideProviders`, `commentaryNote`, `allowTerms` or `blockTerms`) doesn't load in 0.2.0 or earlier: the older version marks the whole file invalid and falls back to the builtin templates and branding. Files that don't use the new fields load in both versions. Existing templates and stored reports render as before apart from the white-label change below, but `report` now stops (exit 1) when a template's own text, titles, cover or footer names an internal term: run `crawlmark-cli report templates validate` after upgrading to see any hits.
+- **White-label reports now hide DataForSEO and the Claude commentary line.** With `hideCrawlmark: true`, files say "a third-party SEO data provider" instead of DataForSEO and "Written commentary; all figures come from the data below." instead of "Commentary written with Claude...". Set `hideProviders: false` to keep the DataForSEO name, and `commentaryNote` to word the line yourself or remove it. "Source: Ahrefs" and "Source: Semrush" lines always stay. Details in [docs/reports.md](docs/reports.md#white-label).
+- **Exports can now be refused.** If the commentary Claude writes for a client names crawlmark, Claude, DataForSEO, a tool name or a similar internal term, `export_report` writes nothing and lists every hit, so Claude can rewrite it. `allowTerms` lets a term through; with white label on, crawlmark, Claude, Anthropic and DataForSEO can only be let through by the `allowTerms` in your branding, not by Claude on an export ([The term check](docs/reports.md#the-term-check)).
+- **Command hints match how you installed crawlmark.** The commands that setup and `clients` messages tell you to run now start with the right prefix (`crawlmark-cli`, `npm run cli --` or `npx -y crawlmark-mcp@latest`).
+
 Upgrading to 0.2.0
 ------------------
 
@@ -122,7 +132,7 @@ The setup wizard covers everything here. Each step shows its current status firs
 | `crawlmark-cli setup --step <node\|provider\|dataforseo\|ahrefs\|semrush\|google\|psi\|discovery\|register\|vendor-mcp>` | One step. `provider` picks your SEO data providers and the default one; `vendor-mcp` adds Semrush's or Ahrefs' own MCP server to your AI apps (see [below](#semrushs-and-ahrefs-own-mcp-servers-optional)) |
 | `crawlmark-cli setup --step crux` | A key for Core Web Vitals history (CrUX). Only run this way; it isn't part of the default wizard |
 | `crawlmark-cli setup --step bing` | A Bing Webmaster Tools API key. Only run this way; it isn't part of the default wizard |
-| `crawlmark-cli setup --step branding [--client <domain>]` | Report branding: agency name, logo, colours, footer, white label, paper size and default formats, with a one-page preview before saving. Only run this way (or from the setup menu) |
+| `crawlmark-cli setup --step branding [--client <domain>]` | Report branding: agency name, logo, colours, fonts, footer, white label, provider names, commentary note, paper size and default formats, with a one-page preview before saving. Only run this way (or from the setup menu) |
 | `crawlmark-cli setup --dry-run` | Runs the free checks and shows what each step would do, without writing, signing in or registering anything |
 | `crawlmark-cli setup --yes` | Accepts every default. Steps that need input (a password, an API key, a key file) are skipped; the default provider is only written to fix a missing or invalid one when a provider works |
 | `crawlmark-cli setup status` | Each integration's state and the next step (`--json` for machine output) |
@@ -626,7 +636,28 @@ Report files
 
 `export_report` (in Claude) and `crawlmark-cli report` (from cron) turn a client's data into Markdown, HTML, PDF or Word files from a YAML template. The files are laid out like an agency dashboard: your logo and colours, four key-figure cards with their changes, a summary, charts (clicks and impressions per day, branded share, organic sessions, Core Web Vitals and rank history), clean tables, and a short "About this report". In Claude the files carry the commentary Claude writes; from cron they are data only and say so. Files go to `<home>/reports/<client>/<YYYY-MM>/`, readable only by you.
 
-Your branding (agency name, logo, colours, footer, white label, paper size and default formats) is set up with `crawlmark-cli setup --step branding`, which shows a one-page preview with sample data before saving; `crawlmark-cli report preview-branding` shows it again later.
+Your branding (agency name, logo, colours, fonts, footer, white label, paper size and default formats) is set up with `crawlmark-cli setup --step branding`, which shows a one-page preview with sample data before saving; `crawlmark-cli report preview-branding` shows it again later.
+
+In Claude the commentary can use sub-headings, bullets, numbered lists, tables and `{{chart search}}` lines that repeat a chart from the section. Text meant for you only goes in an internal part, which is saved to a separate `<template>-<period>.internal.md` file and never into a client file. Texts are limited to 20,000 characters each (100,000 for the client's whole report). Before writing anything, `export_report` checks the client text for internal terms (crawlmark, Claude, DataForSEO, tool and setting names) and refuses the export, listing the hits, if it finds one; Ahrefs, Semrush and Google are not terms, and `allowTerms` (on the export, or in your branding) lets a term through; with white label on, only your branding's `allowTerms` can let crawlmark, Claude, Anthropic or DataForSEO through. [Commentary in docs/reports.md](docs/reports.md#commentary) has the format and the rules.
+
+Templates can also set a cover (subtitle, "Prepared for", "Prepared by", which fields show), a linked contents list (`contents: true`), a page break before a section (`pageBreakBefore: true`, Word and PDF), and reusable text blocks (a glossary or methodology note) that a `block` section shows:
+
+```yaml
+templates:
+  board:
+    title: Quarterly board pack
+    contents: true
+    cover: { subtitle: Search performance for the board, preparedFor: Example Co }
+    sections:
+      - { id: search, type: search_overview }
+      - { id: terms, type: block, block: glossary, pageBreakBefore: true }
+blocks:
+  glossary:
+    title: Glossary
+    text: "CTR is clicks divided by impressions."
+```
+
+Fonts come from `branding` (`bodyFont`, `headingFont`, `fontFallback`; setup asks for them). They show only where the font is installed: HTML and PDF fall back to a sans-serif or serif family, and Word and Google Docs substitute another font. A file that uses any of these fields doesn't load in crawlmark 0.2.0 ([Upgrading to 0.3.0](#upgrading-to-030)).
 
 Builtin templates: `monthly` (the same data as `monthly_report`), `quarterly` (the quarter against the one before and the same quarter last year), `executive` (one page: key figures, the clicks trend, top wins and next steps), `technical` (site crawl, Core Web Vitals, audit changes and AI readiness, for web teams) and `local` (Local SEO: the Google Business Profile and map-pack positions, paid, plus local-intent searches).
 
@@ -642,7 +673,7 @@ To build your own template without writing YAML, run `crawlmark-cli report templ
 
 Optional sections are added with `--include` (`include` in Claude). Free: `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history), `ai` (llms.txt and AI crawler access from the newest saved audit), `issues` (the technical-issues list), `indexing` (Google indexing coverage) and `spend` (paid data used this month; the tool and CLI results always report it, the files only with this section). Paid, through the client's data provider: `backlinks` and `visibility` in `monthly` and `quarterly`, and `competitors` in `quarterly`. Paid sections (also `keyword_gap`, `local_profile` and `ai_visibility` in your own templates) run only with `--paid` (`allowPaid`) after their estimate fits the caps.
 
-PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, branding, paths and the Docs handoff.
+PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, layout, fonts, commentary, branding, paths and the Docs handoff.
 
 Scheduled audits and alerts
 ---------------------------

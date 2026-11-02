@@ -7,6 +7,7 @@
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { stripControl } from "../../lib/terminal-text.js";
+import { chartRefCount, MAX_CHART_REFS, NarrativeParseError, parseNarrative } from "../render/narrative-parse.js";
 
 export const FORMATS = ["md", "html", "pdf", "docx"] as const;
 export type Format = (typeof FORMATS)[number];
@@ -54,6 +55,13 @@ const lineText = (max: number) =>
 const BLANK_FILLER_RE = /[\u115F\u1160\u3164\uFFA0\u2800]/u;
 const freeText = (max: number) => z.string().max(max).refine((s) => stripControl(s) === s, `${NO_CONTROL} (newlines and tabs are fine)`);
 
+/** A font family name. The pattern makes it safe as a quoted CSS string and as XML text; no paths or URLs. */
+const fontName = z
+  .string()
+  .min(1)
+  .max(60)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9 \-]*$/, "must be a font family name: letters, digits, spaces and hyphens");
+
 export const BrandingSchema = z.strictObject({
   // Shown on the cover and in terminal output: no control, bidi or invisible characters.
   agencyName: z.string().min(1).max(80).refine((s) => stripControl(s) === s, "must not contain control or invisible characters").optional(),
@@ -64,6 +72,17 @@ export const BrandingSchema = z.strictObject({
   paper: z.enum(["Letter", "A4"]).optional(),
   /** White label: leave crawlmark's name and version out of client files (neutral wording instead). */
   hideCrawlmark: z.boolean().optional(),
+  // Release B: fonts (family names only; Word, Docs and browsers substitute a font that isn't installed), provider
+  // names, the commentary line and the client-text term check.
+  bodyFont: fontName.optional(),
+  headingFont: fontName.optional(),
+  fontFallback: z.enum(["sans-serif", "serif"]).optional(),
+  /** Hide data provider names such as DataForSEO. Defaults to the value of hideCrawlmark; Ahrefs and Semrush source lines stay. */
+  hideProviders: z.boolean().optional(),
+  /** The line that replaces "Commentary written with Claude; ..."; an empty string removes it. */
+  commentaryNote: z.string().max(200).refine((s) => stripControl(s) === s, NO_CONTROL).optional(),
+  allowTerms: z.array(z.string().min(2).max(60)).max(50).optional(),
+  blockTerms: z.array(z.string().min(2).max(60)).max(100).optional(),
 });
 export type Branding = z.infer<typeof BrandingSchema>;
 
@@ -83,6 +102,8 @@ const common = {
   title: lineText(120).pipe(z.string().min(1)).optional(),
   optional: z.boolean().optional(),
   paid: z.boolean().optional(),
+  /** Start this section on a new page (DOCX and PDF; ignored by the onepage layout). */
+  pageBreakBefore: z.boolean().optional(),
 };
 const limit = (max: number) => z.number().int().min(1).max(max).optional();
 
@@ -161,6 +182,8 @@ const sectionSchemas = [
   z.strictObject({ ...common, type: z.literal("organic_visibility"), trendMonths: z.number().int().min(0).max(24).optional(), history: z.boolean().optional() }),
   z.strictObject({ ...common, type: z.literal("competitor_overview"), limit: limit(10), source: z.enum(["saved", "suggested", "saved_then_suggested"]).optional() }),
   z.strictObject({ ...common, type: z.literal("text"), text: freeText(2000).pipe(z.string().min(1)) }),
+  // Release B: a reusable text block from the template file's `blocks` library (a glossary, a methodology note).
+  z.strictObject({ ...common, type: z.literal("block"), block: id }),
 ] as const;
 
 export const SECTION_TYPES = sectionSchemas.map((s) => s.shape.type.value);
@@ -198,6 +221,7 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   organic_visibility: "Organic search visibility",
   competitor_overview: "Competitors",
   text: "Note",
+  block: "Note",
 };
 
 export type SectionGroup = "search" | "analytics" | "site" | "seo_data" | "local" | "ai" | "other";
@@ -236,6 +260,7 @@ export const SECTION_CATALOGUE: Record<SectionType, { group: SectionGroup; cost:
   organic_visibility: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Ranking keywords by position band and estimated organic traffic, with the trend from stored snapshots." },
   competitor_overview: { group: "seo_data", cost: "paid", needs: "the client's SEO data provider (DataForSEO, Ahrefs or Semrush)", summary: "Top organic competitors (saved ones first), shared keywords and their visibility next to the client's." },
   text: { group: "other", cost: "free", summary: "A fixed paragraph of your own." },
+  block: { group: "other", cost: "free", summary: "A reusable text block from the template file's blocks library (a glossary, a methodology note)." },
 };
 
 /**
@@ -251,6 +276,17 @@ export function isPaidSection(s: SectionSpec): boolean {
   return PAID_SECTION_TYPES.has(s.type) || (s.type === "tracked_keywords" && s.liveRanks === true);
 }
 
+// Cover (Release B): which fields the cover shows, in order, and who the report is for and from.
+export const COVER_FIELDS = ["domain", "period", "compare", "generated", "preparedFor", "preparedBy", "badge"] as const;
+export type CoverField = (typeof COVER_FIELDS)[number];
+export const CoverSchema = z.strictObject({
+  subtitle: lineText(160).optional(),
+  preparedFor: lineText(120).optional(),
+  preparedBy: lineText(120).optional(),
+  fields: z.array(z.enum(COVER_FIELDS)).min(1).max(7).optional(),
+});
+export type CoverSpec = z.infer<typeof CoverSchema>;
+
 export const TemplateSchema = z.strictObject({
   title: lineText(120).pipe(z.string().min(1)),
   description: lineText(300).optional(),
@@ -258,9 +294,31 @@ export const TemplateSchema = z.strictObject({
   compare: z.array(z.enum(COMPARISONS)).max(2).optional(),
   /** `onepage`: the compact executive layout (key figures, one chart, short lists) sized for one page. */
   layout: z.enum(["standard", "onepage"]).optional(),
+  cover: CoverSchema.optional(),
+  /** A contents page (a linked list of the sections) after the cover. Default false. */
+  contents: z.boolean().optional(),
   sections: z.array(SectionSchema).min(1).max(40),
 });
 export type TemplateSpec = z.infer<typeof TemplateSchema>;
+
+/** Reusable text blocks (Release B): commentary Markdown that a `block` section shows. */
+export const MAX_BLOCK_CHARS = 20_000;
+export const BlockSchema = z.strictObject({
+  title: lineText(120).optional(),
+  // Parsed when saved and loaded (SEC-1), so a block that can't render (a table over the limits) never reaches an export.
+  text: freeText(MAX_BLOCK_CHARS)
+    .pipe(z.string().min(1))
+    .superRefine((text, ctx) => {
+      try {
+        const n = chartRefCount(parseNarrative(text));
+        if (n > MAX_CHART_REFS) ctx.addIssue({ code: "custom", message: `has ${n} {{chart}} references; at most ${MAX_CHART_REFS}` });
+      } catch (err) {
+        if (!(err instanceof NarrativeParseError)) throw err;
+        ctx.addIssue({ code: "custom", message: err.message });
+      }
+    }),
+});
+export type BlockSpec = z.infer<typeof BlockSchema>;
 
 export const TemplateFileSchema = z.strictObject({
   version: z.literal(1),
@@ -268,6 +326,7 @@ export const TemplateFileSchema = z.strictObject({
   defaults: z.strictObject({ template: id.optional(), formats: z.array(z.enum(FORMATS)).min(1).max(4).optional() }).optional(),
   // Optional: a file can hold only branding and defaults (a per-client branding override, say).
   templates: z.record(id, TemplateSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 templates").optional(),
+  blocks: z.record(id, BlockSchema).refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 50, "must have 1 to 50 blocks").optional(),
 });
 export type TemplateFile = z.infer<typeof TemplateFileSchema>;
 
@@ -322,7 +381,7 @@ export function customRangeProblems(start: string, end: string, today: Date): st
 }
 
 /** Rules beyond the shape (12.A.2). Pure. */
-export function semanticIssues(file: TemplateFile, today: Date): ValidationIssue[] {
+export function semanticIssues(file: TemplateFile, today: Date, opts: { knownBlocks?: ReadonlySet<string> } = {}): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const push = (path: PropertyKey[], message: string) => issues.push({ path: formatPath(path), message });
   const templates = file.templates ?? {};
@@ -332,6 +391,12 @@ export function semanticIssues(file: TemplateFile, today: Date): ValidationIssue
   for (const [tid, t] of Object.entries(templates)) {
     const base = ["templates", tid];
     if (t.compare && new Set(t.compare).size !== t.compare.length) push([...base, "compare"], "entries must be unique");
+    if (t.cover?.fields) {
+      if (new Set(t.cover.fields).size !== t.cover.fields.length) push([...base, "cover", "fields"], "entries must be unique");
+      for (const f of ["preparedFor", "preparedBy"] as const) {
+        if (t.cover.fields.includes(f) && !t.cover[f]) push([...base, "cover", "fields"], `cover.fields lists ${f} but cover.${f} isn't set`);
+      }
+    }
     if (t.period?.range === "custom") {
       for (const p of customRangeProblems(t.period.start, t.period.end, today)) push([...base, "period"], p);
     }
@@ -361,6 +426,9 @@ export function semanticIssues(file: TemplateFile, today: Date): ValidationIssue
         const hasRemoved = (s.sources as readonly string[] | undefined)?.includes(REMOVED_ISSUE_SOURCE) === true;
         if ((s.issueUrls ?? 0) > 0 && !hasRemoved && !(s.sources ?? []).some((x) => PAID_ISSUE_SOURCES.has(x))) push([...at, "issueUrls"], "issueUrls needs the ahrefs_site_audit source (it fetches example URLs from the provider)");
       }
+      if (s.type === "block" && !Object.hasOwn(file.blocks ?? {}, s.block) && !opts.knownBlocks?.has(s.block)) {
+        push([...at, "block"], `no block "${s.block}" in this file or the global template file`);
+      }
       if (s.type === "core_web_vitals_history") {
         if (s.scope === "url" && !s.url) push([...at, "url"], "scope: url needs a url");
         if (s.url && s.scope !== "url") push([...at, "url"], "url is only used with scope: url");
@@ -368,6 +436,21 @@ export function semanticIssues(file: TemplateFile, today: Date): ValidationIssue
     });
   }
   return issues;
+}
+
+/** Layout problems that don't stop a template loading (Release B). Pure. */
+export function semanticWarnings(file: TemplateFile): ValidationIssue[] {
+  const out: ValidationIssue[] = [];
+  for (const [tid, t] of Object.entries(file.templates ?? {})) {
+    const base = ["templates", tid];
+    if (t.layout === "onepage" && (t.contents === true || t.sections.some((s) => s.pageBreakBefore === true))) {
+      out.push({ path: formatPath(base), message: "onepage reports ignore contents and page breaks" });
+    }
+    if (t.sections[0]?.pageBreakBefore === true) {
+      out.push({ path: formatPath([...base, "sections", 0, "pageBreakBefore"]), message: "a page break before the first section does nothing" });
+    }
+  }
+  return out;
 }
 
 function zodIssues(error: z.ZodError): ValidationIssue[] {
@@ -395,6 +478,8 @@ export interface ValidateOptions {
   today?: Date;
   /** Resolves a branding.logo path and says whether it exists (warning only). */
   logoExists?: (logo: string) => boolean;
+  /** Block ids that another file provides (the global file, when validating a client file). */
+  knownBlocks?: ReadonlySet<string>;
 }
 
 /**
@@ -425,8 +510,8 @@ export function validateTemplateText(text: string, opts: ValidateOptions = {}): 
   }
   const parsed = TemplateFileSchema.safeParse(raw);
   if (!parsed.success) return { valid: false, errors: zodIssues(parsed.error), warnings: [] };
-  const errors = semanticIssues(parsed.data, today);
-  const warnings: ValidationIssue[] = [];
+  const errors = semanticIssues(parsed.data, today, opts.knownBlocks ? { knownBlocks: opts.knownBlocks } : {});
+  const warnings: ValidationIssue[] = semanticWarnings(parsed.data);
   const logo = parsed.data.branding?.logo;
   if (logo && opts.logoExists && !opts.logoExists(logo)) {
     warnings.push({ path: "branding.logo", message: `${logo} doesn't exist; reports are rendered without a logo until it does` });

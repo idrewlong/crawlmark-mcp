@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Example Co - SEO report - September 2026</title>
+<style>
+:root { --primary: #224466; --primary-ink: #224466; --on-primary: #ffffff; --on-primary-soft: #c8d0d9; --cover-rule: #607891; --accent: #cc6600;
+  --ink: #1f2933; --muted: #52606d; --faint: #616c78; --rule: #e4e7eb; --zebra: #f7f8fa; --surface: #f4f6f9;
+  --bar: #8598ab; --tint: #f0f2f4;
+  --good: #13723a; --good-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fdecea; --neutral: #52606d; --neutral-bg: #eef1f4; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-scheme: light; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+.page { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+.cover { background: var(--primary); color: var(--on-primary); border-radius: 12px; padding: 18px 24px 16px; border-bottom: 4px solid var(--accent); margin-bottom: 14px; }
+.cover-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; }
+.brand img { height: 34px; max-width: 160px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+.badge { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; border: 1px solid var(--on-primary-soft); color: var(--on-primary-soft); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--on-primary-soft); margin: 14px 0 2px; font-weight: 600; }
+h1 { font-size: 28px; line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+.domain { color: var(--on-primary-soft); margin: 3px 0 14px; font-size: 14px; }
+.cover-meta { display: flex; flex-wrap: wrap; gap: 6px 32px; margin: 0; border-top: 1px solid var(--cover-rule); padding-top: 10px; font-size: 12.5px; }
+.cover-meta dt { color: var(--on-primary-soft); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.cover-meta dd { margin: 0; font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 4px; }
+.kpi, .tile { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; break-inside: avoid; }
+.tile { background: var(--zebra); border-color: transparent; padding: 10px 12px; }
+.kpi-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.15; margin: 4px 0 6px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.tile .kpi-value { font-size: 20px; margin: 2px 0 4px; }
+.kpi-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.kpi-caption { font-size: 11px; color: var(--faint); margin: 0 0 14px; text-align: right; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px 1px 6px; font-variant-numeric: tabular-nums; }
+.chip svg { width: 8px; height: 8px; fill: currentColor; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+.chip.neutral { color: var(--neutral); background: var(--neutral-bg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tiles { display: grid; gap: 8px; margin: 4px 0 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tiles-1, .tiles-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tiles-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tiles-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.summary { background: #fff; border: 1px solid var(--rule); border-left: 4px solid var(--primary); border-radius: 10px; padding: 14px 18px 12px; margin: 0 0 14px; break-inside: avoid; }
+.summary h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 6px; color: var(--primary-ink); }
+.summary ul { margin: 0; padding-left: 18px; } .summary li { margin: 3px 0; } .summary p { margin: 4px 0; }
+.caption { font-size: 11px; color: var(--faint); margin: 8px 0 0; }
+.card { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 18px 8px; margin: 0 0 14px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.card h2 { font-size: 15px; margin: 0 0 10px; color: var(--primary-ink); display: flex; align-items: center; gap: 8px; break-after: avoid; }
+.card h2::before { content: ""; width: 4px; height: 15px; border-radius: 2px; background: var(--primary); flex: none; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 0 0 14px; } .pair > .card { margin: 0; }
+.cols { display: grid; gap: 16px; } .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.col > :first-child { margin-top: 0; }
+h3, .table-title { font-size: 12px; font-weight: 600; color: var(--ink); margin: 10px 0 4px; break-after: avoid; }
+p { margin: 6px 0; }
+.note { font-size: 11px; color: var(--muted); margin: 4px 0 8px; }
+figure.chart, .cols, .tiles { break-inside: avoid; }
+figure.chart { margin: 2px 0 10px; }
+figure.chart figcaption.stack { flex-direction: column; align-items: flex-start; gap: 2px; }
+figure.chart figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-weight: 400; color: var(--muted); font-size: 11px; }
+.key-item { white-space: nowrap; }
+.key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.key.dashed { border-top-style: dashed; }
+.key.box { width: 10px; height: 10px; border: 0; border-radius: 2px; }
+.chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-svg .tick { font-size: 10px; fill: #52606d; font-family: inherit; font-variant-numeric: tabular-nums; }
+.chart-svg .strong { font-weight: 600; fill: #1f2933; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1.5px solid #cbd2d9; vertical-align: bottom; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; overflow-wrap: break-word; }
+tbody tr:nth-child(even) td { background: var(--zebra); }
+tr, .tile, .kpi { break-inside: avoid; }
+thead { display: table-header-group; }
+.num { text-align: right; white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+.table-wrap:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+td.lead { min-width: 34%; }
+.barbox { display: inline-grid; grid-template-columns: 70px auto; align-items: center; gap: 8px; }
+.track { display: block; height: 7px; }
+.bar { display: block; height: 7px; background: var(--bar); border-radius: 0 3px 3px 0; }
+.v { min-width: 3.2em; }
+.good { color: var(--good); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+.kpi-value.good, .kpi-value.bad { font-weight: 700; }
+.tag { display: inline-block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 999px; padding: 0 7px; line-height: 16px; white-space: nowrap; }
+.tag-good { color: #13723a; background: #e3f4e8; }
+.tag-bad { color: #b42318; background: #fdecea; }
+.tag-warn { color: #8a5300; background: #fdf0d5; }
+.tag-neutral { color: #52606d; background: #eef1f4; }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; background: var(--zebra); border-radius: 3px; padding: 0 3px; }
+.commentary { background: var(--tint); border-left: 3px solid var(--primary); border-radius: 6px; padding: 8px 14px; margin: 10px 0 8px; break-inside: avoid; }
+.commentary .label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; color: var(--primary-ink); margin: 2px 0 4px; }
+.about { margin: 20px 0 0; padding: 14px 18px; background: #fff; border: 1px solid var(--rule); border-radius: 10px; font-size: 11px; color: var(--muted); }
+.about h2 { break-after: avoid; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink); margin: 0 0 6px; }
+.about ul { margin: 0; padding-left: 16px; } .about li { margin: 2px 0; }
+.colophon { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--faint); padding: 12px 2px 24px; }
+@media (max-width: 640px) {
+  .kpis, .tiles, .tiles-5, .tiles-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pair, .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 24px; }
+}
+/* PDF running header in the page's top margin (CSS page-margin box), left off the first page where the cover band is. */
+@page { @top-left { content: "Example Co \b7  Technical SEO report \b7  September 2026"; font: 8px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #616c78; vertical-align: bottom; padding-bottom: 3mm; } }
+@page :first { @top-left { content: none; } }
+@media print {
+  /* Print density: a dashboard export fills its pages. */
+  body { background: #fff; font-size: 10.5px; line-height: 1.4; }
+  .page { max-width: none; margin: 0; padding: 0; }
+  .cover { padding: 14px 20px 12px; } .kind { margin-top: 8px; } h1 { font-size: 24px; } .domain { margin-bottom: 10px; }
+  .kpis { gap: 10px; } .kpi { padding: 10px 12px; } .kpi-value { font-size: 22px; margin: 2px 0 4px; } .kpi-caption { margin-bottom: 10px; }
+  .summary { padding: 10px 16px 8px; margin-bottom: 10px; } .summary li { margin: 1px 0; }
+  .card { padding: 10px 14px 4px; margin-bottom: 10px; } .card h2 { font-size: 13.5px; margin-bottom: 6px; } .pair { gap: 10px; margin-bottom: 10px; }
+  table { font-size: 10.5px; margin-bottom: 6px; } th { padding: 4px 6px; font-size: 9px; } td { padding: 3px 6px; }
+  .tiles { gap: 6px; margin-bottom: 8px; } .tile { padding: 7px 10px; } .tile .kpi-value { font-size: 17px; }
+  h3, .table-title { margin: 6px 0 3px; } p { margin: 4px 0; } .note { margin: 3px 0 6px; } figure.chart { margin-bottom: 6px; } .cols { gap: 12px; }
+  .about { margin-top: 10px; padding: 10px 14px; }
+  .pair .track { display: none; } .pair .barbox { grid-template-columns: auto; } .pair td.lead { min-width: 0; } .pair th { letter-spacing: 0; } .pair .num { white-space: normal; }
+  /* Only atomic blocks stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
+  .card h2, h3, .table-title, figcaption { break-after: avoid; }
+  .summary { font-size: 10px; }
+  .lead-in { break-inside: avoid; } p.note { break-before: avoid; }
+  .table-wrap { overflow: visible; }
+  .cover { margin-bottom: 12px; }
+  .colophon { padding-bottom: 0; }
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+<header class="cover">
+<div class="cover-top"><div class="brand"><span>Example Agency</span></div><span class="badge">With commentary</span></div>
+<p class="kind">Technical SEO report</p>
+<h1>Example Co</h1>
+<p class="domain">example.com</p>
+<dl class="cover-meta">
+<div><dt>Period</dt><dd>September 2026 · 1–30 Sep 2026</dd></div>
+<div><dt>Compared with</dt><dd>August 2026</dd></div>
+<div><dt>Generated</dt><dd>13 Oct 2026</dd></div>
+</dl>
+</header>
+<main>
+<section class="summary" aria-label="Summary"><h2>Summary</h2>
+<p>Clicks grew <strong>12%</strong> in September.</p>
+<ul><li>Blog pages led the gain</li><li>Branded searches held steady</li></ul>
+<p>Next month we will look at the services pages.</p>
+<p class="caption">Written commentary; all figures come from the data below.</p></section>
+<section class="card" aria-label="Core Web Vitals history (real users)"><div class="lead-in"><h2>Core Web Vitals history (real users)</h2>
+<p>Real-user 75th percentile for <code>https://example.com</code> (phone), 3 weekly periods from 2026-03-28 to 2026-04-11.</p>
+<div class="cols cols-2"><div class="col"><figure class="chart"><figcaption class="stack"><span class="chart-title">LCP · Largest Contentful Paint</span></figcaption><svg class="chart-svg" viewBox="0 0 332 125" role="img" aria-label="Largest Contentful Paint for real users went from 2,900 ms to 2,300 ms over 3 weekly periods."><title>Largest Contentful Paint for real users went from 2,900 ms to 2,300 ms over 3 weekly periods.</title><rect x="40" y="44.9" width="280" height="58.1" fill="#e6f4ea"/><rect x="40" y="10" width="280" height="34.9" fill="#fdf3dc"/><line x1="40" x2="320" y1="103" y2="103" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="106.5" text-anchor="end" class="tick">0 ms</text><line x1="40" x2="320" y1="79.8" y2="79.8" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="83.3" text-anchor="end" class="tick">1 s</text><line x1="40" x2="320" y1="56.5" y2="56.5" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="60" text-anchor="end" class="tick">2 s</text><line x1="40" x2="320" y1="33.3" y2="33.3" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="36.8" text-anchor="end" class="tick">3 s</text><line x1="40" x2="320" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">4 s</text><text x="40" y="119" text-anchor="start" class="tick">28 Mar</text><text x="180" y="119" text-anchor="middle" class="tick">4 Apr</text><text x="320" y="119" text-anchor="end" class="tick">11 Apr</text><path d="M40,35.6 L180,42.6 L320,49.5" fill="none" stroke="#224466" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="40" cy="35.6" r="3" fill="#224466" stroke="#ffffff" stroke-width="1.5"/><circle cx="180" cy="42.6" r="3" fill="#224466" stroke="#ffffff" stroke-width="1.5"/><circle cx="320" cy="49.5" r="3" fill="#224466" stroke="#ffffff" stroke-width="1.5"/></svg></figure></div><div class="col"><figure class="chart"><figcaption class="stack"><span class="chart-title">CLS · Cumulative Layout Shift</span></figcaption><svg class="chart-svg" viewBox="0 0 332 125" role="img" aria-label="Cumulative Layout Shift for real users went from 0.05 to 0.06 over 3 weekly periods."><title>Cumulative Layout Shift for real users went from 0.05 to 0.06 over 3 weekly periods.</title><rect x="40" y="41" width="280" height="62" fill="#e6f4ea"/><rect x="40" y="10" width="280" height="31" fill="#fdf3dc"/><line x1="40" x2="320" y1="103" y2="103" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="106.5" text-anchor="end" class="tick">0.0</text><line x1="40" x2="320" y1="72" y2="72" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="75.5" text-anchor="end" class="tick">0.05</text><line x1="40" x2="320" y1="41" y2="41" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="44.5" text-anchor="end" class="tick">0.1</text><line x1="40" x2="320" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">0.15</text><text x="40" y="119" text-anchor="start" class="tick">28 Mar</text><text x="180" y="119" text-anchor="middle" class="tick">4 Apr</text><text x="320" y="119" text-anchor="end" class="tick">11 Apr</text><path d="M40,72 L320,65.8" fill="none" stroke="#224466" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="40" cy="72" r="3" fill="#224466" stroke="#ffffff" stroke-width="1.5"/><circle cx="320" cy="65.8" r="3" fill="#224466" stroke="#ffffff" stroke-width="1.5"/></svg></figure></div></div></div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Metric, First period, Latest period, Change, Rating now, Trend"><table>
+<thead><tr><th class="lead">Metric</th><th class="num">First period</th><th class="num">Latest period</th><th class="num">Change</th><th>Rating now</th><th>Trend</th></tr></thead>
+<tbody><tr><td class="lead">Largest Contentful Paint</td><td class="num">2,900 ms</td><td class="num">2,300 ms</td><td class="num"><span class="good">600 ms better</span></td><td><span class="tag tag-good">good</span></td><td>improving</td></tr>
+<tr><td class="lead">Cumulative Layout Shift</td><td class="num">0.05</td><td class="num">0.06</td><td class="num"><span class="bad">0.01 worse</span></td><td><span class="tag tag-good">good</span></td><td>insufficient data</td></tr></tbody>
+</table></div>
+<p class="note">From the Chrome UX Report: each period is a 28-day window, updated weekly. Lower is better for every metric. Where charts are shown, the shaded bands are Google&#39;s thresholds: green is good, amber needs improvement, red is poor.</p></section>
+<section class="card" aria-label="Changes since the last audit"><div class="lead-in"><h2>Changes since the last audit</h2>
+<div class="tiles tiles-4"><div class="tile"><div class="kpi-label">Resolved</div><div class="kpi-value good">1</div></div><div class="tile"><div class="kpi-label">New</div><div class="kpi-value bad">1</div></div><div class="tile"><div class="kpi-label">Still open</div><div class="kpi-value">1</div></div><div class="tile"><div class="kpi-label">Not re-checked</div><div class="kpi-value">1</div></div></div></div>
+<p>The latest audit (25 Sep 2026) compared with the one before it (20 Aug 2026).</p>
+<h3 class="table-title">New findings</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="New findings"><table>
+<thead><tr><th class="lead">Severity</th><th>Finding</th><th>Page</th></tr></thead>
+<tbody><tr><td class="lead"><span class="tag tag-bad">high</span></td><td>On-page check failed: is broken</td><td>/</td></tr></tbody>
+</table></div>
+<h3 class="table-title">Lighthouse score changes</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Lighthouse score changes"><table>
+<thead><tr><th class="lead">Page</th><th>Category</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr></thead>
+<tbody><tr><td class="lead">/</td><td>performance</td><td class="num">71</td><td class="num">78</td><td class="num"><span class="good">+7</span></td></tr>
+<tr><td class="lead">/</td><td>seo</td><td class="num">90</td><td class="num">92</td><td class="num"><span class="good">+2</span></td></tr></tbody>
+</table></div>
+<p class="note">Findings that weren&#39;t re-checked in the latest audit are listed as not re-checked, never as fixed.</p></section>
+</main>
+<footer class="about"><h2>About this report</h2><ul><li>Period: September 2026 (1–30 Sep 2026), compared with August 2026 (1–31 Aug 2026).</li><li>Written commentary; all figures come from the data below.</li><li>Sources: Google Search Console (search), Google Analytics 4 (organic traffic), saved site audits, the Chrome UX Report and Google Tag Manager when those sections are included.</li><li>Not included this time (no data for this period): Site health (crawl), AI readiness.</li></ul></footer>
+<div class="colophon"><span>Example Agency, example.com</span><span>Generated 13 Oct 2026</span></div>
+</div>
+</body>
+</html>

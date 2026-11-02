@@ -10,6 +10,7 @@
  * - At most 4 requests in flight and 1,000 ms between starts (the documented 60/min).
  * - Errors are never retried (a retry could double-bill), except one retry of a 429.
  */
+import { cliHint } from "../lib/cli-hint.js";
 import { env, type Client } from "../config.js";
 import { globalUnitCap, recordUnits, unitsThisMonth } from "../lib/budget.js";
 import { TTL } from "../lib/cache.js";
@@ -184,7 +185,7 @@ async function send<T>(key: string, req: AhrefsParams, fetchImpl: typeof fetch =
 }
 
 function apiKey(): string {
-  if (!env.AHREFS_API_KEY) throw new ProviderUnavailableError("keywordVolume", "ahrefs", "AHREFS_API_KEY is not set. Run setup --step ahrefs.");
+  if (!env.AHREFS_API_KEY) throw new ProviderUnavailableError("keywordVolume", "ahrefs", `AHREFS_API_KEY is not set. Run ${cliHint()} setup --step ahrefs.`);
   return env.AHREFS_API_KEY;
 }
 

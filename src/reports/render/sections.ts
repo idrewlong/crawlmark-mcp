@@ -11,6 +11,7 @@
  */
 import type {
   BacklinksData,
+  BlockSectionData,
   BacklinksNow,
   CompetitorOverviewData,
   CompetitorRow,
@@ -47,9 +48,9 @@ import type {
   TrackedKeywordsData,
 } from "../report-types.js";
 import { periodName } from "../templates/period.js";
-import type { Block, Delta, Kpi, LineChart, TableBlock, Text } from "./doc.js";
+import type { Block, Chart, Delta, Kpi, LineChart, TableBlock, Text } from "./doc.js";
 import { looksLinky } from "./escape.js";
-import type { Run } from "./narrative.js";
+import { parseNarrative, type Run } from "./narrative.js";
 
 const t = (s: string): Run => ({ t: s });
 const c = (s: string): Run => ({ t: s, c: true as const });
@@ -98,6 +99,8 @@ function metricChange(m: SearchMetric, vs: ComparedTotals): Text {
 export interface MapContext {
   /** branding.hideCrawlmark: neutral wording instead of crawlmark's name. */
   whiteLabel: boolean;
+  /** branding.hideProviders: no DataForSEO name in generated text (Ahrefs and Semrush stay: attribution). */
+  hideProviders?: boolean;
   domain: string;
   onepage: boolean;
   notes: string[];
@@ -224,6 +227,11 @@ const trendText = (sum: RankTrendSummary | undefined) => {
 };
 const PROVIDER_NAME = { dataforseo: "DataForSEO", ahrefs: "Ahrefs", semrush: "Semrush" } as const;
 const KD_LABEL = { dataforseo_kd: "DataForSEO difficulty", ahrefs_kd: "Ahrefs KD", semrush_kd: "Semrush KD" } as const;
+/** How the generated text names a data provider; DataForSEO becomes generic wording when the branding hides providers. */
+const THIRD_PARTY = "a third-party SEO data provider";
+const pname = (p: keyof typeof PROVIDER_NAME, ctx: MapContext): string => (ctx.hideProviders && p === "dataforseo" ? THIRD_PARTY : PROVIDER_NAME[p]);
+const pdata = (p: keyof typeof PROVIDER_NAME, ctx: MapContext): string => (ctx.hideProviders && p === "dataforseo" ? "third-party data" : `${PROVIDER_NAME[p]} data`);
+const kdLabel = (m: keyof typeof KD_LABEL, ctx: MapContext): string => (ctx.hideProviders && m === "dataforseo_kd" ? "Keyword difficulty" : KD_LABEL[m]);
 const SEVERITY_TAG = { critical: "bad", high: "bad", medium: "warn", low: "neutral" } as const;
 const severity = (s: keyof typeof SEVERITY_TAG): Text => [{ t: s, tag: SEVERITY_TAG[s] }];
 const CWV_NAMES: Record<CwvMetric, string> = { lcp: "Largest Contentful Paint", inp: "Interaction to Next Paint", cls: "Cumulative Layout Shift", fcp: "First Contentful Paint", ttfb: "Time to First Byte" };
@@ -257,7 +265,8 @@ const CHANGE_TAG: Record<TechIssue["change"], Text> = {
   retired: [{ t: "retired (container changed)", tag: "warn" }],
   first_run: [t("")],
 };
-const foundBy = (i: TechIssue): Text => cell([...new Set(i.sources.map((x) => ISSUE_SOURCE_NAMES[x.source]))].join(", "));
+const issueSource = (source: IssueSource, ctx: MapContext): string => (ctx.hideProviders && source === "dataforseo_crawl" ? "Site crawl (third-party)" : ISSUE_SOURCE_NAMES[source]);
+const foundBy = (i: TechIssue, ctx: MapContext): Text => cell([...new Set(i.sources.map((x) => issueSource(x.source, ctx)))].join(", "));
 const issueExample = (i: TechIssue, domain: string): Text => {
   const u = i.url ?? i.sources.flatMap((x) => x.examples)[0];
   return u ? pagePath(u, domain) : cell("several pages");
@@ -286,7 +295,7 @@ function missingComparisons(report: TemplateReport, c: Partial<Record<"previous_
   }
 }
 /** Kept in every file, white label included (the providers' terms ask for attribution). */
-const sourceLine = (provider: keyof typeof PROVIDER_NAME, asOf: string, extra = ""): Block => ({ kind: "note", text: [t(`Source: ${PROVIDER_NAME[provider]}. Figures as of ${fullDay(asOf)}${extra}.`)] });
+const sourceLine = (provider: keyof typeof PROVIDER_NAME, asOf: string, extra: string, ctx: MapContext): Block => ({ kind: "note", text: [t(`Source: ${pname(provider, ctx)}. Figures as of ${fullDay(asOf)}${extra}.`)] });
 const monthOf = (day: string) => `${MONTHS[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`;
 const signedInt = (n: number | null) => (n === null ? "n/a" : n === 0 ? "no change" : signed(n));
 const anyFigure = (o: object) => Object.values(o).some((v) => typeof v === "number");
@@ -321,7 +330,7 @@ function backlinksBlocks(data: BacklinksData, report: TemplateReport, ctx: MapCo
         series: [{ name: "Referring domains", values: trend.map((p) => p.referringDomains), role: "current" }],
         format: "count",
         connectGaps: true,
-        summary: `Referring domains went from ${fmtInt(trend[0]!.referringDomains)} in ${monthOf(trend[0]!.day)} to ${fmtInt(trend.at(-1)!.referringDomains)} in ${monthOf(trend.at(-1)!.day)} (${PROVIDER_NAME[data.provider]}).`,
+        summary: `Referring domains went from ${fmtInt(trend[0]!.referringDomains)} in ${monthOf(trend[0]!.day)} to ${fmtInt(trend.at(-1)!.referringDomains)} in ${monthOf(trend.at(-1)!.day)} (${pname(data.provider, ctx)}).`,
         fallback: {
           kind: "table",
           title: "Referring domains by month",
@@ -339,10 +348,10 @@ function backlinksBlocks(data: BacklinksData, report: TemplateReport, ctx: MapCo
     rows.push(row(data.authority.label, cur.authority, cmp.previous.authority, cmp.change.authority));
     blocks.push({ kind: "table", header: ["Metric", fullDay(data.asOf), cmp.name, "Change"], rows, numeric: [false, true, true, true] });
   }
-  missingComparisons(report, data.comparisons, PROVIDER_NAME[data.provider], "Backlinks", ctx);
+  missingComparisons(report, data.comparisons, pname(data.provider, ctx), "Backlinks", ctx);
   for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
   if (cur.newReferringDomains === null && cur.newBacklinks === null && data.provider === "ahrefs") blocks.push({ kind: "note", text: [t("Ahrefs doesn't report new and lost referring domains in these figures, so only the change is shown.")] });
-  blocks.push(sourceLine(data.provider, data.asOf, `. ${data.authority.label.replace(/ \(.*\)$/, "")} is ${PROVIDER_NAME[data.provider]}'s own measure; don't compare it with another provider's`));
+  blocks.push(sourceLine(data.provider, data.asOf, `. ${data.authority.label.replace(/ \(.*\)$/, "")} is ${pname(data.provider, ctx)}'s own measure; don't compare it with another provider's`, ctx));
   return blocks;
 }
 
@@ -397,7 +406,7 @@ function visibilityBlocks(data: VisibilityData, report: TemplateReport, ctx: Map
           series: [{ name: "Ranking keywords", values: trend.map((p) => p.keywords), role: "current" }],
           format: "count",
           connectGaps: true,
-          summary: `Ranking keywords went from ${fmtInt(trend[0]!.keywords)} in ${monthOf(trend[0]!.day)} to ${fmtInt(trend.at(-1)!.keywords)} in ${monthOf(trend.at(-1)!.day)} (${PROVIDER_NAME[data.provider]}).`,
+          summary: `Ranking keywords went from ${fmtInt(trend[0]!.keywords)} in ${monthOf(trend[0]!.day)} to ${fmtInt(trend.at(-1)!.keywords)} in ${monthOf(trend.at(-1)!.day)} (${pname(data.provider, ctx)}).`,
           fallback: { kind: "table", title: "Ranking keywords by month", header: ["Month", "Ranking keywords", "Estimated traffic"], rows: trend.map((p) => [cell(monthOf(p.day)), cell(fmtInt(p.keywords)), cell(fmtInt(p.traffic))]), numeric: [false, true, true] },
         },
       },
@@ -413,9 +422,9 @@ function visibilityBlocks(data: VisibilityData, report: TemplateReport, ctx: Map
     add("Estimated traffic", cur.traffic, cmp.previous.traffic, cmp.change.traffic);
     blocks.push({ kind: "table", header: ["Keywords", fullDay(data.asOf), cmp.name, "Change"], rows, numeric: [false, true, true, true] });
   }
-  missingComparisons(report, data.comparisons, PROVIDER_NAME[data.provider], "Organic search visibility", ctx);
+  missingComparisons(report, data.comparisons, pname(data.provider, ctx), "Organic search visibility", ctx);
   for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
-  blocks.push(sourceLine(data.provider, data.asOf, `. Estimated traffic is ${data.trafficLabel}, a modelled figure; it isn't comparable with Google Analytics or another provider`));
+  blocks.push(sourceLine(data.provider, data.asOf, `. Estimated traffic is ${data.trafficLabel}, a modelled figure; it isn't comparable with Google Analytics or another provider`, ctx));
   return blocks;
 }
 
@@ -429,7 +438,7 @@ function competitorBlocks(data: CompetitorOverviewData, _report: TemplateReport,
   const missing = data.competitors.some((r) => !r.inProviderList);
   const ch = (r: CompetitorRow) => (r.keywordsChange === null ? [] : [t(" "), ...changeCell(r.keywordsChange, `(${signed(r.keywordsChange)})`)]);
   const blocks: Block[] = [
-    { kind: "paragraph", text: [t(`Organic competitors in ${marketName(data.market)} (${PROVIDER_NAME[data.provider]} data, as of ${fullDay(data.asOf)}); saved competitors first.`)] },
+    { kind: "paragraph", text: [t(`Organic competitors in ${marketName(data.market)} (${pdata(data.provider, ctx)}, as of ${fullDay(data.asOf)}); saved competitors first.`)] },
     {
       kind: "table",
       header: ["Domain", "", "Shared keywords", "Their ranking keywords", "Est. traffic"],
@@ -444,11 +453,11 @@ function competitorBlocks(data: CompetitorOverviewData, _report: TemplateReport,
       bar: { col: 2, values: rows.map((r) => (r.origin === "client" ? 0 : (r.commonKeywords ?? 0))) },
     },
   ];
-  if (missing) blocks.push({ kind: "note", text: [t(`"n/a": not among ${PROVIDER_NAME[data.provider]}'s top ${fmtInt(data.providerListSize)} competitors for this site, so shared keywords aren't known; its own figures were looked up separately.`)] });
+  if (missing) blocks.push({ kind: "note", text: [t(`"n/a": not among ${pname(data.provider, ctx)}'s top ${fmtInt(data.providerListSize)} competitors for this site, so shared keywords aren't known; its own figures were looked up separately.`)] });
   for (const n of data.notes) blocks.push({ kind: "note", text: [t(n)] });
   if (data.competitors.some((r) => r.keywordsChange !== null)) blocks.push({ kind: "note", text: [t("The change in brackets is ranking keywords against the previous period's stored figures.")] });
   void ctx;
-  blocks.push(sourceLine(data.provider, data.asOf, `. Estimated traffic is ${data.trafficLabel}`));
+  blocks.push(sourceLine(data.provider, data.asOf, `. Estimated traffic is ${data.trafficLabel}`, ctx));
   return blocks;
 }
 
@@ -713,11 +722,13 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     ...data.notes.map((n) => ({ kind: "note" as const, text: [t(/^Unpublished changes incomplete/.test(n) ? "Unpublished changes: some workspaces couldn't be read." : n.startsWith("This container has never been published") ? n : "A Tag Manager note couldn't be shown in this report.")] })),
   ],
   data_spend: (data: DataSpendData, _r, ctx) => [
-    { kind: "paragraph", text: [t(`Paid data used this calendar month (${data.month}, ${ctx.whiteLabel ? "all paid data" : "all of crawlmark"} for this client): DataForSEO $${data.usd.toFixed(2)}, Ahrefs ${fmtInt(data.units.ahrefs)} units, Semrush ${fmtInt(data.units.semrush)} units.`)] },
+    { kind: "paragraph", text: [t(`Paid data used this calendar month (${data.month}, ${ctx.whiteLabel ? "all paid data" : "all of crawlmark"} for this client): ${ctx.hideProviders ? "pay-per-use data" : "DataForSEO"} $${data.usd.toFixed(2)}, Ahrefs ${fmtInt(data.units.ahrefs)} units, Semrush ${fmtInt(data.units.semrush)} units.`)] },
   ],
   text: (data: TextData) => [{ kind: "paragraph", text: [t(data.text)] }],
+  // Release B: a reusable text block, drawn as commentary-format Markdown without the "Commentary" box.
+  block: (data: BlockSectionData) => [{ kind: "rich", blocks: parseNarrative(data.text) }],
   // Phase 12 B: stored rank history, first → latest, with a chart of the stored points when there are some.
-  rank_trend: (data: RankTrendData) => {
+  rank_trend: (data: RankTrendData, _r, ctx) => {
     // A source's columns only when some keyword has checks from it.
     const gsc = data.source !== "serp" && data.keywords.some((k) => (k.gsc?.checks ?? 0) > 0);
     const serp = data.source !== "gsc" && data.keywords.some((k) => (k.serp?.checks ?? 0) > 0);
@@ -756,7 +767,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
         text: [
           t(
             (gsc ? "Search Console average position is a 7-day average and moves with the mix of searches. " : "") +
-              (serp ? "Live rank is Google's organic position on the day it was checked (DataForSEO); \"not found\" means outside the depth checked." : ""),
+              (serp ? `Live rank is Google's organic position on the day it was checked${ctx.hideProviders ? "" : " (DataForSEO)"}; "not found" means outside the depth checked.` : ""),
           ),
         ],
       },
@@ -910,12 +921,12 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
       if (/^No area is set/.test(n)) blocks.push({ kind: "note", text: [t("Map positions were checked across the client's market, not a single town.")] });
       else if (!/set_client_profile|crawlmark-cli|crawlmark-mcp|npm run cli|setup/.test(n)) blocks.push({ kind: "note", text: [t(n)] });
     }
-    blocks.push({ kind: "note", text: [t(`From Google Maps and the Google Business Profile${ctx.whiteLabel ? "" : ", via DataForSEO,"} when this report was generated. Map position 1 is the top of the map pack; lower is better.`)] });
+    blocks.push({ kind: "note", text: [t(`From Google Maps and the Google Business Profile${ctx.hideProviders ? "" : ", via DataForSEO,"} when this report was generated. Map position 1 is the top of the map pack; lower is better.`)] });
     return blocks;
   },
   // Phase 12 C5: AI-search visibility. Questions are AI-platform text (stripControl'd, escaped as data); cited URLs and
   // domains render as code. No answer text is ever included.
-  ai_visibility: (data: AiVisibilityData) => {
+  ai_visibility: (data: AiVisibilityData, _r, ctx) => {
     const where = data.platform === "chat_gpt" ? "ChatGPT answers (United States, English)" : "Google AI Overviews";
     const product = data.platform === "chat_gpt" ? "ChatGPT" : "Google AI Overview";
     const blocks: Block[] = [];
@@ -937,13 +948,13 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
               numeric: [false, true, false, true],
               bar: { col: 1, values: data.mentions.items.map((i) => i.aiSearchVolume ?? 0) },
             }
-          : { kind: "paragraph", text: [t(`No ${where} in DataForSEO's dataset cite this site yet.`)] },
+          : { kind: "paragraph", text: [t(`No ${where} in ${ctx.hideProviders ? "this AI-answer dataset" : "DataForSEO's dataset"} cite this site yet.`)] },
       );
     }
     if (data.metrics?.sourcesDomain.length) {
       blocks.push({ kind: "table", title: "Other sites cited in the same answers", header: ["Also cited", "Mentions", "AI search volume"], rows: data.metrics.sourcesDomain.map((r) => [[c(r.key)], cell(fmtInt(r.mentions)), cell(fmtInt(r.aiSearchVolume))]), numeric: [false, true, true] });
     }
-    blocks.push({ kind: "note", text: [t("From DataForSEO's LLM Mentions dataset when this report was generated (paid). AI answers change often; AI search volume is DataForSEO's estimate.")] });
+    blocks.push({ kind: "note", text: [t(ctx.hideProviders ? "From an AI-answer dataset when this report was generated (paid). AI answers change often; AI search volume is the dataset's estimate." : "From DataForSEO's LLM Mentions dataset when this report was generated (paid). AI answers change often; AI search volume is DataForSEO's estimate.")] });
     return blocks;
   },
   // Phase 13 A: one deduplicated list from every stored source, grouped by severity. Issue titles and URLs come from
@@ -967,17 +978,17 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
         kind: "table",
         title: SEVERITY_TITLE[sev],
         header: ["Issue", "Pages", "Example", "Found by", ...(ch ? ["Change"] : [])],
-        rows: rows.map((i) => [d(i.title), cell(fmtInt(i.affected)), issueExample(i, ctx.domain), foundBy(i), ...(ch ? [CHANGE_TAG[i.change]] : [])]),
+        rows: rows.map((i) => [d(i.title), cell(fmtInt(i.affected)), issueExample(i, ctx.domain), foundBy(i, ctx), ...(ch ? [CHANGE_TAG[i.change]] : [])]),
         numeric: [false, true, false, false, false],
       });
     }
     if (data.total > data.issues.length) blocks.push({ kind: "note", text: [t(`Showing ${fmtInt(data.issues.length)} of ${fmtInt(data.total)} open issues, most severe first.`)] });
     if (data.resolved.length) {
-      blocks.push({ kind: "table", title: "Resolved since the last report", header: ["Issue", "Example", "Found by"], rows: data.resolved.map((i) => [d(i.title), issueExample(i, ctx.domain), foundBy(i)]) });
+      blocks.push({ kind: "table", title: "Resolved since the last report", header: ["Issue", "Example", "Found by"], rows: data.resolved.map((i) => [d(i.title), issueExample(i, ctx.domain), foundBy(i, ctx)]) });
     }
     for (const n of data.notes ?? []) blocks.push({ kind: "note", text: [t(n)] });
     if (data.noLongerChecked) ctx.note("Technical SEO issues: some issues from earlier reports are no longer checked by any current source, so they are left out (not counted as fixed).");
-    const from = data.sources.map((x) => `${ISSUE_SOURCE_NAMES[x.source]} (${fullDay(x.ranAt)}${x.stale ? ", older data" : ""})`).join(", ");
+    const from = data.sources.map((x) => `${issueSource(x.source, ctx)} (${fullDay(x.ranAt)}${x.stale ? ", older data" : ""})`).join(", ");
     blocks.push({
       kind: "note",
       text: [t(`From ${from}. The same problem found by several sources is listed once; "Pages" is the largest count any one source reports.${ch ? " Issues not re-checked by their source are shown as not re-checked, never as fixed." : ""}`)],
@@ -1111,14 +1122,14 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     });
     return blocks;
   },
-  keyword_gap: (data: KeywordGapData) => {
+  keyword_gap: (data: KeywordGapData, _r, ctx) => {
     const metric = data.gaps.find((g) => g.difficulty.value !== null)?.difficulty.metric ?? data.gaps[0]?.difficulty.metric;
-    const header = ["Keyword", "Monthly volume", metric ? KD_LABEL[metric] : "Difficulty", "Competitors ranking (position)"];
+    const header = ["Keyword", "Monthly volume", metric ? kdLabel(metric, ctx) : "Difficulty", "Competitors ranking (position)"];
     if (!data.gaps.length) return [];
     return [
       {
         kind: "paragraph",
-        text: [t(`Keywords ${data.competitors.join(", ")} rank for and this site doesn't (${PROVIDER_NAME[data.provider]} data, up to ${fmtInt(data.limit)} per competitor), sorted by volume.`)],
+        text: [t(`Keywords ${data.competitors.join(", ")} rank for and this site doesn't (${pdata(data.provider, ctx)}, up to ${fmtInt(data.limit)} per competitor), sorted by volume.`)],
       },
       {
         kind: "table",
@@ -1132,10 +1143,80 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
   },
 };
 
+/**
+ * White label for data providers: wording that came from a provider (its notes, its metric and traffic labels) can
+ * still name DataForSEO, so it goes through this when `hideProviders` is on. The wording the mappers write themselves
+ * is handled where it is written (pname and friends). Client data is never rewritten (R1): a match that is part of a
+ * domain or URL (dataforseo.com, /dataforseo-review) or written all in lower case (a search query such as
+ * "dataforseo api pricing") is left as it is.
+ */
+export function scrubProviders(s: string): string {
+  return s.replace(/(?<![\w./@-])DataForSEO(?![\w-]|\.\w|\/)(?:'s\b| (?=[A-Za-z]))?/gi, (m) => {
+    if (m === m.toLowerCase()) return m;
+    if (/'s$/i.test(m)) return "the provider's";
+    if (m.endsWith(" ")) return "Provider ";
+    return "third-party data";
+  });
+}
+
+/** A deep copy with every string scrubbed (plain data: objects, arrays and strings). For generated prose (About, highlights). */
+export function scrubDeep<T>(v: T): T {
+  if (typeof v === "string") return scrubProviders(v) as T;
+  if (Array.isArray(v)) return v.map(scrubDeep) as T;
+  if (v && typeof v === "object" && !Buffer.isBuffer(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scrubDeep(x)])) as T;
+  return v;
+}
+
+const scrubRuns = (text: Text): Text => text.map((r) => (r.c ? r : { ...r, t: scrubProviders(r.t) }));
+
+function scrubTable(tb: TableBlock): TableBlock {
+  // Header and title are wording; rows are client data (keywords, domains, URLs) and stay as they are.
+  return { ...tb, header: tb.header.map(scrubProviders), ...(tb.title !== undefined ? { title: scrubProviders(tb.title) } : {}) };
+}
+
+/** The provider-originated wording in a section's blocks, scrubbed: prose, notes, headings, labels, chart titles and summaries. */
+export function scrubBlocks(blocks: Block[]): Block[] {
+  return blocks.map((b): Block => {
+    switch (b.kind) {
+      case "heading":
+        return { ...b, text: scrubProviders(b.text) };
+      case "paragraph":
+      case "note":
+        return { ...b, text: scrubRuns(b.text) };
+      case "list":
+        return { ...b, items: b.items.map(scrubRuns) };
+      case "table":
+        return scrubTable(b);
+      case "kpiRow":
+        return { ...b, items: b.items.map((k) => ({ ...k, label: scrubProviders(k.label), ...(k.detail !== undefined ? { detail: scrubProviders(k.detail) } : {}) })) };
+      case "chart":
+        return { ...b, chart: { ...b.chart, title: scrubProviders(b.chart.title), summary: scrubProviders(b.chart.summary), ...(b.chart.fallback ? { fallback: scrubTable(b.chart.fallback) } : {}) } as Chart };
+      case "columns":
+        return { ...b, columns: b.columns.map(scrubBlocks) };
+      default:
+        // Commentary and block text are the user's own words (the term check covers them).
+        return b;
+    }
+  });
+}
+
+/** A section's data with the provider's own wording scrubbed: notes and the metric, traffic and new/lost labels. */
+function scrubProviderData<T>(data: T): T {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const d0 = data as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...d0 };
+  if (Array.isArray(d0.notes)) out.notes = d0.notes.map((n) => (typeof n === "string" ? scrubProviders(n) : n));
+  for (const k of ["trafficLabel", "newLostLabel"]) if (typeof d0[k] === "string") out[k] = scrubProviders(d0[k] as string);
+  const a = d0.authority as { label?: unknown } | undefined;
+  if (a && typeof a === "object" && typeof a.label === "string") out.authority = { ...a, label: scrubProviders(a.label) };
+  return out as T;
+}
+
 /** The blocks for one section with data; none means the section has nothing to show and is left out. */
 export function sectionBlocks(s: SectionResult, report: TemplateReport, ctx: MapContext): Block[] {
   if (s.status !== "ok") return [];
   const mapper = SECTION_MAPPERS[s.type];
   if (!mapper) return [{ kind: "note", text: [t(`${s.title}: this version can't render "${s.type}" sections.`)] }];
-  return mapper(s.data as never, report, ctx);
+  if (!ctx.hideProviders) return mapper(s.data as never, report, ctx);
+  return scrubBlocks(mapper(scrubProviderData(s.data) as never, report, ctx));
 }

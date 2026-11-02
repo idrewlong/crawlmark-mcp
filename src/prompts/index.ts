@@ -33,6 +33,13 @@ export const DOCS_OFFER =
   "Only after a yes: call `export_report` with the same `reportId`, `formats: []` (so no file is written again), `inline: \"html\"` and the same `narrative`, then call the Drive tool with `title` = the inline `title`, `textContent` = the inline `content`, `contentMimeType: \"text/html\"`, and no `parentId` unless the user names a folder. " +
   "Don't share the file or change its permissions. If no such tool is available, don't mention Google Docs. If the Drive call fails, give the error and the local file path instead.";
 
+/** What the commentary may contain and where internal remarks go (export_report's `narrative`). */
+export const COMMENTARY_FORMAT = [
+  "   - Commentary can use paragraphs, `- ` bullets, `1.` numbered lists, `###` sub-headings, pipe tables, `{{chart <sectionId>}}` on its own line (shows a chart the report already draws) and **bold**; anything else appears literally in the files. Up to 20,000 characters per text and 100,000 in total.",
+  '   - Client text never names crawlmark, Claude, tools (such as striking_distance), data vendors such as DataForSEO, or settings and keys: export_report refuses text that does and lists each passage. Say "the keyword data" instead.',
+  "   - Remarks only I should see (caveats, how a number was checked, a note on the client) go in `{ client, internal }` form or in `narrative.internal`: they are saved to a separate internal notes file and never reach the client's files.",
+].join("\n");
+
 /** "2026-09", "2026-Q3" or "2026-07-01..2026-09-30" as run_report_template arguments. */
 export function periodArgs(period: string | undefined): { arg: string; label: string } {
   const p = period?.trim();
@@ -158,6 +165,7 @@ export function registerPrompts(server: McpServer) {
           templateArg: t ? `, \`template: "${t}"\`` : ", `template` set to the one I chose",
           periodArg: p.arg,
           numberRules: NUMBER_RULES,
+          commentaryFormat: COMMENTARY_FORMAT,
           docsOffer: DOCS_OFFER,
         }),
       );

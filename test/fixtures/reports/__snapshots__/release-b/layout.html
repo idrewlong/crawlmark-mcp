@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Example Co - SEO report - September 2026</title>
+<style>
+:root { --primary: #1f5ea8; --primary-ink: #1f5ea8; --on-primary: #ffffff; --on-primary-soft: #d2dfee; --cover-rule: #5e8bc0; --accent: #5b9bd5;
+  --ink: #1f2933; --muted: #52606d; --faint: #616c78; --rule: #e4e7eb; --zebra: #f7f8fa; --surface: #f4f6f9;
+  --bar: #84a6cf; --tint: #eff4f9;
+  --good: #13723a; --good-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fdecea; --neutral: #52606d; --neutral-bg: #eef1f4; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-scheme: light; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+.page { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+.cover { background: var(--primary); color: var(--on-primary); border-radius: 12px; padding: 18px 24px 16px; border-bottom: 4px solid var(--accent); margin-bottom: 14px; }
+.cover-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; }
+.brand img { height: 34px; max-width: 160px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+.badge { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; border: 1px solid var(--on-primary-soft); color: var(--on-primary-soft); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--on-primary-soft); margin: 14px 0 2px; font-weight: 600; }
+h1 { font-size: 28px; line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+.domain { color: var(--on-primary-soft); margin: 3px 0 14px; font-size: 14px; }
+.cover-meta { display: flex; flex-wrap: wrap; gap: 6px 32px; margin: 0; border-top: 1px solid var(--cover-rule); padding-top: 10px; font-size: 12.5px; }
+.cover-meta dt { color: var(--on-primary-soft); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.cover-meta dd { margin: 0; font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 4px; }
+.kpi, .tile { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; break-inside: avoid; }
+.tile { background: var(--zebra); border-color: transparent; padding: 10px 12px; }
+.kpi-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.15; margin: 4px 0 6px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.tile .kpi-value { font-size: 20px; margin: 2px 0 4px; }
+.kpi-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.kpi-caption { font-size: 11px; color: var(--faint); margin: 0 0 14px; text-align: right; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px 1px 6px; font-variant-numeric: tabular-nums; }
+.chip svg { width: 8px; height: 8px; fill: currentColor; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+.chip.neutral { color: var(--neutral); background: var(--neutral-bg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tiles { display: grid; gap: 8px; margin: 4px 0 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tiles-1, .tiles-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tiles-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tiles-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.summary { background: #fff; border: 1px solid var(--rule); border-left: 4px solid var(--primary); border-radius: 10px; padding: 14px 18px 12px; margin: 0 0 14px; break-inside: avoid; }
+.summary h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 6px; color: var(--primary-ink); }
+.summary ul { margin: 0; padding-left: 18px; } .summary li { margin: 3px 0; } .summary p { margin: 4px 0; }
+.caption { font-size: 11px; color: var(--faint); margin: 8px 0 0; }
+.card { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 18px 8px; margin: 0 0 14px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.card h2 { font-size: 15px; margin: 0 0 10px; color: var(--primary-ink); display: flex; align-items: center; gap: 8px; break-after: avoid; }
+.card h2::before { content: ""; width: 4px; height: 15px; border-radius: 2px; background: var(--primary); flex: none; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 0 0 14px; } .pair > .card { margin: 0; }
+.cols { display: grid; gap: 16px; } .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.col > :first-child { margin-top: 0; }
+h3, .table-title { font-size: 12px; font-weight: 600; color: var(--ink); margin: 10px 0 4px; break-after: avoid; }
+p { margin: 6px 0; }
+.note { font-size: 11px; color: var(--muted); margin: 4px 0 8px; }
+figure.chart, .cols, .tiles { break-inside: avoid; }
+figure.chart { margin: 2px 0 10px; }
+figure.chart figcaption.stack { flex-direction: column; align-items: flex-start; gap: 2px; }
+figure.chart figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-weight: 400; color: var(--muted); font-size: 11px; }
+.key-item { white-space: nowrap; }
+.key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.key.dashed { border-top-style: dashed; }
+.key.box { width: 10px; height: 10px; border: 0; border-radius: 2px; }
+.chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-svg .tick { font-size: 10px; fill: #52606d; font-family: inherit; font-variant-numeric: tabular-nums; }
+.chart-svg .strong { font-weight: 600; fill: #1f2933; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1.5px solid #cbd2d9; vertical-align: bottom; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; overflow-wrap: break-word; }
+tbody tr:nth-child(even) td { background: var(--zebra); }
+tr, .tile, .kpi { break-inside: avoid; }
+thead { display: table-header-group; }
+.num { text-align: right; white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+.table-wrap:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+td.lead { min-width: 34%; }
+.barbox { display: inline-grid; grid-template-columns: 70px auto; align-items: center; gap: 8px; }
+.track { display: block; height: 7px; }
+.bar { display: block; height: 7px; background: var(--bar); border-radius: 0 3px 3px 0; }
+.v { min-width: 3.2em; }
+.good { color: var(--good); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+.kpi-value.good, .kpi-value.bad { font-weight: 700; }
+.tag { display: inline-block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 999px; padding: 0 7px; line-height: 16px; white-space: nowrap; }
+.tag-good { color: #13723a; background: #e3f4e8; }
+.tag-bad { color: #b42318; background: #fdecea; }
+.tag-warn { color: #8a5300; background: #fdf0d5; }
+.tag-neutral { color: #52606d; background: #eef1f4; }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; background: var(--zebra); border-radius: 3px; padding: 0 3px; }
+.commentary { background: var(--tint); border-left: 3px solid var(--primary); border-radius: 6px; padding: 8px 14px; margin: 10px 0 8px; break-inside: avoid; }
+.commentary .label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; color: var(--primary-ink); margin: 2px 0 4px; }
+.about { margin: 20px 0 0; padding: 14px 18px; background: #fff; border: 1px solid var(--rule); border-radius: 10px; font-size: 11px; color: var(--muted); }
+.about h2 { break-after: avoid; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink); margin: 0 0 6px; }
+.about ul { margin: 0; padding-left: 16px; } .about li { margin: 2px 0; }
+.colophon { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--faint); padding: 12px 2px 24px; }
+@media (max-width: 640px) {
+  .kpis, .tiles, .tiles-5, .tiles-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pair, .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 24px; }
+}
+/* PDF running header in the page's top margin (CSS page-margin box), left off the first page where the cover band is. */
+@page { @top-left { content: "Example Co \b7  Monthly SEO report \b7  September 2026"; font: 8px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #616c78; vertical-align: bottom; padding-bottom: 3mm; } }
+@page :first { @top-left { content: none; } }
+@media print {
+  /* Print density: a dashboard export fills its pages. */
+  body { background: #fff; font-size: 10.5px; line-height: 1.4; }
+  .page { max-width: none; margin: 0; padding: 0; }
+  .cover { padding: 14px 20px 12px; } .kind { margin-top: 8px; } h1 { font-size: 24px; } .domain { margin-bottom: 10px; }
+  .kpis { gap: 10px; } .kpi { padding: 10px 12px; } .kpi-value { font-size: 22px; margin: 2px 0 4px; } .kpi-caption { margin-bottom: 10px; }
+  .summary { padding: 10px 16px 8px; margin-bottom: 10px; } .summary li { margin: 1px 0; }
+  .card { padding: 10px 14px 4px; margin-bottom: 10px; } .card h2 { font-size: 13.5px; margin-bottom: 6px; } .pair { gap: 10px; margin-bottom: 10px; }
+  table { font-size: 10.5px; margin-bottom: 6px; } th { padding: 4px 6px; font-size: 9px; } td { padding: 3px 6px; }
+  .tiles { gap: 6px; margin-bottom: 8px; } .tile { padding: 7px 10px; } .tile .kpi-value { font-size: 17px; }
+  h3, .table-title { margin: 6px 0 3px; } p { margin: 4px 0; } .note { margin: 3px 0 6px; } figure.chart { margin-bottom: 6px; } .cols { gap: 12px; }
+  .about { margin-top: 10px; padding: 10px 14px; }
+  .pair .track { display: none; } .pair .barbox { grid-template-columns: auto; } .pair td.lead { min-width: 0; } .pair th { letter-spacing: 0; } .pair .num { white-space: normal; }
+  /* Only atomic blocks stay whole (a chart, a KPI row, a table row, a callout); section cards flow across pages. */
+  .card h2, h3, .table-title, figcaption { break-after: avoid; }
+  .summary { font-size: 10px; }
+  .lead-in { break-inside: avoid; } p.note { break-before: avoid; }
+  .table-wrap { overflow: visible; }
+  .cover { margin-bottom: 12px; }
+  .colophon { padding-bottom: 0; }
+}
+
+.subtitle { color: var(--on-primary-soft); margin: 3px 0 0; font-size: 14px; }
+.contents { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 12px 18px; margin: 0 0 14px; break-inside: avoid; }
+.contents h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 6px; color: var(--primary-ink); }
+.contents ol { margin: 0; padding-left: 20px; } .contents li { margin: 2px 0; } .contents a { color: var(--primary-ink); }
+@media print { .page-break { break-before: page; } }
+</style>
+</head>
+<body>
+<div class="page">
+<header class="cover">
+<div class="cover-top"><div class="brand"></div></div>
+<p class="kind">Monthly SEO report</p>
+<h1>Example Co</h1>
+<p class="subtitle">Quarterly check-in</p>
+<dl class="cover-meta">
+<div><dt>Prepared for</dt><dd>Jane Doe, Example Co</dd></div>
+<div><dt>Period</dt><dd>September 2026 · 1–30 Sep 2026</dd></div>
+<div><dt>Generated</dt><dd>13 Oct 2026</dd></div>
+</dl>
+</header>
+<main>
+<nav class="contents" aria-label="Contents"><h2>Contents</h2><ol><li><a href="#s-search">Search performance</a></li><li><a href="#s-brand">Branded vs non-branded</a></li><li><a href="#s-traffic">Organic traffic (GA4)</a></li><li><a href="#s-queries">Top queries</a></li><li><a href="#s-query-movers">Query movers</a></li><li><a href="#s-pages">Top pages</a></li><li><a href="#s-page-movers">Page movers</a></li><li><a href="#s-landing">Top organic landing pages</a></li><li><a href="#s-tracked">Tracked keywords</a></li><li><a href="#s-opportunities">Opportunities</a></li><li><a href="#s-audit">Changes since the last audit</a></li><li><a href="#s-cwv">Core Web Vitals history (real users)</a></li><li><a href="#s-gtm">Tag Manager findings</a></li><li><a href="#about-this-report">About this report</a></li></ol></nav>
+<section class="kpis" aria-label="Key figures"><div class="kpi"><div class="kpi-label">Clicks</div><div class="kpi-value">1,120</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>17.6%</div><div class="kpi-detail">vs 952</div></div><div class="kpi"><div class="kpi-label">Impressions</div><div class="kpi-value">20,000</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>17.6%</div><div class="kpi-detail">vs 17,000</div></div><div class="kpi"><div class="kpi-label">CTR</div><div class="kpi-value">5.60%</div><div class="chip neutral"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 4h8v2H1z"/></svg><span class="sr">no change </span>0.0 pts</div><div class="kpi-detail">vs 5.60%</div></div><div class="kpi"><div class="kpi-label">Average position</div><div class="kpi-value">7.5</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 8.5 1 1.5h8z"/></svg><span class="sr">down </span>0.7 better</div><div class="kpi-detail">from 8.2 · lower is better</div></div></section>
+<p class="kpi-caption">Change vs August 2026 (previous period)</p>
+<section class="summary" aria-label="Highlights"><h2>Highlights</h2>
+<ul><li>Clicks rose 17.6% (from 952 to 1,120) vs August 2026.</li><li>Clicks rose 66.7% (from 672 to 1,120) vs September 2025.</li><li>Non-branded clicks fell 6.7% (from 492 to 459) vs August 2026.</li><li>Organic sessions (GA4) rose 17.6% (from 1,275 to 1,500) vs August 2026.</li><li>Top gaining query: &quot;emergency plumber&quot; (+27 clicks, from 153 to 180).</li><li>Top losing query: &quot;leak detection&quot; (-93 clicks, from 153 to 60).</li><li>1 audit issue resolved, 1 new critical or high-severity issue since the last audit.</li><li>LCP for real users (75th percentile) went from 2,900 ms (needs improvement) to 2,300 ms (good).</li></ul>
+<p class="caption">Computed automatically from the data in this report.</p></section>
+<section class="card" id="s-search" aria-label="Search performance"><div class="lead-in"><h2>Search performance</h2>
+<div class="cols cols-2"><div class="col"><figure class="chart"><figcaption class="stack"><span class="chart-title">Clicks per day</span><span class="legend"><span class="key-item"><span class="key" style="border-color:#1f5ea8"></span>September 2026</span><span class="key-item"><span class="key dashed" style="border-color:#9aa5b1"></span>August 2026</span></span></figcaption><svg class="chart-svg" viewBox="0 0 332 125" role="img" aria-label="Clicks per day: 1,121 clicks in September 2026 against 951 in August 2026, from 1 Sep to 30 Sep."><title>Clicks per day: 1,121 clicks in September 2026 against 951 in August 2026, from 1 Sep to 30 Sep.</title><line x1="40" x2="320" y1="103" y2="103" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="106.5" text-anchor="end" class="tick">0</text><line x1="40" x2="320" y1="72" y2="72" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="75.5" text-anchor="end" class="tick">20</text><line x1="40" x2="320" y1="41" y2="41" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="44.5" text-anchor="end" class="tick">40</text><line x1="40" x2="320" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">60</text><text x="40" y="119" text-anchor="start" class="tick">1 Sep</text><text x="136.6" y="119" text-anchor="middle" class="tick">11 Sep</text><text x="223.4" y="119" text-anchor="middle" class="tick">20 Sep</text><text x="320" y="119" text-anchor="end" class="tick">30 Sep</text><path d="M40,70.5 L49.7,68.9 L59.3,50.3 L69,48.8 L78.6,47.2 L88.3,45.7 L97.9,45.7 L107.6,64.3 L117.2,64.3 L126.9,45.7 L136.6,47.2 L146.2,48.8 L155.9,50.3 L165.5,51.9 L175.2,68.9 L184.8,70.5 L194.5,55 L204.1,56.5 L213.8,56.5 L223.4,56.5 L233.1,56.5 L242.8,70.5 L252.4,70.5 L262.1,53.4 L271.7,51.9 L281.4,48.8 L291,47.2 L300.7,44.1 L310.3,62.7 L320,61.2" fill="none" stroke="#9aa5b1" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 3"/><path d="M40,103 L40,45.7 L49.7,42.6 L59.3,39.4 L69,37.9 L78.6,58.1 L88.3,56.5 L97.9,33.3 L107.6,33.3 L117.2,33.3 L126.9,34.8 L136.6,36.3 L146.2,58.1 L155.9,59.6 L165.5,41 L175.2,42.6 L184.8,44.1 L194.5,45.7 L204.1,47.2 L213.8,65.8 L223.4,65.8 L233.1,47.2 L242.8,47.2 L252.4,45.7 L262.1,42.6 L271.7,41 L281.4,59.6 L291,56.5 L300.7,33.3 L310.3,30.2 L320,28.6 L320,103 Z" fill="#1f5ea8" fill-opacity="0.12" stroke="none"/><path d="M40,45.7 L49.7,42.6 L59.3,39.4 L69,37.9 L78.6,58.1 L88.3,56.5 L97.9,33.3 L107.6,33.3 L117.2,33.3 L126.9,34.8 L136.6,36.3 L146.2,58.1 L155.9,59.6 L165.5,41 L175.2,42.6 L184.8,44.1 L194.5,45.7 L204.1,47.2 L213.8,65.8 L223.4,65.8 L233.1,47.2 L242.8,47.2 L252.4,45.7 L262.1,42.6 L271.7,41 L281.4,59.6 L291,56.5 L300.7,33.3 L310.3,30.2 L320,28.6" fill="none" stroke="#1f5ea8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="320" cy="28.6" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/></svg></figure></div><div class="col"><figure class="chart"><figcaption class="stack"><span class="chart-title">Impressions per day</span><span class="legend"><span class="key-item"><span class="key" style="border-color:#1f5ea8"></span>September 2026</span><span class="key-item"><span class="key dashed" style="border-color:#9aa5b1"></span>August 2026</span></span></figcaption><svg class="chart-svg" viewBox="0 0 332 125" role="img" aria-label="Impressions per day: 20,000 impressions in September 2026 against 17,000 in August 2026, from 1 Sep to 30 Sep."><title>Impressions per day: 20,000 impressions in September 2026 against 17,000 in August 2026, from 1 Sep to 30 Sep.</title><line x1="40" x2="320" y1="103" y2="103" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="106.5" text-anchor="end" class="tick">0</text><line x1="40" x2="320" y1="79.8" y2="79.8" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="83.3" text-anchor="end" class="tick">250</text><line x1="40" x2="320" y1="56.5" y2="56.5" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="60" text-anchor="end" class="tick">500</text><line x1="40" x2="320" y1="33.3" y2="33.3" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="36.8" text-anchor="end" class="tick">750</text><line x1="40" x2="320" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">1k</text><text x="40" y="119" text-anchor="start" class="tick">1 Sep</text><text x="136.6" y="119" text-anchor="middle" class="tick">11 Sep</text><text x="223.4" y="119" text-anchor="middle" class="tick">20 Sep</text><text x="320" y="119" text-anchor="end" class="tick">30 Sep</text><path d="M40,67.9 L49.7,66.4 L59.3,46.9 L69,45 L78.6,43.4 L88.3,42.1 L97.9,41.3 L107.6,60.9 L117.2,61.1 L126.9,41.9 L136.6,43 L146.2,44.4 L155.9,46 L165.5,47.7 L175.2,66.5 L184.8,67.6 L194.5,52.1 L204.1,53.2 L213.8,53.7 L223.4,53.8 L233.1,53.3 L242.8,68.7 L252.4,67.8 L262.1,49.4 L271.7,47.4 L281.4,45.2 L291,42.9 L300.7,40.6 L310.3,59.1 L320,57.8" fill="none" stroke="#9aa5b1" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 3"/><path d="M40,103 L40,41.1 L49.7,38.4 L59.3,35.8 L69,33.3 L78.6,54.4 L88.3,53.3 L97.9,29.1 L107.6,28.7 L117.2,29 L126.9,29.7 L136.6,31 L146.2,55.2 L155.9,56.4 L165.5,36.6 L175.2,38.6 L184.8,40.4 L194.5,42 L204.1,43.1 L213.8,62.7 L223.4,62.8 L233.1,43.5 L242.8,42.4 L252.4,40.8 L262.1,38.7 L271.7,36.3 L281.4,55.8 L291,54 L300.7,28.1 L310.3,25.5 L320,23.3 L320,103 Z" fill="#1f5ea8" fill-opacity="0.12" stroke="none"/><path d="M40,41.1 L49.7,38.4 L59.3,35.8 L69,33.3 L78.6,54.4 L88.3,53.3 L97.9,29.1 L107.6,28.7 L117.2,29 L126.9,29.7 L136.6,31 L146.2,55.2 L155.9,56.4 L165.5,36.6 L175.2,38.6 L184.8,40.4 L194.5,42 L204.1,43.1 L213.8,62.7 L223.4,62.8 L233.1,43.5 L242.8,42.4 L252.4,40.8 L262.1,38.7 L271.7,36.3 L281.4,55.8 L291,54 L300.7,28.1 L310.3,25.5 L320,23.3" fill="none" stroke="#1f5ea8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="320" cy="23.3" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/></svg></figure></div></div></div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Metric, September 2026, August 2026, Change, September 2025, Change"><table>
+<thead><tr><th class="lead">Metric</th><th class="num">September 2026</th><th class="num">August 2026</th><th class="num">Change</th><th class="num">September 2025</th><th class="num">Change</th></tr></thead>
+<tbody><tr><td class="lead">Clicks</td><td class="num">1,120</td><td class="num">952</td><td class="num"><span class="good">+17.6%</span></td><td class="num">672</td><td class="num"><span class="good">+66.7%</span></td></tr>
+<tr><td class="lead">Impressions</td><td class="num">20,000</td><td class="num">17,000</td><td class="num"><span class="good">+17.6%</span></td><td class="num">12,000</td><td class="num"><span class="good">+66.7%</span></td></tr>
+<tr><td class="lead">CTR</td><td class="num">5.60%</td><td class="num">5.60%</td><td class="num">0.0 pts</td><td class="num">5.60%</td><td class="num">0.0 pts</td></tr>
+<tr><td class="lead">Average position</td><td class="num">7.5</td><td class="num">8.2</td><td class="num"><span class="good">0.7 better</span></td><td class="num">8.2</td><td class="num"><span class="good">0.7 better</span></td></tr></tbody>
+</table></div>
+<p class="note">Average position: lower is better.</p></section>
+<section class="card" id="s-brand" aria-label="Branded vs non-branded"><div class="lead-in"><h2>Branded vs non-branded</h2>
+<figure class="chart"><figcaption><span class="chart-title">Share of clicks</span><span class="legend"><span class="key-item"><span class="key box" style="background:#1f5ea8"></span>Branded</span><span class="key-item"><span class="key box" style="background:#a5bfdc"></span>Non-branded</span></span></figcaption><svg class="chart-svg" viewBox="0 0 680 60" role="img" aria-label="Branded queries brought 39.5% of clicks in September 2026 (34.1% in August 2026)."><title>Branded queries brought 39.5% of clicks in September 2026 (34.1% in August 2026).</title><text x="0" y="17" class="tick strong">September 2026</text><rect x="118" y="2" width="218.6" height="22" rx="3" fill="#1f5ea8"/><text x="126" y="17" class="tick" fill="#ffffff" style="fill:#ffffff">39.5%</text><rect x="338.6" y="2" width="337.4" height="22" rx="3" fill="#a5bfdc"/><text x="346.6" y="17" class="tick" fill="#111827" style="fill:#111827">60.5%</text><text x="0" y="51" class="tick strong">August 2026</text><rect x="118" y="36" width="188.5" height="22" rx="3" fill="#1f5ea8"/><text x="126" y="51" class="tick" fill="#ffffff" style="fill:#ffffff">34.1%</text><rect x="308.5" y="36" width="367.5" height="22" rx="3" fill="#a5bfdc"/><text x="316.5" y="51" class="tick" fill="#111827" style="fill:#111827">65.9%</text></svg></figure></div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Queries, Clicks, Change vs August 2026, Impressions, CTR, Average position"><table>
+<thead><tr><th class="lead">Queries</th><th class="num">Clicks</th><th class="num">Change vs August 2026</th><th class="num">Impressions</th><th class="num">CTR</th><th class="num">Average position</th></tr></thead>
+<tbody><tr><td class="lead">Branded</td><td class="num">300</td><td class="num"><span class="good">+17.6%</span></td><td class="num">1,200</td><td class="num">25.00%</td><td class="num">1.2</td></tr>
+<tr><td class="lead">Non-branded</td><td class="num">459</td><td class="num"><span class="bad">−6.7%</span></td><td class="num">13,960</td><td class="num">3.29%</td><td class="num">8.8</td></tr></tbody>
+</table></div>
+<p>Branded share of clicks: 39.5% (34.1% in August 2026).</p>
+<p class="note">Branded means the query contains example co, the domain or the business name.</p></section>
+<section class="card" id="s-traffic" aria-label="Organic traffic (GA4)"><div class="lead-in"><h2>Organic traffic (GA4)</h2>
+<div class="tiles tiles-4"><div class="tile"><div class="kpi-label">Sessions</div><div class="kpi-value">1,500</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>17.6%</div><div class="kpi-detail">vs 1,275</div></div><div class="tile"><div class="kpi-label">Users</div><div class="kpi-value">1,200</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>17.6%</div><div class="kpi-detail">vs 1,020</div></div><div class="tile"><div class="kpi-label">Engagement rate</div><div class="kpi-value">61.2%</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>2.8 pts</div><div class="kpi-detail">vs 58.4%</div></div><div class="tile"><div class="kpi-label">Key events</div><div class="kpi-value">40</div><div class="chip good"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5 9 8.5H1z"/></svg><span class="sr">up </span>17.6%</div><div class="kpi-detail">vs 34</div></div></div></div>
+<figure class="chart"><figcaption><span class="chart-title">Organic sessions per day</span><span class="legend"><span class="key-item"><span class="key" style="border-color:#1f5ea8"></span>September 2026</span><span class="key-item"><span class="key dashed" style="border-color:#9aa5b1"></span>August 2026</span></span></figcaption><svg class="chart-svg" viewBox="0 0 680 135" role="img" aria-label="Organic sessions per day: 1,499 sessions in September 2026 against 1,274 in August 2026, from 1 Sep to 30 Sep."><title>Organic sessions per day: 1,499 sessions in September 2026 against 1,274 in August 2026, from 1 Sep to 30 Sep.</title><line x1="40" x2="668" y1="113" y2="113" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="116.5" text-anchor="end" class="tick">0</text><line x1="40" x2="668" y1="87.3" y2="87.3" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="90.8" text-anchor="end" class="tick">20</text><line x1="40" x2="668" y1="61.5" y2="61.5" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="65" text-anchor="end" class="tick">40</text><line x1="40" x2="668" y1="35.8" y2="35.8" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="39.3" text-anchor="end" class="tick">60</text><line x1="40" x2="668" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">80</text><text x="40" y="129" text-anchor="start" class="tick">1 Sep</text><text x="169.9" y="129" text-anchor="middle" class="tick">7 Sep</text><text x="299.9" y="129" text-anchor="middle" class="tick">13 Sep</text><text x="408.1" y="129" text-anchor="middle" class="tick">18 Sep</text><text x="538.1" y="129" text-anchor="middle" class="tick">24 Sep</text><text x="668" y="129" text-anchor="end" class="tick">30 Sep</text><path d="M40,77 L61.7,74.4 L83.3,55.1 L105,52.5 L126.6,51.2 L148.3,49.9 L169.9,48.6 L191.6,69.2 L213.2,69.2 L234.9,49.9 L256.6,51.2 L278.2,52.5 L299.9,53.8 L321.5,55.1 L343.2,75.7 L364.8,75.7 L386.5,60.2 L408.1,61.5 L429.8,61.5 L451.4,61.5 L473.1,61.5 L494.8,77 L516.4,77 L538.1,57.6 L559.7,55.1 L581.4,52.5 L603,51.2 L624.7,48.6 L646.3,67.9 L668,66.7" fill="none" stroke="#9aa5b1" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 3"/><path d="M40,113 L40,48.6 L61.7,46.1 L83.3,43.5 L105,40.9 L126.6,62.8 L148.3,61.5 L169.9,35.8 L191.6,35.8 L213.2,35.8 L234.9,37 L256.6,38.3 L278.2,62.8 L299.9,64.1 L321.5,43.5 L343.2,46.1 L364.8,48.6 L386.5,49.9 L408.1,51.2 L429.8,71.8 L451.4,71.8 L473.1,51.2 L494.8,49.9 L516.4,48.6 L538.1,46.1 L559.7,43.5 L581.4,64.1 L603,61.5 L624.7,35.8 L646.3,33.2 L668,30.6 L668,113 Z" fill="#1f5ea8" fill-opacity="0.12" stroke="none"/><path d="M40,48.6 L61.7,46.1 L83.3,43.5 L105,40.9 L126.6,62.8 L148.3,61.5 L169.9,35.8 L191.6,35.8 L213.2,35.8 L234.9,37 L256.6,38.3 L278.2,62.8 L299.9,64.1 L321.5,43.5 L343.2,46.1 L364.8,48.6 L386.5,49.9 L408.1,51.2 L429.8,71.8 L451.4,71.8 L473.1,51.2 L494.8,49.9 L516.4,48.6 L538.1,46.1 L559.7,43.5 L581.4,64.1 L603,61.5 L624.7,35.8 L646.3,33.2 L668,30.6" fill="none" stroke="#1f5ea8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="668" cy="30.6" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/></svg></figure>
+<p class="note">Organic search visits from Google Analytics, compared with August 2026.</p></section>
+<section class="card page-break" id="s-queries" aria-label="Top queries"><div class="lead-in"><h2>Top queries</h2>
+</div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Query, Clicks, Impressions, CTR, Position"><table>
+<thead><tr><th class="lead">Query</th><th class="num">Clicks</th><th class="num">Impressions</th><th class="num">CTR</th><th class="num">Position</th></tr></thead>
+<tbody><tr><td class="lead">example co <span class="tag tag-neutral">brand</span></td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:100%"></span></span><span class="v">300</span></span></td><td class="num">1,200</td><td class="num">25.00%</td><td class="num">1.2</td></tr>
+<tr><td class="lead">emergency plumber</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:60%"></span></span><span class="v">180</span></span></td><td class="num">4,200</td><td class="num">4.29%</td><td class="num">6.4</td></tr>
+<tr><td class="lead">water heater repair</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:40%"></span></span><span class="v">120</span></span></td><td class="num">3,100</td><td class="num">3.87%</td><td class="num">8.1</td></tr>
+<tr><td class="lead">drain cleaning near me</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:30%"></span></span><span class="v">90</span></span></td><td class="num">5,200</td><td class="num">1.73%</td><td class="num">11.3</td></tr>
+<tr><td class="lead">leak detection</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:20%"></span></span><span class="v">60</span></span></td><td class="num">900</td><td class="num">6.67%</td><td class="num">4.2</td></tr>
+<tr><td class="lead">&lt;img src=x onerror=alert(1)&gt;</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:2%"></span></span><span class="v">5</span></span></td><td class="num">300</td><td class="num">1.67%</td><td class="num">15.0</td></tr>
+<tr><td class="lead">pipe | fitting</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:1%"></span></span><span class="v">4</span></span></td><td class="num">260</td><td class="num">1.54%</td><td class="num">12.5</td></tr></tbody>
+</table></div></section>
+<section class="card" id="s-query-movers" aria-label="Query movers"><div class="lead-in"><h2>Query movers</h2>
+</div>
+<div class="cols cols-2"><div class="col"><h3 class="table-title">Gained clicks</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Gained clicks"><table>
+<thead><tr><th class="lead">Query</th><th class="num">Clicks</th><th class="num">Change</th><th class="num">Position</th></tr></thead>
+<tbody><tr><td class="lead">example co</td><td class="num">300</td><td class="num"><span class="good">+45</span></td><td class="num">1.2</td></tr>
+<tr><td class="lead">emergency plumber</td><td class="num">180</td><td class="num"><span class="good">+27</span></td><td class="num">6.4</td></tr>
+<tr><td class="lead">water heater repair</td><td class="num">120</td><td class="num"><span class="good">+18</span></td><td class="num">8.1</td></tr>
+<tr><td class="lead">drain cleaning near me</td><td class="num">90</td><td class="num"><span class="good">+13</span></td><td class="num">11.3</td></tr>
+<tr><td class="lead">&lt;img src=x onerror=alert(1)&gt;</td><td class="num">5</td><td class="num"><span class="good">+1</span></td><td class="num">15.0</td></tr>
+<tr><td class="lead">pipe | fitting</td><td class="num">4</td><td class="num"><span class="good">+1</span></td><td class="num">12.5</td></tr></tbody>
+</table></div></div><div class="col"><h3 class="table-title">Lost clicks</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Lost clicks"><table>
+<thead><tr><th class="lead">Query</th><th class="num">Clicks</th><th class="num">Change</th><th class="num">Position</th></tr></thead>
+<tbody><tr><td class="lead">leak detection</td><td class="num">60</td><td class="num"><span class="bad">−93</span></td><td class="num">4.2</td></tr></tbody>
+</table></div></div></div></section>
+<section class="card" id="s-pages" aria-label="Top pages"><div class="lead-in"><h2>Top pages</h2>
+</div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Page, Clicks, Impressions, CTR, Position"><table>
+<thead><tr><th class="lead">Page</th><th class="num">Clicks</th><th class="num">Impressions</th><th class="num">CTR</th><th class="num">Position</th></tr></thead>
+<tbody><tr><td class="lead">/</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:100%"></span></span><span class="v">420</span></span></td><td class="num">6,000</td><td class="num">7.00%</td><td class="num">3.1</td></tr>
+<tr><td class="lead">/services/emergency</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:48%"></span></span><span class="v">200</span></span></td><td class="num">5,100</td><td class="num">3.92%</td><td class="num">6.0</td></tr>
+<tr><td class="lead">/blog/water-heaters</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:26%"></span></span><span class="v">110</span></span></td><td class="num">4,100</td><td class="num">2.68%</td><td class="num">9.2</td></tr>
+<tr><td class="lead">/contact</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:10%"></span></span><span class="v">40</span></span></td><td class="num">800</td><td class="num">5.00%</td><td class="num">5.5</td></tr></tbody>
+</table></div></section>
+<div class="pair"><section class="card" id="s-page-movers" aria-label="Page movers"><div class="lead-in"><h2>Page movers</h2>
+</div>
+<h3 class="table-title">Gained clicks</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Gained clicks"><table>
+<thead><tr><th class="lead">Page</th><th class="num">Clicks</th><th class="num">Change</th><th class="num">Position</th></tr></thead>
+<tbody><tr><td class="lead">/</td><td class="num">420</td><td class="num"><span class="good">+63</span></td><td class="num">3.1</td></tr>
+<tr><td class="lead">/services/emergency</td><td class="num">200</td><td class="num"><span class="good">+30</span></td><td class="num">6.0</td></tr>
+<tr><td class="lead">/blog/water-heaters</td><td class="num">110</td><td class="num"><span class="good">+16</span></td><td class="num">9.2</td></tr>
+<tr><td class="lead">/contact</td><td class="num">40</td><td class="num"><span class="good">+6</span></td><td class="num">5.5</td></tr></tbody>
+</table></div></section><section class="card" id="s-landing" aria-label="Top organic landing pages"><div class="lead-in"><h2>Top organic landing pages</h2>
+</div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Landing page, Sessions, Engagement rate, Key events"><table>
+<thead><tr><th class="lead">Landing page</th><th class="num">Sessions</th><th class="num">Engagement rate</th><th class="num">Key events</th></tr></thead>
+<tbody><tr><td class="lead">/</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:100%"></span></span><span class="v">700</span></span></td><td class="num">64.0%</td><td class="num">20</td></tr>
+<tr><td class="lead">/services/emergency</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:57%"></span></span><span class="v">400</span></span></td><td class="num">58.0%</td><td class="num">15</td></tr>
+<tr><td class="lead">/blog/water-heaters</td><td class="num"><span class="barbox"><span class="track"><span class="bar" style="width:30%"></span></span><span class="v">210</span></span></td><td class="num">49.0%</td><td class="num">2</td></tr></tbody>
+</table></div></section></div>
+<section class="card" id="s-tracked" aria-label="Tracked keywords"><div class="lead-in"><h2>Tracked keywords</h2>
+</div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Keyword, Average position, August 2026, Change, Clicks, Impressions"><table>
+<thead><tr><th class="lead">Keyword</th><th class="num">Average position</th><th class="num">August 2026</th><th class="num">Change</th><th class="num">Clicks</th><th class="num">Impressions</th></tr></thead>
+<tbody><tr><td class="lead">emergency plumber</td><td class="num">6.4</td><td class="num">7.1</td><td class="num"><span class="good">0.7 better</span></td><td class="num">180</td><td class="num">4,200</td></tr>
+<tr><td class="lead">example co</td><td class="num">1.2</td><td class="num">1.9</td><td class="num"><span class="good">0.7 better</span></td><td class="num">300</td><td class="num">1,200</td></tr>
+<tr><td class="lead">water heater repair</td><td class="num">8.1</td><td class="num">8.8</td><td class="num"><span class="good">0.7 better</span></td><td class="num">120</td><td class="num">3,100</td></tr></tbody>
+</table></div>
+<p class="note">Search Console average position; lower is better.</p></section>
+<section class="card page-break" id="s-opportunities" aria-label="Opportunities"><div class="lead-in"><h2>Opportunities</h2>
+</div>
+<h3 class="table-title">Close to page one</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Close to page one"><table>
+<thead><tr><th class="lead">Query</th><th>Page</th><th class="num">Position</th><th class="num">Impressions</th><th class="num">Est. extra clicks</th></tr></thead>
+<tbody><tr><td class="lead">drain cleaning near me</td><td>/services/emergency</td><td class="num">11.3</td><td class="num">5,200</td><td class="num">400</td></tr></tbody>
+</table></div>
+<p class="note">Estimated extra clicks assume a typical click-through rate for a higher position; treat them as a guide, not a forecast.</p></section>
+<section class="card" id="s-audit" aria-label="Changes since the last audit"><div class="lead-in"><h2>Changes since the last audit</h2>
+<div class="tiles tiles-4"><div class="tile"><div class="kpi-label">Resolved</div><div class="kpi-value good">1</div></div><div class="tile"><div class="kpi-label">New</div><div class="kpi-value bad">1</div></div><div class="tile"><div class="kpi-label">Still open</div><div class="kpi-value">1</div></div><div class="tile"><div class="kpi-label">Not re-checked</div><div class="kpi-value">1</div></div></div></div>
+<p>The latest audit (25 Sep 2026) compared with the one before it (20 Aug 2026).</p>
+<h3 class="table-title">New findings</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="New findings"><table>
+<thead><tr><th class="lead">Severity</th><th>Finding</th><th>Page</th></tr></thead>
+<tbody><tr><td class="lead"><span class="tag tag-bad">high</span></td><td>On-page check failed: is broken</td><td>/</td></tr></tbody>
+</table></div>
+<h3 class="table-title">Lighthouse score changes</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Lighthouse score changes"><table>
+<thead><tr><th class="lead">Page</th><th>Category</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr></thead>
+<tbody><tr><td class="lead">/</td><td>performance</td><td class="num">71</td><td class="num">78</td><td class="num"><span class="good">+7</span></td></tr>
+<tr><td class="lead">/</td><td>seo</td><td class="num">90</td><td class="num">92</td><td class="num"><span class="good">+2</span></td></tr></tbody>
+</table></div>
+<p class="note">Findings that weren&#39;t re-checked in the latest audit are listed as not re-checked, never as fixed.</p></section>
+<section class="card" id="s-cwv" aria-label="Core Web Vitals history (real users)"><div class="lead-in"><h2>Core Web Vitals history (real users)</h2>
+<p>Real-user 75th percentile for <code>https://example.com</code> (phone), 3 weekly periods from 2026-03-28 to 2026-04-11.</p>
+<div class="cols cols-2"><div class="col"><figure class="chart"><figcaption class="stack"><span class="chart-title">LCP · Largest Contentful Paint</span></figcaption><svg class="chart-svg" viewBox="0 0 332 125" role="img" aria-label="Largest Contentful Paint for real users went from 2,900 ms to 2,300 ms over 3 weekly periods."><title>Largest Contentful Paint for real users went from 2,900 ms to 2,300 ms over 3 weekly periods.</title><rect x="40" y="44.9" width="280" height="58.1" fill="#e6f4ea"/><rect x="40" y="10" width="280" height="34.9" fill="#fdf3dc"/><line x1="40" x2="320" y1="103" y2="103" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="106.5" text-anchor="end" class="tick">0 ms</text><line x1="40" x2="320" y1="79.8" y2="79.8" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="83.3" text-anchor="end" class="tick">1 s</text><line x1="40" x2="320" y1="56.5" y2="56.5" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="60" text-anchor="end" class="tick">2 s</text><line x1="40" x2="320" y1="33.3" y2="33.3" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="36.8" text-anchor="end" class="tick">3 s</text><line x1="40" x2="320" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">4 s</text><text x="40" y="119" text-anchor="start" class="tick">28 Mar</text><text x="180" y="119" text-anchor="middle" class="tick">4 Apr</text><text x="320" y="119" text-anchor="end" class="tick">11 Apr</text><path d="M40,35.6 L180,42.6 L320,49.5" fill="none" stroke="#1f5ea8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="40" cy="35.6" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/><circle cx="180" cy="42.6" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/><circle cx="320" cy="49.5" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/></svg></figure></div><div class="col"><figure class="chart"><figcaption class="stack"><span class="chart-title">CLS · Cumulative Layout Shift</span></figcaption><svg class="chart-svg" viewBox="0 0 332 125" role="img" aria-label="Cumulative Layout Shift for real users went from 0.05 to 0.06 over 3 weekly periods."><title>Cumulative Layout Shift for real users went from 0.05 to 0.06 over 3 weekly periods.</title><rect x="40" y="41" width="280" height="62" fill="#e6f4ea"/><rect x="40" y="10" width="280" height="31" fill="#fdf3dc"/><line x1="40" x2="320" y1="103" y2="103" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="106.5" text-anchor="end" class="tick">0.0</text><line x1="40" x2="320" y1="72" y2="72" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="75.5" text-anchor="end" class="tick">0.05</text><line x1="40" x2="320" y1="41" y2="41" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="44.5" text-anchor="end" class="tick">0.1</text><line x1="40" x2="320" y1="10" y2="10" stroke="#e4e7eb" stroke-width="1"/><text x="34" y="13.5" text-anchor="end" class="tick">0.15</text><text x="40" y="119" text-anchor="start" class="tick">28 Mar</text><text x="180" y="119" text-anchor="middle" class="tick">4 Apr</text><text x="320" y="119" text-anchor="end" class="tick">11 Apr</text><path d="M40,72 L320,65.8" fill="none" stroke="#1f5ea8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="40" cy="72" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/><circle cx="320" cy="65.8" r="3" fill="#1f5ea8" stroke="#ffffff" stroke-width="1.5"/></svg></figure></div></div></div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Metric, First period, Latest period, Change, Rating now, Trend"><table>
+<thead><tr><th class="lead">Metric</th><th class="num">First period</th><th class="num">Latest period</th><th class="num">Change</th><th>Rating now</th><th>Trend</th></tr></thead>
+<tbody><tr><td class="lead">Largest Contentful Paint</td><td class="num">2,900 ms</td><td class="num">2,300 ms</td><td class="num"><span class="good">600 ms better</span></td><td><span class="tag tag-good">good</span></td><td>improving</td></tr>
+<tr><td class="lead">Cumulative Layout Shift</td><td class="num">0.05</td><td class="num">0.06</td><td class="num"><span class="bad">0.01 worse</span></td><td><span class="tag tag-good">good</span></td><td>insufficient data</td></tr></tbody>
+</table></div>
+<p class="note">From the Chrome UX Report: each period is a 28-day window, updated weekly. Lower is better for every metric. Where charts are shown, the shaded bands are Google&#39;s thresholds: green is good, amber needs improvement, red is poor.</p></section>
+<section class="card" id="s-gtm" aria-label="Tag Manager findings"><div class="lead-in"><h2>Tag Manager findings</h2>
+<p>Container <code>GTM-EXAMPLE</code> (example.com), live version 12: 4 tags, 3 triggers, 5 variables, 2 findings.</p></div>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Severity, Finding, Item"><table>
+<thead><tr><th class="lead">Severity</th><th>Finding</th><th>Item</th></tr></thead>
+<tbody><tr><td class="lead"><span class="tag tag-warn">medium</span></td><td>Universal Analytics tag &lt;b&gt;Old UA&lt;/b&gt;</td><td>tag Old UA</td></tr>
+<tr><td class="lead"><span class="tag tag-neutral">low</span></td><td>Paused tag: Test</td><td>tag Test</td></tr></tbody>
+</table></div></section>
+</main>
+<footer class="about" id="about-this-report"><h2>About this report</h2><ul><li>Period: September 2026 (1–30 Sep 2026), compared with August 2026 (1–31 Aug 2026) and September 2025 (1–30 Sep 2025, the same period a year earlier).</li><li>Data-only report. Built automatically from Search Console and Google Analytics. It has no written commentary.</li><li>Sources: Google Search Console (search), Google Analytics 4 (organic traffic), saved crawlmark audits, the Chrome UX Report and Google Tag Manager when those sections are included.</li><li>Search Console counts anonymized queries in its totals but not in the query tables, so the query tables don&#39;t add up to the totals.</li></ul></footer>
+<div class="colophon"><span>crawlmark 0.3.0</span><span>Generated 13 Oct 2026</span></div>
+</div>
+</body>
+</html>

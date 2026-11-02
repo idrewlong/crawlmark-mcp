@@ -9,6 +9,6 @@ The report is for the client, so write it in plain language. Templates are free 
 5. **Write commentary per section**, using the section ids as keys: a short `summary` (three sentences: how organic search did overall, the main reason, and the one thing to watch), then for each section with data, what changed and why. Explain a likely reason only when the data supports it; if the data doesn't say why, say it isn't clear from the data. Don't invent causes, and don't hide declines. Findings marked unverified in an audit section, and technical issues marked not re-checked, were not re-checked, so don't count them as fixed. The Google indexing section is a sample of pages, not Search Console's full Page indexing report; say so if you discuss it.
 6. **Style rules.**
 {{numberRules}}
-   - Commentary is plain paragraphs, `- ` bullets and **bold** only (anything else appears literally in the files).
+{{commentaryFormat}}
 7. **Save it.** Ask which format or formats I want: PDF (the default), Word, HTML or Markdown. Don't export them all; call `export_report` with `client: "{{client}}"`, the same `reportId`, exactly the formats I picked (`["pdf"]` if I just say yes) and your text as `narrative` (`summary` plus `sections` keyed by section id). Tell me the file paths it returns, and any `warnings` (for example a PDF that needs Chrome, in which case an HTML file is written instead).
 8. {{docsOffer}}

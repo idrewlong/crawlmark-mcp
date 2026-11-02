@@ -60,7 +60,7 @@ describe("routing", () => {
     const sent = fakeDfs();
     const c = makeClient("ahrefs-nokey.example.com", { dataProvider: "ahrefs" });
     await expect(keywordIdeas(c, { seeds: ["plumber"], mode: "related", limit: 10 })).rejects.toBeInstanceOf(ProviderUnavailableError);
-    await expect(keywordGap(c, { competitors: ["competitor-a.example"], limit: 10, minVolume: 0 }, { ctx: noGsc })).rejects.toThrow(/AHREFS_API_KEY is not set\. Run setup --step ahrefs/);
+    await expect(keywordGap(c, { competitors: ["competitor-a.example"], limit: 10, minVolume: 0 }, { ctx: noGsc })).rejects.toThrow(/AHREFS_API_KEY is not set\. Run .+ setup --step ahrefs/);
     expect(sent).toEqual([]);
   });
 });

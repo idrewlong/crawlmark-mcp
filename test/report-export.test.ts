@@ -194,6 +194,25 @@ describe("crawlmark-cli report", () => {
     expect(readdirSync(join(h.reportsDir, "example.com", "2026-09")).sort()).toEqual(["monthly-2026-09.docx", "monthly-2026-09.html", "monthly-2026-09.md", "monthly-2026-09.pdf"]);
   });
 
+  it("a template text that names an internal term exits 1 before anything is run or written (B-C5)", async () => {
+    const h = harness();
+    mkdirSync(join(h.home, "config"), { recursive: true });
+    writeFileSync(join(h.home, "config", "report-templates.yaml"), 'version: 1\ntemplates:\n  x:\n    title: X\n    sections:\n      - { id: a, type: text, text: "Data from DataForSEO via striking_distance." }\n');
+    const run = vi.fn();
+    const deps = { ...h.deps, runDeps: async () => (run(), fakeDeps()) };
+    expect(await reportCommand([], flags({ client: "example.com", template: "x", month: "2026-09", format: "md" }), h.io, deps)).toBe(1);
+    expect(h.json().errors[0]).toMatch(/example\.com: Client-facing text names internal terms: sections\.a\.text: "DataForSEO".*sections\.a\.text: "striking_distance"/);
+    // Q3: a cron run has no commentary, so the advice is about the template file, not narrative or internal notes.
+    expect(h.json().errors[0]).toContain("Edit the template's own text");
+    expect(h.json().errors[0]).toContain("branding.allowTerms");
+    expect(h.json().errors[0]).not.toMatch(/narrative|internal notes/);
+    expect(run).not.toHaveBeenCalled();
+    expect(existsSync(h.reportsDir)).toBe(false);
+    // Allowing the terms in the template file's branding lets it run.
+    writeFileSync(join(h.home, "config", "report-templates.yaml"), 'version: 1\nbranding: { allowTerms: [DataForSEO, striking_distance] }\ntemplates:\n  x:\n    title: X\n    sections:\n      - { id: a, type: text, text: "Data from DataForSEO via striking_distance." }\n');
+    expect(await reportCommand([], flags({ client: "example.com", template: "x", month: "2026-09", format: "md" }), h.io, h.deps)).toBe(0);
+  });
+
   it("--all skips ignored clients and clients with no data; --dry-run writes nothing", async () => {
     const h = harness({}, { latestAudit: () => undefined });
     expect(await reportCommand([], flags({ all: true, month: "2026-09" }), h.io, h.deps)).toBe(0);

@@ -375,7 +375,8 @@ describe("without elicitation, risky saves need the user's own answer (SEC-1)", 
     await templateWriteCall("create_report_template", { client: "example.com", file: "client", id: "monthly", template: long, replace: true, confirmToken: p.confirmToken }, d);
     expect(asked[0]).toContain('It hides the builtin "monthly" template for this client.');
     expect(asked[0]).toContain("Sections: note (text).");
-    expect(asked[0]).toMatch(/Text in "note": "Hello x{194}\.\.\."$/);
+    // SEC-3: the length, and the whole text when it is at most 400 characters (else its first and last 200).
+    expect(asked[0]).toMatch(/Text in "note" \(306 characters\): "Hello x{300}"$/);
   });
 });
 

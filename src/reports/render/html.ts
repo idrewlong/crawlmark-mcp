@@ -7,9 +7,9 @@
  * inline colour on change values (which Docs keeps).
  */
 import { DEFAULT_ACCENT, DEFAULT_PRIMARY, NEUTRAL, TONE, inkOn, mix, softTextOn, textOn } from "./color.js";
-import type { Block, Chart, DocSection, Kpi, ReportDoc, TableBlock, Text } from "./doc.js";
+import { ABOUT_ANCHOR, coverEntries, type Block, type Chart, type DocNarrativeBlock, type DocSection, type DocBranding, type Kpi, type ReportDoc, type TableBlock, type Text } from "./doc.js";
 import { clean, escapeHtml, safeColor } from "./escape.js";
-import type { NarrativeBlock, Run } from "./narrative.js";
+import type { Run } from "./narrative.js";
 import { lineChartSvg, seriesColor, shareChartSvg, shareColors } from "./svg.js";
 
 export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'";
@@ -24,6 +24,8 @@ interface Ctx {
   width: number;
   primary: string;
   onepage: boolean;
+  /** Section cards carry `id="s-<id>"` link targets (only when the report has a contents list). */
+  anchors?: boolean;
 }
 
 const TAG_COLORS = { good: TONE.good, bad: TONE.bad, warn: { fg: "#8a5300", bg: "#fdf0d5" }, neutral: TONE.neutral } as const;
@@ -36,11 +38,40 @@ function run(r: Run, ctx: Ctx): string {
 }
 const text = (t: Text, ctx: Ctx) => t.map((r, i) => (r.tag && i > 0 ? " " : "") + run(r, ctx)).join("");
 
-function narrative(blocks: NarrativeBlock[], ctx: Ctx): string {
-  return blocks.map((b) => (b.kind === "p" ? `<p>${text(b.runs, ctx)}</p>` : `<ul>${b.items.map((i) => `<li>${text(i, ctx)}</li>`).join("")}</ul>`)).join("\n");
+/** A table written in the commentary: the same look as data tables, cells are escaped runs. */
+function narrativeTable(b: Extract<DocNarrativeBlock, { kind: "table" }>, ctx: Ctx): string {
+  const cols = b.header.length;
+  const al = (i: number) => (b.align[i] === "right" ? (ctx.docs ? ' align="right"' : ' class="num"') : ctx.docs ? ' align="left"' : "");
+  const head = `<thead><tr>${b.header.map((h, i) => `<th${al(i)}>${text(h, ctx)}</th>`).join("")}</tr></thead>`;
+  const body = `<tbody>${b.rows.map((r) => `<tr>${Array.from({ length: cols }, (_, i) => `<td${b.align[i] === "right" ? (ctx.docs ? ' align="right"' : ' class="num"') : ""}>${text(r[i] ?? [], ctx)}</td>`).join("")}</tr>`).join("\n")}</tbody>`;
+  return ctx.docs ? `<table border="1" cellpadding="4" cellspacing="0">\n${head}\n${body}\n</table>` : `<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table>\n${head}\n${body}\n</table></div>`;
 }
 
-function commentaryBox(blocks: NarrativeBlock[], ctx: Ctx): string {
+function narrative(blocks: DocNarrativeBlock[], ctx: Ctx): string {
+  return blocks
+    .map((b) => {
+      switch (b.kind) {
+        case "p":
+          return `<p>${text(b.runs, ctx)}</p>`;
+        case "ul":
+          return `<ul>${b.items.map((i) => `<li>${text(i, ctx)}</li>`).join("")}</ul>`;
+        case "ol":
+          return `<ol${b.start !== 1 ? ` start="${b.start}"` : ""}>${b.items.map((i) => `<li>${text(i, ctx)}</li>`).join("")}</ol>`;
+        case "h":
+          return `<h4>${text(b.runs, ctx)}</h4>`;
+        case "table":
+          return narrativeTable(b, ctx);
+        case "chart":
+          return chart(b.chart, ctx);
+        case "chartRef": // buildReportDoc resolves or drops these
+          return "";
+      }
+    })
+    .filter((x) => x !== "")
+    .join("\n");
+}
+
+function commentaryBox(blocks: DocNarrativeBlock[], ctx: Ctx): string {
   return ctx.docs
     ? `<blockquote><p><strong>Commentary</strong></p>\n${narrative(blocks, ctx)}</blockquote>`
     : `<aside class="commentary"><p class="label">Commentary</p>\n${narrative(blocks, ctx)}</aside>`;
@@ -145,6 +176,8 @@ function block(b: Block, ctx: Ctx): string {
       const inner = { ...ctx, width: Math.round((ctx.width - 16 * (n - 1)) / n) };
       return `<div class="cols cols-${n}">${b.columns.map((col) => `<div class="col">${col.map((x) => block(x, inner)).join("\n")}</div>`).join("")}</div>`;
     }
+    case "rich":
+      return narrative(b.blocks, ctx);
   }
 }
 
@@ -152,7 +185,8 @@ function section(s: DocSection, ctx: Ctx, width: number): string {
   const inner = { ...ctx, width };
   const html = (blocks: Block[]) => blocks.map((b) => block(b, inner)).filter(Boolean).join("\n");
   const commentary = s.commentary ? commentaryBox(s.commentary, ctx) : "";
-  if (ctx.docs) return `<h2>${escapeHtml(s.title)}</h2>\n${[html(s.blocks), commentary].filter(Boolean).join("\n")}`;
+  const idAttr = ctx.anchors ? ` id="${escapeHtml(s.anchor)}"` : "";
+  if (ctx.docs) return `<h2${idAttr}>${escapeHtml(s.title)}</h2>\n${[html(s.blocks), commentary].filter(Boolean).join("\n")}`;
   // The heading travels with its lead-in (short paragraphs and notes, then the first chart or tiles), so a
   // heading is never left alone at the bottom of a page. Tables aren't pulled in: their rows flow.
   let n = 0;
@@ -160,7 +194,7 @@ function section(s: DocSection, ctx: Ctx, width: number): string {
   const first = s.blocks[n];
   if (first && (first.kind === "chart" || first.kind === "kpiRow" || (first.kind === "columns" && first.columns.flat().every((x) => x.kind === "chart")))) n++;
   const lead = `<div class="lead-in"><h2>${escapeHtml(s.title)}</h2>\n${html(s.blocks.slice(0, n))}</div>`;
-  return `<section class="card" aria-label="${escapeHtml(s.title)}">${lead}\n${[html(s.blocks.slice(n)), commentary].filter(Boolean).join("\n")}</section>`;
+  return `<section class="card${s.pageBreakBefore ? " page-break" : ""}"${idAttr} aria-label="${escapeHtml(s.title)}">${lead}\n${[html(s.blocks.slice(n)), commentary].filter(Boolean).join("\n")}</section>`;
 }
 
 /** A CSS string literal: everything but plain letters, digits and spaces as a CSS escape, so data can't end the string or the <style>. */
@@ -168,7 +202,55 @@ export function cssString(s: string): string {
   return `"${Array.from(clean(s)).map((ch) => (/[A-Za-z0-9 ]/.test(ch) ? ch : `\\${ch.codePointAt(0)!.toString(16)} `)).join("")}"`;
 }
 
-function style(primary: string, accent: string, onepage: boolean, runningHeader: string): string {
+const SANS_STACK = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif';
+const SERIF_STACK = 'Georgia, Cambria, "Times New Roman", Times, serif';
+
+/** A font family name as a quoted CSS string. Branding validation allows letters, digits, spaces and hyphens; anything else is escaped. */
+function fontString(name: string): string {
+  return `"${Array.from(clean(name)).map((ch) => (/[A-Za-z0-9 -]/.test(ch) ? ch : `\\${ch.codePointAt(0)!.toString(16)} `)).join("")}"`;
+}
+
+/** The CSS font stacks for the branding's fonts, or null when no font setting is used (the file then matches 0.2.0 exactly). */
+export function fontStacks(fonts: DocBranding["fonts"]): { body: string; heading: string } | null {
+  if (fonts.body === null && fonts.heading === null && fonts.fallback === "sans-serif") return null;
+  const generic = fonts.fallback === "serif" ? SERIF_STACK : SANS_STACK;
+  const stack = (name: string | null) => (name ? `${fontString(name)}, ${generic}` : generic);
+  return { body: stack(fonts.body), heading: stack(fonts.heading ?? fonts.body) };
+}
+
+interface Extras {
+  fonts: { body: string; heading: string } | null;
+  contents: boolean;
+  pageBreaks: boolean;
+  subtitle: boolean;
+  h4: boolean;
+}
+
+/** CSS for Release B features, added only when the report uses them so other reports stay byte-identical to 0.2.0. */
+function extraStyle(x: Extras, runningHeader: string): string {
+  const out: string[] = [];
+  if (x.fonts) {
+    out.push(
+      `:root { --font-body: ${x.fonts.body}; --font-heading: ${x.fonts.heading}; }`,
+      "body { font-family: var(--font-body); }",
+      "h1, h2, h3, h4, .table-title, .kind { font-family: var(--font-heading); }",
+      `@page { @top-left { content: ${cssString(runningHeader)}; font-family: ${x.fonts.body}; } }`,
+    );
+  }
+  if (x.subtitle) out.push(".subtitle { color: var(--on-primary-soft); margin: 3px 0 0; font-size: 14px; }");
+  if (x.contents) {
+    out.push(
+      ".contents { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 12px 18px; margin: 0 0 14px; break-inside: avoid; }",
+      ".contents h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 6px; color: var(--primary-ink); }",
+      ".contents ol { margin: 0; padding-left: 20px; } .contents li { margin: 2px 0; } .contents a { color: var(--primary-ink); }",
+    );
+  }
+  if (x.h4) out.push("h4 { font-size: 12px; font-weight: 600; margin: 10px 0 4px; break-after: avoid; }");
+  if (x.pageBreaks) out.push("@media print { .page-break { break-before: page; } }");
+  return out.length ? `\n${out.join("\n")}` : "";
+}
+
+function style(primary: string, accent: string, onepage: boolean, runningHeader: string, extras: string): string {
   const ink = inkOn(primary);
   const on = textOn(primary);
   const onSoft = softTextOn(on, primary);
@@ -299,7 +381,7 @@ ${
 .about { margin-top: 6px; padding: 8px 14px; font-size: 10px; } .about h2 { margin-bottom: 2px; } .kpi-caption { margin-bottom: 10px; }
 td { padding: 4px 6px; } th { padding: 4px 6px; }`
     : ""
-}
+}${extras}
 </style>`;
 }
 
@@ -309,7 +391,12 @@ export function toHtml(doc: ReportDoc, opts: HtmlOptions = {}): string {
   const primary = safeColor(b.primaryColor, DEFAULT_PRIMARY);
   const accent = safeColor(b.accentColor, DEFAULT_ACCENT);
   const onepage = doc.meta.layout === "onepage";
-  const ctx: Ctx = { docs, width: 680, primary, onepage };
+  const ctx: Ctx = { docs, width: 680, primary, onepage, ...(doc.contents ? { anchors: true } : {}) };
+  const allNarrative = [...(doc.summary?.narrative ? [doc.summary.narrative] : []), ...doc.sections.flatMap((x) => [...(x.commentary ? [x.commentary] : []), ...x.blocks.flatMap((bl) => (bl.kind === "rich" ? [bl.blocks] : []))])];
+  const extras = extraStyle(
+    { fonts: fontStacks(b.fonts), contents: Boolean(doc.contents), pageBreaks: doc.sections.some((x) => x.pageBreakBefore), subtitle: Boolean(doc.meta.cover.subtitle), h4: allNarrative.some((bs) => bs.some((n) => n.kind === "h")) },
+    doc.meta.runningHeader,
+  );
   const head = [
     "<!doctype html>",
     '<html lang="en">',
@@ -319,28 +406,35 @@ export function toHtml(doc: ReportDoc, opts: HtmlOptions = {}): string {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     '<meta name="referrer" content="no-referrer">',
     `<title>${escapeHtml(doc.meta.title)}</title>`,
-    ...(docs ? [] : [style(primary, accent, onepage, doc.meta.runningHeader)]),
+    ...(docs ? [] : [style(primary, accent, onepage, doc.meta.runningHeader, extras)]),
     "</head>",
     docs ? "<body>" : `<body${onepage ? ' class="onepage"' : ""}>`,
   ];
   const m = doc.meta;
   const body: string[] = [];
+  const cv = coverEntries(m);
   if (docs) {
+    // The period joins the first line when it is the first labelled entry (the default cover); the rest follow in order.
+    const first = cv.entries[0]?.field === "period" ? cv.entries[0] : undefined;
+    const line1 = [...(cv.domain ? [`<strong>${escapeHtml(m.domain)}</strong>`] : []), escapeHtml(m.templateTitle), ...(first ? [`${escapeHtml(m.periodLabel)} (${escapeHtml(m.periodRange)})`] : [])].join(" · ");
+    const line2 = [...cv.entries.slice(first ? 1 : 0).map((e) => `${e.field === "period" ? "Period:" : e.label} ${escapeHtml(e.value)}`), ...(cv.badge ? [escapeHtml(doc.badge)] : [])].join(" · ");
     body.push(
       ...(b.agencyName ? [`<p><strong>${escapeHtml(b.agencyName)}</strong></p>`] : []),
       `<h1>${escapeHtml(m.clientName)}</h1>`,
-      `<p><strong>${escapeHtml(m.domain)}</strong> · ${escapeHtml(m.templateTitle)} · ${escapeHtml(m.periodLabel)} (${escapeHtml(m.periodRange)})</p>`,
-      `<p>${m.compareWith ? `Compared with ${escapeHtml(m.compareWith)} · ` : ""}Generated ${escapeHtml(m.generated)} · ${escapeHtml(doc.badge)}</p>`,
+      ...(m.cover.subtitle ? [`<p><em>${escapeHtml(m.cover.subtitle)}</em></p>`] : []),
+      `<p>${line1}</p>`,
+      ...(line2 ? [`<p>${line2}</p>`] : []),
+      ...(doc.contents ? ["<h2>Contents</h2>", `<ol>${doc.contents.map((c) => `<li><a href="#${escapeHtml(c.anchor)}">${escapeHtml(c.title)}</a></li>`).join("")}</ol>`] : []),
     );
     if (doc.kpis.length) body.push("<h2>Key figures</h2>", kpiTable(doc.kpis), ...(doc.kpiCaption ? [`<p><em>${escapeHtml(doc.kpiCaption)}</em></p>`] : []));
     if (doc.summary) {
       body.push(`<h2>${escapeHtml(doc.summary.title)}</h2>`);
       if (doc.summary.narrative) body.push(commentaryBox(doc.summary.narrative, ctx));
       if (doc.summary.items) body.push(`<ul>${doc.summary.items.map((h) => `<li>${text(h, ctx)}</li>`).join("")}</ul>`);
-      body.push(`<p><em>${escapeHtml(doc.summary.caption)}</em></p>`);
+      if (doc.summary.caption) body.push(`<p><em>${escapeHtml(doc.summary.caption)}</em></p>`);
     }
     for (const s of doc.sections) body.push(section(s, ctx, ctx.width));
-    body.push("<h2>About this report</h2>", `<ul>${doc.about.map((a) => `<li>${text(a, ctx)}</li>`).join("")}</ul>`, `<p><em>${escapeHtml(doc.footer)}</em></p>`, "</body>", "</html>");
+    body.push(`<h2${doc.contents ? ` id="${ABOUT_ANCHOR}"` : ""}>About this report</h2>`, `<ul>${doc.about.map((a) => `<li>${text(a, ctx)}</li>`).join("")}</ul>`, `<p><em>${escapeHtml(doc.footer)}</em></p>`, "</body>", "</html>");
     return [...head, ...body.filter(Boolean)].join("\n") + "\n";
   }
 
@@ -348,18 +442,18 @@ export function toHtml(doc: ReportDoc, opts: HtmlOptions = {}): string {
   body.push(
     '<div class="page">',
     '<header class="cover">',
-    `<div class="cover-top"><div class="brand">${logo}${b.agencyName ? `<span>${escapeHtml(b.agencyName)}</span>` : ""}</div><span class="badge">${escapeHtml(doc.badge)}</span></div>`,
+    `<div class="cover-top"><div class="brand">${logo}${b.agencyName ? `<span>${escapeHtml(b.agencyName)}</span>` : ""}</div>${cv.badge ? `<span class="badge">${escapeHtml(doc.badge)}</span>` : ""}</div>`,
     `<p class="kind">${escapeHtml(m.templateTitle)}</p>`,
     `<h1>${escapeHtml(m.clientName)}</h1>`,
-    `<p class="domain">${escapeHtml(m.domain)}</p>`,
-    '<dl class="cover-meta">',
-    `<div><dt>Period</dt><dd>${escapeHtml(m.periodLabel)} · ${escapeHtml(m.periodRange)}</dd></div>`,
-    ...(m.compareWith ? [`<div><dt>Compared with</dt><dd>${escapeHtml(m.compareWith)}</dd></div>`] : []),
-    `<div><dt>Generated</dt><dd>${escapeHtml(m.generated)}</dd></div>`,
-    "</dl>",
+    ...(m.cover.subtitle ? [`<p class="subtitle">${escapeHtml(m.cover.subtitle)}</p>`] : []),
+    ...(cv.domain ? [`<p class="domain">${escapeHtml(m.domain)}</p>`] : []),
+    ...(cv.entries.length ? ['<dl class="cover-meta">', ...cv.entries.map((e) => `<div><dt>${e.label}</dt><dd>${escapeHtml(e.value)}</dd></div>`), "</dl>"] : []),
     "</header>",
     "<main>",
   );
+  if (doc.contents) {
+    body.push(`<nav class="contents" aria-label="Contents"><h2>Contents</h2><ol>${doc.contents.map((c) => `<li><a href="#${escapeHtml(c.anchor)}">${escapeHtml(c.title)}</a></li>`).join("")}</ol></nav>`);
+  }
   if (doc.kpis.length) {
     body.push(`<section class="kpis" aria-label="Key figures">${doc.kpis.map((k) => kpiCard(k, ctx, false)).join("")}</section>`);
     if (doc.kpiCaption) body.push(`<p class="kpi-caption">${escapeHtml(doc.kpiCaption)}</p>`);
@@ -370,7 +464,7 @@ export function toHtml(doc: ReportDoc, opts: HtmlOptions = {}): string {
       `<section class="summary" aria-label="${escapeHtml(s.title)}"><h2>${escapeHtml(s.title)}</h2>`,
       s.narrative ? narrative(s.narrative, ctx) : "",
       s.items ? `<ul>${s.items.map((h) => `<li>${text(h, ctx)}</li>`).join("")}</ul>` : "",
-      `<p class="caption">${escapeHtml(s.caption)}</p></section>`,
+      `${s.caption ? `<p class="caption">${escapeHtml(s.caption)}</p>` : ""}</section>`,
     );
   }
   // Consecutive half-width sections share a row.
@@ -386,7 +480,7 @@ export function toHtml(doc: ReportDoc, opts: HtmlOptions = {}): string {
     "</main>",
     onepage
       ? `<footer class="about"><h2>About this report</h2><p>${doc.about.map((a) => text(a, ctx)).join(" ")}</p></footer>`
-      : `<footer class="about"><h2>About this report</h2><ul>${doc.about.map((a) => `<li>${text(a, ctx)}</li>`).join("")}</ul></footer>`,
+      : `<footer class="about"${doc.contents ? ` id="${ABOUT_ANCHOR}"` : ""}><h2>About this report</h2><ul>${doc.about.map((a) => `<li>${text(a, ctx)}</li>`).join("")}</ul></footer>`,
     `<div class="colophon"><span>${escapeHtml(doc.footer)}</span><span>Generated ${escapeHtml(m.generated)}</span></div>`,
     "</div>",
     "</body>",

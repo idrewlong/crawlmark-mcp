@@ -5,6 +5,8 @@ export interface Literal {
   end: number;
   raw: string;
   line: number;
+  /** A template part that starts right after a `${…}` interpolation. */
+  afterInterpolation: boolean;
 }
 
 /**
@@ -20,18 +22,18 @@ export function stringLiterals(src: string): Literal[] {
   let prev = ""; // previous significant character, to tell a regex from a division
   const lineAt = (pos: number) => src.slice(0, pos).split("\n").length;
 
-  const readTemplate = (from: number): void => {
+  const readTemplate = (from: number, after = false): void => {
     let j = from;
     for (; j < src.length; j++) {
       const c = src[j];
       if (c === "\\") j++;
       else if (c === "`") {
-        out.push({ kind: "template", start: from, end: j, raw: src.slice(from, j), line: lineAt(from) });
+        out.push({ kind: "template", start: from, end: j, raw: src.slice(from, j), line: lineAt(from), afterInterpolation: after });
         i = j + 1;
         prev = "`";
         return;
       } else if (c === "$" && src[j + 1] === "{") {
-        out.push({ kind: "template", start: from, end: j, raw: src.slice(from, j), line: lineAt(from) });
+        out.push({ kind: "template", start: from, end: j, raw: src.slice(from, j), line: lineAt(from), afterInterpolation: after });
         stack.push(depth);
         depth++;
         i = j + 2;
@@ -56,7 +58,7 @@ export function stringLiterals(src: string): Literal[] {
     } else if (c === '"' || c === "'") {
       let j = i + 1;
       while (j < src.length && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
-      out.push({ kind: "string", start: i + 1, end: j, raw: src.slice(i + 1, j), line: lineAt(i) });
+      out.push({ kind: "string", start: i + 1, end: j, raw: src.slice(i + 1, j), line: lineAt(i), afterInterpolation: false });
       i = j + 1;
       prev = c;
     } else if (c === "`") {
@@ -84,7 +86,7 @@ export function stringLiterals(src: string): Literal[] {
       prev = c;
       if (stack.length && stack[stack.length - 1] === depth) {
         stack.pop();
-        readTemplate(i);
+        readTemplate(i, true);
       }
     } else {
       if (!/\s/.test(c)) prev = c;

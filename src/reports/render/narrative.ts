@@ -1,83 +1,75 @@
 /**
- * Model-written commentary (D2, D4): a tiny Markdown subset. Paragraphs
- * (separated by a blank line), `- ` bullets and `**bold**`; everything else is
- * literal text (raw HTML, links and headings stay as typed). stripControl runs
- * first; each renderer escapes the result for its own format.
+ * Model-written commentary (D2, D4, B-C4): a tiny Markdown subset. Paragraphs
+ * (separated by a blank line), `- ` bullets, `1.` lists, `##`-`####` sub-headings,
+ * pipe tables, `{{chart <sectionId>}}` lines and `**bold**`; everything else is
+ * literal text (raw HTML and links stay as typed). stripControl runs first; each
+ * renderer escapes the result for its own format.
  */
-import { clean } from "./escape.js";
+import { chartRefCount, MAX_CHART_REFS, MAX_INTERNAL_CHARS, MAX_NARRATIVE_CHARS, MAX_NARRATIVE_FIELD, NarrativeParseError, parseNarrative, type NarrativeBlock } from "./narrative-parse.js";
 
-export interface Run {
-  t: string;
-  b?: true;
-  c?: true;
-  /** A change coloured as good (green) or bad (red); renderers that can't colour show the text alone. */
-  tone?: "good" | "bad";
-  /** A small label pill (severity, "brand"); plain text where pills aren't available. */
-  tag?: "good" | "bad" | "warn" | "neutral";
-}
-export type NarrativeBlock = { kind: "p"; runs: Run[] } | { kind: "ul"; items: Run[][] };
+export * from "./narrative-parse.js";
 
-export const MAX_NARRATIVE_CHARS = 30_000;
-export const MAX_NARRATIVE_FIELD = 6_000;
-
-/** `**bold**` runs; an unmatched `**` stays literal. */
-export function inlineRuns(text: string): Run[] {
-  const runs: Run[] = [];
-  const re = /\*\*(.+?)\*\*/g;
-  let last = 0;
-  for (let m = re.exec(text); m; m = re.exec(text)) {
-    if (m.index > last) runs.push({ t: text.slice(last, m.index) });
-    runs.push({ t: m[1]!, b: true });
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) runs.push({ t: text.slice(last) });
-  return runs.filter((r) => r.t.length > 0);
-}
-
-export function parseNarrative(input: string): NarrativeBlock[] {
-  const blocks: NarrativeBlock[] = [];
-  const lines = clean(input).replace(/\r\n?/g, "\n").split("\n");
-  let para: string[] = [];
-  let list: Run[][] | undefined;
-  const flushPara = () => {
-    if (para.length) blocks.push({ kind: "p", runs: inlineRuns(para.join(" ").trim()) });
-    para = [];
-  };
-  const flushList = () => {
-    if (list?.length) blocks.push({ kind: "ul", items: list });
-    list = undefined;
-  };
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
-    if (bullet && !/^\s*\*\*/.test(line)) {
-      flushPara();
-      (list ??= []).push(inlineRuns(bullet[1]!.trim()));
-    } else if (line.trim() === "") {
-      flushPara();
-      flushList();
-    } else {
-      flushList();
-      para.push(line.trim());
-    }
-  }
-  flushPara();
-  flushList();
-  return blocks.filter((b) => (b.kind === "p" ? b.runs.length > 0 : b.items.length > 0));
-}
+/** A text for the client, or a client / internal split. A plain string counts as client text. */
+export type NarrativeText = string | { client?: string | undefined; internal?: string | undefined };
 
 export interface Narrative {
-  summary?: string | undefined;
-  sections?: Record<string, string> | undefined;
+  summary?: NarrativeText | undefined;
+  sections?: Record<string, NarrativeText> | undefined;
+  /** General internal notes; never rendered into client files. */
+  internal?: string | undefined;
 }
 
-/** Checks the narrative against the report's section ids and the size limits. Throws with a clear message. */
+/** The part of a narrative text a client file may show. */
+export function clientText(v: NarrativeText | undefined): string | undefined {
+  return typeof v === "string" ? v : v?.client;
+}
+
+/** The internal part of a narrative text (a plain string has none). */
+export function internalText(v: NarrativeText | undefined): string | undefined {
+  return typeof v === "string" ? undefined : v?.internal;
+}
+
+const num = (n: number) => n.toLocaleString("en-US");
+
+/** Checks the narrative against the report's section ids and the size limits. Throws with the field name. */
 export function validateNarrative(n: Narrative | undefined, sectionIds: readonly string[]): void {
   if (!n) return;
-  const fields = [n.summary ?? "", ...Object.values(n.sections ?? {})];
-  for (const f of fields) if (f.length > MAX_NARRATIVE_FIELD) throw new Error(`Each narrative text is at most ${MAX_NARRATIVE_FIELD} characters.`);
-  const total = fields.reduce((a, f) => a + f.length, 0);
-  if (total > MAX_NARRATIVE_CHARS) throw new Error(`The narrative is ${total} characters; the limit is ${MAX_NARRATIVE_CHARS}.`);
   const unknown = Object.keys(n.sections ?? {}).filter((id) => !sectionIds.includes(id));
   if (unknown.length) throw new Error(`narrative.sections has ids that aren't sections of this report: ${unknown.join(", ")}. Sections: ${sectionIds.join(", ")}.`);
+  const fields: { where: string; text: string; internal: boolean }[] = [];
+  const add = (where: string, v: NarrativeText | undefined) => {
+    fields.push({ where, text: clientText(v) ?? "", internal: false }, { where: `${where}.internal`, text: internalText(v) ?? "", internal: true });
+  };
+  add("narrative.summary", n.summary);
+  for (const [id, v] of Object.entries(n.sections ?? {})) add(`narrative.sections.${id}`, v);
+  fields.push({ where: "narrative.internal", text: n.internal ?? "", internal: true });
+  let client = 0;
+  let internal = 0;
+  let chartRefs = 0;
+  for (const f of fields) {
+    if (f.text.length > MAX_NARRATIVE_FIELD) throw new Error(`${f.where} is ${num(f.text.length)} characters; at most ${num(MAX_NARRATIVE_FIELD)} per text.`);
+    if (f.internal) internal += f.text.length;
+    else client += f.text.length;
+    if (!f.text) continue;
+    let blocks: NarrativeBlock[];
+    try {
+      blocks = parseNarrative(f.text);
+    } catch (err) {
+      if (err instanceof NarrativeParseError) throw new Error(`${f.where}: ${err.message}`);
+      throw err;
+    }
+    // Internal notes become a Markdown file with no charts, so only client text is checked for chart references.
+    if (f.internal) continue;
+    chartRefs += chartRefCount(blocks);
+    if (chartRefs > MAX_CHART_REFS) {
+      throw new Error(`${f.where}: the commentary has more than ${MAX_CHART_REFS} {{chart}} references; at most ${MAX_CHART_REFS} per report. Keep the ones that matter most.`);
+    }
+    for (const b of blocks) {
+      if (b.kind === "chartRef" && !sectionIds.includes(b.section)) {
+        throw new Error(`${f.where}: {{chart ${b.section}}} isn't a section of this report. Sections: ${sectionIds.join(", ")}.`);
+      }
+    }
+  }
+  if (client > MAX_NARRATIVE_CHARS) throw new Error(`The client-facing narrative is ${num(client)} characters; the limit is ${num(MAX_NARRATIVE_CHARS)}.`);
+  if (internal > MAX_INTERNAL_CHARS) throw new Error(`The internal notes are ${num(internal)} characters; the limit is ${num(MAX_INTERNAL_CHARS)}.`);
 }

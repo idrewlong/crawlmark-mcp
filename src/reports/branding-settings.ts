@@ -13,7 +13,7 @@ import { contrast, inkOn } from "./render/color.js";
 import { MAX_LOGO_BYTES, sniffImage } from "./render/image.js";
 import { clientTemplatesFile, globalTemplatesFile, safeSegment } from "./paths.js";
 import { STARTER_YAML } from "./templates/builtin.js";
-import { loadTemplates, type ResolvedBranding } from "./templates/load.js";
+import { loadTemplates, readTemplateFile, type ResolvedBranding } from "./templates/load.js";
 import { FORMATS, validateTemplateText, type Branding, type Format } from "./templates/schema.js";
 import { cliHint } from "../lib/cli-hint.js";
 
@@ -30,11 +30,44 @@ export interface BrandingSettings {
   accentColor?: string | undefined;
   footer?: string | undefined;
   hideCrawlmark?: boolean | undefined;
+  /** Font family names (letters, digits, spaces, hyphens). Unset: the report's own fonts. */
+  bodyFont?: string | undefined;
+  /** Unset: the same as the body font. */
+  headingFont?: string | undefined;
+  /** Unset: sans-serif. */
+  fontFallback?: "sans-serif" | "serif" | undefined;
+  /** Hide data provider names such as DataForSEO. Unset: follows hideCrawlmark. */
+  hideProviders?: boolean | undefined;
+  /** The line that replaces "Commentary written with Claude; ..."; "" removes it. Unset: the default wording. */
+  commentaryNote?: string | undefined;
   paper?: "Letter" | "A4" | undefined;
   formats?: Format[] | undefined;
 }
 
-export const SETTING_FIELDS = ["agencyName", "logo", "primaryColor", "accentColor", "footer", "hideCrawlmark", "paper", "formats"] as const;
+export const MAX_COMMENTARY_NOTE = 200;
+const FONT_NAME = /^[A-Za-z0-9][A-Za-z0-9 \-]*$/;
+
+/** A font family name as the templates file accepts it (1-60 characters: letters, digits, spaces, hyphens), trimmed. */
+export function parseFontName(input: string): string | undefined {
+  const v = input.replace(/\s+/g, " ").trim();
+  return v.length >= 1 && v.length <= 60 && FONT_NAME.test(v) ? v : undefined;
+}
+
+export const SETTING_FIELDS = [
+  "agencyName",
+  "logo",
+  "primaryColor",
+  "accentColor",
+  "bodyFont",
+  "headingFont",
+  "fontFallback",
+  "footer",
+  "hideCrawlmark",
+  "hideProviders",
+  "commentaryNote",
+  "paper",
+  "formats",
+] as const;
 export type SettingField = (typeof SETTING_FIELDS)[number];
 
 /** The file the step writes: the global templates file, or the client's override file. */
@@ -53,16 +86,28 @@ export function currentBranding(homeDir: string, clientSlug?: string): BrandingS
     ...(b.accentColor ? { accentColor: b.accentColor } : {}),
     ...(b.footer ? { footer: b.footer } : {}),
     ...(b.hideCrawlmark ? { hideCrawlmark: true } : {}),
+    ...(b.bodyFont ? { bodyFont: b.bodyFont } : {}),
+    ...(b.headingFont ? { headingFont: b.headingFont } : {}),
+    ...(b.fontFallback ? { fontFallback: b.fontFallback } : {}),
+    ...(b.hideProviders !== undefined ? { hideProviders: b.hideProviders } : {}),
+    ...(b.commentaryNote !== undefined ? { commentaryNote: b.commentaryNote } : {}),
     ...(b.paper ? { paper: b.paper } : {}),
-    formats: loaded.defaults.formats,
+    // Only formats a file sets: the builtin default (PDF) isn't a setting, so it is never written back as one (Q2).
+    ...(formatsSet(homeDir, clientSlug) ? { formats: loaded.defaults.formats } : {}),
   };
+}
+
+/** True when the global file, or the client's file, sets `defaults.formats`. */
+function formatsSet(homeDir: string, clientSlug?: string): boolean {
+  const files = [globalTemplatesFile(homeDir), ...(clientSlug ? [clientTemplatesFile(homeDir, clientSlug)] : [])];
+  return files.some((f) => readTemplateFile(f, homeDir).value?.defaults?.formats !== undefined);
 }
 
 /** True when the global file (or the client's file) sets any branding. */
 export function brandingConfigured(homeDir: string): { configured: boolean; agencyName?: string | undefined; clientOverrides: number } {
   const loaded = loadTemplates({ homeDir });
   const b = loaded.branding;
-  const configured = Boolean(b.agencyName || b.logo || b.primaryColor || b.accentColor || b.footer || b.hideCrawlmark);
+  const configured = Boolean(b.agencyName || b.logo || b.primaryColor || b.accentColor || b.footer || b.hideCrawlmark || b.bodyFont || b.headingFont || b.fontFallback || b.hideProviders !== undefined || b.commentaryNote !== undefined);
   let clientOverrides = 0;
   try {
     const dir = join(homeDir, "config", "report-templates");
@@ -138,12 +183,18 @@ export function logoSourcePath(homeDir: string, input: string, cwd: string, user
   return /^branding\//.test(expanded) && existsSync(join(homeDir, expanded)) ? join(homeDir, expanded) : resolve(cwd, expanded);
 }
 
-function setOrDelete(doc: Document, path: string[], value: unknown): void {
-  if (value === undefined || value === "") doc.deleteIn(path);
-  else doc.setIn(path, value);
+function setOrDelete(doc: Document, path: string[], value: unknown, keepEmpty = false): void {
+  if (value === undefined || (value === "" && !keepEmpty)) doc.deleteIn(path);
+  else setIfChanged(doc, path, value);
 }
 
-const BRANDING_KEYS = ["agencyName", "logo", "primaryColor", "accentColor", "footer", "paper", "hideCrawlmark"] as const;
+/** Set a value unless the file already holds exactly it, so its quoting and layout stay as they are (Q2). */
+function setIfChanged(doc: Document, path: string[], value: unknown): void {
+  if (doc.hasIn(path) && doc.getIn(path) === value) return;
+  doc.setIn(path, value);
+}
+
+const BRANDING_KEYS = ["agencyName", "logo", "primaryColor", "accentColor", "bodyFont", "headingFont", "fontFallback", "footer", "paper", "hideCrawlmark", "hideProviders", "commentaryNote"] as const;
 
 /**
  * The templates file's text with the branding and default formats set (comments and every other setting kept).
@@ -162,19 +213,22 @@ export function brandingFileText(existing: string | undefined, settings: Brandin
     const path = ["branding", key];
     const value = key === "hideCrawlmark" ? settings.hideCrawlmark || undefined : settings[key];
     if (!global) {
-      setOrDelete(doc, path, value);
+      setOrDelete(doc, path, value, key === "commentaryNote");
       continue;
     }
     const g = key === "hideCrawlmark" ? global.hideCrawlmark || undefined : global[key];
     const inFile = doc.hasIn(path);
     if (value === g && !inFile) continue;
-    if (value !== undefined) doc.setIn(path, value);
+    if (value !== undefined) setIfChanged(doc, path, value);
     else if (g !== undefined && key === "footer") doc.setIn(path, "");
     else if (g !== undefined && key === "hideCrawlmark") doc.setIn(path, false);
     else doc.deleteIn(path);
   }
   const formatsChanged = !global || doc.hasIn(["defaults", "formats"]) || (settings.formats ?? []).join() !== (global.formats ?? []).join();
-  if (settings.formats?.length && formatsChanged) {
+  // The same list already in the file stays as written (block or flow style).
+  const inFile = (doc.toJS() as { defaults?: { formats?: unknown } } | null)?.defaults?.formats;
+  const sameAsFile = Array.isArray(inFile) && inFile.join() === (settings.formats ?? []).join();
+  if (settings.formats?.length && formatsChanged && !sameAsFile) {
     if (!doc.has("defaults") || !isMap(doc.get("defaults"))) doc.set("defaults", doc.createNode({}));
     const seq = doc.createNode([...settings.formats]);
     if (isSeq(seq)) seq.flow = true;
@@ -208,6 +262,11 @@ export function asResolvedBranding(homeDir: string, s: BrandingSettings): Resolv
     ...(s.footer ? { footer: s.footer } : {}),
     ...(s.paper ? { paper: s.paper } : {}),
     ...(s.hideCrawlmark ? { hideCrawlmark: true } : {}),
+    ...(s.bodyFont ? { bodyFont: s.bodyFont } : {}),
+    ...(s.headingFont ? { headingFont: s.headingFont } : {}),
+    ...(s.fontFallback ? { fontFallback: s.fontFallback } : {}),
+    ...(s.hideProviders !== undefined ? { hideProviders: s.hideProviders } : {}),
+    ...(s.commentaryNote !== undefined ? { commentaryNote: s.commentaryNote } : {}),
   };
   if (!s.logo) return b;
   const resolved = resolve(homeDir, s.logo);

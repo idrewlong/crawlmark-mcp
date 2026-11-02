@@ -12,7 +12,7 @@ import type { Ui } from "../../setup/ui.js";
 import { costLabel, defaultSection, estimateText, GROUP_ORDER, GROUP_LABELS, type CatalogueEntry } from "./builder.js";
 import type { SectionEstimate } from "./run.js";
 import { BUILTIN_TEMPLATES } from "./builtin.js";
-import { ID_RE, MAX_SPAN_DAYS, type Comparison, type Format, type Period, type SectionSpec, type SectionType, type TemplateSpec } from "./schema.js";
+import { ID_RE, MAX_BLOCK_CHARS, MAX_SPAN_DAYS, type Comparison, type Format, type Period, type SectionSpec, type SectionType, type TemplateSpec } from "./schema.js";
 import { TemplateFileChangedError, TemplateWriteError, type TemplateWritePlan } from "./write.js";
 
 export interface BuilderTarget {
@@ -22,7 +22,12 @@ export interface BuilderTarget {
   /** The file sets defaults.formats. */
   hasDefaultFormats: boolean;
   valid: boolean;
+  /** Text block ids a `block` section can use: this file's, plus the global file's for a client file. Missing: none known. */
+  blockIds?: string[] | undefined;
 }
+
+/** A text block the builder creates alongside the template (saved in the file's `blocks:`). */
+export type NewBlock = { title?: string | undefined; text: string };
 
 export interface BuilderDeps {
   ui: Ui;
@@ -39,9 +44,9 @@ export interface BuilderDeps {
   estimates(): Promise<Map<SectionType, SectionEstimate[]>>;
   target(): BuilderTarget;
   /** Plan the write (validates; throws TemplateWriteError). Writes nothing. */
-  plan(id: string, spec: TemplateSpec, opts: { defaultFormats?: Format[] | undefined }): TemplateWritePlan;
-  /** Render the preview with sample data; returns the file. */
-  preview(id: string, spec: TemplateSpec): Promise<{ path: string; logoWarning?: string }>;
+  plan(id: string, spec: TemplateSpec, opts: { defaultFormats?: Format[] | undefined; blocks?: Record<string, NewBlock> | undefined }): TemplateWritePlan;
+  /** Render the preview with sample data; returns the file. `blocks` are the ones created in this session. */
+  preview(id: string, spec: TemplateSpec, blocks?: Record<string, NewBlock>): Promise<{ path: string; logoWarning?: string }>;
   /** Open a file in the default app (fancy mode on a terminal only). */
   openPath?: ((path: string) => boolean) | undefined;
   /** Write the planned change (checks the file is unchanged). */
@@ -66,7 +71,7 @@ const COMPARE_CHOICES: Choice<Comparison>[] = [
   { value: "previous_period", label: "The previous period" },
   { value: "previous_year", label: "The same period a year earlier" },
 ];
-type Change = "details" | "sections" | "optional" | "period" | "compare" | "layout" | "formats";
+type Change = "details" | "sections" | "optional" | "period" | "compare" | "layout" | "contents" | "formats";
 
 interface Draft {
   id: string;
@@ -77,6 +82,12 @@ interface Draft {
   period: Period;
   compare: Comparison[];
   layout: "standard" | "onepage";
+  /** A contents list after the cover (standard layout only). */
+  contents: boolean;
+  /** The block the `block` section shows: an existing one, or `newBlock`'s id. */
+  block?: string | undefined;
+  /** A block to create with the template (when `block` isn't an existing one). */
+  newBlock?: NewBlock | undefined;
   defaultFormats?: Format[] | undefined;
   /** Sections the optional question has already been asked about (new paid ones start optional). */
   optionalSeen: Set<SectionType>;
@@ -88,15 +99,32 @@ class GaveUp extends Error {}
 const titleFromId = (id: string) => id.replace(/-+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 /** The draft as a template spec (pure). Paid sections carry paid: true; Tag Manager is always optional. */
-export function draftSpec(d: { title: string; types: readonly SectionType[]; text?: string | undefined; optional: ReadonlySet<SectionType>; period: Period; compare: readonly Comparison[]; layout: "standard" | "onepage" }): TemplateSpec {
+export function draftSpec(d: {
+  title: string;
+  types: readonly SectionType[];
+  text?: string | undefined;
+  block?: string | undefined;
+  optional: ReadonlySet<SectionType>;
+  period: Period;
+  compare: readonly Comparison[];
+  layout: "standard" | "onepage";
+  contents?: boolean | undefined;
+}): TemplateSpec {
   const sections: SectionSpec[] = d.types.map((t) => {
-    const s = defaultSection(t, t === "text" && d.text ? { text: d.text } : {});
+    const s = defaultSection(t, t === "text" && d.text ? { text: d.text } : t === "block" && d.block ? { block: d.block } : {});
     if (!d.optional.has(t) && t !== "tag_manager") return s;
     // optional right after the type, as in the builtin templates ({ id, type, optional, paid }).
     const { id, type, ...rest } = s as SectionSpec & Record<string, unknown>;
     return { id, type, optional: true, ...rest } as SectionSpec;
   });
-  return { title: d.title, period: d.period, compare: [...d.compare], ...(d.layout === "onepage" ? { layout: "onepage" as const } : {}), sections };
+  return {
+    title: d.title,
+    period: d.period,
+    compare: [...d.compare],
+    ...(d.layout === "onepage" ? { layout: "onepage" as const } : {}),
+    ...(d.contents && d.layout !== "onepage" ? { contents: true } : {}),
+    sections,
+  };
 }
 
 export async function runTemplateBuilder(deps: BuilderDeps): Promise<number> {
@@ -129,6 +157,7 @@ export async function runTemplateBuilder(deps: BuilderDeps): Promise<number> {
       period: { range: "last_month" },
       compare: ["previous_period", "previous_year"],
       layout: "standard",
+      contents: false,
     };
     draft.title = await askTitle(prompt, draft.id);
     await askSections(deps, draft, byType, estimates, priceOf);
@@ -142,14 +171,19 @@ export async function runTemplateBuilder(deps: BuilderDeps): Promise<number> {
       const spec = draftSpec(draft);
       let plan: TemplateWritePlan | undefined;
       try {
-        plan = deps.plan(draft.id, spec, { defaultFormats: draft.defaultFormats });
+        plan = deps.plan(draft.id, spec, { defaultFormats: draft.defaultFormats, ...newBlocks(draft) });
       } catch (err) {
         if (!(err instanceof TemplateWriteError)) throw err;
         ui.fail(`This template isn't valid yet: ${err.message}`);
       }
+      // A caller that can't save new blocks would drop the text silently; say so instead of saving a template with no block.
+      if (plan && draft.newBlock && draft.block && !plan.blocksSet.includes(draft.block)) {
+        ui.fail("This command can't save a new text block yet, so the template can't be saved. Pick an existing block, or leave out the Note block section.");
+        plan = undefined;
+      }
       if (plan) {
         try {
-          const p = await ui.spin("Making a one-page preview with sample data...", () => deps.preview(draft.id, spec));
+          const p = await ui.spin("Making a one-page preview with sample data...", () => deps.preview(draft.id, spec, newBlocks(draft).blocks));
           if (p.logoWarning) ui.warn(p.logoWarning);
           ui.info(`Preview (sample example.com data, not a client report): ${p.path}`);
           if (deps.openPath && ui.fancy && !deps.dryRun) {
@@ -205,6 +239,7 @@ export async function runTemplateBuilder(deps: BuilderDeps): Promise<number> {
           { value: "period", label: "Period" },
           { value: "compare", label: "Comparisons" },
           { value: "layout", label: "Layout" },
+          ...(draft.layout === "standard" ? [{ value: "contents" as const, label: "Contents page" }] : []),
           { value: "details", label: "Id and title" },
           ...(!target.hasDefaultFormats ? [{ value: "formats" as const, label: "Default formats" }] : []),
         ],
@@ -219,7 +254,10 @@ export async function runTemplateBuilder(deps: BuilderDeps): Promise<number> {
       } else if (what === "optional") await askOptional(prompt, draft, byType);
       else if (what === "period") draft.period = await askPeriod(prompt, ui, draft.period);
       else if (what === "compare") draft.compare = await askCompare(prompt, draft.compare);
-      else if (what === "layout") draft.layout = await askLayout(prompt, draft.layout);
+      else if (what === "layout") {
+        draft.layout = await askLayout(prompt, draft.layout);
+        if (draft.layout === "onepage") draft.contents = false;
+      } else if (what === "contents") draft.contents = await askContents(prompt, draft.contents);
       else draft.defaultFormats = await askFormats(prompt, draft.defaultFormats);
     }
   } catch (err) {
@@ -298,6 +336,11 @@ async function askSections(
       ui.fail("Pick at least one section.");
       continue;
     }
+    if (picked.includes("block")) await askBlock(deps, draft);
+    else {
+      draft.block = undefined;
+      draft.newBlock = undefined;
+    }
     if (picked.includes("text")) {
       const text = (await prompt.ask("Text for the note section (one paragraph)", { default: draft.text })).replace(/\s+/g, " ").trim().slice(0, 2000);
       draft.text = text || "Notes for this report.";
@@ -307,6 +350,51 @@ async function askSections(
     return;
   }
   throw new GaveUp("No sections picked.");
+}
+
+const newBlocks = (d: Draft): { blocks?: Record<string, NewBlock> } => (d.newBlock && d.block ? { blocks: { [d.block]: d.newBlock } } : {});
+
+/** The block a `block` section shows: one that exists in the file (or the global file), or a new one written here. */
+async function askBlock(deps: BuilderDeps, draft: Draft): Promise<void> {
+  const { prompt, ui } = deps;
+  const existing = deps.target().blockIds ?? [];
+  if (existing.length) {
+    const choice = await prompt.choose<string>(
+      "Which text block should the Note section show?",
+      [...existing.map((b) => ({ value: b, label: b })), { value: "", label: "A new block (write its text now)" }],
+      draft.block && existing.includes(draft.block) ? draft.block : existing[0]!,
+    );
+    if (choice !== "") {
+      draft.block = choice;
+      draft.newBlock = undefined;
+      return;
+    }
+  }
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const id = (await prompt.ask("Block id (lowercase letters, digits and hyphens, e.g. glossary)", { default: draft.newBlock ? draft.block : "notes" })).trim();
+    if (!ID_RE.test(id)) {
+      ui.fail(`"${id.slice(0, 40)}" isn't a valid id: 1-40 lowercase letters, digits and hyphens, starting with a letter or digit.`);
+      continue;
+    }
+    if (existing.includes(id)) {
+      ui.fail(`A block "${id}" already exists; pick it from the list, or use another id.`);
+      continue;
+    }
+    const title = (await prompt.ask("Block title, shown above its text (Enter for the default, Note)", { default: draft.newBlock?.title })).replace(/\s+/g, " ").trim().slice(0, 120);
+    const text = (await prompt.ask("Block text (one paragraph; Markdown is fine)", { default: draft.newBlock?.text })).replace(/\s+/g, " ").trim().slice(0, MAX_BLOCK_CHARS);
+    if (!text) {
+      ui.fail("A block needs some text.");
+      continue;
+    }
+    draft.block = id;
+    draft.newBlock = { ...(title ? { title } : {}), text };
+    return;
+  }
+  throw new GaveUp("No usable text block.");
+}
+
+async function askContents(prompt: Prompter, current: boolean): Promise<boolean> {
+  return prompt.confirm("Add a contents list after the cover (linked section titles, no page numbers)?", current);
 }
 
 async function askOptional(prompt: Prompter, draft: Draft, byType: Map<SectionType, CatalogueEntry>): Promise<void> {

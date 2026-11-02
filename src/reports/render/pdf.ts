@@ -7,13 +7,17 @@
  */
 import type { Browser } from "puppeteer";
 import { withBrowser } from "../../providers/browser.js";
+import type { DocBranding } from "./doc.js";
 import { escapeHtml } from "./escape.js";
+import { fontStacks } from "./html.js";
 
 export type Paper = "Letter" | "A4";
 export interface PdfOptions {
   paper: Paper;
   /** Footer text left of "Page n of m". */
   footer: string;
+  /** The footer's CSS font stack (footerFont of the branding fonts). Default: the system stack. */
+  fontFamily?: string | undefined;
   signal?: AbortSignal | undefined;
 }
 export type PdfPrinter = (html: string, opts: PdfOptions) => Promise<Buffer>;
@@ -36,10 +40,22 @@ export interface PdfRequest {
 const MARGIN = "15mm";
 const CONTENT_TIMEOUT_MS = 30_000;
 
-const TEMPLATE_STYLE = "font-size:8px;width:100%;padding:0 15mm;color:#616c78;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;justify-content:space-between;gap:12px";
+const DEFAULT_FOOTER_FONT = "system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const templateStyle = (fontFamily: string) => `font-size:8px;width:100%;padding:0 15mm;color:#616c78;font-family:${fontFamily};display:flex;justify-content:space-between;gap:12px`;
 
-export function footerTemplate(footer: string): string {
-  return `<div style="${TEMPLATE_STYLE}"><span>${escapeHtml(footer)}</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
+/**
+ * The footer's font stack: the body stack of the branding fonts (the same one the HTML uses), else the system stack.
+ * Built from the branding, never read back out of the HTML (SEC-4: commentary text can't set it).
+ */
+export function footerFont(fonts: DocBranding["fonts"]): string {
+  const stacks = fontStacks(fonts);
+  // The stack goes into a double-quoted style attribute, so its quotes become single quotes. fontStacks escapes every
+  // character of a name that isn't a letter, digit, space or hyphen.
+  return stacks ? stacks.body.replace(/"/g, "'") : DEFAULT_FOOTER_FONT;
+}
+
+export function footerTemplate(footer: string, fontFamily: string = DEFAULT_FOOTER_FONT): string {
+  return `<div style="${templateStyle(fontFamily)}"><span>${escapeHtml(footer)}</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
 }
 
 /** Print `html` on an open page: no JavaScript, no network (only data: URLs load). */
@@ -59,7 +75,7 @@ export async function printOnPage(page: PdfPage, html: string, opts: Omit<PdfOpt
     displayHeaderFooter: true,
     // The running header is a CSS page-margin box in the HTML (so it can skip the first page).
     headerTemplate: "<span></span>",
-    footerTemplate: footerTemplate(opts.footer),
+    footerTemplate: footerTemplate(opts.footer, opts.fontFamily ?? DEFAULT_FOOTER_FONT),
   });
   return Buffer.from(pdf);
 }

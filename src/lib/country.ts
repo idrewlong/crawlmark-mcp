@@ -8,6 +8,7 @@
  * are larger and have no country here, so Ahrefs and Semrush are unavailable for a
  * client that has one and no `country`.
  */
+import { cliHint } from "./cli-hint.js";
 
 /** ISO 3166-1 numeric code -> alpha-2. */
 const ISO_NUMERIC_TO_ALPHA2: Readonly<Record<number, string>> = {
@@ -56,7 +57,7 @@ export function ahrefsCountry(cc: string): string {
 /** The message when a client has no country Ahrefs/Semrush can use (spec 9.1). */
 export function noCountryMessage(client: { domain: string; locationCode: number }): string {
   return (
-    `Set country: XX for ${client.domain} in clients.yaml (or clients set ${client.domain} --country XX); ` +
+    `Set country: XX for ${client.domain} in clients.yaml (or ${cliHint()} clients set ${client.domain} --country XX); ` +
     `Ahrefs/Semrush need a country, and locationCode ${client.locationCode} is not a country.`
   );
 }

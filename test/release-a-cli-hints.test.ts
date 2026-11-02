@@ -41,6 +41,21 @@ describe("D9a: command hints come from one helper", () => {
     expect(hits).toEqual([]);
   });
 
+  it("no bare `setup --step` or `clients set ` hints (they follow a ${cliHint()} interpolation)", () => {
+    const bare = /setup --step|clients set /g;
+    // Not runnable hints: usage errors naming the subcommand.
+    const known = [/^clients set takes exactly one client/, /^clients set needs --area/];
+    const hits = walk(SRC)
+      .filter((f) => f.endsWith(".ts") && relative(SRC, f).split(sep).join("/") !== "cli-help.ts")
+      .flatMap((f) =>
+        stringLiterals(readFileSync(f, "utf8"))
+          .filter((l) => !known.some((k) => k.test(l.raw)))
+          .filter((l) => [...l.raw.matchAll(bare)].some((m) => !(l.afterInterpolation && l.raw.slice(0, m.index).trim() === "")))
+          .map((l) => `${relative(SRC, f)}:${l.line}`),
+      );
+    expect(hits).toEqual([]);
+  });
+
   it("no hardcoded crawlmark-cli in prompt templates (they use {{cli}})", () => {
     const dir = join(SRC, "prompts", "templates");
     const bad = readdirSync(dir).filter((f) => readFileSync(join(dir, f), "utf8").includes("crawlmark-cli"));

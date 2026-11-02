@@ -196,6 +196,17 @@ describe("report prompts (Phase 12)", () => {
     expect(q).toContain("`export_report`");
   });
 
+  it("template-report: the commentary format, the internal split and the no-vendor-names rule (B-C4, B-C5)", async () => {
+    const { COMMENTARY_FORMAT } = await import("../src/prompts/index.js");
+    const tpl = await textOf("template-report", { client: "example.com", template: "monthly" });
+    expect(tpl).toContain(COMMENTARY_FORMAT);
+    expect(COMMENTARY_FORMAT).toContain("{{chart <sectionId>}}");
+    expect(COMMENTARY_FORMAT).toContain("pipe tables");
+    expect(COMMENTARY_FORMAT).toContain("narrative.internal");
+    expect(COMMENTARY_FORMAT).toMatch(/never names crawlmark, Claude, tools/);
+    expect(tpl).not.toContain("{{commentaryFormat}}");
+  });
+
   it("both report prompts share one copy of the number rules and the Docs offer, which is conditional and consent-first", async () => {
     const { NUMBER_RULES, DOCS_OFFER } = await import("../src/prompts/index.js");
     const monthly = await textOf("monthly-report-writeup", { client: "example.com" });

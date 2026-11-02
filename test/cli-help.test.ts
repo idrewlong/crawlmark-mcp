@@ -56,6 +56,14 @@ describe("help", () => {
     expect(programName(undefined)).toBe("crawlmark-cli");
   });
 
+  it("Release B: setup help names the new branding fields and report help the contents and block choices, within 80 columns", () => {
+    const setup = groupHelp("setup", plain);
+    expect(setup).toMatch(/fonts, footer, white label,\s+provider names, commentary note/);
+    const report = groupHelp("report", plain);
+    expect(report).toMatch(/a contents page and a\s+reusable text block/);
+    for (const text of [setup, report]) for (const l of text.split("\n")) expect(l.length).toBeLessThanOrEqual(80);
+  });
+
   it("headings are bold only when asked", () => {
     expect(topHelp(plain)).not.toContain("\u001b[");
     expect(groupHelp("setup", { ...plain, bold: true })).toContain("\u001b[1m");

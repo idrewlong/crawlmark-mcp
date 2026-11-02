@@ -60,6 +60,7 @@ export const DEFAULT_SECTION_IDS: Record<SectionType, string> = {
   organic_visibility: "visibility",
   competitor_overview: "competitors",
   text: "note",
+  block: "block",
 };
 
 export interface CatalogueEntry {
@@ -98,9 +99,11 @@ export function templateCatalogue(): CatalogueEntry[] {
  * A section of `type` with the builder's defaults: its default id, `paid: true` for paid types, `optional: true`
  * for Tag Manager (opt-in by rule). Options that cost money (live ranks, provider site-audit sources) are never set.
  */
-export function defaultSection(type: SectionType, opts: { id?: string; text?: string } = {}): SectionSpec {
+export function defaultSection(type: SectionType, opts: { id?: string; text?: string; block?: string } = {}): SectionSpec {
   const id = opts.id ?? DEFAULT_SECTION_IDS[type];
   if (type === "text") return { id, type, text: opts.text ?? "Notes for this report." };
+  // A block section needs a block in the file's `blocks` library; "notes" is only a placeholder name.
+  if (type === "block") return { id, type, block: opts.block ?? "notes" };
   const s: Record<string, unknown> = { id, type };
   if (type === "tag_manager") s.optional = true;
   if (PAID_SECTION_TYPES.has(type)) s.paid = true;

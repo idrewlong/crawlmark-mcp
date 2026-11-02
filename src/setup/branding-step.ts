@@ -13,8 +13,10 @@ import {
   importLogo,
   logoSourcePath,
   MAX_AGENCY_NAME,
+  MAX_COMMENTARY_NOTE,
   MAX_FOOTER,
   parseColor,
+  parseFontName,
   primaryContrast,
   writeBranding,
   type BrandingSettings,
@@ -34,8 +36,13 @@ export const FIELD_LABELS: Record<SettingField, string> = {
   logo: "Logo",
   primaryColor: "Primary colour",
   accentColor: "Accent colour",
+  bodyFont: "Body font",
+  headingFont: "Heading font",
+  fontFallback: "Font fallback",
   footer: "Footer text",
   hideCrawlmark: "White label (hide crawlmark)",
+  hideProviders: "Hide data provider names",
+  commentaryNote: "Commentary note",
   paper: "Paper size",
   formats: "Default report format(s)",
 };
@@ -56,17 +63,37 @@ export function describeBranding(s: BrandingSettings): string[] {
     `${FIELD_LABELS.logo}: ${s.logo ?? "none"}`,
     `${FIELD_LABELS.primaryColor}: ${s.primaryColor ?? `not set (default ${DEFAULT_PRIMARY})`}`,
     `${FIELD_LABELS.accentColor}: ${s.accentColor ?? `not set (default ${DEFAULT_ACCENT})`}`,
+    `${FIELD_LABELS.bodyFont}: ${s.bodyFont ?? "not set (the report's own font)"}`,
+    `${FIELD_LABELS.headingFont}: ${s.headingFont ?? "same as the body font"}`,
+    `${FIELD_LABELS.fontFallback}: ${s.fontFallback ?? "sans-serif"}`,
     `${FIELD_LABELS.footer}: ${s.footer ?? "not set"}`,
     `${FIELD_LABELS.hideCrawlmark}: ${s.hideCrawlmark ? "yes" : "no"}`,
+    `${FIELD_LABELS.hideProviders}: ${(s.hideProviders ?? s.hideCrawlmark ?? false) ? "yes" : "no"}${s.hideProviders === undefined ? " (follows white label)" : ""}`,
+    `${FIELD_LABELS.commentaryNote}: ${s.commentaryNote === undefined ? "default wording" : s.commentaryNote === "" ? "none (the line is left out)" : s.commentaryNote}`,
     `${FIELD_LABELS.paper}: ${s.paper ?? "Letter"}`,
     `${FIELD_LABELS.formats}: ${(s.formats?.length ? s.formats : (["pdf"] as Format[])).map((f) => FORMAT_LABELS[f]).join(", ")}`,
   ];
 }
 
+/** A font family name, or undefined for "none". Enter keeps the current one; "-" clears it. */
+async function askFont(ctx: WizardContext, question: string, current: string | undefined): Promise<string | undefined> {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const a = (await ctx.prompt.ask(question, { default: current })).trim();
+    if (a === "-") return undefined;
+    if (a === "") return current;
+    const f = parseFontName(a);
+    if (f) return f;
+    uiFor(ctx).fail(`"${cleanText(a, 40)}" isn't a font family name: use letters, digits, spaces and hyphens (for example Inter or Open Sans).`);
+  }
+  return current;
+}
+
+/** A #rrggbb colour. Enter keeps the current one, and keeps "not set" as not set (the report's default); "-" clears it. */
 async function askColor(ctx: WizardContext, question: string, current: string | undefined, fallback: string): Promise<string | undefined> {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const a = (await ctx.prompt.ask(`${question} (#rrggbb; Enter keeps, - for the default)`, { default: current ?? fallback })).trim();
+    const a = (await ctx.prompt.ask(`${question} (#rrggbb; Enter keeps${current ? "" : ` the default ${fallback}`}, - for the default)`, { default: current })).trim();
     if (a === "-") return undefined;
+    if (a === "") return current;
     const c = parseColor(a);
     if (c) return c;
     uiFor(ctx).fail(`"${cleanText(a, 20)}" isn't a #rrggbb colour (for example ${fallback}).`);
@@ -120,6 +147,17 @@ export async function askField(ctx: WizardContext, field: SettingField, draft: B
     case "accentColor":
       s.accentColor = await askColor(ctx, "Accent colour: the stripe under the cover band", s.accentColor, DEFAULT_ACCENT);
       break;
+    case "bodyFont":
+      s.bodyFont = await askFont(ctx, "Body font: a font family name (Enter keeps, - for the report's own font). It shows only where it is installed; Word and Google Docs swap in another when it isn't", s.bodyFont);
+      break;
+    case "headingFont":
+      s.headingFont = await askFont(ctx, "Heading font (Enter keeps, - for the same as the body font)", s.headingFont);
+      break;
+    case "fontFallback": {
+      const pick = await ctx.prompt.choose("Fallback when a font isn't installed", [{ value: "sans-serif", label: "Sans-serif" }, { value: "serif", label: "Serif" }] as const, s.fontFallback ?? "sans-serif");
+      s.fontFallback = pick === "sans-serif" && s.fontFallback === undefined ? undefined : pick;
+      break;
+    }
     case "footer": {
       const a = await ctx.prompt.ask(`Footer text on every page, at most ${MAX_FOOTER} characters (Enter keeps, - for none)`, { default: s.footer });
       s.footer = a.trim() === "-" ? undefined : cleanText(a, MAX_FOOTER) || undefined;
@@ -128,16 +166,36 @@ export async function askField(ctx: WizardContext, field: SettingField, draft: B
     case "hideCrawlmark":
       s.hideCrawlmark = (await ctx.prompt.confirm("White label: leave crawlmark's name and version out of client reports?", s.hideCrawlmark ?? false)) || undefined;
       break;
-    case "paper":
-      s.paper = await ctx.prompt.choose("Paper size for PDF and Word", [{ value: "Letter", label: "US Letter" }, { value: "A4", label: "A4" }] as const, s.paper ?? "Letter");
+    case "hideProviders": {
+      const follows = s.hideCrawlmark ?? false;
+      const yes = await ctx.prompt.confirm("Hide data provider names like DataForSEO (Ahrefs and Semrush source lines stay)?", s.hideProviders ?? follows);
+      // The same answer as white label, with nothing saved before, stays unset so it keeps following white label.
+      s.hideProviders = yes === follows && s.hideProviders === undefined ? undefined : yes;
       break;
+    }
+    case "commentaryNote": {
+      const a = await ctx.prompt.ask(`Commentary note: the line that says how the written commentary was made, at most ${MAX_COMMENTARY_NOTE} characters (Enter keeps, - for the default wording, none for no line)`, { default: s.commentaryNote || undefined });
+      const t = a.trim();
+      if (t === "-") s.commentaryNote = undefined;
+      else if (t.toLowerCase() === "none") s.commentaryNote = "";
+      else if (t !== "") s.commentaryNote = cleanText(t, MAX_COMMENTARY_NOTE);
+      break;
+    }
+    case "paper": {
+      const pick = await ctx.prompt.choose("Paper size for PDF and Word", [{ value: "Letter", label: "US Letter" }, { value: "A4", label: "A4" }] as const, s.paper ?? "Letter");
+      // Keeping the default with nothing saved stays unset (Q2).
+      s.paper = pick === "Letter" && s.paper === undefined ? undefined : pick;
+      break;
+    }
     case "formats": {
       const choices: Choice<Format>[] = FORMATS_ORDER.map((f) => ({ value: f, label: FORMAT_LABELS[f] }));
       const current = s.formats?.length ? s.formats : (["pdf"] as Format[]);
       const picked = ctx.prompt.multiselect
         ? await ctx.prompt.multiselect("Default report format(s)", choices, current, { summary: `Default report format: ${current.map((f) => FORMAT_LABELS[f]).join(", ")}. Keep it?` })
         : current;
-      s.formats = picked.length ? picked : ["pdf"];
+      const next: Format[] = picked.length ? picked : ["pdf"];
+      // Keeping the default (PDF) with nothing saved stays unset (Q2).
+      s.formats = s.formats === undefined && next.join() === "pdf" ? undefined : next;
       break;
     }
   }

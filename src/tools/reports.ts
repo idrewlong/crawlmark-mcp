@@ -6,7 +6,7 @@ import { getAudit, latestAudit, latestAuditBefore, listAudits } from "../lib/aud
 import { missingPieces, type Client } from "../lib/clients.js";
 import { env, HOME, seoDefaultProvider } from "../config.js";
 import { packageVersion } from "../lib/entry.js";
-import { exportReport } from "../reports/export.js";
+import { ClientTextLintError, exportReport } from "../reports/export.js";
 import { chromePdfPrinter } from "../reports/render/pdf.js";
 import { loadTemplates, templateFileWarnings } from "../reports/templates/load.js";
 import { FORMATS, FREE_ISSUE_SOURCES, ISSUE_SOURCES, PAID_ISSUE_SOURCES } from "../reports/templates/schema.js";
@@ -36,6 +36,11 @@ function listedProvider(c: Client): string {
   if (c.dataProvider) return c.dataProvider;
   return seoDefaultProvider.ok ? `${seoDefaultProvider.provider} (default)` : `(default is invalid: ${seoDefaultProvider.invalidValue})`;
 }
+
+const textOrSplit = z.union([
+  z.string().max(20_000),
+  z.strictObject({ client: z.string().max(20_000).optional(), internal: z.string().max(20_000).optional() }),
+]);
 
 export function registerReportTools(server: McpServer) {
   server.registerTool(
@@ -198,7 +203,9 @@ export function registerReportTools(server: McpServer) {
       description:
         "Save a client report as Markdown, HTML, PDF and/or Word (docx) files under the reports folder (<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>; files 0600). " +
         "Pass the `reportId` from run_report_template so the files show exactly the numbers you wrote about (kept 24 hours), or the same arguments as run_report_template to run it first. " +
-        "`narrative` is your commentary (summary plus text per section id; paragraphs, `- ` bullets and **bold** only; at most 30,000 characters); without it the files are labelled data-only. " +
+        "`narrative` is your commentary: `summary` plus text per section id. Format: paragraphs, `- ` bullets, `1.` lists, `###` sub-headings, pipe tables, `{{chart <sectionId>}}` (a chart the report already draws) and **bold**; up to 20,000 characters per text and 100,000 in total, and at most 20 `{{chart}}` lines per report. Without a narrative the files are labelled data-only. " +
+        "Any text can be `{ client, internal }`: the internal part goes to a separate `<template>-<period>.internal.md` file (audience `internal`; with `formats: []` it comes back as `internalNotes`), never to the client files; `narrative.internal` holds general internal notes. " +
+        "Client text must not name crawlmark, Claude, Anthropic, DataForSEO, tool names or credential names: the export is refused, nothing is written, and the result lists every hit (`refused: true`, `hits`). Rewrite the passage or move it to internal notes. `allowTerms` can allow a tool name or blocked term that is fine to show; with white label on, built-in terms (crawlmark, Claude, Anthropic, DataForSEO) can only be allowed by the user in the branding allowTerms. " +
         "`inline: \"html\"` also returns a docs-friendly HTML copy (no logo, plain tables) for saving to Google Docs with the user's own Drive tool, only after the user agrees; `formats: []` with inline writes no file. " +
         "Re-exporting the same template and period overwrites its files. Ask the user which format(s) they want (default PDF) and pass exactly those. PDF needs Chrome; if it fails, an HTML file is written instead (unless HTML was asked for too), the other formats are still written, and `warnings` says why.",
       inputSchema: {
@@ -214,20 +221,21 @@ export function registerReportTools(server: McpServer) {
         estimateOnly: z.boolean().optional().describe("Price the paid sections without running anything or writing files (as run_report_template's estimateOnly). Not with reportId."),
         formats: z.array(z.enum(FORMATS)).max(4).optional().describe("Default: the saved default (the template file's defaults.formats), PDF unless changed. Pass exactly the formats the user chose."),
         narrative: z
-          .object({
-            summary: z.string().max(6000).optional(),
-            sections: z.record(z.string().max(40), z.string().max(6000)).optional(),
+          .strictObject({
+            summary: textOrSplit.optional(),
+            sections: z.record(z.string().max(40), textOrSplit).optional(),
+            internal: z.string().max(20_000).optional().describe("General internal notes: written to the internal notes file only, never to a client file."),
           })
-          .strict()
           .optional()
-          .describe("Your commentary: `summary`, and text keyed by section id (e.g. search, brand, traffic, opportunities, audit)."),
+          .describe("Your commentary: `summary`, and text keyed by section id (e.g. search, brand, traffic, opportunities, audit). A text is a string for the client, or { client, internal }."),
+        allowTerms: z.array(z.string().min(2).max(60)).max(20).optional().describe("Terms the client text may contain for this export (added to the branding allowTerms), for example a client whose own name matches a blocked word. With white label on it can't allow built-in terms such as crawlmark, Claude or DataForSEO. The result's warnings list the terms applied."),
         inline: z.enum(["html", "md"]).optional().describe("Also return the report as text (html is the Google Docs format)."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     handler(
       "export_report",
-      async ({ client, reportId, formats, narrative, inline, estimateOnly, ...runArgs }, { signal }) => {
+      async ({ client, reportId, formats, narrative, allowTerms, inline, estimateOnly, ...runArgs }, { signal }) => {
         const c = await resolveClient(client);
         if (estimateOnly) {
           if (reportId) throw new Error("estimateOnly prices a new run: pass the template and period arguments, not a reportId (a stored report has already been paid for).");
@@ -243,17 +251,25 @@ export function registerReportTools(server: McpServer) {
           report = await runTemplate(c, { ...runArgs, homeDir: HOME.dir }, await loadDefaultRunDeps());
         }
         const loaded = loadTemplates({ homeDir: HOME.dir, clientSlug: c.slug });
-        const out = await exportReport(report, {
-          formats: formats ?? loaded.defaults.formats,
-          narrative,
-          inline,
-          reportsDir: env.REPORTS_DIR,
-          branding: loaded.branding,
-          version: packageVersion(new URL("../index.js", import.meta.url).href),
-          printer: chromePdfPrinter,
-          signal,
-          warnings: templateFileWarnings(loaded),
-        });
+        let out;
+        try {
+          out = await exportReport(report, {
+            formats: formats ?? loaded.defaults.formats,
+            narrative,
+            allowTerms,
+            inline,
+            reportsDir: env.REPORTS_DIR,
+            branding: loaded.branding,
+            version: packageVersion(new URL("../index.js", import.meta.url).href),
+            printer: chromePdfPrinter,
+            signal,
+            warnings: templateFileWarnings(loaded),
+          });
+        } catch (err) {
+          // A refusal is a normal answer the model can act on: every hit as structured data, and nothing written.
+          if (err instanceof ClientTextLintError) return { reportId: report.reportId, refused: true, written: false, error: err.message, hits: err.hits };
+          throw err;
+        }
         return { reportId: report.reportId, ...out };
       },
       { timeoutMs: TIMEOUTS.auditMs },

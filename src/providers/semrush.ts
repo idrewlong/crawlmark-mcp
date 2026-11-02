@@ -13,6 +13,7 @@
  * never retried, except one retry of a 429. Units are recorded per request; a timeout records the estimate. The pure
  * parts live in ./semrush-shape.ts.
  */
+import { cliHint } from "../lib/cli-hint.js";
 import { env, type Client } from "../config.js";
 import { globalUnitCap, recordUnits, unitsThisMonth } from "../lib/budget.js";
 import { TTL } from "../lib/cache.js";
@@ -62,7 +63,7 @@ interface Req {
 }
 
 function apiKey(capability: string): string {
-  if (!env.SEMRUSH_API_KEY) throw new ProviderUnavailableError(capability, "semrush", "SEMRUSH_API_KEY is not set. Run setup --step semrush.");
+  if (!env.SEMRUSH_API_KEY) throw new ProviderUnavailableError(capability, "semrush", `SEMRUSH_API_KEY is not set. Run ${cliHint()} setup --step semrush.`);
   return env.SEMRUSH_API_KEY;
 }
 

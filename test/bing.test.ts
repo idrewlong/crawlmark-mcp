@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { crawlIssueLabels, matchBingSite, parseBingDate, parseCrawlIssues, parseUserSites, topRows, parseStatRows, windowsFor, parseTraffic } from "../src/analysis/bing.js";
 import { db } from "../src/lib/store.js";
+import { cliHint } from "../src/lib/cli-hint.js";
 import {
   BING_READ_METHODS,
   BingApiError,
@@ -141,7 +142,7 @@ describe("bingGet", () => {
     const f = fakeBing();
     const err = await bingGet("GetUserSites", {}, { key: "", fetchImpl: f.fetchImpl }).catch((e: Error) => e);
     expect(err).toBeInstanceOf(BingUnavailableError);
-    expect((err as Error).message).toMatch(/BING_WEBMASTER_API_KEY.*setup --step bing/);
+    expect((err as Error).message).toMatch(/BING_WEBMASTER_API_KEY.*Run .+ setup --step bing/);
     expect(f.mock).not.toHaveBeenCalled();
   });
 
@@ -156,7 +157,7 @@ describe("bingGet", () => {
     const f = fakeBing({ GetUserSites: () => new Response(`{"ErrorCode":3,"Message":"InvalidApiKey ${KEY} https://ssl.bing.com/x?apikey=${KEY}"}`, { status: 400 }) });
     const err = await bingGet("GetUserSites", {}, { key: KEY, fetchImpl: f.fetchImpl, noCache: true }).catch((e: Error) => e);
     expect(err).toBeInstanceOf(BingUnavailableError);
-    expect((err as Error).message).toBe("Bing rejected the API key; run setup --step bing.");
+    expect((err as Error).message).toBe(`Bing rejected the API key; run ${cliHint()} setup --step bing.`);
     expect(bingErrorMessage(400, '{"ErrorCode":14,"Message":"NotAuthorized"}')).toMatchObject({ unavailable: false, message: expect.stringMatching(/isn't a site this key can read/) });
     expect(bingErrorMessage(400, "<root><ErrorCode type=\"number\">3</ErrorCode></root>")).toMatchObject({ unavailable: true, code: 3 });
     expect(bingErrorMessage(503, "")).toMatchObject({ retryable: true, message: "Bing Webmaster Tools returned HTTP 503." });
@@ -188,7 +189,7 @@ describe("bingGet", () => {
     const r = await checkBingKey(KEY, fakeBing().fetchImpl);
     expect(r).toEqual({ ok: true, sites: 4, verified: 3 });
     const bad = await checkBingKey(KEY, fakeBing({ GetUserSites: () => new Response('{"ErrorCode":3,"Message":"InvalidApiKey"}', { status: 400 }) }).fetchImpl);
-    expect(bad).toEqual({ ok: false, kind: "refused", problem: "Bing rejected the API key; run setup --step bing." });
+    expect(bad).toEqual({ ok: false, kind: "refused", problem: `Bing rejected the API key; run ${cliHint()} setup --step bing.` });
     const throttled = await checkBingKey(KEY, fakeBing({ GetUserSites: () => new Response('{"ErrorCode":4,"Message":"ThrottleUser"}', { status: 400 }) }).fetchImpl);
     expect(throttled).toMatchObject({ ok: false, kind: "throttled" });
     const down = await checkBingKey(KEY, (async () => {

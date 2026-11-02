@@ -123,11 +123,21 @@ describe("all three: escaping, white label, operator-only content", () => {
   });
 
   it("white label keeps the Source lines and crawlmark's name out; no cost, units, market code or snapshot detail in any file", async () => {
+    // Release B: white label also hides the DataForSEO name (hideProviders follows hideCrawlmark); the Source line stays, generically named.
     const white = buildReportDoc(p13bReport(), { ...v, branding: { hideCrawlmark: true } });
+    for (const text of [toMarkdown(white), toHtml(white), await docXml(white)]) {
+      expect(text).not.toMatch(/crawlmark|dataforseo/i);
+      expect(text).toContain("Source: a third-party SEO data provider");
+      expect(text).not.toMatch(/units|\$|2840|snapshot|provider_history|reused|quota/i);
+    }
+    expect(toMarkdown(white)).toContain("Backlinks, organic visibility and competitors: a third-party SEO data provider (paid), stored month by month");
+  });
+
+  it("hideProviders: false keeps the DataForSEO name even in white label", async () => {
+    const white = buildReportDoc(p13bReport(), { ...v, branding: { hideCrawlmark: true, hideProviders: false } });
     for (const text of [toMarkdown(white), toHtml(white), await docXml(white)]) {
       expect(text).not.toMatch(/crawlmark/i);
       expect(text).toContain("Source: DataForSEO");
-      expect(text).not.toMatch(/units|\$|2840|snapshot|provider_history|reused|quota/i);
     }
     expect(toMarkdown(white)).toContain("Backlinks, organic visibility and competitors: DataForSEO (paid), stored month by month");
   });

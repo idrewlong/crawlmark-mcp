@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../src/config.js";
+import { cliHint } from "../src/lib/cli-hint.js";
 
 const SENTINEL = "ahrefs-SENTINEL-key-3f9c1e";
 process.env.AHREFS_API_KEY = SENTINEL;
@@ -282,7 +283,7 @@ describe("Ahrefs requests", () => {
     const calls = fakeAhrefs();
     const c = client({ country: null, locationCode: 1023191 });
     await expect(routed.rankedKeywords(c)).rejects.toThrow(
-      `Set country: XX for ${c.domain} in clients.yaml (or clients set ${c.domain} --country XX); Ahrefs/Semrush need a country, and locationCode 1023191 is not a country.`,
+      `Set country: XX for ${c.domain} in clients.yaml (or ${cliHint()} clients set ${c.domain} --country XX); Ahrefs/Semrush need a country, and locationCode 1023191 is not a country.`,
     );
     expect(calls).toHaveLength(0);
   });

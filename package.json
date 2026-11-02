@@ -1,6 +1,6 @@
 {
   "name": "crawlmark-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for automated SEO audits and reports: Google Search Console, GA4, Tag Manager, DataForSEO, Lighthouse and axe-core",
   "keywords": [
     "mcp",

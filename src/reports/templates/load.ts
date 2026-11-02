@@ -42,6 +42,14 @@ export interface LoadedTemplates {
   templates: Map<string, { spec: TemplateSpec; source: TemplateSource; file?: string }>;
   branding: ResolvedBranding;
   defaults: { template: string; formats: Format[] };
+  /** Reusable text blocks (Release B). Global blocks first; a client block with the same id replaces the whole block. */
+  blocks: Map<string, LoadedBlock>;
+}
+
+export interface LoadedBlock {
+  title?: string;
+  text: string;
+  source: "global" | "client";
 }
 
 export interface LoadOptions {
@@ -53,8 +61,11 @@ export interface LoadOptions {
 /** A logo path: relative ones resolve against the config home. */
 export const resolveLogo = (homeDir: string, logo: string) => (isAbsolute(logo) ? logo : resolve(homeDir, logo));
 
-/** Read and validate one template file. A missing file is valid and empty. */
-export function readTemplateFile(path: string, homeDir: string, today?: Date): { status: TemplateFileStatus; value?: TemplateFile } {
+/**
+ * Read and validate one template file. A missing file is valid and empty. `knownBlocks` are the block ids another
+ * file provides (the global file's, when this is a client file), so a `block` section can refer to them.
+ */
+export function readTemplateFile(path: string, homeDir: string, today?: Date, knownBlocks?: ReadonlySet<string>): { status: TemplateFileStatus; value?: TemplateFile } {
   if (!existsSync(path)) return { status: { path, exists: false, valid: true } };
   let result: ValidationResult;
   try {
@@ -67,7 +78,7 @@ export function readTemplateFile(path: string, homeDir: string, today?: Date): {
     if (text === undefined) {
       result = { valid: false, errors: [{ path: "", message: `the file is larger than ${MAX_TEMPLATE_BYTES / 1024} KB` }], warnings: [] };
     } else {
-      result = validateTemplateText(text, { ...(today ? { today } : {}), logoExists: (l) => existsSync(resolveLogo(homeDir, l)) });
+      result = validateTemplateText(text, { ...(today ? { today } : {}), ...(knownBlocks ? { knownBlocks } : {}), logoExists: (l) => existsSync(resolveLogo(homeDir, l)) });
     }
   } catch (err) {
     result = { valid: false, errors: [{ path: "", message: `couldn't read the file: ${(err as Error).message}` }], warnings: [] };
@@ -82,9 +93,18 @@ export function readTemplateFile(path: string, homeDir: string, today?: Date): {
   return result.value ? { status, value: result.value } : { status };
 }
 
+/** The block ids of a file's value, for validating a file that may refer to them. */
+export const blockIds = (file: TemplateFile | undefined): ReadonlySet<string> => new Set(Object.keys(file?.blocks ?? {}));
+
+/** The block ids the global template file provides (empty when it is missing or invalid). */
+export function globalBlockIds(homeDir: string, today?: Date): ReadonlySet<string> {
+  return blockIds(readTemplateFile(globalTemplatesFile(homeDir), homeDir, today).value);
+}
+
 export function loadTemplates(opts: LoadOptions): LoadedTemplates {
   const global = readTemplateFile(globalTemplatesFile(opts.homeDir), opts.homeDir, opts.today);
-  const client = opts.clientSlug ? readTemplateFile(clientTemplatesFile(opts.homeDir, opts.clientSlug), opts.homeDir, opts.today) : undefined;
+  // The global file is read first: a client template may use its blocks, but not the other way round.
+  const client = opts.clientSlug ? readTemplateFile(clientTemplatesFile(opts.homeDir, opts.clientSlug), opts.homeDir, opts.today, blockIds(global.value)) : undefined;
 
   const templates: LoadedTemplates["templates"] = new Map();
   for (const [id, spec] of Object.entries(BUILTIN_TEMPLATES)) templates.set(id, { spec, source: "builtin" });
@@ -103,7 +123,10 @@ export function loadTemplates(opts: LoadOptions): LoadedTemplates {
     template: client?.value?.defaults?.template ?? global.value?.defaults?.template ?? BUILTIN_DEFAULTS.template,
     formats: client?.value?.defaults?.formats ?? global.value?.defaults?.formats ?? BUILTIN_DEFAULTS.formats,
   };
-  return { files: { global: global.status, ...(client ? { client: client.status } : {}) }, templates, branding, defaults };
+  const blocks: LoadedTemplates["blocks"] = new Map();
+  for (const [bid, b] of Object.entries(global.value?.blocks ?? {})) blocks.set(bid, { ...(b.title ? { title: b.title } : {}), text: b.text, source: "global" });
+  for (const [bid, b] of Object.entries(client?.value?.blocks ?? {})) blocks.set(bid, { ...(b.title ? { title: b.title } : {}), text: b.text, source: "client" });
+  return { files: { global: global.status, ...(client ? { client: client.status } : {}) }, templates, branding, defaults, blocks };
 }
 
 export interface ResolvedTemplate {

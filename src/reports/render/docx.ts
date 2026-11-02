@@ -11,12 +11,15 @@
  */
 import {
   AlignmentType,
+  Bookmark,
   BorderStyle,
   Document,
   Footer,
   Header,
   HeadingLevel,
   ImageRun,
+  InternalHyperlink,
+  LevelFormat,
   Packer,
   PageNumber,
   Paragraph,
@@ -32,15 +35,15 @@ import {
 } from "docx";
 import { ChartRun, type ChartRunOptions } from "docx/charts";
 import { DEFAULT_ACCENT, DEFAULT_PRIMARY, NEUTRAL, SERIES, TONE, inkOn, mix, softTextOn, textOn } from "./color.js";
-import type { Block, Chart, Kpi, LineChart, ReportDoc, TableBlock, Text } from "./doc.js";
+import { coverEntries, type Block, type Chart, type DocNarrativeBlock, type Kpi, type LineChart, type ReportDoc, type TableBlock, type Text } from "./doc.js";
 import { docxText, safeColor } from "./escape.js";
 import { fit, imageSize } from "./image.js";
-import type { NarrativeBlock } from "./narrative.js";
 import { niceStep, shareColors, wholeStep } from "./svg.js";
 
 const PAGE = { Letter: { width: 12240, height: 15840 }, A4: { width: 11906, height: 16838 } } as const;
 /** 15 mm in twips. */
 const MARGIN = 850;
+/** Word's default body font; the branding's bodyFont and headingFont replace it. */
 const FONT = "Calibri";
 const MONO = "Consolas";
 const hex = (c: string) => c.replace("#", "").toUpperCase();
@@ -53,7 +56,14 @@ interface Ctx {
   primaryInk: string;
   /** Usable text width in twips. */
   width: number;
+  /** The body font name (charts use it). */
+  font: string;
+  /** Numbered commentary lists: each list gets its own instance so numbering restarts. */
+  ol: { next(): number };
 }
+
+/** The numbering reference for a commentary list that starts at `start`. */
+const olReference = (start: number) => (start === 1 ? "narrative-ol" : `narrative-ol-${start}`);
 
 function runs(t: Text, opts: { italics?: boolean; color?: string; size?: number } = {}): TextRun[] {
   return t.flatMap((r, i) => [
@@ -143,18 +153,45 @@ function oneCell(ctx: Ctx, cell: TableCell): Table {
 }
 
 /** A shaded one-cell box with a coloured left rule: the summary callout and commentary boxes. */
-function box(ctx: Ctx, paragraphs: Paragraph[], fill: string, rule: string): Table {
+function box(ctx: Ctx, paragraphs: (Paragraph | Table)[], fill: string, rule: string): Table {
   return oneCell(ctx, new TableCell({ width: { size: ctx.width, type: WidthType.DXA }, margins: { top: 120, bottom: 120, left: 200, right: 200 }, borders: { ...noBorders, left: line(rule, 24) }, shading: { type: ShadingType.CLEAR, color: "auto", fill }, children: paragraphs }));
 }
 
-function narrative(blocks: NarrativeBlock[]): Paragraph[] {
-  return blocks.flatMap((b) => (b.kind === "p" ? [new Paragraph({ children: runs(b.runs), spacing: { after: 80 } })] : b.items.map((i) => new Paragraph({ bullet: { level: 0 }, children: runs(i) }))));
+/** Space inside a callout box (twips) that tables and charts in the commentary give up. */
+const BOX_INSET = 480;
+
+function narrative(blocks: DocNarrativeBlock[], ctx: Ctx, boxed = true): (Paragraph | Table)[] {
+  const inner: Ctx = boxed ? { ...ctx, width: ctx.width - BOX_INSET } : ctx;
+  return blocks.flatMap((b): (Paragraph | Table)[] => {
+    switch (b.kind) {
+      case "p":
+        return [new Paragraph({ children: runs(b.runs), spacing: { after: 80 } })];
+      case "ul":
+        return b.items.map((i) => new Paragraph({ bullet: { level: 0 }, children: runs(i) }));
+      case "ol": {
+        const instance = ctx.ol.next();
+        return b.items.map((i) => new Paragraph({ numbering: { reference: olReference(b.start), level: 0, instance }, children: runs(i) }));
+      }
+      case "h":
+        return [new Paragraph({ heading: HeadingLevel.HEADING_4, keepNext: true, children: runs(b.runs) })];
+      case "table": {
+        const cols = b.header.length;
+        const rows = b.rows.map((r) => Array.from({ length: cols }, (_, i) => r[i] ?? []));
+        // The header is plain text in Word (the header row is bold small caps already).
+        return table({ kind: "table", header: b.header.map((h) => h.map((r) => r.t).join("")), rows, numeric: b.align.slice(0, cols).map((a) => a === "right") }, inner);
+      }
+      case "chart":
+        return chart(b.chart, inner, false);
+      case "chartRef": // buildReportDoc resolves or drops these
+        return [];
+    }
+  });
 }
 
 const label = (s: string, color: string) => new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: docxText(s), bold: true, size: 15, allCaps: true, color })] });
 
-function commentary(blocks: NarrativeBlock[], ctx: Ctx): Table {
-  return box(ctx, [label("Commentary", hex(ctx.primaryInk)), ...narrative(blocks)], hex(mix(ctx.primary, "#ffffff", 0.93)), hex(ctx.primary));
+function commentary(blocks: DocNarrativeBlock[], ctx: Ctx): Table {
+  return box(ctx, [label("Commentary", hex(ctx.primaryInk)), ...narrative(blocks, ctx)], hex(mix(ctx.primary, "#ffffff", 0.93)), hex(ctx.primary));
 }
 
 const spacer = (after = 80) => new Paragraph({ children: [], spacing: { after } });
@@ -200,7 +237,7 @@ export function wholeInterval(c: LineChart): number {
 /** A native Word chart: line charts for the daily and trend series, a 100% stacked bar for shares. */
 function chart(c: Chart, ctx: Ctx, half: boolean): (Paragraph | Table)[] {
   const px = Math.round((ctx.width / 1440) * 96 * (half ? 0.49 : 1));
-  const font = { name: FONT };
+  const font = { name: ctx.font };
   const axisFont = { size: 8, color: H.muted };
   let opts: ChartRunOptions;
   if (c.type === "line") {
@@ -267,17 +304,35 @@ function block(b: Block, ctx: Ctx, half = false): (Paragraph | Table)[] {
       return chart(b.chart, ctx, half);
     case "columns":
       return b.columns.flat().flatMap((x) => block(x, ctx, false));
+    case "rich":
+      return narrative(b.blocks, ctx, false);
   }
 }
 
-function sectionHeading(title: string, ctx: Ctx): Paragraph {
+function sectionHeading(title: string, ctx: Ctx, opts: { bookmark?: string; pageBreakBefore?: boolean } = {}): Paragraph {
+  const run = new TextRun({ text: docxText(title), color: hex(ctx.primaryInk), bold: true, size: 28 });
   return new Paragraph({
     heading: HeadingLevel.HEADING_2,
     keepNext: true,
+    ...(opts.pageBreakBefore ? { pageBreakBefore: true } : {}),
     spacing: { before: 280, after: 120 },
     border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: H.rule, space: 4 } },
-    children: [new TextRun({ text: docxText(title), color: hex(ctx.primaryInk), bold: true, size: 28 })],
+    children: [opts.bookmark ? new Bookmark({ id: opts.bookmark, children: [run] }) : run],
   });
+}
+
+/** Word bookmark names: a letter first, then letters, digits and underscores, at most 40 characters, unique. */
+function bookmarkNames(anchors: string[]): Map<string, string> {
+  const names = new Map<string, string>();
+  const used = new Set<string>();
+  for (const a of anchors) {
+    const base = a.replace(/[^A-Za-z0-9_]/g, "_").replace(/^[^A-Za-z]/, "s$&").slice(0, 36);
+    let name = base;
+    for (let n = 2; used.has(name); n++) name = `${base}_${n}`;
+    used.add(name);
+    names.set(a, name);
+  }
+  return names;
 }
 
 function cover(doc: ReportDoc, ctx: Ctx): Table {
@@ -291,14 +346,16 @@ function cover(doc: ReportDoc, ctx: Ctx): Table {
     ...(logo && size ? [new ImageRun({ type: logo.mime === "image/png" ? "png" : "jpg", data: logo.data, transformation: fit(size, 140, 40), altText: { name: "logo", description: docxText(b.agencyName ?? "Logo"), title: "Logo" } })] : []),
     ...(b.agencyName ? [new TextRun({ text: `${logo && size ? "   " : ""}${docxText(b.agencyName)}`, bold: true, size: 20, color: on })] : []),
   ];
-  const meta = [`Period: ${m.periodLabel} · ${m.periodRange}`, ...(m.compareWith ? [`Compared with: ${m.compareWith}`] : []), `Generated: ${m.generated}`];
+  const cv = coverEntries(m);
+  const meta = cv.entries.map((e) => `${e.label}: ${e.value}`);
   const paragraphs = [
     ...(brandRuns.length ? [new Paragraph({ spacing: { after: 160 }, children: brandRuns })] : []),
     new Paragraph({ children: [new TextRun({ text: docxText(m.templateTitle), allCaps: true, bold: true, size: 16, color: soft })] }),
     new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 20 }, children: [new TextRun({ text: docxText(m.clientName), bold: true, size: 52, color: on })] }),
-    new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: docxText(m.domain), size: 22, color: soft })] }),
-    new Paragraph({ children: meta.flatMap((x, i) => [...(i ? [new TextRun({ text: "     ", size: 18 })] : []), new TextRun({ text: docxText(x), size: 18, bold: true, color: on })]) }),
-    new Paragraph({ spacing: { before: 80 }, children: [new TextRun({ text: docxText(doc.badge), allCaps: true, size: 15, color: soft })] }),
+    ...(m.cover.subtitle ? [new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: docxText(m.cover.subtitle), size: 24, color: soft })] })] : []),
+    ...(cv.domain ? [new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: docxText(m.domain), size: 22, color: soft })] })] : []),
+    ...(meta.length ? [new Paragraph({ children: meta.flatMap((x, i) => [...(i ? [new TextRun({ text: "     ", size: 18 })] : []), new TextRun({ text: docxText(x), size: 18, bold: true, color: on })]) })] : []),
+    ...(cv.badge ? [new Paragraph({ spacing: { before: 80 }, children: [new TextRun({ text: docxText(doc.badge), allCaps: true, size: 15, color: soft })] })] : []),
   ];
   return oneCell(
     ctx,
@@ -309,8 +366,26 @@ function cover(doc: ReportDoc, ctx: Ctx): Table {
 export async function toDocx(doc: ReportDoc): Promise<Buffer> {
   const primary = safeColor(doc.branding.primaryColor, DEFAULT_PRIMARY);
   const page = PAGE[doc.branding.paper];
-  const ctx: Ctx = { primary, primaryInk: inkOn(primary), width: page.width - 2 * MARGIN };
+  const bodyFont = doc.branding.fonts.body ?? FONT;
+  const headFont = doc.branding.fonts.heading ?? bodyFont;
+  const fontsOn = doc.branding.fonts.body !== null || doc.branding.fonts.heading !== null;
+  let instance = 0;
+  const ctx: Ctx = { primary, primaryInk: inkOn(primary), width: page.width - 2 * MARGIN, font: bodyFont, ol: { next: () => ++instance } };
   const children: (Paragraph | Table)[] = [cover(doc, ctx), spacer(160)];
+
+  // Narrative features in use decide which styles and numbering definitions the file carries, so other files stay as in 0.2.0.
+  const narratives = [...(doc.summary?.narrative ? [doc.summary.narrative] : []), ...doc.sections.flatMap((x) => [...(x.commentary ? [x.commentary] : []), ...x.blocks.flatMap((bl) => (bl.kind === "rich" ? [bl.blocks] : []))])];
+  const usesH = narratives.some((bs) => bs.some((n) => n.kind === "h"));
+  const olStarts = [...new Set(narratives.flatMap((bs) => bs.flatMap((n) => (n.kind === "ol" ? [n.start] : []))))];
+
+  const names = bookmarkNames(doc.contents?.map((c) => c.anchor) ?? []);
+  if (doc.contents) {
+    children.push(sectionHeading("Contents", ctx));
+    for (const c of doc.contents) {
+      children.push(new Paragraph({ spacing: { after: 50 }, indent: { left: 200 }, children: [new InternalHyperlink({ anchor: names.get(c.anchor)!, children: [new TextRun({ text: docxText(c.title), color: hex(ctx.primaryInk), underline: {} })] })] }));
+    }
+    children.push(spacer(120));
+  }
 
   if (doc.kpis.length) {
     children.push(kpiCells(doc.kpis, ctx, true, 4));
@@ -323,9 +398,9 @@ export async function toDocx(doc: ReportDoc): Promise<Buffer> {
         ctx,
         [
           label(s.title, hex(ctx.primaryInk)),
-          ...(s.narrative ? narrative(s.narrative) : []),
+          ...(s.narrative ? narrative(s.narrative, ctx) : []),
           ...(s.items ?? []).map((h) => new Paragraph({ bullet: { level: 0 }, spacing: { after: 30 }, children: runs(h, { size: 19 }) })),
-          new Paragraph({ spacing: { before: 80 }, children: [new TextRun({ text: docxText(s.caption), size: 15, color: H.faint })] }),
+          ...(s.caption ? [new Paragraph({ spacing: { before: 80 }, children: [new TextRun({ text: docxText(s.caption), size: 15, color: H.faint })] })] : []),
         ],
         hex(mix(primary, "#ffffff", 0.94)),
         hex(primary),
@@ -334,11 +409,11 @@ export async function toDocx(doc: ReportDoc): Promise<Buffer> {
     );
   }
   for (const s of doc.sections) {
-    children.push(sectionHeading(s.title, ctx));
+    children.push(sectionHeading(s.title, ctx, { ...(doc.contents ? { bookmark: names.get(s.anchor)! } : {}), ...(s.pageBreakBefore ? { pageBreakBefore: true } : {}) }));
     for (const b of s.blocks) children.push(...block(b, ctx));
     if (s.commentary) children.push(commentary(s.commentary, ctx), spacer());
   }
-  children.push(sectionHeading("About this report", ctx));
+  children.push(sectionHeading("About this report", ctx, doc.contents ? { bookmark: names.get("about-this-report")! } : {}));
   children.push(...doc.about.map((a) => new Paragraph({ bullet: { level: 0 }, children: runs(a, { color: H.muted, size: 16 }) })));
 
   const small = { color: H.faint, size: 15 };
@@ -348,12 +423,24 @@ export async function toDocx(doc: ReportDoc): Promise<Buffer> {
     creator: doc.branding.hideCrawlmark ? docxText(doc.branding.agencyName ?? "") : "crawlmark",
     description: doc.meta.dataOnly ? "Data-only report" : "Report with commentary",
     styles: {
-      default: { document: { run: { font: FONT, size: 20, color: H.ink }, paragraph: { spacing: { line: 264 } } } },
+      default: { document: { run: { font: bodyFont, size: 20, color: H.ink }, paragraph: { spacing: { line: 264 } } } },
       paragraphStyles: [
-        { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: FONT, size: 28, bold: true }, paragraph: { keepNext: true } },
-        { id: "Heading3", name: "Heading 3", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: FONT, size: 21, bold: true }, paragraph: { keepNext: true, spacing: { before: 160, after: 60 } } },
+        ...(fontsOn ? [{ id: "Title", name: "Title", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: headFont } }] : []),
+        { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: headFont, size: 28, bold: true }, paragraph: { keepNext: true } },
+        { id: "Heading3", name: "Heading 3", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: headFont, size: 21, bold: true }, paragraph: { keepNext: true, spacing: { before: 160, after: 60 } } },
+        ...(fontsOn || usesH ? [{ id: "Heading4", name: "Heading 4", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: headFont, size: 20, bold: true }, paragraph: { keepNext: true, spacing: { before: 120, after: 40 } } }] : []),
       ],
     },
+    ...(olStarts.length
+      ? {
+          numbering: {
+            config: olStarts.map((start) => ({
+              reference: olReference(start),
+              levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.START, start, style: { paragraph: { indent: { left: 540, hanging: 360 } } } }],
+            })),
+          },
+        }
+      : {}),
     sections: [
       {
         properties: { page: { size: page, margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN, header: 400, footer: 400 } } },

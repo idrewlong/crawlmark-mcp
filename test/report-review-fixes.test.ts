@@ -58,7 +58,7 @@ describe("R-3: days with no rows are filled with 0", () => {
 /** A fixture doc with one extra section holding `chart`, rendered to DOCX; returns the chart parts' XML. */
 async function docxCharts(chart: Chart): Promise<string> {
   const doc = buildReportDoc(await fixtureReport({ include: [] }), v);
-  doc.sections = [{ id: "x", title: "X", blocks: [{ kind: "chart", chart }] }];
+  doc.sections = [{ id: "x", anchor: "s-x", title: "X", blocks: [{ kind: "chart", chart }] }];
   const zip = await JSZip.loadAsync(await toDocx(doc));
   const parts = Object.keys(zip.files).filter((f) => /^word\/charts\/chart\d+\.xml$/.test(f));
   return (await Promise.all(parts.map((p) => zip.file(p)!.async("string")))).join("\n");

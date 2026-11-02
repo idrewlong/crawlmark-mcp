@@ -759,7 +759,7 @@ export async function stepProviderPick(ctx: WizardContext): Promise<{ result: St
   ctx.out(`SEO data providers: ${ids.map((id) => `${PROVIDER_LABELS[id]} (${(works(id, st.get(rowId(id))) ? "working" : STATE_WORD[st.get(rowId(id))?.state ?? "missing"])})`).join(", ")}`);
   ctx.out(describeDefault(st.get("seoprovider")));
   ctx.out("Keyword volumes, rankings, competitors and backlinks come from a paid provider. Pick the ones you have an API key for (none is required).");
-  if (ctx.ui?.fancy) ctx.out("Space selects, Enter continues. To skip, press Enter with nothing selected; add one later with setup --step provider.");
+  if (ctx.ui?.fancy) ctx.out(`Space selects, Enter continues. To skip, press Enter with nothing selected; add one later with ${ctx.cliDisplay} setup --step provider.`);
   const keyed = ids.filter((id) => hasKey(id, st.get(rowId(id))));
   // Nothing is ticked for you: only providers you already have a key for start selected (a re-run).
   const defaults = keyed;
@@ -768,7 +768,7 @@ export async function stepProviderPick(ctx: WizardContext): Promise<{ result: St
   const selected = new Set(picked);
   const working = new Set(ids.filter((id) => selected.has(id) && works(id, st.get(rowId(id)))));
   ctx.providers = { selected, working: new Set([...(ctx.providers?.working ?? []), ...working]) };
-  if (selected.size === 0) ui.info("No paid provider selected. Free tools (Search Console, GA4, audits) still work. Add one later with setup --step provider.");
+  if (selected.size === 0) ui.info(`No paid provider selected. Free tools (Search Console, GA4, audits) still work. Add one later with ${ctx.cliDisplay} setup --step provider.`);
   if (!selected.has("dataforseo") && (selected.has("ahrefs") || selected.has("semrush"))) {
     ui.warn("Live SERPs, on-page checks and crawls need DataForSEO; without it those parts of run_audit and serp_check are skipped.");
   }
@@ -819,7 +819,7 @@ export async function stepProviderDefault(ctx: WizardContext): Promise<StepResul
     choice = W[0]!;
     message = `Default: ${PROVIDER_LABELS[choice]} (the only provider set up).`;
   } else {
-    ctx.out("Each client can override this (dataProvider in clients.yaml, or clients set <client> --provider).");
+    ctx.out(`Each client can override this (dataProvider in clients.yaml, or ${ctx.cliDisplay} clients set <client> --provider).`);
     const pre = effective && W.includes(effective) ? effective : W[0]!;
     choice = await ctx.prompt.choose(
       "Default provider for keyword, competitor and backlink data",

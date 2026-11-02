@@ -13,7 +13,7 @@ Compared with August 2026 and September 2025 · Generated 13 Oct 2026 · *With c
 >
 > indented code
 >
-> 1\. one
+> 1.one
 >
 > \# heading
 >
@@ -37,7 +37,7 @@ indented code
 
 ## Note
 
-1\. one
+1.one
 
 ## Note
 

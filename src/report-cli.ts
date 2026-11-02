@@ -7,18 +7,20 @@ import { resolve } from "node:path";
 import type { Client } from "./config.js";
 import { formatTable } from "./lib/clients.js";
 import { stripControl } from "./lib/terminal-text.js";
-import { exportReport, reportFilePath, ReportRenderError, ReportWriteError, type ExportedFile } from "./reports/export.js";
+import { ClientTextLintError, exportReport, reportFilePath, ReportRenderError, ReportWriteError, type ExportedFile } from "./reports/export.js";
+import { lintClientText } from "./reports/render/term-lint.js";
+import { TOOL_NAMES } from "./tools/names.js";
 import type { DateRange } from "./lib/dates.js";
 import type { PdfPrinter } from "./reports/render/pdf.js";
 import { loadTemplates } from "./reports/templates/load.js";
 import { estimateTemplate, planRun, runTemplate, type RunDeps, type RunEstimate } from "./reports/templates/run.js";
 import { FORMATS, type Format } from "./reports/templates/schema.js";
-import { initStarterFile, listReportTemplates, validateTemplateFileAt } from "./reports/templates/service.js";
+import { initStarterFile, listReportTemplates, templatePlanFields, validateTemplateFileAt } from "./reports/templates/service.js";
 import { globalTemplatesFile } from "./reports/paths.js";
 import { PromptAbortedError } from "./setup/prompter.js";
 import type { PreviewResult } from "./reports/branding-preview.js";
 import type { ResolvedBranding } from "./reports/templates/load.js";
-import { readTemplateFile } from "./reports/templates/load.js";
+import { globalBlockIds, readTemplateFile } from "./reports/templates/load.js";
 import { defaultSection, estimateSectionsFor, templateCatalogue } from "./reports/templates/builder.js";
 import { runTemplateBuilder, type BuilderDeps } from "./reports/templates/new-cli.js";
 import { applyTemplateWrite, planTemplateWrite, templateTargetPath } from "./reports/templates/write.js";
@@ -182,11 +184,12 @@ export async function templatesNewCommand(args: string[], flags: TemplatesNewFla
     target() {
       const path = templateTargetPath(io.homeDir, file, file === "client" ? slug : null);
       const r = readTemplateFile(path, io.homeDir, today);
-      return { path, ids: Object.keys(r.value?.templates ?? {}), hasDefaultFormats: Boolean(r.value?.defaults?.formats), valid: r.status.valid };
+      const blockIds = [...Object.keys(r.value?.blocks ?? {}), ...(file === "client" ? globalBlockIds(io.homeDir, today) : [])];
+      return { path, ids: Object.keys(r.value?.templates ?? {}), hasDefaultFormats: Boolean(r.value?.defaults?.formats), valid: r.status.valid, blockIds };
     },
     plan: (id, spec, o) =>
-      planTemplateWrite({ homeDir: io.homeDir, file, clientSlug: file === "client" ? slug : undefined, id, mode: "create", template: spec, replace: flags.replace === true, defaultFormats: o.defaultFormats, ...(today ? { today } : {}) }),
-    preview: async (id, spec) => renderTemplatePreview(deps.reportsDir, { clientSlug: slug, id, spec, branding: loadTemplates({ homeDir: io.homeDir, clientSlug: slug, ...(today ? { today } : {}) }).branding, version: deps.version }),
+      planTemplateWrite({ homeDir: io.homeDir, file, clientSlug: file === "client" ? slug : undefined, id, mode: "create", template: spec, replace: flags.replace === true, defaultFormats: o.defaultFormats, ...(o.blocks ? { blocks: o.blocks } : {}), ...(today ? { today } : {}) }),
+    preview: async (id, spec, blocks) => renderTemplatePreview(deps.reportsDir, { clientSlug: slug, id, spec, ...(blocks ? { blocks } : {}), branding: loadTemplates({ homeDir: io.homeDir, clientSlug: slug, ...(today ? { today } : {}) }).branding, version: deps.version }),
     openPath: deps.openPath,
     save: (plan) => applyTemplateWrite(plan, io.homeDir, today),
   };
@@ -364,6 +367,17 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
       fatal = true;
       continue;
     }
+    // The term check on the template's own texts, before anything is fetched or spent (a run has no commentary here).
+    const hits = lintClientText(templatePlanFields(plan.template.spec, plan.sections, plan.loaded.blocks, plan.loaded.branding), {
+      toolNames: TOOL_NAMES,
+      allowTerms: plan.loaded.branding.allowTerms,
+      blockTerms: plan.loaded.branding.blockTerms,
+    });
+    if (hits.length) {
+      errors.push(`${client.slug}: ${new ClientTextLintError(hits, { context: "template" }).message}`);
+      fatal = true;
+      continue;
+    }
     if (ask && picked === undefined) {
       let chosen: Format[];
       try {
@@ -409,7 +423,7 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
         if (counts.error) failed++;
         continue;
       }
-      const out = await exportReport(report, { formats: wanted, reportsDir: deps.reportsDir, branding: plan.loaded.branding, version: deps.version, printer: deps.printer });
+      const out = await exportReport(report, { formats: wanted, reportsDir: deps.reportsDir, branding: plan.loaded.branding, version: deps.version, printer: deps.printer, lintContext: "template" });
       // A requested format that wasn't written (a PDF without Chrome, even with the HTML fallback) needs attention.
       if (wanted.some((f) => !out.files.some((x) => x.format === f)) || counts.error) attention = true;
       written++;
@@ -426,7 +440,7 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
       });
     } catch (err) {
       failed++;
-      if (err instanceof ReportWriteError) {
+      if (err instanceof ReportWriteError || err instanceof ClientTextLintError) {
         fatal = true;
         errors.push(`${client.slug}: ${msg(err)}`);
       } else if (err instanceof ReportRenderError) {

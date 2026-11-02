@@ -3,7 +3,7 @@
  * every renderer. Types only, so renderers never load provider code.
  */
 import type { DateRange } from "../lib/dates.js";
-import type { Comparison } from "./templates/schema.js";
+import type { Comparison, CoverSpec } from "./templates/schema.js";
 import type { TemplateSource } from "./templates/load.js";
 
 export type { Comparison, DateRange, TemplateSource };
@@ -333,6 +333,15 @@ interface SectionBase {
   id: string;
   type: string;
   title: string;
+  /** Release B: start this section on a new page. Absent in reports made before 0.3.0. */
+  pageBreakBefore?: true;
+}
+
+/** A `block` section's data: the text is resolved from the template files' blocks library when the report runs. */
+export interface BlockSectionData {
+  blockId: string;
+  /** Commentary Markdown (the same format as export_report's narrative). */
+  text: string;
 }
 
 export type SectionResult =
@@ -351,7 +360,8 @@ export interface Highlight {
 export interface TemplateReport {
   reportId: string;
   client: { slug: string; name: string; domain: string };
-  template: { id: string; title: string; source: TemplateSource; layout?: "onepage" };
+  /** `cover` and `contents` are stored with the report, so exporting a reportId renders the same layout. Absent before 0.3.0. */
+  template: { id: string; title: string; source: TemplateSource; layout?: "onepage"; cover?: CoverSpec; contents?: true };
   period: { current: DateRange; label: string; folderMonth: string; comparisons: { previous_period?: DateRange; previous_year?: DateRange } };
   generatedAt: string;
   sections: SectionResult[];

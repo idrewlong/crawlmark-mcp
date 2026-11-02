@@ -5,6 +5,7 @@
  * PSI_API_KEY. The key travels only in the request URL; it is never part of a
  * cache key, an error, a log line or a result. Cached a day (the data changes weekly).
  */
+import { cliHint } from "../lib/cli-hint.js";
 import { env, type Client } from "../config.js";
 import { ALL_CRUX_METRICS, CRUX_METRICS, parseCruxHistory, type CruxHistoryResponse } from "../analysis/crux.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
@@ -23,9 +24,9 @@ export interface CruxRequest {
   metrics?: CwvMetric[] | undefined;
 }
 
-export const CRUX_SETUP_HINT = "Run setup --step crux.";
-export const NO_CRUX_KEY =
-  "CrUX History needs CRUX_API_KEY (or a PSI_API_KEY whose Google Cloud project has the Chrome UX Report API enabled). Run setup --step crux.";
+export const cruxSetupHint = (): string => `Run ${cliHint()} setup --step crux.`;
+export const noCruxKey = (): string =>
+  `CrUX History needs CRUX_API_KEY (or a PSI_API_KEY whose Google Cloud project has the Chrome UX Report API enabled). ${cruxSetupHint()}`;
 
 /** No usable key, or the key's project can't use the CrUX API: the data is unavailable, not failed. */
 export class CruxUnavailableError extends ProviderUnavailableError {
@@ -56,13 +57,13 @@ export function clientOrigin(client: Pick<Client, "domain" | "keyPages">): strin
 /** Classify an error response. Pure. The text is redacted by the caller. */
 export function cruxErrorMessage(status: number, body: string, keySource: "CRUX_API_KEY" | "PSI_API_KEY"): { unavailable: boolean; message: string } {
   if (/API_KEY_INVALID|API key not valid|keyInvalid/i.test(body)) {
-    return { unavailable: true, message: `Google says the ${keySource} isn't a valid key. ${CRUX_SETUP_HINT}` };
+    return { unavailable: true, message: `Google says the ${keySource} isn't a valid key. ${cruxSetupHint()}` };
   }
   if (status === 403 && /SERVICE_DISABLED|accessNotConfigured|has not been used|is disabled|chromeuxreport/i.test(body)) {
-    return { unavailable: true, message: `${NO_CRUX_KEY} The ${keySource} project can't use it yet: enable the Chrome UX Report API at https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com.` };
+    return { unavailable: true, message: `${noCruxKey()} The ${keySource} project can't use it yet: enable the Chrome UX Report API at https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com.` };
   }
   if (status === 403 && /API_KEY_SERVICE_BLOCKED|blocked/i.test(body)) {
-    return { unavailable: true, message: `The ${keySource} is restricted to other APIs; allow the Chrome UX Report API on it (APIs & Services > Credentials). ${CRUX_SETUP_HINT}` };
+    return { unavailable: true, message: `The ${keySource} is restricted to other APIs; allow the Chrome UX Report API on it (APIs & Services > Credentials). ${cruxSetupHint()}` };
   }
   if (status === 429) return { unavailable: false, message: "CrUX API quota exceeded (150 queries a minute per Google Cloud project). Try again in a minute." };
   return { unavailable: false, message: `CrUX API returned HTTP ${status}.` };
@@ -73,7 +74,7 @@ const NOT_FOUND = (what: string, ff: string) => `The Chrome UX Report has no dat
 export async function cruxHistory(req: CruxRequest, opts: { fetchImpl?: typeof fetch; refresh?: boolean; e?: Parameters<typeof cruxKey>[0] } = {}): Promise<CruxHistoryResult> {
   if ((req.origin === undefined) === (req.url === undefined)) throw new Error("Give exactly one of origin or url.");
   const k = cruxKey(opts.e ?? env);
-  if (!k) throw new CruxUnavailableError(NO_CRUX_KEY);
+  if (!k) throw new CruxUnavailableError(noCruxKey());
   const formFactor = req.formFactor ?? "PHONE";
   const weeks = Math.min(40, Math.max(1, Math.round(req.weeks ?? 25)));
   const metrics = req.metrics?.length ? [...new Set(req.metrics)] : ALL_CRUX_METRICS;

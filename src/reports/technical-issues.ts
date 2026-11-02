@@ -187,7 +187,7 @@ export function dataForSeoCrawlIssues(summary: { issues: { check: string; pages:
     .map((i) => {
       const check = cleanText(i.check, 80) ?? "check";
       const severity = onPageSeverity(check);
-      return { source: "dataforseo_crawl" as const, rule: check, url: null, severity, nativeSeverity: severity, title: `DataForSEO check failed: ${check.replace(/_/g, " ")}`, count: Math.round(i.pages) };
+      return { source: "dataforseo_crawl" as const, rule: check, url: null, severity, nativeSeverity: severity, title: `Crawl check failed: ${check.replace(/_/g, " ")}`, count: Math.round(i.pages) };
     });
 }
 

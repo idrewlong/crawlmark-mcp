@@ -306,8 +306,11 @@ function ctxFor(h: string, answers: Answer[], opts: { dryRun?: boolean; yes?: bo
   return { ctx, prompt, lines, previews };
 }
 
-/** Answers for the eight fields, in order: name, logo, primary, accent, footer, white label, paper, formats. */
-const ALL = (logo: string): Answer[] => ["Acme Agency", logo, "#123456", "#2e8540", "Prepared by Acme", true, "A4", ["pdf", "docx"]];
+/**
+ * Answers for the thirteen fields, in order: name, logo, primary, accent, body font, heading font, font fallback, footer,
+ * white label, hide provider names, commentary note, paper, formats (Enter keeps for the font, fallback and note questions).
+ */
+const ALL = (logo: string): Answer[] => ["Acme Agency", logo, "#123456", "#2e8540", "", "", "", "Prepared by Acme", true, true, "", "A4", ["pdf", "docx"]];
 
 describe("setup --step branding", () => {
   it("asks each field, previews, re-asks only the field chosen to change, re-renders, and saves once", async () => {
@@ -340,7 +343,7 @@ describe("setup --step branding", () => {
 
   it("a light primary colour: warns and offers a darker shade that passes AA", async () => {
     const h = home();
-    const { ctx, prompt } = ctxFor(h, ["", "", "#ffd400", true, "", "", false, "", ["pdf"], "save"], { preview: false });
+    const { ctx, prompt } = ctxFor(h, ["", "", "#ffd400", true, "", "", "", "", "", false, false, "", "", ["pdf"], "save"], { preview: false });
     await stepBranding(ctx);
     expect(prompt.asked).toContainEqual(expect.stringMatching(/^Use the darker #[0-9a-f]{6} instead/));
     const primary = loadTemplates({ homeDir: h }).branding.primaryColor!;
@@ -380,7 +383,7 @@ describe("setup --step branding", () => {
   it("a bad logo is refused with the reason and asked again", async () => {
     const h = home();
     writeFileSync(join(h, "fake.png"), "not an image");
-    const { ctx, prompt } = ctxFor(h, ["Acme", "fake.png", "-", "", "", "", false, "", ["pdf"], "save"], { preview: false });
+    const { ctx, prompt } = ctxFor(h, ["Acme", "fake.png", "-", "", "", "", "", "", "", false, false, "", "", ["pdf"], "save"], { preview: false });
     await stepBranding(ctx);
     expect(prompt.asked.filter((q) => q.startsWith("Logo file"))).toHaveLength(2);
     expect((ctx.ui as ReturnType<typeof recordingUi>).events).toContainEqual(expect.stringMatching(/^fail: .*isn't a PNG or JPEG/));

@@ -4,9 +4,9 @@
  * Same structure as the HTML file: header, key figures, summary, one section
  * per card, charts as their small tables, and "About this report".
  */
-import type { Block, Chart, Kpi, ReportDoc, TableBlock, Text } from "./doc.js";
+import { coverEntries, type Block, type Chart, type DocNarrativeBlock, type Kpi, type ReportDoc, type TableBlock, type Text } from "./doc.js";
 import { escapeMarkdown, looksLinky, markdownCode } from "./escape.js";
-import type { NarrativeBlock, Run } from "./narrative.js";
+import type { Run } from "./narrative.js";
 
 function run(r: Run, first: boolean): string {
   if (r.c || looksLinky(r.t)) return markdownCode(r.t);
@@ -18,12 +18,34 @@ function run(r: Run, first: boolean): string {
 /** Runs of one block: only the first one starts the line. Table cells never start a block. */
 const text = (t: Text, block = true) => t.map((r, i) => (r.tag && i > 0 ? " " : "") + run(r, block && i === 0)).join("");
 
-function quoteBox(title: string, blocks: NarrativeBlock[]): string[] {
+/** Commentary blocks as Markdown chunks (one per block, no quote prefix). */
+function narrativeChunks(blocks: DocNarrativeBlock[]): string[][] {
+  const out: string[][] = [];
+  for (const b of blocks) {
+    if (b.kind === "p") out.push([text(b.runs)]);
+    else if (b.kind === "ul") out.push(b.items.map((item) => `- ${text(item)}`));
+    else if (b.kind === "ol") out.push(b.items.map((item, i) => `${b.start + i}. ${text(item)}`));
+    else if (b.kind === "h") out.push([`#### ${text(b.runs, false)}`]);
+    else if (b.kind === "table") out.push(commentaryTable(b));
+    else if (b.kind === "chart") {
+      const lines = chart(b.chart);
+      if (lines.length) out.push(lines);
+    }
+  }
+  return out;
+}
+
+function commentaryTable(b: Extract<DocNarrativeBlock, { kind: "table" }>): string[] {
+  const cols = b.header.length;
+  const cell = (c: Text) => text(c, false) || " ";
+  return [`| ${b.header.map(cell).join(" | ")} |`, `| ${b.header.map((_, i) => (b.align[i] === "right" ? "---:" : "---")).join(" | ")} |`, ...b.rows.map((r) => `| ${Array.from({ length: cols }, (_, i) => cell(r[i] ?? [])).join(" | ")} |`)];
+}
+
+function quoteBox(title: string, blocks: DocNarrativeBlock[]): string[] {
   const out = [`> **${escapeMarkdown(title)}**`, ">"];
-  blocks.forEach((b, i) => {
+  narrativeChunks(blocks).forEach((chunk, i) => {
     if (i) out.push(">");
-    if (b.kind === "p") out.push(`> ${text(b.runs)}`);
-    else for (const item of b.items) out.push(`> - ${text(item)}`);
+    for (const l of chunk) out.push(l ? `> ${l}` : ">");
   });
   return out;
 }
@@ -67,6 +89,8 @@ function block(b: Block): string[][] {
       return [chart(b.chart)].filter((x) => x.length);
     case "columns":
       return b.columns.flat().flatMap(block);
+    case "rich":
+      return narrativeChunks(b.blocks);
   }
 }
 
@@ -76,10 +100,18 @@ export function toMarkdown(doc: ReportDoc): string {
   const m = doc.meta;
   if (doc.branding.agencyName) push(`**${escapeMarkdown(doc.branding.agencyName)}**`);
   push(`# ${escapeMarkdown(m.clientName)}`);
-  push(
-    `**${escapeMarkdown(m.domain, false)}** · ${escapeMarkdown(m.templateTitle, false)} · ${escapeMarkdown(m.periodLabel, false)} (${escapeMarkdown(m.periodRange, false)})  `,
-    `${m.compareWith ? `Compared with ${escapeMarkdown(m.compareWith, false)} · ` : ""}Generated ${escapeMarkdown(m.generated, false)} · *${escapeMarkdown(doc.badge, false)}*`,
-  );
+  if (m.cover.subtitle) push(`*${escapeMarkdown(m.cover.subtitle, false)}*`);
+  // The period joins the first line when it is the first labelled entry (the default cover); the rest follow in order.
+  const cv = coverEntries(m);
+  const first = cv.entries[0]?.field === "period" ? cv.entries[0] : undefined;
+  const entryText = (e: (typeof cv.entries)[number]) => `${e.field === "period" ? "Period:" : e.label} ${escapeMarkdown(e.value, false)}`;
+  const line1 = [...(cv.domain ? [`**${escapeMarkdown(m.domain, false)}**`] : []), escapeMarkdown(m.templateTitle, false), ...(first ? [`${escapeMarkdown(m.periodLabel, false)} (${escapeMarkdown(m.periodRange, false)})`] : [])].join(" · ");
+  const line2 = [...cv.entries.slice(first ? 1 : 0).map(entryText), ...(cv.badge ? [`*${escapeMarkdown(doc.badge, false)}*`] : [])].join(" · ");
+  push(...(line2 ? [`${line1}  `, line2] : [line1]));
+  if (doc.contents) {
+    push("## Contents");
+    push(...doc.contents.map((c, i) => `${i + 1}. ${escapeMarkdown(c.title, false)}`));
+  }
   if (doc.kpis.length) {
     push("## Key figures");
     push(...kpiTable(doc.kpis));
@@ -90,7 +122,7 @@ export function toMarkdown(doc: ReportDoc): string {
     push(`## ${escapeMarkdown(s.title)}`);
     if (s.narrative) push(...quoteBox("Commentary", s.narrative));
     if (s.items) push(...s.items.map((h) => `- ${text(h)}`));
-    push(`*${escapeMarkdown(s.caption)}*`);
+    if (s.caption) push(`*${escapeMarkdown(s.caption)}*`);
   }
   for (const s of doc.sections) {
     push(`## ${escapeMarkdown(s.title)}`);

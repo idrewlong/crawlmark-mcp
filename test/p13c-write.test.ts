@@ -330,7 +330,9 @@ describe("builder catalogue", () => {
     expect(cat.filter((c) => c.paid).map((c) => c.type).sort()).toEqual(["ai_visibility", "backlinks", "competitor_overview", "keyword_gap", "local_profile", "organic_visibility"]);
     // Every default section is valid on its own (paid ones carry paid: true; tag_manager is optional).
     for (const c of cat) {
-      const yaml = `version: 1\ntemplates:\n  t: ${JSON.stringify({ title: "T", sections: [defaultSection(c.type)] })}\n`;
+      // A block section refers to a block of the file's blocks library.
+      const blocks = c.type === "block" ? `blocks:\n  notes: { text: "A note." }\n` : "";
+      const yaml = `version: 1\n${blocks}templates:\n  t: ${JSON.stringify({ title: "T", sections: [defaultSection(c.type)] })}\n`;
       expect(validateTemplateText(yaml, { today }).errors, c.type).toEqual([]);
     }
   });

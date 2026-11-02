@@ -7,13 +7,14 @@ import { toMarkdown } from "../src/reports/render/markdown.js";
 const EVIL = "https://x.example/a\\|[click](https://evil.example)";
 
 const doc = (value: string): ReportDoc => ({
-  meta: { title: "T", clientName: "Example Co", domain: "example.com", templateTitle: "T", periodLabel: "September 2026", periodRange: "1-30 Sep 2026", generated: "13 Oct 2026", dataOnly: true, layout: "standard", runningHeader: "H" },
+  meta: { title: "T", clientName: "Example Co", domain: "example.com", templateTitle: "T", periodLabel: "September 2026", periodRange: "1-30 Sep 2026", generated: "13 Oct 2026", dataOnly: true, layout: "standard", runningHeader: "H", cover: { fields: ["domain", "period", "compare", "generated", "badge"] } },
   badge: "Data-only report",
   kpis: [],
-  sections: [{ id: "s", title: "Pages", blocks: [{ kind: "table", header: ["Page", "Clicks"], rows: [[[{ t: value }], [{ t: "5" }]]], numeric: [false, true] }] }],
+  sections: [{ id: "s", anchor: "s-s", title: "Pages", blocks: [{ kind: "table", header: ["Page", "Clicks"], rows: [[[{ t: value }], [{ t: "5" }]]], numeric: [false, true] }] }],
   about: [],
+  warnings: [],
   footer: "f",
-  branding: { primaryColor: "#000000", accentColor: "#000000", paper: "Letter" },
+  branding: { primaryColor: "#000000", accentColor: "#000000", paper: "Letter", fonts: { body: null, heading: null, fallback: "sans-serif" }, commentaryNote: null },
 });
 
 describe("markdownCode backslash handling", () => {

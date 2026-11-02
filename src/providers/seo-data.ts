@@ -301,14 +301,14 @@ export function resolveProvider(
     if (e.configured.dataforseo) return { provider: "dataforseo", fallbackFrom: chosen };
     if (chosen === "semrush" && !isDfsOnly(capability)) return { unavailable: `Semrush's API (v4) doesn't include ${SEMRUSH_LACKS[capability] ?? capability}. Use DataForSEO or Ahrefs for it.` };
     const what = isDfsOnly(capability) ? ONLY_LABEL[capability] : capability;
-    return { unavailable: `${what} need DataForSEO; ${chosen} (the provider for ${client.slug}) doesn't offer them. Run setup --step dataforseo.` };
+    return { unavailable: `${what} need DataForSEO; ${chosen} (the provider for ${client.slug}) doesn't offer them. Run ${cliHint()} setup --step dataforseo.` };
   }
   if (e.configured[chosen]) return { provider: chosen };
   if (chosen === "dataforseo") return { unavailable: DFS_NOT_SET };
   return {
     unavailable: override
-      ? `${client.slug} uses dataProvider ${chosen} (clients.yaml) but ${KEY_VAR[chosen]} is not set. Run setup --step ${chosen}, or change it with clients set ${client.slug} --provider <dataforseo|ahrefs|semrush|none>.`
-      : `SEO_DATA_PROVIDER is ${chosen} but ${KEY_VAR[chosen]} is not set. Run setup --step ${chosen}, or setup --step provider to pick another default.`,
+      ? `${client.slug} uses dataProvider ${chosen} (clients.yaml) but ${KEY_VAR[chosen]} is not set. Run ${cliHint()} setup --step ${chosen}, or change it with ${cliHint()} clients set ${client.slug} --provider <dataforseo|ahrefs|semrush|none>.`
+      : `SEO_DATA_PROVIDER is ${chosen} but ${KEY_VAR[chosen]} is not set. Run ${cliHint()} setup --step ${chosen}, or ${cliHint()} setup --step provider to pick another default.`,
   };
 }
 

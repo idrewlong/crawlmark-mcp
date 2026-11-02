@@ -10,15 +10,16 @@
  */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { chmodSync, existsSync, lstatSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep, isAbsolute } from "node:path";
 import { Document, isMap, isNode, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq, type Node } from "yaml";
 import { RegularFileError, readRegularFileCapped } from "../../lib/read-regular-file.js";
 import { writeFileAtomic } from "../../lib/atomic-file.js";
 import { clientTemplatesFile, globalTemplatesFile } from "../paths.js";
 import { BUILTIN_TEMPLATES } from "./builtin.js";
-import { readTemplateFile, resolveLogo } from "./load.js";
+import { globalBlockIds, readTemplateFile, resolveLogo } from "./load.js";
 import {
+  BlockSchema,
   ID_RE,
   isPaidSection,
   MAX_TEMPLATE_BYTES,
@@ -38,7 +39,11 @@ export type TemplateFileKind = "global" | "client";
 export interface TemplatePatch {
   addSections?: unknown[] | undefined;
   removeSectionIds?: string[] | undefined;
-  set?: { title?: unknown; description?: unknown; period?: unknown; compare?: unknown; layout?: unknown } | undefined;
+  set?: { title?: unknown; description?: unknown; period?: unknown; compare?: unknown; layout?: unknown; cover?: unknown; contents?: unknown } | undefined;
+  /** Add or replace file-level text blocks (the `blocks:` library next to `templates:`). */
+  setBlocks?: Record<string, { title?: string | undefined; text: string }> | undefined;
+  /** Remove file-level blocks; refused while a template in the same file still has a `block` section naming one. */
+  removeBlockIds?: string[] | undefined;
 }
 
 export interface TemplateWriteRequest {
@@ -54,6 +59,8 @@ export interface TemplateWriteRequest {
   patch?: TemplatePatch | undefined;
   /** create: overwrite a template with this id in the file, or shadow a builtin with the same id. */
   replace?: boolean | undefined;
+  /** create (the CLI builder): file-level text blocks to add alongside the template, so a new `block` section has its block. */
+  blocks?: Record<string, { title?: string | undefined; text: string }> | undefined;
   /** The CLI builder only: set `defaults.formats` when the file has none (never changes an existing value). */
   defaultFormats?: Format[] | undefined;
   today?: Date;
@@ -85,6 +92,8 @@ export interface TemplateWritePlan {
   /** A client-file save while the global file exists but is invalid and its template ids couldn't be read: whether this id hides a global template is unknown. */
   globalFileInvalid: boolean;
   template: TemplateSpec;
+  /** Block ids this write adds or replaces (their text appears in client reports, so saving them needs the user's own answer). */
+  blocksSet: string[];
   paidSections: { id: string; type: string }[];
   warnings: ValidationIssue[];
 }
@@ -189,7 +198,7 @@ function templatesMap(doc: Document): YAMLMap {
   return map;
 }
 
-const SET_FIELDS = ["title", "description", "period", "compare", "layout"] as const;
+const SET_FIELDS = ["title", "description", "period", "compare", "layout", "cover", "contents"] as const;
 
 function asObject(v: unknown, what: string): Record<string, unknown> {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new TemplateWriteError(`${what} must be an object.`, [{ path: "", message: `${what} must be an object` }]);
@@ -243,6 +252,7 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
     const node = doc.createNode(asObject(req.template, "template")) as Node;
     styleTemplateNode(node);
     templates.set(req.id, node);
+    if (req.blocks && Object.keys(req.blocks).length) applyBlockEdits(doc, asObject(req.blocks, "blocks"), []);
   } else {
     applyPatch(doc, templates, req.id, req.patch!);
   }
@@ -272,7 +282,8 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
     if (spliced !== null && sameData(spliced, doc)) after = spliced;
     else reformatted = after !== before;
   }
-  const result = validateTemplateText(after, { ...(req.today ? { today: req.today } : {}), logoExists: (l) => existsSync(resolveLogo(req.homeDir, l)) });
+  const known = req.file === "client" ? globalBlockIds(req.homeDir, req.today) : undefined;
+  const result = validateTemplateText(after, { ...(req.today ? { today: req.today } : {}), ...(known ? { knownBlocks: known } : {}), logoExists: (l) => existsSync(resolveLogo(req.homeDir, l)) });
   if (!result.valid) throw new TemplateWriteError(`The template isn't valid: ${result.errors.map((e) => `${e.path || "(file)"}: ${e.message}`).join("; ")}`, result.errors);
   const template = result.value!.templates![req.id]!;
   for (const [i, s] of template.sections.entries()) {
@@ -300,6 +311,7 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
     shadowsGlobal,
     globalFileInvalid,
     template,
+    blocksSet: Object.keys(req.patch?.setBlocks ?? req.blocks ?? {}),
     paidSections: template.sections.filter((s) => isPaidSection(s) || s.paid === true).map((s) => ({ id: s.id, type: s.type })),
     warnings: [
       ...result.warnings,
@@ -307,6 +319,7 @@ export function planTemplateWrite(req: TemplateWriteRequest): TemplateWritePlan 
       ...(shadowsGlobal ? [{ path: `templates.${req.id}`, message: `hides the global "${req.id}" template for this client` }] : []),
       ...(globalFileInvalid ? [{ path: `templates.${req.id}`, message: `the global template file is invalid, so it can't be checked whether this hides a global "${req.id}" template; fix the global file (report templates validate)` }] : []),
       ...(reformatted ? [{ path: "", message: "this file's layout couldn't be edited line by line, so it is rewritten in a standard layout (comments kept); check the diff" }] : []),
+      ...(req.file === "global" && req.patch?.removeBlockIds?.length ? clientFilesUsingBlocks(req.homeDir, req.patch.removeBlockIds) : []),
     ],
   };
 }
@@ -394,6 +407,7 @@ function templateBlock(id: string, spec: unknown): string {
  */
 function spliceEdit(before: string, req: TemplateWriteRequest): string | null {
   if (!before.endsWith("\n")) return null;
+  if (req.blocks && Object.keys(req.blocks).length) return null;
   const orig = parseDocument(before, { uniqueKeys: true });
   const root = orig.contents;
   if (orig.errors.length || !isMap(root) || root.flow) return null;
@@ -432,6 +446,8 @@ function spliceEdit(before: string, req: TemplateWriteRequest): string | null {
     if (!firstKey) return null;
     const fieldIndent = " ".repeat(columnOf(before, firstKey[0]));
     const patch = req.patch!;
+    // File-level block edits aren't spliced; the caller re-serializes the document (comments kept).
+    if (patch.setBlocks || patch.removeBlockIds?.length) return null;
     const sectionsPair = tmap.items.find((p) => keyText(p.key) === "sections");
     for (const [k, v] of Object.entries(patch.set ?? {})) {
       if (v === undefined) continue;
@@ -532,7 +548,11 @@ function applyPatch(doc: Document, templates: YAMLMap, id: string, patch: Templa
   const add = patch.addSections ?? [];
   const remove = patch.removeSectionIds ?? [];
   const set = patch.set ? asObject(patch.set, "patch.set") : {};
-  if (!add.length && !remove.length && !Object.keys(set).length) throw new TemplateWriteError("The patch changes nothing.", [{ path: "patch", message: "give addSections, removeSectionIds or set" }]);
+  const setBlocks = patch.setBlocks ? asObject(patch.setBlocks, "patch.setBlocks") : {};
+  const removeBlocks = patch.removeBlockIds ?? [];
+  if (!add.length && !remove.length && !Object.keys(set).length && !Object.keys(setBlocks).length && !removeBlocks.length) {
+    throw new TemplateWriteError("The patch changes nothing.", [{ path: "patch", message: "give addSections, removeSectionIds, set, setBlocks or removeBlockIds" }]);
+  }
   for (const k of Object.keys(set)) {
     if (!(SET_FIELDS as readonly string[]).includes(k)) throw new TemplateWriteError(`patch.set can't change "${k}".`, [{ path: `patch.set.${k}`, message: `unknown field; use ${SET_FIELDS.join(", ")}` }]);
   }
@@ -563,6 +583,82 @@ function applyPatch(doc: Document, templates: YAMLMap, id: string, patch: Templa
     styleSection(n);
     sections.items.push(n);
   });
+  applyBlockEdits(doc, setBlocks, removeBlocks);
+}
+
+/** setBlocks / removeBlockIds on the file's `blocks:` map. An emptied map is dropped (the schema wants 1 to 50 blocks). */
+function applyBlockEdits(doc: Document, setBlocks: Record<string, unknown>, removeIds: string[]): void {
+  if (!Object.keys(setBlocks).length && !removeIds.length) return;
+  for (const bid of Object.keys(setBlocks)) {
+    if (!ID_RE.test(bid)) throw new TemplateWriteError(`"${bid}" isn't a valid block id.`, [{ path: `patch.setBlocks.${bid}`, message: "must be 1-40 characters: lowercase letters, digits and hyphens, starting with a letter or digit" }]);
+    const parsed = BlockSchema.safeParse(setBlocks[bid]);
+    if (!parsed.success) {
+      throw new TemplateWriteError(`patch.setBlocks.${bid} isn't a valid block: ${parsed.error.issues.map((x) => x.message).join("; ")}`, parsed.error.issues.map((x) => ({ path: `patch.setBlocks.${bid}${x.path.length ? `.${x.path.join(".")}` : ""}`, message: x.message })));
+    }
+  }
+  let blocks = doc.get("blocks", true);
+  if (blocks !== undefined && !isMap(blocks)) throw new TemplateWriteError("blocks: is not a map in this file; fix it by hand first.", [{ path: "blocks", message: "must be a map of block ids" }]);
+  if (!blocks) {
+    blocks = new YAMLMap();
+    doc.set("blocks", blocks);
+  }
+  const map = blocks as YAMLMap;
+  map.flow = false;
+  for (const bid of removeIds) {
+    if (!map.has(bid)) throw new TemplateWriteError(`This file has no block "${bid}".`, [{ path: "patch.removeBlockIds", message: `no block "${bid}"` }]);
+    const refs = sectionsUsingBlock(doc, bid);
+    if (refs.length) {
+      throw new TemplateWriteError(`Block "${bid}" is still used by ${refs.join(", ")}. Remove or change those sections first.`, [{ path: "patch.removeBlockIds", message: `block "${bid}" is used by ${refs.join(", ")}` }]);
+    }
+    map.delete(bid);
+  }
+  for (const [bid, v] of Object.entries(setBlocks)) map.set(bid, doc.createNode(v));
+  if (map.items.length === 0) doc.delete("blocks");
+}
+
+/**
+ * Client template files with a `block` section that uses one of these global blocks and has no block of that id of
+ * its own: removing the global block makes such a file invalid. A warning per file; unreadable files are skipped.
+ */
+function clientFilesUsingBlocks(homeDir: string, blockIds: readonly string[]): ValidationIssue[] {
+  const dir = dirname(clientTemplatesFile(homeDir, "x"));
+  let names: string[];
+  try {
+    if (!lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()) return [];
+    names = readdirSync(dir).filter((n) => n.endsWith(".yaml")).sort();
+  } catch {
+    return [];
+  }
+  const out: ValidationIssue[] = [];
+  for (const name of names) {
+    let data: { blocks?: Record<string, unknown>; templates?: Record<string, { sections?: { id?: unknown; type?: unknown; block?: unknown }[] }> } | null;
+    try {
+      data = parseDocument(readRegularFileCapped(join(dir, name), MAX_TEMPLATE_BYTES).toString("utf8")).toJS() as typeof data;
+    } catch {
+      continue;
+    }
+    const uses: string[] = [];
+    for (const [tid, t] of Object.entries(data?.templates ?? {})) {
+      for (const sec of Array.isArray(t?.sections) ? t.sections : []) {
+        const bid = sec?.block;
+        if (sec?.type === "block" && typeof bid === "string" && blockIds.includes(bid) && !Object.hasOwn(data?.blocks ?? {}, bid)) uses.push(`templates.${tid} section "${String(sec.id)}" (block "${bid}")`);
+      }
+    }
+    if (uses.length) {
+      out.push({ path: "patch.removeBlockIds", message: `the client file ${name} still uses ${uses.join(", ")}; that file stops loading until it has the block or the section is removed` });
+    }
+  }
+  return out;
+}
+
+/** `templates.<t> section "<id>"` for every `block` section in the document that names `blockId`. */
+function sectionsUsingBlock(doc: Document, blockId: string): string[] {
+  const templates = ((doc.toJS() as { templates?: unknown }).templates ?? {}) as Record<string, { sections?: { id?: string; type?: string; block?: string }[] }>;
+  const out: string[] = [];
+  for (const [tid, t] of Object.entries(templates)) {
+    for (const s of t?.sections ?? []) if (s?.type === "block" && s.block === blockId) out.push(`templates.${tid} section "${s.id}"`);
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ diff
@@ -669,10 +765,11 @@ function diffOps(A: string[], B: string[]): Op[] {
  * (TemplateFileChangedError otherwise). The text is validated again, the old file kept as `<file>.bak`
  * (one copy, 0600), and the new one written atomically with mode 0600.
  */
-export function applyTemplateWrite(plan: Pick<TemplateWritePlan, "path" | "before" | "after" | "beforeHash" | "afterHash">, homeDir: string, today?: Date): { path: string; backup: string | null } {
+export function applyTemplateWrite(plan: Pick<TemplateWritePlan, "path" | "file" | "before" | "after" | "beforeHash" | "afterHash">, homeDir: string, today?: Date): { path: string; backup: string | null } {
   assertSafeTarget(homeDir, plan.path);
   if (sha256(plan.after) !== plan.afterHash) throw new Error("The planned text doesn't match its hash.");
-  const check = validateTemplateText(plan.after, today ? { today } : {});
+  const known = plan.file === "client" ? globalBlockIds(homeDir, today) : undefined;
+  const check = validateTemplateText(plan.after, { ...(today ? { today } : {}), ...(known ? { knownBlocks: known } : {}) });
   if (!check.valid) throw new TemplateWriteError("The template isn't valid any more.", check.errors);
   const now = readCurrent(plan.path);
   const nowHash = now === null ? null : sha256(now);

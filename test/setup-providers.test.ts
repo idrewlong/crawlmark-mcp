@@ -245,7 +245,7 @@ describe("provider:pick", () => {
     h.states.set("ahrefs", working("ahrefs", { keySet: true }));
     const r = await stepProviderPick(h.ctx);
     expect(r.result.message).toBe("No paid provider selected.");
-    expect(h.ui.events).toContain("info: No paid provider selected. Free tools (Search Console, GA4, audits) still work. Add one later with setup --step provider.");
+    expect(h.ui.events).toContain("info: No paid provider selected. Free tools (Search Console, GA4, audits) still work. Add one later with crawlmark-cli setup --step provider.");
     expect(h.ui.events).toContain("info: Ahrefs key kept in .env but not used as the default. Remove AHREFS_API_KEY from .env to forget it.");
     expect(h.env()).toEqual({ AHREFS_API_KEY: "keep-me" });
   });
@@ -286,7 +286,7 @@ describe("provider:default", () => {
     expect(await stepProviderDefault(h.ctx)).toMatchObject({ defaultProvider: "ahrefs" });
     expect(pre).toBe("ahrefs");
     expect(p.asked).toEqual(["Default provider for keyword, competitor and backlink data"]);
-    expect(h.lines).toContain("Each client can override this (dataProvider in clients.yaml, or clients set <client> --provider).");
+    expect(h.lines).toContain("Each client can override this (dataProvider in clients.yaml, or crawlmark-cli clients set <client> --provider).");
     expect(existsSync(join(h.home, ".env"))).toBe(false);
 
     const change = harness(byQuestion({ choice: "dataforseo" }));

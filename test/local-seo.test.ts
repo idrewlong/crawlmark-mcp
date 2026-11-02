@@ -141,7 +141,7 @@ describe("routing", () => {
   it("the local capabilities are DataForSEO-only and never fall back silently", () => {
     const e = { defaultProvider: "dataforseo" as const, configured: { dataforseo: false, ahrefs: true, semrush: true } };
     for (const cap of ["localProfile", "localPack", "localReviews"] as const) {
-      expect(resolveProvider({ slug: "x", dataProvider: "ahrefs" }, cap, e)).toHaveProperty("unavailable", expect.stringMatching(/need DataForSEO; ahrefs .* Run setup --step dataforseo/));
+      expect(resolveProvider({ slug: "x", dataProvider: "ahrefs" }, cap, e)).toHaveProperty("unavailable", expect.stringMatching(/need DataForSEO; ahrefs .* Run .+ setup --step dataforseo/));
       expect(resolveProvider({ slug: "x" }, cap, { ...e, configured: { ...e.configured, dataforseo: true } })).toEqual({ provider: "dataforseo" });
     }
   });

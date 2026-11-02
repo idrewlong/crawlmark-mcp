@@ -297,6 +297,64 @@ describe("report templates new", () => {
   });
 });
 
+describe("report templates new: text blocks", () => {
+  const blockTail = (): Step[] => [
+    { kind: "multiselect", q: /^Optional sections/, a: "default" },
+    { kind: "choose", q: /^Report period/, a: "last_month" },
+    { kind: "multiselect", q: /^Compare with/, a: "default" },
+    { kind: "choose", q: /^Layout/, a: "default" },
+    { kind: "confirm", q: /no default report format/, a: false },
+    { kind: "choose", q: /^Save this template\?/, a: "save" },
+  ];
+
+  it("creates a template with a new text block and saves both; the block shows in the template and the file validates", async () => {
+    const t = setup(
+      [
+        { kind: "ask", q: /^Template id/, a: "board" },
+        { kind: "ask", q: /^Title/, a: "Board pack" },
+        { kind: "groupMultiselect", q: /^Sections to include/, a: ["search_overview", "block"] },
+        { kind: "ask", q: /^Block id/, a: "glossary" },
+        { kind: "ask", q: /^Block title/, a: "Glossary" },
+        { kind: "ask", q: /^Block text/, a: "CTR is clicks divided by impressions." },
+        ...blockTail(),
+      ],
+    );
+    expect(await t.run({ client: "example.com" })).toBe(0);
+    const text = readFileSync(globalFile(t.home), "utf8");
+    expect(text.startsWith(EXISTING)).toBe(true);
+    expect(text).toContain("type: block, block: glossary");
+    expect(text).toMatch(/blocks:\n {2}glossary:\n {4}title: Glossary\n {4}text: /);
+    expect(text).toContain("CTR is clicks divided by impressions.");
+    expect(t.out.join("\n") + t.ui.events.join("\n")).not.toMatch(/can't save a new text block/);
+    // The preview was made with the new block, and `validate` accepts the saved file.
+    expect(existsSync(join(t.reportsDir, ".preview", "example.com", "board.html"))).toBe(true);
+    expect(readFileSync(join(t.reportsDir, ".preview", "example.com", "board.html"), "utf8")).toContain("CTR is clicks divided by impressions.");
+    const lines: string[] = [];
+    expect(templatesCommand("validate", [], { out: (l = "") => lines.push(l), warn: (l) => lines.push(l), homeDir: t.home, cwd: t.home, today })).toBe(0);
+  });
+
+  it("a client file can pick a block that lives in the global file; nothing is copied into the client file", async () => {
+    const existing = `${EXISTING}blocks:\n  method:\n    title: Method\n    text: How the numbers were counted.\n`;
+    const t = setup(
+      [
+        { kind: "ask", q: /^Template id/, a: "board" },
+        { kind: "ask", q: /^Title/, a: "Board pack" },
+        { kind: "groupMultiselect", q: /^Sections to include/, a: ["search_overview", "block"] },
+        { kind: "choose", q: /^Which text block/, a: "method" },
+        ...blockTail(),
+      ],
+      { existing },
+    );
+    expect(await t.run({ client: "example.com", file: "client" })).toBe(0);
+    const clientFile = readFileSync(join(t.home, "config", "report-templates", "example.com.yaml"), "utf8");
+    expect(clientFile).toContain("type: block, block: method");
+    expect(clientFile).not.toContain("blocks:");
+    expect(readFileSync(globalFile(t.home), "utf8")).toBe(existing);
+    const lines: string[] = [];
+    expect(templatesCommand("validate", [join(t.home, "config", "report-templates", "example.com.yaml")], { out: (l = "") => lines.push(l), warn: (l) => lines.push(l), homeDir: t.home, cwd: t.home, today })).toBe(0);
+  });
+});
+
 describe("draft spec and preview", () => {
   it("paid sections carry paid: true; Tag Manager is always optional; the note keeps its text", () => {
     const spec = draftSpec({ title: "T", types: ["backlinks", "tag_manager", "text"], text: "Hello", optional: new Set(), period: { range: "last_month" }, compare: [], layout: "onepage" });

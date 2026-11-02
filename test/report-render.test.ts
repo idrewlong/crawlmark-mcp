@@ -135,7 +135,7 @@ describe("escaping helpers", () => {
   it("Markdown output of hostile block markers in data and commentary (SEC-2)", async () => {
     const h = home();
     mkdirSync(join(h, "config"), { recursive: true });
-    const hostile = ["---", "~~~ fence", "    indented code", "1. one", "# heading", "===", "+ plus"];
+    const hostile = ["---", "~~~ fence", "    indented code", "1.one", "# heading", "===", "+ plus"];
     writeFileSync(
       join(h, "config", "report-templates.yaml"),
       `version: 1\ntemplates:\n  x:\n    title: X\n    sections:\n${hostile.map((t, i) => `      - { id: t${i}, type: text, text: ${JSON.stringify(t)} }`).join("\n")}\n`,
@@ -164,10 +164,10 @@ describe("narrative subset", () => {
     expect(parseNarrative("**unclosed bold")).toEqual([{ kind: "p", runs: [{ t: "**unclosed bold" }] }]);
   });
 
-  it("limits: 6,000 per text, 30,000 in total, known section ids only", () => {
-    expect(() => validateNarrative({ summary: "x".repeat(6001) }, [])).toThrow(/6000/);
-    const sections = Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`s${i}`, "x".repeat(5500)]));
-    expect(() => validateNarrative({ sections }, Object.keys(sections))).toThrow(/30000/);
+  it("limits: 20,000 per text, 100,000 in total, known section ids only", () => {
+    expect(() => validateNarrative({ summary: "x".repeat(20_001) }, [])).toThrow(/20,000/);
+    const sections = Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`s${i}`, "x".repeat(17_000)]));
+    expect(() => validateNarrative({ sections }, Object.keys(sections))).toThrow(/100,000/);
     expect(() => validateNarrative({ sections: { nope: "x" } }, ["search"])).toThrow(/nope.*search/);
     expect(() => validateNarrative({ summary: "ok", sections: { search: "fine" } }, ["search"])).not.toThrow();
   });

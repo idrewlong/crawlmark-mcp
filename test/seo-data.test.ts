@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../src/config.js";
 import { resolveProvider, type Capability, type ProviderEnv } from "../src/providers/seo-data.js";
+import { cliHint } from "../src/lib/cli-hint.js";
 
 const all = { dataforseo: true, ahrefs: true, semrush: true };
 const none = { dataforseo: false, ahrefs: false, semrush: false };
@@ -46,7 +47,7 @@ describe("resolveProvider (9.5 rules 1-6)", () => {
       expect(resolveProvider(c("semrush"), cap, env("dataforseo", all))).toEqual({ provider: "dataforseo", fallbackFrom: "semrush" });
     }
     expect(resolveProvider(c(), "serpLive", env("ahrefs", { ahrefs: true }))).toEqual({
-      unavailable: "Live SERP checks need DataForSEO; ahrefs (the provider for example.com) doesn't offer them. Run setup --step dataforseo.",
+      unavailable: `Live SERP checks need DataForSEO; ahrefs (the provider for example.com) doesn't offer them. Run ${cliHint()} setup --step dataforseo.`,
     });
     expect(resolveProvider(c(), "onPageInstant", env("semrush", { semrush: true }))).toHaveProperty("unavailable", expect.stringMatching(/^On-page checks need DataForSEO/));
     expect(resolveProvider(c(), "siteCrawl", env("semrush", { semrush: true }))).toHaveProperty("unavailable", expect.stringMatching(/^Site crawls need DataForSEO/));
@@ -54,7 +55,7 @@ describe("resolveProvider (9.5 rules 1-6)", () => {
 
   it("rule 4: the chosen provider has the capability but no key: unavailable, never a fallback", () => {
     expect(resolveProvider(c(), "rankedKeywords", env("ahrefs", { dataforseo: true }))).toEqual({
-      unavailable: "SEO_DATA_PROVIDER is ahrefs but AHREFS_API_KEY is not set. Run setup --step ahrefs, or setup --step provider to pick another default.",
+      unavailable: `SEO_DATA_PROVIDER is ahrefs but AHREFS_API_KEY is not set. Run ${cliHint()} setup --step ahrefs, or ${cliHint()} setup --step provider to pick another default.`,
     });
     expect(resolveProvider(c("semrush"), "backlinksSummary", env("dataforseo", { dataforseo: true }))).toHaveProperty(
       "unavailable",

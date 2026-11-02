@@ -2,14 +2,15 @@
 
 crawlmark turns a client's data into a report file: Markdown, HTML, PDF or Word (`.docx`). The same templates drive both ways of making one:
 
-- **In Claude**, the `template-report` prompt (or `monthly-report-writeup`) runs a template, writes commentary per section, and calls `export_report`. The files say "Commentary written with Claude; all figures come from the data below," and each commentary box sits next to the data it discusses.
+- **In Claude**, the `template-report` prompt (or `monthly-report-writeup`) runs a template, writes commentary per section, and calls `export_report`. The files say "Commentary written with Claude; all figures come from the data below," and each commentary box sits next to the data it discusses. [Commentary](#commentary) covers what the text can contain and what it may not say.
 - **From cron**, `crawlmark-cli report` writes the same files without commentary. They say "Data-only report" at the top. There is no model in cron, so crawlmark never writes interpretation itself; the only sentences it adds are computed highlights (facts such as "Clicks rose 12.0% (from 1,000 to 1,120) vs August 2026.").
 
 ## What a report looks like
 
 Every format follows the same layout, like an agency dashboard export:
 
-- **Cover band**: your logo and agency name (from `branding`), the template's title, the client's name and domain, the period, what it's compared with, the date it was made, and a "Data-only report" or "With commentary" badge.
+- **Cover band**: your logo and agency name (from `branding`), the template's title, the client's name and domain, the period, what it's compared with, the date it was made, and a "Data-only report" or "With commentary" badge. A template can add a subtitle and "Prepared for" / "Prepared by" lines and choose which of these show ([Cover](#cover)).
+- **Contents** (optional): a linked list of the sections after the cover ([Contents and page breaks](#contents-and-page-breaks)).
 - **Key figures**: four cards (clicks, impressions, CTR, average position) with the change against the first comparison that has data, as a green or red chip with an arrow. Average position counts a fall as an improvement ("0.7 better"). Without a comparison the cards show the values alone.
 - **Summary**: Claude's summary when you asked for commentary, otherwise the computed highlights.
 - **One card per section** with charts and tables. Charts are drawn in the file itself (inline SVG in HTML and PDF, no script and nothing loaded from the network): clicks and impressions per day against the previous period, the branded share of clicks, organic sessions per day, Core Web Vitals history with Google's good and poor bands, and tracked keyword positions over time. Tables have right-aligned numbers, coloured changes (positions and Core Web Vitals timings read "0.7 better" or "1.1 worse", as on the key-figure card) and page paths (`/services/emergency`) instead of full URLs; sections about URLs (site crawl, llms.txt, Bing) keep the full URL as code.
@@ -17,9 +18,23 @@ Every format follows the same layout, like an agency dashboard export:
 
 Client files never show operator detail: a section with no data is left out (not "None."), a comparison column with no data is dropped (with one note), and tool hints, internal thresholds, a missing-logo warning and paid-data spend stay in the tool and CLI results (`export_report` and `crawlmark-cli report` return `spend` when the run used paid data). Add the optional `spend` section if you want spend in the file.
 
-Set the branding up with `crawlmark-cli setup --step branding` (also "Set up report branding" in the setup menu). It shows the current values, asks for each one (Enter keeps it): agency name, logo (PNG or JPEG up to 512 KB, copied into `<home>/branding/`), primary and accent colours (with a darker shade suggested when white text on the primary wouldn't meet WCAG AA), footer, white label, paper size and the default report format(s). Then it renders a one-page preview with sample example.com data (`<home>/branding/preview.pdf`, or `.html` without Chrome) and lets you change any field and preview again before saving; nothing is written until you choose save, and cancelling saves nothing. `--client <domain>` writes that client's override file instead, `--dry-run` previews without saving, and `--yes` keeps the current values. `crawlmark-cli report preview-branding [--client <domain>]` renders the saved branding again any time. The preview never uses client data and makes no network or paid call.
+Set the branding up with `crawlmark-cli setup --step branding` (also "Set up report branding" in the setup menu). It shows the current values, asks for each one (Enter keeps it, and a value that isn't set stays unset so the report keeps its default): agency name, logo (PNG or JPEG up to 512 KB, copied into `<home>/branding/`), primary and accent colours (with a darker shade suggested when white text on the primary wouldn't meet WCAG AA), body and heading fonts and the fallback family ([Fonts](#fonts)), footer, white label, whether to hide data-provider names, the commentary note, paper size and the default report format(s). Then it renders a one-page preview with sample example.com data (`<home>/branding/preview.pdf`, or `.html` without Chrome) and lets you change any field and preview again before saving; nothing is written until you choose save, and cancelling saves nothing. `--client <domain>` writes that client's override file instead, `--dry-run` previews without saving, and `--yes` keeps the current values. `crawlmark-cli report preview-branding [--client <domain>]` renders the saved branding again any time. The preview never uses client data and makes no network or paid call.
 
-White label: `hideCrawlmark: true` in `branding` leaves crawlmark's name and version out of the files (the footer, the Word file's author, and wording such as "crawlmark's own crawl", which becomes "a crawl of the site").
+### White label
+
+`hideCrawlmark: true` in `branding` leaves crawlmark's name and version out of the files (the footer, the Word file's author, and wording such as "crawlmark's own crawl", which becomes "a crawl of the site"). Since 0.3.0 it also:
+
+- **Hides DataForSEO.** Where a file named it, it now says "a third-party SEO data provider". Set `hideProviders: false` to keep the DataForSEO name in a white-label file, or `hideProviders: true` to hide it without hiding crawlmark. In setup this is "Hide provider names" and it follows the white-label answer until you set it.
+- **Changes the commentary line.** "Commentary written with Claude; all figures come from the data below." becomes "Written commentary; all figures come from the data below." `commentaryNote` sets your own wording (up to 200 characters), or `""` removes the line. Without white label the default line stays. In setup, `-` means the default wording and `none` removes the line.
+
+The "Source: Ahrefs" and "Source: Semrush" lines always stay, white label or not: those providers' terms ask for attribution. Hiding DataForSEO changes only wording: client data such as a competitor domain (`dataforseo.com`), a search query or a URL that contains the name is shown as it is.
+
+```yaml
+branding:
+  hideCrawlmark: true
+  hideProviders: true            # default: follows hideCrawlmark
+  commentaryNote: "Written commentary; figures come from the data below."   # "" removes the line
+```
 
 Brand colours: `primaryColor` fills the cover band and colours headings and the main chart line; `accentColor` is the stripe under the cover band. Text on and in them is darkened or switched to dark text when needed, so it stays readable (WCAG AA) whatever colours you choose. Green and red are kept for changes. Without branding the report uses a calm blue.
 
@@ -129,16 +144,142 @@ A client can have its own file, `<home>/config/report-templates/<domain>.yaml`, 
 | `indexing_issues` | Google's indexing of a sample of the site's URLs from stored URL Inspection results: URLs checked, indexed (and the share), not indexed, canonicals Google chose differently, a share chart of Google's coverage states, the worst pages (with whether each is in a sitemap and when Google last crawled it), Search Console's sitemap errors and warnings, and the indexed share by month. Before reading, it inspects up to `maxInspections` more URLs (free, within the daily budget; see [audits.md](audits.md#indexing-coverage)). The file says it's a sample (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's Page indexing report, which the API doesn't offer, and how many sitemap URLs were checked in the last 30 days; once every sitemap URL has a recent check (run `crawlmark-cli index-coverage --all-pages` daily) it says "all N sitemap pages" instead. When an export of Search Console's Pages report was imported (`import_index_report` or `crawlmark-cli index-coverage import`), the section starts with Google's own counts from it ("From Search Console's Pages report exported on 14 Oct 2026: 128 pages not indexed and 412 indexed"), a table of reasons with example pages, and "(indexed now)" beside examples URL Inspection found indexed after the export; with an import and no inspections it shows only that. Needs a Search Console property | `maxInspections` (25, 0 to 200; 0 reads stored results only), `staleDays` (7, 1 to 90), `limit` (10 worst pages, up to 50), `trendMonths` (6, 0 to 12) |
 | `data_spend` | Paid data used this month. Operator information: optional (`spend`) in the builtin monthly, and always in the tool and CLI results | |
 | `text` | Your own text | `text` |
+| `block` | A reusable text block from the file's `blocks` library (a glossary, a methodology note). It has no "Commentary" label | `block` (the block's id) |
 
 A paid `keyword_gap`, `local_profile` or `ai_visibility` section is estimated with the other paid sections before the report makes its first paid request; if the estimate doesn't fit the client's or the global cap, the run stops with the cap message (and a limit that would fit) and nothing is spent. While the paid sections run, the whole estimate is reserved (dollars for DataForSEO, units per provider for Ahrefs and Semrush), so a scheduled run and a Claude session can't both spend the same budget.
 
 To see the cost first, pass `estimateOnly: true` to `run_report_template` or `export_report` (or run `crawlmark-cli report ... --dry-run`): it returns each paid section's estimate (`sections: [{ id, type, provider, usd, units, requests, reused }]`), the `total`, what's `remaining` for the client and globally, `wouldExceed` and a one-line `message`, and fetches, spends and writes nothing.
 
-Every section has an `id` and `type`, and optionally a `title`, `optional: true` (included only when asked: `include: ["cwv"]` or `--include cwv`) and `paid: true`. A paid section runs only when the template marks it paid **and** you allow it at run time (`allowPaid: true`, or `--paid`); otherwise it is listed as skipped. Each section reports its own status: `ok`, `error`, `unavailable` (no Search Console or GA4 property, no CrUX key) or `skipped`. The tool result has the reasons; the files leave those sections out and "About this report" names them in one line (a section that failed says it couldn't be fetched).
+Every section has an `id` and `type`, and optionally a `title`, `pageBreakBefore: true` ([Contents and page breaks](#contents-and-page-breaks)), `optional: true` (included only when asked: `include: ["cwv"]` or `--include cwv`) and `paid: true`. A paid section runs only when the template marks it paid **and** you allow it at run time (`allowPaid: true`, or `--paid`); otherwise it is listed as skipped. Each section reports its own status: `ok`, `error`, `unavailable` (no Search Console or GA4 property, no CrUX key) or `skipped`. The tool result has the reasons; the files leave those sections out and "About this report" names them in one line (a section that failed says it couldn't be fetched).
 
 A template can set `layout: onepage` for the compact one-page layout the builtin `executive` uses (search shows only the clicks chart, movers only the gains, opportunities only the top three, and query-mover and opportunity sections sit side by side).
 
 The charts need daily rows: run_report_template adds them to the `search_overview` and `organic_traffic` data as `daily` (Search Console and GA4 `date` dimension; free, extra fields only), and stored rank points to `rank_trend` keywords as `series`. When the daily rows can't be fetched, the section still renders, without its chart.
+
+## Cover, contents, page breaks and text blocks
+
+These are template fields. They work the same in the global file and in a client's file, and a report without them looks exactly as it did in 0.2.0.
+
+```yaml
+version: 1
+blocks:
+  glossary:
+    title: Glossary
+    text: |
+      **CTR** is clicks divided by impressions.
+
+      **Position** is the average rank in Google; lower is better.
+templates:
+  board:
+    title: Quarterly board pack
+    period: { range: last_quarter }
+    contents: true
+    cover:
+      subtitle: Search performance for the board
+      preparedFor: Example Co
+      preparedBy: Example Agency
+      fields: [domain, period, compare, preparedFor, preparedBy, badge]
+    sections:
+      - { id: search, type: search_overview }
+      - { id: pages, type: top_pages, pageBreakBefore: true }
+      - { id: terms, type: block, block: glossary, pageBreakBefore: true }
+```
+
+### Cover
+
+`cover` shapes the cover band. `subtitle` (up to 160 characters) goes under the title; `preparedFor` and `preparedBy` (up to 120) add "Prepared for" and "Prepared by" lines. `fields` picks which entries show and in what order, from `domain`, `period`, `compare`, `generated`, `preparedFor`, `preparedBy` and `badge`. Leave `domain` or `badge` out to switch them off. A field listed in `fields` needs its text set (`preparedFor` in `fields` with no `cover.preparedFor` is an error). Without `fields`, the cover shows the domain, period, comparison, date and badge, plus "Prepared for" and "Prepared by" when you set them. The fields come in the same order in Word, HTML, PDF and Markdown.
+
+### Contents and page breaks
+
+`contents: true` adds a list of the section titles after the cover, with the "About this report" section last. It is a linked list without page numbers: Word bookmarks and links, an HTML `nav`, and a plain numbered list in Markdown (no links). One-page templates (`layout: onepage`) ignore it.
+
+`pageBreakBefore: true` on a section starts it on a new page in **Word and PDF**. Markdown has no pages, and the HTML file only breaks when you print it. A section with a page break is never placed beside another one, and one-page templates ignore page breaks. Putting it on the first section does nothing; `report templates validate` warns about that and about contents or page breaks in a one-page template.
+
+### Text blocks
+
+A `blocks` library at the top level of a template file holds reusable text (1 to 50 blocks per file, each up to 20,000 characters and at most 20 `{{chart}}` lines, with an optional `title`). The text is checked when the file is saved or loaded, so a block whose table is over the limits is an error in `report templates validate` rather than a broken export later. A `block` section shows one. The text uses the [commentary format](#commentary-format), and the section has no "Commentary" label, so it reads as part of the report: a glossary, a methodology note, terms of service.
+
+A client's template file can use blocks from the global file as well as its own. A block that nothing defines is an error in `report templates validate`. Removing a block from the global file with `update_report_template` warns, in the proposal, about client files whose `block` sections still use it (that file stops loading until it has the block again); a hand edit isn't checked, so validate the client's template afterwards. Block text is checked for [internal terms](#the-term-check) like any text the client reads.
+
+## Fonts
+
+`branding` can set `bodyFont`, `headingFont` (the body font when unset) and `fontFallback` (`sans-serif` or `serif`). A font is a family name made of letters, digits, spaces and hyphens, such as `Georgia` or `Open Sans`; paths and URLs are refused.
+
+```yaml
+branding:
+  bodyFont: Georgia
+  headingFont: Arial
+  fontFallback: serif
+```
+
+Reports never embed or download fonts, so a font shows only where it is installed. HTML and PDF use the local font name followed by the fallback family, so a PDF printed on a machine without the font uses the fallback. Word writes the font name into the document; the machine that opens it swaps in another font when it isn't installed, and Google Docs does the same. For a report that must look identical everywhere, pick a font that ships with Windows and macOS (Arial, Georgia, Verdana) or send the PDF. Markdown ignores fonts. Without these settings the PDF and HTML use the builtin font stack and Word uses Calibri.
+
+## Commentary
+
+When Claude writes the commentary, `export_report` takes a `narrative`: a `summary` and a text per section id (`search`, `brand`, and so on). Each text is a plain string for the client, or `{ client, internal }` to keep part of it back ([below](#client-and-internal-notes)).
+
+### Commentary format
+
+A small Markdown subset. Anything else appears as typed (raw HTML and links stay literal text).
+
+| Write | Result |
+|---|---|
+| A blank line between blocks | Paragraphs |
+| `- item` or `* item` | Bullets |
+| `1. item` or `1) item` | A numbered list (it starts at the number you give) |
+| `## `, `### ` or `#### ` before a line | A sub-heading |
+| A pipe table with a `---` separator row | A table: up to 12 columns and 200 rows; `---:` right-aligns a column; `\|` is a literal pipe |
+| `**bold**` | Bold |
+| `{{chart <sectionId>}}` or `{{chart <sectionId> 2}}` on a line of its own | Repeats a chart that section already draws (the number picks which, 1 by default) |
+
+```
+#### Where the gain came from
+
+1. Service pages gained the most clicks.
+2. Branded searches stayed flat.
+
+| Page | Change |
+| --- | ---: |
+| /services/emergency | +12% |
+
+{{chart search 1}}
+```
+
+A report's commentary can have at most 20 chart references in all; more is refused, naming the text where the limit was passed (blocks count toward the same 20 when the report is built, and any past it are left out with a warning). A chart reference to a section id the report doesn't have is refused. One for a chart the section doesn't draw (`{{chart search 9}}`) is left out and listed in the export result's `warnings`; nothing about it appears in the file. In Markdown the repeated chart becomes the same small table the section has.
+
+Limits: 20,000 characters per text, 100,000 characters of client text in one export, 50,000 of internal text. A table over 12 columns or 200 rows, or a text over a limit, is refused with the field's name before anything is written.
+
+### Client and internal notes
+
+`{ client, internal }` splits a text. The client part goes into the report files. The internal part, and `narrative.internal` for notes about the whole report, never appears in a client file; it is written to its own file, `<template>-<period>.internal.md` next to the report (readable only by you, and marked `audience: "internal"` in the result's `files`). With `formats: []` nothing is written and the notes come back in the result as `internalNotes`. Keep that file out of what you send.
+
+```
+export_report { client: "example.com", reportId: "rpt_01J...", formats: ["pdf"],
+  narrative: { summary: "Clicks rose 12% in September.",
+    sections: { search: { client: "Clicks rose 12%.", internal: "Ask about the dip on the 14th." } },
+    internal: "Renewal call on Friday." } }
+```
+
+### The term check
+
+Client text must not name crawlmark, Claude, Anthropic, DataForSEO, tool names (`striking_distance`), command or setting names (`allowPaid`, `reportId`, `CRAWLMARK_HOME`), report ids or credential-looking variable names. Before anything is rendered, `export_report` checks the summary, the section commentary, the template title, every section title (a `block` section without its own title shows its block's title), `block` and `text` sections, the cover texts, the branding footer and the commentary note. The check reads the text the way a reader sees it: invisible characters (zero-width spaces, soft hyphens) and the Markdown markers `*` and `` ` `` are ignored and fullwidth letters count as ordinary ones, so `**Data**ForSEO` is still a hit. Snippets show the text without those characters. If any text hits, the export is refused: nothing is written, and the result is
+
+```json
+{ "refused": true, "written": false, "error": "Client-facing text names internal terms: ...",
+  "hits": [ { "where": "sections.search", "term": "DataForSEO", "snippet": "...Rankings came from DataForSEO this month..." } ],
+  "reportId": "rpt_01J..." }
+```
+
+with every hit listed (at most 5 per term per text). Rewrite those passages, move them to the internal part, or allow a term. Ahrefs, Semrush and Google are not terms: they are attribution. Queries, URLs and page titles in the data aren't checked, and neither is the internal part.
+
+- `allowTerms` on `export_report` (up to 20 terms) allows terms for that export, for example when a client's own name matches one. With white label on (`hideCrawlmark` or `hideProviders`) it allows only tool names and your `blockTerms`: the built-in terms (crawlmark, crawlmark-cli, crawlmark-mcp, Claude, Anthropic, DataForSEO, the setting names, report ids and credential names) can then only be allowed by the `allowTerms` in `branding`, which you set yourself. The export's `warnings` list the terms it applied, and any it didn't.
+- `allowTerms` in `branding` allows them for every report, and `blockTerms` adds your own (a client code name, say). Edit these in the YAML by hand; branding setup keeps them as they are.
+
+`report templates validate` (and `validate_report_template`) run the same check on the template's own text (the template, section and block titles, the `text` sections, blocks, cover and footer) and show hits as warnings with their YAML path. `crawlmark-cli report` stops with exit 1 on them before it fetches or spends anything, since a report from cron has no commentary of its own; edit that text in the template file, or allow the term with `branding.allowTerms`.
+
+## Compatibility with 0.2.0
+
+A template file that uses any new field (`cover`, `contents`, `pageBreakBefore`, `blocks` or `block` sections, the font, `hideProviders`, `commentaryNote`, `allowTerms` and `blockTerms` settings) doesn't load in crawlmark 0.2.0 or earlier: the older version reports the file as invalid and falls back to the builtin templates and branding. Update crawlmark everywhere the file is used (every computer and cron host) before you add these fields. Files that don't use them load in both. Existing templates and stored reports render as before, except that white-label reports now hide DataForSEO and the Claude commentary line, and `crawlmark-cli report` now exits 1 when a template's own text, titles, cover or footer names an internal term ([The term check](#the-term-check)). Run `crawlmark-cli report templates validate` after upgrading to see any hits.
 
 ## Build a template
 
@@ -150,7 +291,7 @@ You don't have to write the YAML by hand. Both ways below show you exactly what 
 crawlmark-cli report templates new --client example.com
 ```
 
-It asks for an id and a title, then shows every section type grouped (Search Console, Analytics, Site health, SEO data, Local search, AI search, Other), each marked `(free)`, `(free · needs <key>)` or `(paid · DataForSEO · ~$0.025 per run for example.com)`. The paid numbers are estimates for that client from its own data provider and caches; working them out makes no request and spends nothing. Each paid section you tick is confirmed once more by name and cost (the default is No). Then the optional sections (paid ones start optional, so they run only with `--include <id> --paid`), the period (last month, last quarter, last 28 days or the last N days), the comparisons, the layout (standard or one page) and, when the file has none yet, its default formats.
+It asks for an id and a title, then shows every section type grouped (Search Console, Analytics, Site health, SEO data, Local search, AI search, Other), each marked `(free)`, `(free · needs <key>)` or `(paid · DataForSEO · ~$0.025 per run for example.com)`. The paid numbers are estimates for that client from its own data provider and caches; working them out makes no request and spends nothing. Each paid section you tick is confirmed once more by name and cost (the default is No). Then the optional sections (paid ones start optional, so they run only with `--include <id> --paid`), the period (last month, last quarter, last 28 days or the last N days), the comparisons, the layout (standard or one page) and, when the file has none yet, its default formats. The **Note (text block)** section asks which block to show, and offers to write a new block (id, title, text), which is saved in the same file when you save the template. A client's file can pick the global file's blocks. In "Change something", **Contents page** adds the linked contents list (standard layout only). Covers, page breaks and fonts are set in the YAML.
 
 Before saving it writes a one-page preview with **sample example.com data** (never the client's own) to `<home>/reports/.preview/<client>/<id>.html`, offers to open it, shows the diff of the template file, and asks: save, change something, or cancel. Ctrl-C at any point writes nothing.
 
@@ -180,13 +321,14 @@ The `build-report-template` prompt walks through this. The rules:
 - A call without `confirmToken` only proposes: it validates the template with the same schema as `report templates validate`, returns the template's YAML, a diff of the whole target file and the paid sections with this client's estimates, and stores a single-use token for 15 minutes. Nothing is written.
 - Saving needs the same arguments plus the token. It fails if the token is unknown, used or expired, if the arguments changed, or if the file changed since the proposal (propose again and look at the new diff).
 - A template with paid sections also needs `paidAcknowledged: true`, which Claude may pass only after you agreed to those sections by name and cost.
-- When your app supports MCP elicitation (Claude Code, for example), crawlmark also asks you directly before saving ("Save template "board" to ...? It includes 1 paid section (backlinks). Sections: ...", with the start of any free-text section) and saves only on yes.
-- Without elicitation, the token is only a two-step the model can complete by itself: it shows that Claude made the proposal first, not that you agreed. So without elicitation crawlmark saves only simple new templates (no paid sections, no free-text `text` sections, not replacing a template in the file, not hiding a builtin, and no `update_report_template` changes). Anything else is refused with a pointer to `crawlmark-cli report templates new`, where you make the choices yourself. This keeps text injected into a page Claude read from reaching every client report.
-- `update_report_template` changes a template that is already in a file: the whole `template`, or a `patch` that adds sections (at the end), removes sections by id, or sets the title, description, period, comparisons or layout. Builtin templates aren't in a file; copy one with `create_report_template` and `replace: true`.
+- When your app supports MCP elicitation (Claude Code, for example), crawlmark also asks you directly before saving ("Save template "board" to ...? It includes 1 paid section (backlinks). Sections: ...", with any free-text section and cover text) and saves only on yes.
+- Without elicitation, the token is only a two-step the model can complete by itself: it shows that Claude made the proposal first, not that you agreed. So without elicitation crawlmark saves only simple new templates (no paid sections, no free-text `text` sections, no cover subtitle or prepared-for/by texts, not replacing a template in the file, not hiding a builtin, and no `update_report_template` changes). Anything else is refused with a pointer to `crawlmark-cli report templates new`, where you make the choices yourself. This keeps text injected into a page Claude read from reaching every client report.
+- `update_report_template` changes a template that is already in a file: the whole `template`, or a `patch` that adds sections (at the end), removes sections by id, or sets the title, description, period, comparisons, layout, `cover` or `contents`. `addSections` can add `block` sections and `pageBreakBefore`. `patch.setBlocks` adds or replaces text blocks in the file, and `patch.removeBlockIds` removes them (refused while a section still uses one, naming the section). Builtin templates aren't in a file; copy one with `create_report_template` and `replace: true`.
+- Saving text blocks always asks you to confirm in a dialog that shows each block's title, its length and its text (the first and last 200 characters of a long one), because block text goes into client reports. An app without elicitation can't save blocks through Claude: use `crawlmark-cli report templates new` or edit the YAML.
 
 ## Files and formats
 
-Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `quarterly-2026-q3.html` or `monthly-2026-07-01-to-2026-09-30.docx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.
+Files go to `<home>/reports/<client>/<YYYY-MM>/<template>-<period>.<ext>` (set `REPORTS_DIR` to move them), for example `reports/example.com/2026-09/monthly-2026-09.pdf`, `quarterly-2026-q3.html` or `monthly-2026-07-01-to-2026-09-30.docx`. `YYYY-MM` is the month the period ends in. Folders are created readable only by you (0700) and files are 0600, since they hold client data. Commentary kept internal goes to `<template>-<period>.internal.md` in the same folder ([Client and internal notes](#client-and-internal-notes)); exporting the same period again without internal notes removes that file, so it never belongs to an older version of the report. Exporting the same template and period again overwrites the file (`overwritten: true`). Reports are kept until you delete them; delete a client's folder to remove its reports.
 
 | Format | Notes |
 |---|---|
@@ -210,7 +352,7 @@ crawlmark never writes to Google. If your Claude has a Google Drive connector th
   export_report { client: "example.com", reportId: "rpt_01J...", formats: ["pdf", "docx"], narrative: { summary: "...", sections: { search: "..." } } }
 ```
 
-`run_report_template` keeps its data for 24 hours under the `reportId`, so the files show exactly the numbers the commentary was written from. Commentary supports paragraphs, `- ` bullets and `**bold**`; anything else appears as typed.
+`run_report_template` keeps its data for 24 hours under the `reportId`, so the files show exactly the numbers the commentary was written from. Commentary supports paragraphs, bullets, numbered lists, sub-headings, tables, `**bold**` and chart repeats ([Commentary](#commentary)); anything else appears as typed. An export whose client text names an internal term is refused with the hits and writes nothing.
 
 ## From cron
 

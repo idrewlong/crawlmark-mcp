@@ -74,7 +74,7 @@ function planFor(tool: TemplateTool, args: TemplateWriteArgs, deps: TemplateWrit
  * (a crawled page, say) could otherwise hide a builtin, overwrite a template, add paid sections, or put its
  * own text into every client report. Simple additive templates without a text section need no dialog.
  */
-export function dialogReasons(plan: Pick<TemplateWritePlan, "id" | "shadowsBuiltin" | "shadowsGlobal" | "globalFileInvalid" | "replaces" | "paidSections" | "template">): string[] {
+export function dialogReasons(plan: Pick<TemplateWritePlan, "id" | "shadowsBuiltin" | "shadowsGlobal" | "globalFileInvalid" | "replaces" | "paidSections" | "template"> & { blocksSet?: string[] }): string[] {
   const reasons: string[] = [];
   if (plan.shadowsBuiltin) reasons.push(`it hides the builtin "${plan.id}" template`);
   if (plan.shadowsGlobal) reasons.push(`it hides the global "${plan.id}" template for this client`);
@@ -83,14 +83,42 @@ export function dialogReasons(plan: Pick<TemplateWritePlan, "id" | "shadowsBuilt
   if (plan.paidSections.length) reasons.push(`it has paid sections (${plan.paidSections.map((s) => s.id).join(", ")})`);
   const texts = plan.template.sections.filter((s) => s.type === "text").map((s) => s.id);
   if (texts.length) reasons.push(`it has free-text sections (${texts.join(", ")}) that appear in every report`);
+  if (plan.blocksSet?.length) reasons.push(`it adds or replaces text blocks (${plan.blocksSet.join(", ")}) that appear in client reports`);
+  const cover = coverTexts(plan.template);
+  if (cover.length) reasons.push(`it sets cover texts (${cover.map(([k]) => k).join(", ")}) that appear on every report's cover`);
   return reasons;
 }
+
+/** The cover's free texts a template sets, as [field, text] pairs. */
+function coverTexts(t: TemplateSpec): [string, string][] {
+  return (["subtitle", "preparedFor", "preparedBy"] as const).flatMap((k): [string, string][] => (t.cover?.[k] ? [[k, t.cover[k]]] : []));
+}
+
+const PREVIEW_CHARS = 200;
+
+/** A text for the dialog: one line, control characters removed; a long one as its first and last 200 characters (SEC-3). */
+export function dialogPreview(text: string): string {
+  const clean = stripControl(text).replace(/\s+/g, " ").trim();
+  if (clean.length <= PREVIEW_CHARS * 2) return `"${clean}"`;
+  return `"${clean.slice(0, PREVIEW_CHARS)}" ... "${clean.slice(-PREVIEW_CHARS)}"`;
+}
+
+const charCount = (text: string) => `${text.length.toLocaleString("en-US")} character${text.length === 1 ? "" : "s"}`;
 
 const NO_DIALOG_HELP =
   `This app can't ask the user to confirm directly (MCP elicitation), so crawlmark won't save it from here. The user can build it with \`${cliHint()} report templates new\` in a terminal, or use an app that supports confirmation dialogs (Claude Code, for example).`;
 
-/** The elicitation text (SEC-2): what is saved, what it hides or replaces, the sections, and the start of any text section. */
-export function confirmMessage(plan: TemplateWritePlan): string {
+/** A text block a patch sets, as the dialog shows it. */
+export interface BlockText {
+  title?: string | undefined;
+  text: string;
+}
+
+/**
+ * The elicitation text (SEC-2): what is saved, what it hides or replaces, the sections, any text section, the cover
+ * texts, and each text block with its title and length (the first and last 200 characters of a long one).
+ */
+export function confirmMessage(plan: TemplateWritePlan & { blockTexts?: Record<string, BlockText> }): string {
   const parts = [`Save template "${plan.id}" to ${plan.path}?`];
   if (plan.shadowsBuiltin) parts.push(`It hides the builtin "${plan.id}" template${plan.file === "client" ? " for this client" : ""}.`);
   else if (plan.replaces) parts.push("It replaces the template with this id in that file.");
@@ -101,14 +129,25 @@ export function confirmMessage(plan: TemplateWritePlan): string {
   parts.push(`Sections: ${plan.template.sections.map((s) => `${s.id} (${s.type})`).join(", ")}.`);
   for (const s of plan.template.sections) {
     if (s.type !== "text") continue;
-    const clean = stripControl(s.text).replace(/\s+/g, " ").trim();
-    parts.push(`Text in "${s.id}": "${clean.length > 200 ? `${clean.slice(0, 200)}...` : clean}"`);
+    parts.push(`Text in "${s.id}" (${charCount(s.text)}): ${dialogPreview(s.text)}`);
+  }
+  for (const [k, text] of coverTexts(plan.template)) parts.push(`Cover ${k}: ${dialogPreview(text)}`);
+  for (const [bid, b] of Object.entries(plan.blockTexts ?? {})) {
+    const title = b.title ? ` titled ${dialogPreview(b.title)}` : " (no title)";
+    parts.push(`Text block "${bid}"${title}, ${charCount(b.text)}: ${dialogPreview(b.text)}`);
   }
   return parts.join(" ");
 }
 
 function paidLine(plan: TemplateWritePlan): string {
   return plan.paidSections.length ? ` It includes ${plural(plan.paidSections.length, "paid section")} (${plan.paidSections.map((s) => s.id).join(", ")}).` : "";
+}
+
+/** The title and text of the blocks a patch sets, so the confirmation dialog shows the user what will appear in reports. */
+function blockTextsOf(args: TemplateWriteArgs): Record<string, BlockText> {
+  const out: Record<string, BlockText> = {};
+  for (const [bid, b] of Object.entries(args.patch?.setBlocks ?? {})) out[bid] = { ...(typeof b?.title === "string" ? { title: b.title } : {}), text: typeof b?.text === "string" ? b.text : "" };
+  return out;
 }
 
 /** The tool call itself (exported for tests; the MCP layer only adds elicitation and the result envelope). */
@@ -200,7 +239,7 @@ export async function templateWriteCall(tool: TemplateTool, args: TemplateWriteA
     const reasons = dialogReasons(plan);
     if (reasons.length) throw new ProposalError(`Not saved: ${reasons.join("; ")}, so the user must confirm it themselves. ${NO_DIALOG_HELP}`);
   } else {
-    const ok = await deps.elicit(confirmMessage(plan));
+    const ok = await deps.elicit(confirmMessage({ ...plan, blockTexts: blockTextsOf(args) }));
     if (!ok) {
       consumeProposal(args.confirmToken);
       throw new ProposalError("Not saved: the user declined.");
@@ -217,7 +256,8 @@ const sectionLike = z.record(z.string(), z.unknown());
 const templateArg = z
   .record(z.string(), z.unknown())
   .describe(
-    "The template as JSON, validated with the template schema: { title, description?, period?: { range: last_month | last_quarter | last_n_days (days) | custom (start, end) }, compare?: [previous_period, previous_year], layout?: standard | onepage, sections: [{ id, type, optional?, paid?, title?, ...type options }] }. " +
+    "The template as JSON, validated with the template schema: { title, description?, period?: { range: last_month | last_quarter | last_n_days (days) | custom (start, end) }, compare?: [previous_period, previous_year], layout?: standard | onepage, cover?: { subtitle?, preparedFor?, preparedBy?, fields?: [domain | period | compare | generated | preparedFor | preparedBy | badge] }, contents?: boolean (a contents list after the cover), sections: [{ id, type, optional?, paid?, pageBreakBefore?, title?, ...type options }] }. " +
+      "A `block` section ({ id, type: block, block: <block id> }) shows a reusable text block from the template file's file-level `blocks` (add blocks with update_report_template's patch.setBlocks; a client template can use the global file's blocks). " +
       "Section types and what they cost: get_report_template's `catalogue`. Paid section types need paid: true. Prefer optional: true for paid sections.",
   );
 
@@ -286,7 +326,7 @@ export function registerTemplateWriteTools(server: McpServer, opts: { homeDir?: 
     {
       title: "Update a report template",
       description:
-        "Change a template that is already in the global template file or a client's file: either the whole `template`, or a `patch` (addSections, removeSectionIds, set title/description/period/compare/layout; null in set removes a field). " +
+        "Change a template that is already in the global template file or a client's file: either the whole `template`, or a `patch` (addSections, removeSectionIds, set title/description/period/compare/layout/cover/contents; null in set removes a field; setBlocks adds or replaces file-level text blocks as { <id>: { title?, text } }; removeBlockIds removes blocks no section uses). " +
         "Builtin templates aren't in a file: copy one with create_report_template and replace: true instead." +
         DESCRIPTION_TAIL,
       inputSchema: {
@@ -297,9 +337,15 @@ export function registerTemplateWriteTools(server: McpServer, opts: { homeDir?: 
             addSections: z.array(sectionLike).max(40).optional(),
             removeSectionIds: z.array(z.string().min(1).max(40)).max(40).optional(),
             set: z
-              .object({ title: z.unknown().optional(), description: z.unknown().optional(), period: z.unknown().optional(), compare: z.unknown().optional(), layout: z.unknown().optional() })
+              .object({ title: z.unknown().optional(), description: z.unknown().optional(), period: z.unknown().optional(), compare: z.unknown().optional(), layout: z.unknown().optional(), cover: z.unknown().optional(), contents: z.unknown().optional() })
               .strict()
               .optional(),
+            setBlocks: z
+              .record(z.string().min(1).max(40), z.object({ title: z.string().max(120).optional(), text: z.string().min(1).max(20_000) }).strict())
+              .refine((r) => Object.keys(r).length <= 50, "at most 50 blocks")
+              .optional()
+              .describe("Add or replace reusable text blocks in the file: { <block id>: { title?, text } }. The text is commentary Markdown shown in client reports through `block` sections."),
+            removeBlockIds: z.array(z.string().min(1).max(40)).max(50).optional().describe("Remove blocks from the file; refused while a template in the file still has a block section using one."),
           })
           .strict()
           .optional()

@@ -37,6 +37,7 @@ import type {
   LocalProfileData,
   RankTrendData,
   SiteCrawlData,
+  BlockSectionData,
   LandingPagesData,
   MoversData,
   OpportunityLists,
@@ -698,6 +699,12 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       units: { ahrefs: deps.unitsThisMonth(keys, "ahrefs"), semrush: deps.unitsThisMonth(keys, "semrush") },
     }),
     text: async (s: Extract<SectionSpec, { type: "text" }>) => ({ text: s.text }),
+    // Release B: a reusable block from the template files' blocks library (the client's over the global one).
+    block: async (s: Extract<SectionSpec, { type: "block" }>): Promise<BlockSectionData> => {
+      const b = plan.loaded.blocks.get(s.block);
+      if (!b) throw new SectionUnavailableError(`no block "${s.block}"`);
+      return { blockId: s.block, text: b.text };
+    },
     // Phase 13 B: provider sections, from the plan the pre-flight priced (stored snapshots first; D1-D7).
     backlinks: (s: Extract<SectionSpec, { type: "backlinks" }>) => providerSection(s),
     organic_visibility: (s: Extract<SectionSpec, { type: "organic_visibility" }>) => providerSection(s),
@@ -827,7 +834,12 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   };
 
   const runOne = async (s: SectionSpec): Promise<SectionResult> => {
-    const base = { id: s.id, type: s.type, title: s.title ?? SECTION_TITLES[s.type] };
+    const base = {
+      id: s.id,
+      type: s.type,
+      title: s.title ?? (s.type === "block" ? plan.loaded.blocks.get(s.block)?.title : undefined) ?? SECTION_TITLES[s.type],
+      ...(s.pageBreakBefore === true ? { pageBreakBefore: true as const } : {}),
+    };
     // technical_issues still runs its free sources without allowPaid; its paid sources are listed as unavailable.
     if ((isPaidSection(s) || s.paid === true) && !allowPaid && s.type !== "technical_issues") {
       return { ...base, status: "skipped", reason: "paid section; run with allowPaid: true (tool) or --paid (CLI) to include it" };
@@ -896,7 +908,14 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   const report: TemplateReport = {
     reportId: `rpt_${ulid()}`,
     client: { slug: client.slug, name: client.name, domain: client.domain },
-    template: { id: template.id, title: template.spec.title, source: template.source, ...(template.spec.layout === "onepage" ? { layout: "onepage" as const } : {}) },
+    template: {
+      id: template.id,
+      title: template.spec.title,
+      source: template.source,
+      ...(template.spec.layout === "onepage" ? { layout: "onepage" as const } : {}),
+      ...(template.spec.cover ? { cover: template.spec.cover } : {}),
+      ...(template.spec.contents === true ? { contents: true as const } : {}),
+    },
     period: { current: period.current, label: period.label, folderMonth: period.folderMonth, comparisons: period.comparisons },
     generatedAt: new Date().toISOString(),
     sections,
