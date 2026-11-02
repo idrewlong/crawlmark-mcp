@@ -15,6 +15,8 @@ export interface CrawlCliFlags {
   "user-agent"?: string | undefined;
   "include-subdomains"?: boolean | undefined;
   "start-url"?: string | undefined;
+  /** --no-sitemap-urls: skip the sitemap phase. */
+  "no-sitemap-urls"?: boolean | undefined;
 }
 
 export interface CrawlCliIo {
@@ -85,6 +87,7 @@ export async function crawlCommand(args: string[], values: CrawlCliFlags, io: Cr
       ...(ua ? { userAgent: ua } : {}),
       ...(values["include-subdomains"] ? { includeSubdomains: true } : {}),
       ...(startUrls ? { startUrls } : {}),
+      ...(values["no-sitemap-urls"] ? { includeSitemapUrls: false } : {}),
     });
     io.out(JSON.stringify({ command: "crawl", ...r }, null, 2));
     const s = r.summary;

@@ -19,6 +19,7 @@ import { readEnvFile } from "./env-file.js";
 import { resolveHome } from "./home.js";
 import { projectRoot, resolveFromRoot } from "./paths.js";
 import { stripControl } from "./terminal-text.js";
+import { NPX_COMMAND } from "./cli-hint.js";
 
 export const REGISTRY_LATEST_URL = "https://registry.npmjs.org/crawlmark-mcp/latest";
 export const UPDATE_CHECK_TIMEOUT_MS = 1_500;
@@ -208,7 +209,7 @@ export async function checkForUpdate(o: UpdateCheckOptions): Promise<string | un
 
 /** The notice text (pure). */
 export function updateNotice(current: string, latest: string): string {
-  return `Update available ${stripControl(current)} → ${stripControl(latest)} · run npx crawlmark-mcp@latest init`;
+  return `Update available ${stripControl(current)} → ${stripControl(latest)} · run ${NPX_COMMAND} init`;
 }
 
 /** `<dataDir>/update-check.json`. */

@@ -17,6 +17,7 @@ import { ProviderUnavailableError } from "../lib/provider-ids.js";
 import { withUnitsReservation, unitsCall } from "./units-billing.js";
 import type { RawIssue } from "../analysis/tech-issues.js";
 import type { IssueSeverity, SourceRun } from "../reports/report-types.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 /** The only Ahrefs calls this module can make (D12). */
 export const ALLOWED: readonly { method: "GET"; path: string; units: number }[] = [
@@ -118,7 +119,7 @@ export async function matchAhrefsProject(client: Client, t: AhrefsAuditTransport
   const matches = saved ? r.value.filter((p) => p.id === saved) : r.value.filter((p) => onClientDomain(p.host, client.domain));
   // A pinned project on another site would put that site's audit in this client's report: refused.
   if (saved && matches.length === 1 && !onClientDomain(matches[0]!.host, client.domain)) {
-    throw new ProviderUnavailableError("siteAudit", "ahrefs", `Ahrefs Site Audit project ${saved} is for ${matches[0]!.host || "another site"}, not ${own}; fix ahrefsSiteAuditProject (crawlmark-cli clients set ${client.domain} --ahrefs-site-audit-project <id>)`);
+    throw new ProviderUnavailableError("siteAudit", "ahrefs", `Ahrefs Site Audit project ${saved} is for ${matches[0]!.host || "another site"}, not ${own}; fix ahrefsSiteAuditProject (${cliHint()} clients set ${client.domain} --ahrefs-site-audit-project <id>)`);
   }
   if (matches.length !== 1) {
     throw new ProviderUnavailableError(
@@ -127,7 +128,7 @@ export async function matchAhrefsProject(client: Client, t: AhrefsAuditTransport
       saved
         ? `no Ahrefs Site Audit project ${saved} for this key (check ahrefsSiteAuditProject)`
         : matches.length
-          ? `${matches.length} Ahrefs Site Audit projects match ${own}; set ahrefsSiteAuditProject (crawlmark-cli clients set ${client.domain} --ahrefs-site-audit-project <id>)`
+          ? `${matches.length} Ahrefs Site Audit projects match ${own}; set ahrefsSiteAuditProject (${cliHint()} clients set ${client.domain} --ahrefs-site-audit-project <id>)`
           : `no Ahrefs Site Audit project for ${own}; create one in Ahrefs, or set ahrefsSiteAuditProject`,
     );
   }

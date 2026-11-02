@@ -7,8 +7,10 @@ import { ahrefsStatus } from "../providers/ahrefs.js";
 import { dataForSeoStatus } from "../providers/dataforseo.js";
 import { semrushStatus } from "../providers/semrush.js";
 import { backlinksSummary, competitorDomains, rankedKeywords, searchVolume, serp } from "../providers/seo-data.js";
-import { ga4Report } from "../providers/ga4.js";
+import { effectiveHostnames, ga4HostnameBreakdown, ga4Report } from "../providers/ga4.js";
 import { gscInspectUrl, gscQuery } from "../providers/gsc.js";
+import { validateGa4Hostnames } from "../lib/ga4-hostnames.js";
+import { fillGscMonths, gscHistoryView } from "../lib/gsc-monthly.js";
 import { runLighthouse } from "../providers/lighthouse.js";
 import { clientOrigin, cruxHistory } from "../providers/crux.js";
 import { checkRender } from "../providers/render.js";
@@ -17,6 +19,9 @@ import { keywordInput } from "../lib/clients.js";
 import { recordLiveRank } from "../lib/rank-history.js";
 import { assertUserUrl } from "../user-url.js";
 import { handler, READ_ONLY } from "./util.js";
+
+/** Writes local history to the database and may make many Search Console calls. */
+const LOCAL_WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 
 /**
  * Lower-level tools for ad-hoc questions ("which pages lost clicks from the
@@ -30,9 +35,12 @@ const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const BROWSER = { timeoutMs: TIMEOUTS.browserMs };
 /** Routed paid tools: each result carries `provider` (whose data it is), `units` (Ahrefs/Semrush API units; null for DataForSEO), costUsd and fromCache. */
 const PAID = "Paid (DataForSEO, Ahrefs or Semrush, per client; the result's `provider` and `units` say which and how many API units)";
-const URL_SAFETY =
+const URL_RULES =
   "http/https only; hosts that resolve to a private, loopback or link-local address are refused unless ALLOW_PRIVATE_URLS=true, " +
-  "and with RESTRICT_TO_CLIENT_DOMAINS=true only client domains and their subdomains are allowed. Times out after 90s.";
+  "and with RESTRICT_TO_CLIENT_DOMAINS=true only client domains and their subdomains are allowed.";
+const URL_SAFETY = `${URL_RULES} Times out after 90s.`;
+/** Lighthouse runs one at a time, so its whole-call limit covers the longest wait plus one run (a backstop; the run has its own timer). */
+const LIGHTHOUSE = { timeoutMs: TIMEOUTS.lighthouseQueueMs + TIMEOUTS.lighthouseRunMs + 30_000 };
 
 function rangeOrDefault(startDate?: string, endDate?: string) {
   if (startDate && endDate) return { startDate, endDate };
@@ -48,7 +56,8 @@ export function registerRawTools(server: McpServer) {
       title: "Search Console query",
       description:
         "Query Google Search Console search analytics for a client. Group by query, page, country, device or date, " +
-        "and filter by page or query substring. Free. Defaults to the last complete month.",
+        "and filter by page or query substring. Free. Defaults to the last complete month. " +
+        "The client's gscExcludeQueries are left out of the rows (set includeExcludedQueries to see raw Search Console numbers).",
       inputSchema: {
         client: clientArg,
         startDate: dateArg.optional(),
@@ -57,11 +66,46 @@ export function registerRawTools(server: McpServer) {
         pageContains: z.string().optional(),
         queryContains: z.string().optional(),
         rowLimit: z.number().int().min(1).max(25000).optional(),
+        includeExcludedQueries: z.boolean().optional().describe("Don't leave out the client's gscExcludeQueries (raw numbers). Default false."),
       },
       annotations: READ_ONLY,
     },
     handler("gsc_query", async ({ client, startDate, endDate, ...rest }) =>
       gscQuery(await resolveClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
+    ),
+  );
+
+  server.registerTool(
+    "gsc_history",
+    {
+      title: "Search Console history",
+      description:
+        "Saved monthly Search Console history for a client: clicks, impressions, CTR and position per month, and optionally one month's top pages, queries, devices and countries. " +
+        "Free. Google keeps only 16 months of Search Console data, so run this once per client with backfill: true to save what Google still has (the oldest month may be partial, complete: false); " +
+        "monthly_report and report runs then save the newest missing months. Saved numbers are raw: the client's gscExcludeQueries are applied to saved query rows when a report reads them, and to saved totals only for months saved under the same exclusions (otherwise totals are read raw, with a note). " +
+        "A backfill paces its requests, backs off at quota limits and is safe to run again: it only fetches months not saved yet (refresh: false).",
+      inputSchema: {
+        client: clientArg,
+        backfill: z.boolean().optional().describe("Fetch and save the months not saved yet (up to `months`). Default false: only show what is saved."),
+        months: z.number().int().min(1).max(16).optional().describe("How many recent months a backfill covers. Default 16."),
+        month: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM: the month `detail` shows (default: the newest saved month)."),
+        detail: z.array(z.enum(["pages", "queries", "devices", "countries"])).optional().describe("Also return that month's saved rows."),
+        limit: z.number().int().min(1).max(250).optional().describe("Rows per detail list. Default 25."),
+      },
+      annotations: LOCAL_WRITE,
+    },
+    handler(
+      "gsc_history",
+      async ({ client, backfill, months, month, detail, limit }, { signal }) => {
+        const c = await resolveClient(client);
+        if (!c.gscProperty) throw new Error(`No Search Console property found for ${c.domain}, so there is no history to save. Give the Google account access to the site in Search Console (then call list_clients with refresh: true).`);
+        const n = months ?? 16;
+        const fill = backfill ? await fillGscMonths(c, { max: n, window: n, signal }, { gscQuery, now: Date.now }) : undefined;
+        const view = gscHistoryView(c, { month, detail, limit: limit ?? 25 });
+        if (fill?.failed.length) view.notes.unshift(`${fill.failed.length} month(s) weren't saved. Call gsc_history with backfill: true again to carry on where it stopped.`);
+        return { client: c.domain, property: c.gscProperty, stored: view.stored, ...(fill ? { backfill: fill } : {}), ...(view.detail ? { detail: view.detail } : {}), notes: view.notes };
+      },
+      { timeoutMs: 5 * 60_000 },
     ),
   );
 
@@ -114,7 +158,9 @@ export function registerRawTools(server: McpServer) {
       title: "GA4 report",
       description:
         "Run a GA4 Data API report for a client. Pass GA4 API metric and dimension names " +
-        "(e.g. metrics: sessions, keyEvents, engagementRate; dimensions: landingPagePlusQueryString, sessionDefaultChannelGroup, date). Free.",
+        "(e.g. metrics: sessions, keyEvents, engagementRate; dimensions: landingPagePlusQueryString, sessionDefaultChannelGroup, date). Free. " +
+        "Only the client's GA4 hostnames are counted (default: the domain and its www form; set ga4Hostnames with set_client_profile). " +
+        "Returns { rows, hostnames } where hostnames lists the hostnames left out with their session counts; hostnames / allHostnames override the filter for this call.",
       inputSchema: {
         client: clientArg,
         metrics: z.array(z.string()).min(1),
@@ -123,12 +169,39 @@ export function registerRawTools(server: McpServer) {
         endDate: dateArg.optional(),
         organicOnly: z.boolean().optional().describe("Restrict to Organic Search sessions."),
         limit: z.number().int().min(1).max(10000).optional(),
+        hostnames: z.array(z.string().max(253)).min(1).max(20).optional().describe('Count only these hostnames for this call ("shop.example.com", "*.example.com" for any subdomain). Default: the client\'s ga4Hostnames.'),
+        allHostnames: z.boolean().optional().describe("Count every hostname (no hostname filter) for this call."),
       },
       annotations: READ_ONLY,
     },
-    handler("ga4_report", async ({ client, startDate, endDate, ...rest }) =>
-      ga4Report(await resolveClient(client), { ...rangeOrDefault(startDate, endDate), ...rest }),
-    ),
+    handler("ga4_report", async ({ client, startDate, endDate, hostnames, allHostnames, ...rest }) => {
+      if (hostnames && allHostnames) throw new Error("Give hostnames or allHostnames, not both.");
+      if (hostnames) {
+        const problem = validateGa4Hostnames(hostnames);
+        if (problem) throw new Error(`hostnames: ${problem}`);
+      }
+      const c = await resolveClient(client);
+      const range = rangeOrDefault(startDate, endDate);
+      const override = allHostnames ? ["*"] : hostnames;
+      const rows = await ga4Report(c, { ...range, ...rest, ...(override ? { hostnames: override } : {}) });
+      const effective = effectiveHostnames(c, override);
+      let breakdown: Awaited<ReturnType<typeof ga4HostnameBreakdown>> | undefined;
+      let breakdownError: string | undefined;
+      try {
+        breakdown = await ga4HostnameBreakdown(c, range, { ...(rest.organicOnly !== undefined ? { organicOnly: rest.organicOnly } : {}), ...(override ? { hostnames: override } : {}) });
+      } catch (err) {
+        breakdownError = err instanceof Error ? err.message : String(err);
+      }
+      return {
+        rows,
+        hostnames: {
+          applied: effective.includes("*") ? ("all" as const) : effective,
+          excludedSessions: breakdown && breakdown.applied !== "all" ? breakdown.excludedSessions : null,
+          excluded: breakdown?.excluded ?? [],
+          ...(breakdownError ? { error: breakdownError } : {}),
+        },
+      };
+    }),
   );
 
   // ------------------------------------- paid SEO data (DataForSEO, Ahrefs or Semrush, per client)
@@ -246,7 +319,7 @@ export function registerRawTools(server: McpServer) {
       description:
         "Check the Ahrefs API v3 key with Ahrefs' free limits-and-usage call: whether the key works, the plan, the key's and workspace's units used this billing month " +
         "and when they reset, plus the units crawlmark recorded this calendar month against its own cap (monthlyUnitCap). " +
-        "Free (no API units), never cached, records no spend, and never shows the key. A missing or rejected key is reported in the result, not as a tool error. " +
+        "Free (no API units), never cached, records no spend, and never shows the key. A missing or rejected key is reported in the result, not as a tool error; on a paid call a rejected key is an error that says how to fix the key or move that client to another configured provider (set_client_profile dataProvider), and crawlmark never switches providers by itself. " +
         "Change the key in a terminal (setup --step ahrefs), never through chat.",
       inputSchema: {},
       annotations: READ_ONLY,
@@ -261,7 +334,7 @@ export function registerRawTools(server: McpServer) {
       description:
         "Whether a Semrush API key (v4, from the profile > API keys page) is set, what Semrush serves in crawlmark (keyword volume and backlinks; its v4 API has no rankings, " +
         "competitors, visibility or Site Audit), and the units crawlmark recorded this calendar month against its own cap. Semrush has no free key check, so a rejected key shows " +
-        "on the first paid call. Free, never cached, records no spend, never shows a key. Change the key in a terminal (setup --step semrush), never through chat.",
+        "on the first paid call, as an error that says how to fix the key or move that client to another configured provider (set_client_profile dataProvider); crawlmark never switches providers by itself. Free, never cached, records no spend, never shows a key. Change the key in a terminal (setup --step semrush), never through chat.",
       inputSchema: {},
       annotations: READ_ONLY,
     },
@@ -276,7 +349,9 @@ export function registerRawTools(server: McpServer) {
       title: "Lighthouse",
       description:
         "Run Lighthouse on any URL: category scores, lab Core Web Vitals and top opportunities. " +
-        "Adds real-user CrUX field data when PSI_API_KEY is set. Free, ~30s. " + URL_SAFETY,
+        "Adds real-user CrUX field data when PSI_API_KEY is set. " +
+        "Free. Usually 30-60 s; Lighthouse runs one at a time, so parallel calls queue (each run times out after 150 s, not counting the wait). Call it for one URL at a time. " +
+        URL_RULES,
       inputSchema: { url: z.string().url(), formFactor: z.enum(["mobile", "desktop"]).optional() },
       annotations: READ_ONLY,
     },
@@ -286,7 +361,7 @@ export function registerRawTools(server: McpServer) {
         await assertUserUrl(url);
         return runLighthouse(url, formFactor, { signal });
       },
-      BROWSER,
+      LIGHTHOUSE,
     ),
   );
 

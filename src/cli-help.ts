@@ -6,7 +6,7 @@
 import { basename } from "node:path";
 import { styleText } from "node:util";
 
-export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "index-coverage", "seo-snapshot", "report", "crawl", "logs", "data"] as const;
+export const HELP_GROUPS = ["init", "setup", "auth", "clients", "competitors", "keywords", "brand", "audit", "check-traffic", "check-ranks", "index-coverage", "seo-snapshot", "report", "crawl", "logs", "data", "gsc-history"] as const;
 export type HelpGroup = (typeof HELP_GROUPS)[number];
 
 export function isHelpGroup(name: string | undefined): name is HelpGroup {
@@ -56,6 +56,7 @@ export function topHelp(o: HelpOptions): string {
     "  logs                  Crawler hits in your server logs (local, never uploaded)",
     heading("Stored data", o),
     "  data purge            Delete a provider's stored data (e.g. Ahrefs)",
+    "  gsc-history           Save Search Console history (Google keeps 16 months)",
     "",
     heading("Examples", o),
     "  npx crawlmark-mcp@latest init",
@@ -126,6 +127,9 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "                [--country <XX|none>] [--bing-site <url|none>]",
     "                [--place-id <id|none>]",
     "                [--ahrefs-site-audit-project <id|none>]",
+    "                [--ga4-hostname <host|none>]...",
+    "                [--gsc-exclude-query <item|none>]...",
+    "                [--gtm-container <GTM-XXXX|id|none>]",
     "",
     "clients list",
     "  Show every client. When Google is set up, newly discovered Search Console",
@@ -164,6 +168,18 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "                       The client's existing Ahrefs Site Audit project",
     "                       (app.ahrefs.com/site-audit/<id>), read by",
     "                       technical_issues; none matches by domain",
+    "  --ga4-hostname <host>",
+    "                       A hostname counted in GA4 numbers; repeat the flag for",
+    "                       several (replaces the list). Default: the domain and",
+    "                       www. Use *.example.com for any subdomain, * for no",
+    "                       filter; none goes back to the default",
+    "  --gsc-exclude-query <item>",
+    "                       A Search Console query left out of totals and query",
+    "                       lists: exact text, or /regex/ (RE2; quote it). Repeat",
+    "                       for several (replaces the list); none clears it",
+    "  --gtm-container <id> The Tag Manager container gtm_audit uses: GTM-XXXX or",
+    "                       the numeric ID. Also removes gtmAccountId; none clears",
+    "                       the pin",
   ],
   competitors: (p) => [
     `Usage: ${p} competitors list <client>`,
@@ -275,6 +291,24 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
     "  Prints JSON to stdout. Exit code: 0 done, 1 error or no --paid, 2 a client",
     "  failed or was over its cap.",
   ],
+  "gsc-history": (p) => [
+    `Usage: ${p} gsc-history backfill <client>... | --all`,
+    "                [--months <n>] [--refresh]",
+    `       ${p} gsc-history show <client> [--months <n>]`,
+    "",
+    "  Google keeps 16 months of Search Console data, and every month not saved is",
+    "  lost for good. backfill saves each missing month (clicks, impressions, top",
+    "  pages, queries, devices and countries) in crawlmark's local database; run it",
+    "  once now, then reports keep it up to date. Free (Search Console only). It",
+    "  paces its requests, backs off when Google says slow down, and stops cleanly",
+    "  at a quota limit: run it again to carry on. The oldest month is partial.",
+    "  --all                   Every client with a Search Console property",
+    "  --months <n>            How many recent months (1 to 16, default 16)",
+    "  --refresh               Fetch months that are already saved again",
+    "  show lists the saved months (raw numbers, before query exclusions).",
+    "",
+    "  Prints one line per client. Exit code: 0 done, 1 error or all failed.",
+  ],
   data: (p) => [
     `Usage: ${p} data purge --provider <ahrefs|semrush|dataforseo>`,
     "                [--client <domain|slug>]",
@@ -329,7 +363,7 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
   `Usage: ${p} crawl --client <domain|slug> [--max-pages <n>]`,
   "                [--max-depth <n>] [--concurrency <n>]",
   "                [--user-agent crawlmark|googlebot] [--include-subdomains]",
-  "                [--start-url <url,url>]",
+  "                [--start-url <url,url>] [--no-sitemap-urls]",
   "",
   "  Crawls the client's own site from this machine (free) and saves the result",
   "  for local_crawl_pages, site_hygiene's orphan check and audits. Obeys",
@@ -345,6 +379,8 @@ const GROUP_TEXT: Record<Exclude<HelpGroup, "init">, (p: string) => string[]> = 
   "  --include-subdomains    Also crawl subdomains",
   "  --start-url <url,url>   Where to start, on the client's host (default: the",
   "                          homepage and the client's key pages)",
+  "  --no-sitemap-urls       Skip the sitemap phase (by default, sitemap URLs",
+  "                          the links didn't reach are fetched too, same caps)",
   "  Prints JSON to stdout and a summary to stderr. Exit code: 0 saved, 1 error.",
 ],
   logs: (p) => [

@@ -5,6 +5,7 @@
  * src/providers/google-login.ts and src/lib/token-store.ts.
  */
 import { z } from "zod";
+import { cliHint } from "./cli-hint.js";
 
 export const GOOGLE_AUTH_MODES = ["oauth", "service_account"] as const;
 export type GoogleAuthMode = (typeof GOOGLE_AUTH_MODES)[number];
@@ -31,7 +32,8 @@ export const SERVICE_ACCOUNT_SCOPES = [...DATA_SCOPES, GTM_SCOPE] as const;
  */
 export const OAUTH_SCOPES = [...DATA_SCOPES, GTM_SCOPE, "openid", "email"] as const;
 
-export const LOGIN_COMMAND = "crawlmark-cli auth login";
+/** The sign-in command as this install runs it. A function: google-auth is loaded while config.ts loads, before cli-hint can read the config. */
+export const loginCommand = (): string => `${cliHint()} auth login`;
 export const CALLBACK_PATH = "/oauth2callback";
 
 // ---------------------------------------------------------------- mode selection
@@ -110,7 +112,7 @@ export function selectGoogleAuthConfig(e: GoogleAuthEnv): GoogleAuthConfig {
   if (missing.length) {
     throw new Error(
       `Google OAuth is not configured: ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not set. ` +
-        `Create a Desktop app OAuth client in Google Cloud (see README), add the values to .env, then run \`${LOGIN_COMMAND}\`. ` +
+        `Create a Desktop app OAuth client in Google Cloud (see README), add the values to .env, then run \`${loginCommand()}\`. ` +
         "Or set GOOGLE_AUTH_MODE=service_account to use a service-account key instead.",
     );
   }
@@ -129,7 +131,7 @@ export function serviceAccountKeyMissingMessage(keyFile: string): string {
 }
 
 export function noTokenMessage(tokenFile: string): string {
-  return `Not signed in to Google (no token at ${tokenFile}). Run \`${LOGIN_COMMAND}\` to sign in.`;
+  return `Not signed in to Google (no token at ${tokenFile}). Run \`${loginCommand()}\` to sign in.`;
 }
 
 // ---------------------------------------------------------------- consent URL + callback
@@ -215,7 +217,8 @@ export function missingGtmScope(granted: string | readonly string[] | undefined 
   return !list.includes(GTM_SCOPE);
 }
 
-export const GTM_SCOPE_MESSAGE = `Tag Manager access isn't granted to this sign-in. Run \`${LOGIN_COMMAND}\` again to grant it (leave every permission ticked).`;
+export const gtmScopeMessage = (): string =>
+  `Tag Manager access isn't granted to this sign-in. Run \`${loginCommand()}\` again to grant it (leave every permission ticked).`;
 
 /** Email claim from an ID token. Display only: the token came straight from Google's token endpoint over TLS. */
 export function emailFromIdToken(idToken: string | null | undefined): string | undefined {
@@ -249,11 +252,11 @@ export function parseTokenFile(text: string, path: string): StoredToken {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`Google token file at ${path} is not valid JSON. Run \`${LOGIN_COMMAND}\` again.`);
+    throw new Error(`Google token file at ${path} is not valid JSON. Run \`${loginCommand()}\` again.`);
   }
   const parsed = StoredTokenSchema.safeParse(json);
   if (!parsed.success) {
-    throw new Error(`Google token file at ${path} has no refresh token. Run \`${LOGIN_COMMAND}\` again.`);
+    throw new Error(`Google token file at ${path} has no refresh token. Run \`${loginCommand()}\` again.`);
   }
   return parsed.data;
 }
@@ -299,16 +302,16 @@ export function isInvalidGrant(err: unknown): boolean {
   return err instanceof Error && /\binvalid_grant\b/.test(err.message);
 }
 
-export const INVALID_GRANT_MESSAGE =
+export const invalidGrantMessage = (): string =>
   "Google sign-in expired or was revoked (invalid_grant). " +
-  `Run \`${LOGIN_COMMAND}\` to sign in again. ` +
+  `Run \`${loginCommand()}\` to sign in again. ` +
   "Note: if the OAuth consent screen is External with publishing status Testing (personal Gmail), " +
   "Google expires sign-ins after 7 days, so this is expected weekly.";
 
 /** Map a token-refresh failure to a user-facing error. Non-auth errors pass through unchanged. */
 export function mapTokenError(err: unknown): unknown {
-  if (err instanceof Error && err.message === INVALID_GRANT_MESSAGE) return err;
-  if (isInvalidGrant(err)) return new Error(INVALID_GRANT_MESSAGE, { cause: err });
+  if (err instanceof Error && err.message === invalidGrantMessage()) return err;
+  if (isInvalidGrant(err)) return new Error(invalidGrantMessage(), { cause: err });
   return err;
 }
 
@@ -323,7 +326,7 @@ export function loginExchangeErrorMessage(err: unknown): string {
     code === "invalid_client" || code === "unauthorized_client"
       ? " Check GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET (the client must be a Desktop app)."
       : "";
-  return `Sign-in failed: Google rejected the authorization code (${detail}).${hint} Run \`${LOGIN_COMMAND}\` again.`;
+  return `Sign-in failed: Google rejected the authorization code (${detail}).${hint} Run \`${loginCommand()}\` again.`;
 }
 
 // ---------------------------------------------------------------- status

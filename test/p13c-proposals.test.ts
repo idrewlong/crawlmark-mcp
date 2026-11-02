@@ -15,6 +15,7 @@ import type { Client } from "../src/lib/clients.js";
 import { argumentsHash, canonicalJson, newToken, TOKEN_RE } from "../src/reports/templates/proposals.js";
 import { registerTemplateWriteTools, templateWriteCall, type TemplateWriteArgs, type TemplateWriteDeps } from "../src/tools/report-template-write.js";
 import { POSIX_MODES } from "./platform.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 const today = new Date("2026-10-13T12:00:00Z");
 const newHome = () => mkdtempSync(join(tmpdir(), "crawlmark-p13c-tool-"));
@@ -351,7 +352,7 @@ describe("without elicitation, risky saves need the user's own answer (SEC-1)", 
       const r = await call(tool, { ...proposeArgs, ...(paidAcknowledged !== undefined ? { paidAcknowledged } : {}), confirmToken: p.json.confirmToken });
       expect(r.isError).toBe(true);
       expect(r.text).toMatch(why);
-      expect(r.text).toMatch(/crawlmark-cli report templates new/);
+      expect(r.text).toMatch(cliRe("report templates new"));
       expect(readFileSync(globalFile(home), "utf8")).toBe(EXISTING);
     });
   }

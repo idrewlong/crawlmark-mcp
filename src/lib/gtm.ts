@@ -3,7 +3,7 @@
  * container refs, the domain join  and
  * the error messages. The I/O lives in src/providers/gtm.ts.
  */
-import { GTM_SCOPE_MESSAGE } from "./google-auth.js";
+import { gtmScopeMessage } from "./google-auth.js";
 import { stripControl } from "./terminal-text.js";
 
 export interface GtmContainerRef {
@@ -88,12 +88,13 @@ function toMatch(list: GtmContainerRef[], matchedBy: GtmMatch["matchedBy"]): Gtm
  * Match containers to client domains. Each listed domain goes through
  * normalizeHost, the Phase 0c host normaliser passed in by the caller
  * (`https://www.x.com/` and `x.com` both give `x.com`). When several containers
- * list one host, the lowest `GTM-` ID wins and the others become alternates.
+ * list one host they are all candidates, ordered by `GTM-` ID (first is `primary`, the rest `alternates`);
+ * gtm_audit picks among them by what the live homepage loads. Nothing here chooses by ID.
  *
  * Then a container with no domain list is matched by its name when the name is
  * a host (`www.example.com/` gives `example.com`), unless some container's
  * domain list already claims that host. Name candidates for a host follow the
- * same lowest-ID rule. Everything else is returned unmatched.
+ * same ordering. Everything else is returned unmatched.
  */
 export function joinGtmContainers(
   containers: GtmContainerRef[],
@@ -152,9 +153,10 @@ export function gtmNotes(
       );
     }
     if (m.alternates.length && !pinned.has(host)) {
+      const ids = [m, ...m.alternates].map((c) => c.publicId || c.gtmContainerId);
       notes.push(
-        `Tag Manager: ${host} is ${m.matchedBy === "name" ? "the name of" : "listed by"} ${m.alternates.length + 1} containers; using ${m.publicId || m.gtmContainerId}. ` +
-          `Others: ${m.alternates.map((a) => a.publicId || a.gtmContainerId).join(", ")}. Pin one with gtmContainerId in clients.yaml.`,
+        `Tag Manager: ${host} is ${m.matchedBy === "name" ? "the name of" : "listed by"} ${ids.length} containers (${ids.join(", ")}); ` +
+          "gtm_audit picks the one the live homepage loads. Pin one with set_client_profile gtmContainerId.",
       );
     }
   }
@@ -162,7 +164,39 @@ export function gtmNotes(
   return notes;
 }
 
+const GTM_ID = "(GTM-[A-Z0-9]{4,12})";
+/**
+ * Only IDs in a loader context count: the gtm.js / ns.html URL (`?id=GTM-X`, with other params before or after, and
+ * `&amp;` encoded) or the snippet's `(window,document,'script','<layer>','GTM-X')` call. A GTM-XXXX in body text, a
+ * comment or an unrelated widget is not a container the page loads, and must not steer which container is audited.
+ */
+const GTM_LOADER_RE = new RegExp(
+  `googletagmanager\\.com/(?:gtm\\.js|ns\\.html)\\?[^"'\\s<>]*?\\bid=${GTM_ID}\\b` +
+    `|['"]script['"]\\s*,\\s*['"][\\w$.-]+['"]\\s*,\\s*['"]${GTM_ID}['"]` +
+    `|['"]dataLayer['"]\\s*,\\s*['"]${GTM_ID}['"]`,
+  "gi",
+);
+
+/**
+ * `GTM-XXXX` container IDs the page loads (the loader snippet, the noscript iframe, a gtm.js URL), uppercased,
+ * de-duplicated, in page order, at most 10. Containers injected only by JavaScript at runtime aren't seen: pin those.
+ */
+export function extractGtmIds(html: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(GTM_LOADER_RE)) {
+    const id = (m[1] ?? m[2] ?? m[3])?.toUpperCase();
+    if (id && !out.includes(id)) out.push(id);
+    if (out.length === 10) break;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- errors
+
+/** A Tag Manager call that kept hitting the rate limit until its retry budget ran out. The message is final. */
+export class GtmRateLimitError extends Error {
+  override name = "GtmRateLimitError";
+}
 
 export const TAG_MANAGER_API_DISABLED = "Enable the \"Tag Manager API\" in the Google Cloud project (APIs & Services > Library), then retry. If you just enabled it, call list_clients with refresh: true.";
 
@@ -220,6 +254,7 @@ export function accessDeniedMessage(containerPath: string, who: GtmIdentity): st
 
 /** Turn a Tag Manager API failure into the error a tool should show. */
 export function gtmApiError(err: unknown, containerPath: string, who: GtmIdentity): Error {
+  if (err instanceof GtmRateLimitError) return err;
   const info = apiErrorInfo(err);
   switch (classifyGtmError(info)) {
     case "api-disabled":
@@ -227,7 +262,7 @@ export function gtmApiError(err: unknown, containerPath: string, who: GtmIdentit
     case "rate-limit":
       return new Error("Tag Manager is rate limiting requests (quota exceeded). Wait a minute and retry.");
     case "scope":
-      return new Error(GTM_SCOPE_MESSAGE);
+      return new Error(gtmScopeMessage());
     case "denied":
       return new Error(accessDeniedMessage(containerPath, who));
     case "not-found":

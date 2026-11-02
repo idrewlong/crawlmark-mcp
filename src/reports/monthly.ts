@@ -4,11 +4,14 @@ import { monthlyAuditSection } from "../analysis/diff.js";
 import { latestAudit, latestAuditBefore } from "../lib/audits.js";
 import { BudgetExceededError, spentThisMonth, withUsdReservation } from "../lib/budget.js";
 import { spendKeys } from "../lib/spend.js";
-import { lastCompleteMonth, monthRange, pctChange, previousMonth, sameMonthLastYear } from "../lib/dates.js";
+import { stripControl } from "../lib/terminal-text.js";
+import { lastCompleteMonth, monthRange, pctChange, previousMonth, sameMonthLastYear, type DateRange } from "../lib/dates.js";
 import { ProviderUnavailableError } from "../lib/provider-ids.js";
 import { ESTIMATE_USD } from "../providers/dataforseo.js";
 import { requireDataForSeo, serp } from "../providers/seo-data.js";
-import { ga4OrganicSummary, ga4TopLandingPages } from "../providers/ga4.js";
+import { findQuerySpikes, SPIKE_LOOKBACK_DAYS, shiftDay, type QuerySpike } from "../analysis/query-spikes.js";
+import { fillGscMonths, type FillResult } from "../lib/gsc-monthly.js";
+import { ga4HostnameBreakdown, ga4OrganicSummary, ga4TopLandingPages, type Ga4HostnameBreakdown } from "../providers/ga4.js";
 import { gscQuery, gscTotals, type GscRow } from "../providers/gsc.js";
 import { isBranded } from "../lib/brand.js";
 import { recordLiveRank } from "../lib/rank-history.js";
@@ -29,6 +32,47 @@ export interface PeriodTotals {
   impressions: number;
   ctr: number;
   position: number;
+  /** D4: what the client's gscExcludeQueries took out of these totals (present only when they applied). */
+  excluded?: { clicks: number; impressions: number };
+  /** R3: caveats from the Search Console read (saved history that predates the client's current exclusions). */
+  notes?: string[];
+}
+
+/** D3 (C10): the report line naming hostnames GA4 left out, or undefined when nothing was left out. */
+export function ga4ScopeNote(b: Ga4HostnameBreakdown): string | undefined {
+  if (b.excludedSessions <= 0) return undefined;
+  const hosts = b.excluded.map((h) => `${stripControl(h.hostName).slice(0, 80)} ${h.sessions}`).join(", ");
+  return `GA4: ${b.excludedSessions} organic sessions from other hostnames were left out (${hosts}). If a hostname belongs to this site, add it with set_client_profile ga4Hostnames.`;
+}
+
+/** D4 (C10): the report line for query exclusions, or undefined when none applied. */
+export function gscExclusionNote(excluded: { clicks: number; impressions: number } | undefined): string | undefined {
+  return excluded ? `Search Console: ${excluded.clicks} clicks and ${excluded.impressions} impressions from excluded queries were left out of totals (positions are unadjusted).` : undefined;
+}
+
+/** D5 (C10): report lines for a history save (what was stored, and why anything couldn't be). */
+export function historyNotes(r: FillResult): string[] {
+  const out: string[] = [];
+  if (r.stored.length) out.push(`Saved Search Console history for ${r.stored.length} month(s) (${r.stored.at(-1)}…${r.stored[0]}).`);
+  if (r.failed.length) out.push(`Search Console history couldn't be saved this run: ${r.failed[0]!.error}.`);
+  return out;
+}
+
+/** D5: store the newest missing months (at most 2 per run). Never throws: a failure becomes a note. */
+export async function saveRecentHistory(client: Client): Promise<string[]> {
+  if (!client.gscProperty) return [];
+  try {
+    return historyNotes(await fillGscMonths(client, { max: 2, newestFirst: true }, { gscQuery, now: Date.now }));
+  } catch (err) {
+    return [`Search Console history couldn't be saved this run: ${err instanceof Error ? err.message : String(err)}.`];
+  }
+}
+
+/** D4 (C9): days in `period` whose impressions jumped on a few zero-click queries. One daily request plus at most 3 breakdowns. */
+export async function querySpikesFor(client: Client, period: DateRange, query: typeof gscQuery = gscQuery): Promise<QuerySpike[]> {
+  const rows = await query(client, { startDate: shiftDay(period.startDate, -SPIKE_LOOKBACK_DAYS), endDate: period.endDate, dimensions: ["date"], rowLimit: 1000 });
+  const series = rows.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.keys[0] ?? "")).map((r) => ({ date: r.keys[0]!, clicks: r.clicks, impressions: r.impressions }));
+  return findQuerySpikes(series, period, (date) => query(client, { startDate: date, endDate: date, dimensions: ["query"], rowLimit: 1000 }));
 }
 
 /**
@@ -152,7 +196,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
   const prev = monthRange(previousMonth(month));
   const yoy = monthRange(sameMonthLastYear(month));
 
-  const [gscCur, gscPrev, gscYoy, queriesCur, queriesPrev, pagesCur, pagesPrev, gaCur, gaPrev, landing, opportunities] =
+  const [gscCur, gscPrev, gscYoy, queriesCur, queriesPrev, pagesCur, pagesPrev, gaCur, gaPrev, landing, opportunities, hostScope, spikes] =
     await Promise.all([
       section(() => gscTotals(client, cur)),
       section(() => gscTotals(client, prev)),
@@ -166,7 +210,13 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
       section(() => ga4TopLandingPages(client, cur, 15)),
       // Free opportunity lists for the month (one more Search Console call, cached).
       section(() => opportunitiesForMonth(client, cur, 5)),
+      // D3: which hostnames GA4 left out (one more cached GA4 call), and D4: zero-click query spikes.
+      section(() => ga4HostnameBreakdown(client, cur, { organicOnly: true })),
+      section(() => querySpikesFor(client, cur)),
     ]);
+
+  // D5: save the newest missing months of Search Console history (at most 2 per run), after this run's own data.
+  const historyLines = gscCur.ok ? await saveRecentHistory(client) : [];
 
   // Tracked keywords: free GSC average position, optionally a paid live SERP check. Live SERPs are
   // DataForSEO-only: when no SERP provider is available, every row keeps its GSC values (liveRank null)
@@ -218,6 +268,11 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
       : { error: !queriesCur.ok ? queriesCur.error : !queriesPrev.ok ? queriesPrev.error : "unknown" };
   const ac = dataOf(gaCur);
   const ap = dataOf(gaPrev);
+  const notes = [
+    ...[hostScope.ok ? ga4ScopeNote(hostScope.data) : undefined, gc ? gscExclusionNote(gc.excluded) : undefined].filter((n): n is string => Boolean(n)),
+    ...new Set([gc, gp, gy].flatMap((g) => g?.notes ?? [])),
+    ...historyLines,
+  ];
 
   return {
     client: { slug: client.slug, name: client.name, domain: client.domain },
@@ -227,6 +282,7 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
       ? {
           vsPreviousMonth: compare(gc, gp),
           vsLastYear: gy ? compare(gc, gy) : null,
+          ...(spikes.ok ? { querySpikes: spikes.data } : {}),
           ...brandSplitFields(brandSplit),
         }
       : { error: !gscCur.ok ? gscCur.error : !gscPrev.ok ? gscPrev.error : "unknown", ...brandSplitFields(brandSplit) },
@@ -242,5 +298,6 @@ export async function monthlyReport(client: Client, opts: MonthlyReportOptions =
     opportunities: opportunities.ok ? opportunities.data : { error: opportunities.error },
     audit: audit.ok ? audit.data : { error: audit.error },
     dataSpendThisMonthUsd: Number(spentThisMonth(spendKeys(client)).toFixed(4)),
+    notes,
   };
 }

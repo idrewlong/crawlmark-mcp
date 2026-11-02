@@ -5,6 +5,7 @@ import { env } from "../config.js";
 import { keywordInput } from "../lib/clients.js";
 import { checkRanks, loadCheckRanksDeps, rankHistory } from "../ranks.js";
 import { handler } from "./util.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 /**
  * Rank history for tracked keywords (Phase 12 B). rank_history reads the local
@@ -26,7 +27,7 @@ export function registerRankTools(server: McpServer) {
     {
       title: "Rank history",
       description:
-        "Stored rank history for a client's tracked keywords: Search Console 7-day average positions (`gsc`, saved by check_ranks and crawlmark-cli check-ranks, free) " +
+        `Stored rank history for a client's tracked keywords: Search Console 7-day average positions (\`gsc\`, saved by check_ranks and ${cliHint()} check-ranks, free) ` +
         "and live Google ranks (`serp`, saved by check_ranks with live: true, serp_check and monthly_report with liveRanks, paid when they ran). " +
         "Per keyword and source: the series and a summary (latest, first, best, worst, change, change30d, change90d). Lower is better: a negative change is an improvement. " +
         "Free and local: reads crawlmark's database only, makes no request. Default range: the last 180 days.",

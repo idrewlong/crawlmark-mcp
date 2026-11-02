@@ -18,6 +18,7 @@ import { isRealDate } from "./reports/templates/schema.js";
 export { recordLiveRank } from "./lib/rank-history.js";
 import { GSC_MARKET, normalizeRankKeyword, previousRanks, readRanks, saveRanks, serpRankRow, storedKeywords, type RankInput, type RankSource, type StoredRank } from "./lib/rank-history.js";
 import type { GscQueryOptions, GscRow } from "./providers/gsc.js";
+import { cliHint } from "./lib/cli-hint.js";
 
 const DAY_MS = 86_400_000;
 const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -224,7 +225,7 @@ export function keywordRegexes(keywords: readonly string[]): string[] {
 /** The tracked keywords to check: all of them, or the requested subset (each must be tracked). */
 function selectKeywords(client: Client, requested: string[] | undefined): string[] {
   const tracked = [...new Set(client.trackedKeywords.map((k) => normalizeRankKeyword(k)).filter((k): k is string => Boolean(k)))];
-  if (tracked.length === 0) throw new Error(`${client.domain} has no tracked keywords. Add some with add_keywords (or crawlmark-cli keywords add ${client.domain} "<keyword>").`);
+  if (tracked.length === 0) throw new Error(`${client.domain} has no tracked keywords. Add some with add_keywords (or ${cliHint()} keywords add ${client.domain} "<keyword>").`);
   if (!requested?.length) return tracked;
   const wanted = [...new Set(requested.map((k) => normalizeRankKeyword(k) ?? ""))];
   const unknown = wanted.filter((k) => !tracked.includes(k));
@@ -272,7 +273,7 @@ export async function checkRanks(client: Client, opts: CheckRanksOptions, deps: 
   const gscAvailable = deps.googleConfigured() && Boolean(client.gscProperty);
   if (!gscAvailable && !live) {
     throw new Error(
-      `check_ranks needs Search Console for ${client.domain} (${deps.googleConfigured() ? "no Search Console property found" : "Google isn't set up: run setup --step google"}), or live: true for a paid live SERP check.`,
+      `check_ranks needs Search Console for ${client.domain} (${deps.googleConfigured() ? "no Search Console property found" : `Google isn't set up: run ${cliHint()} setup --step google`}), or live: true for a paid live SERP check.`,
     );
   }
   // The whole run's paid estimate, once, before any request (free Search Console included), reserved until the

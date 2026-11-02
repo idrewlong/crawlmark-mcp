@@ -4,6 +4,7 @@
  * wrappers pass in the identity from googleAuthStatus().
  */
 import { apiErrorInfo, classifyGtmError, type ApiErrorInfo, type GtmIdentity } from "./gtm.js";
+import { cliHint } from "./cli-hint.js";
 
 export type GoogleIdentity = GtmIdentity;
 
@@ -22,10 +23,10 @@ export function ga4AccessDeniedMessage(propertyId: string, who: GoogleIdentity, 
   const prop = `GA4 property ${propertyId.replace(/^properties\//, "")}`;
   const fix =
     who.mode === "oauth"
-      ? "Ask the property owner to add that account as a Viewer, or sign in with an account that has access: crawlmark-cli auth login."
+      ? `Ask the property owner to add that account as a Viewer, or sign in with an account that has access: ${cliHint()} auth login.`
       : "In GA4, open Admin > Property access management > Add users, add that account's email with the Viewer role, then retry.";
   const lead = who.mode === "oauth" ? "isn't accessible to" : "isn't shared with";
-  return `${prop} ${lead} ${label}. ${unknown ? "(crawlmark could not read the account's email; run crawlmark-cli auth status to see it.) " : ""}${fix}${statusSuffix(info)}`;
+  return `${prop} ${lead} ${label}. ${unknown ? `(crawlmark could not read the account's email; run ${cliHint()} auth status to see it.) ` : ""}${fix}${statusSuffix(info)}`;
 }
 
 export function gscAccessDeniedMessage(siteUrl: string, who: GoogleIdentity, info: ApiErrorInfo = { status: 403, message: "", reasons: [] }): string {
@@ -33,9 +34,9 @@ export function gscAccessDeniedMessage(siteUrl: string, who: GoogleIdentity, inf
   const lead = who.mode === "oauth" ? "isn't accessible to" : "isn't shared with";
   const fix =
     who.mode === "oauth"
-      ? "Ask a site owner to add that account in Search Console (Settings > Users and permissions), or sign in with an account that has access: crawlmark-cli auth login."
+      ? `Ask a site owner to add that account in Search Console (Settings > Users and permissions), or sign in with an account that has access: ${cliHint()} auth login.`
       : "In Search Console, open Settings > Users and permissions > Add user, add that account's email with Restricted (or Full) permission, then retry.";
-  return `Search Console property ${siteUrl} ${lead} ${label}. ${unknown ? "(crawlmark could not read the account's email; run crawlmark-cli auth status to see it.) " : ""}${fix}${statusSuffix(info)}`;
+  return `Search Console property ${siteUrl} ${lead} ${label}. ${unknown ? `(crawlmark could not read the account's email; run ${cliHint()} auth status to see it.) ` : ""}${fix}${statusSuffix(info)}`;
 }
 
 /** True for a genuine permission failure (a 403 that is not a disabled API, quota or scope problem). */
@@ -53,10 +54,10 @@ export function credentialsRejectedMessage(service: "GA4" | "Search Console", wh
   const { label } = describe(who);
   const fix =
     who.mode === "oauth"
-      ? "Sign in again: crawlmark-cli auth login."
+      ? `Sign in again: ${cliHint()} auth login.`
       : who.mode === "service_account"
-        ? "The service-account key may have been revoked or deleted; download a new key and re-run crawlmark-cli setup --step google."
-        : "Check the Google setup: crawlmark-cli setup --step google.";
+        ? `The service-account key may have been revoked or deleted; download a new key and re-run ${cliHint()} setup --step google.`
+        : `Check the Google setup: ${cliHint()} setup --step google.`;
   return `${service} rejected the credentials for ${label} (HTTP 401: invalid or expired). ${fix}`;
 }
 

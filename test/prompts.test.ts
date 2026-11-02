@@ -131,7 +131,7 @@ describe("getting-started", () => {
     const text = readFileSync(new URL("getting-started.md", TEMPLATE_DIR), "utf8");
     expect(text.indexOf("`setup_status`")).toBeLessThan(text.indexOf("`list_clients`"));
     expect(text).toMatch(/Never ask me to paste a password, API key/);
-    expect(text).toContain("crawlmark-cli setup");
+    expect(text).toContain("{{cli}} setup");
     expect(text).toContain("`opportunity-review`");
     expect(text).toContain("`monthly-report-writeup`");
     expect(text).toMatch(/most Search Console data/);

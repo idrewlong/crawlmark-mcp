@@ -57,11 +57,14 @@ import {
 } from "./lib/clients.js";
 import { MAX_BRAND_TERM_LENGTH, normalizeBrandTerm, squash, toBrandTerms } from "./lib/brand.js";
 import { mapLimit } from "./lib/concurrency.js";
+import { validateGa4Hostnames } from "./lib/ga4-hostnames.js";
+import { validateExclusions } from "./lib/gsc-exclusions.js";
 import { isProviderId, PROVIDER_IDS, type ProviderId } from "./lib/provider-ids.js";
 import { GOOGLE_NOT_CONFIGURED_MESSAGE } from "./lib/google-auth.js";
 import { listGa4Properties, listGscSites } from "./providers/discovery.js";
 import { listGtmContainers } from "./providers/gtm.js";
 import { googleAuthModeNote, googleConfigured } from "./providers/google.js";
+import { cliHint } from "./lib/cli-hint.js";
 
 /**
  * Clients live in clients.yaml (CLIENTS_FILE). When Google is set up,
@@ -337,7 +340,7 @@ export async function resolveClient(idOrDomain: string): Promise<Client> {
       throw new Error(`${ignored.domain} is marked ignore: true in clients.yaml. Remove that line to use it as a client.`);
     }
     const hint = registry.discovery.skipped
-      ? ` Add it with \`crawlmark-cli clients add ${host ?? idOrDomain}\`.`
+      ? ` Add it with \`${cliHint()} clients add ${host ?? idOrDomain}\`.`
       : " If the property was added in the last day, call list_clients with refresh: true.";
     throw new Error(unknownClientMessage(idOrDomain, registry.clients, registry.discovery.error) + hint);
   }
@@ -352,7 +355,7 @@ export async function resolveClient(idOrDomain: string): Promise<Client> {
 export function resolveClientOffline(idOrDomain: string): Client {
   const registry = assembleRegistry({ skipped: "offline" }, loadOverrides(), clientDefaults);
   const client = findClient(registry.clients, idOrDomain);
-  if (!client) throw new Error(unknownClientMessage(idOrDomain, registry.clients) + ` Add it with \`crawlmark-cli clients add ${normalizeHost(idOrDomain) ?? idOrDomain}\`.`);
+  if (!client) throw new Error(unknownClientMessage(idOrDomain, registry.clients) + ` Add it with \`${cliHint()} clients add ${normalizeHost(idOrDomain) ?? idOrDomain}\`.`);
   return client;
 }
 
@@ -555,14 +558,23 @@ export interface ProfileUpdate {
   gbpPlaceId?: string | undefined;
   /** Phase 13 B: an existing Ahrefs Site Audit project ID (digits); empty string clears it. */
   ahrefsSiteAuditProject?: string | undefined;
+  /** D3: GA4 hostnames replacing the stored list; [] clears it (back to the domain and www.), ["*"] turns the filter off. */
+  ga4Hostnames?: string[] | undefined;
+  /** D4: Search Console exclusions (exact queries, or /regex/) replacing the stored list; [] clears it. */
+  gscExcludeQueries?: string[] | undefined;
+  /** D2: "GTM-XXXX" or the numeric container ID. Pins the container and removes gtmAccountId (it is looked up from the public ID). Empty string clears both. */
+  gtmContainerId?: string | undefined;
 }
+
+/** "GTM-ABC1234" (stored uppercase) or a numeric container ID. */
+export const GTM_CONTAINER_INPUT_RE = /^(GTM-[A-Z0-9]{4,12}|\d{1,20})$/i;
 
 export interface ProfileResult {
   client: string;
   set: Record<string, string>;
   cleared: string[];
   /** dataProvider and country are included when the update set or cleared either of them. */
-  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null; ahrefsSiteAuditProject?: string | null; };
+  profile: { name: string; area: string | null; niche: string | null; brandTerms: string[]; dataProvider?: ProviderId | null; country?: string | null; bingSite?: string | null; gbpPlaceId?: string | null; ahrefsSiteAuditProject?: string | null; ga4Hostnames?: string[]; gscExcludeQueries?: string[]; gtm?: { containerId: string | null; pinned: boolean } };
   clientsFile: string;
 }
 
@@ -622,13 +634,42 @@ export async function setClientProfile(
     if (v !== "" && !PROJECT_ID_RE.test(v)) throw new Error(`"${stripControl(update.ahrefsSiteAuditProject).slice(0, 60)}" isn't an Ahrefs Site Audit project ID (digits, from the project's URL).`);
     fields.ahrefsSiteAuditProject = v;
   }
+  if (update.gtmContainerId !== undefined) {
+    const v = update.gtmContainerId.trim();
+    if (v !== "" && !GTM_CONTAINER_INPUT_RE.test(v)) {
+      throw new Error(`"${stripControl(update.gtmContainerId).slice(0, 40)}" isn't a Tag Manager container ID. Use the public ID ("GTM-XXXX") or the numeric container ID from the Tag Manager URL, or an empty value to clear the pin.`);
+    }
+    fields.gtmContainerId = v.toUpperCase();
+  }
+  const cleanList = (items: string[], dedupeKey: (s: string) => string) => {
+    const seen = new Set<string>();
+    return items.map((i) => i.trim()).filter((i) => (seen.has(dedupeKey(i)) ? false : (seen.add(dedupeKey(i)), true)));
+  };
+  let ga4Hostnames: string[] | undefined;
+  if (update.ga4Hostnames !== undefined) {
+    ga4Hostnames = cleanList(update.ga4Hostnames, (h) => h.toLowerCase());
+    if (ga4Hostnames.length > 0) {
+      const problem = validateGa4Hostnames(ga4Hostnames);
+      if (problem) throw new Error(`ga4Hostnames: ${problem}`);
+    }
+  }
+  let gscExcludeQueries: string[] | undefined;
+  if (update.gscExcludeQueries !== undefined) {
+    gscExcludeQueries = cleanList(update.gscExcludeQueries, (q) => q);
+    if (gscExcludeQueries.length > 0) {
+      const problem = validateExclusions(gscExcludeQueries);
+      if (problem) throw new Error(`gscExcludeQueries: ${problem}`);
+    }
+  }
   let brandTerms: string[] | undefined;
   if (update.brandTerms !== undefined) {
     brandTerms = toBrandTerms(update.brandTerms);
     const bad = update.brandTerms.filter((t) => t.trim() !== "" && !normalizeBrandTerm(t));
     if (bad.length) throw new Error(`Not a usable brand term: ${bad.map((t) => `"${t}"`).join(", ")}. Terms need a letter or digit and at most ${MAX_BRAND_TERM_LENGTH} characters.`);
   }
-  if (Object.keys(fields).length === 0 && brandTerms === undefined) throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId or ahrefsSiteAuditProject.");
+  if (Object.keys(fields).length === 0 && brandTerms === undefined && ga4Hostnames === undefined && gscExcludeQueries === undefined) {
+    throw new Error("Nothing to set: pass area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ahrefsSiteAuditProject, ga4Hostnames, gscExcludeQueries or gtmContainerId.");
+  }
   const client = await resolveClient(idOrDomain);
   if (fields.bingSite && !bingSiteOnDomain(fields.bingSite, client.domain)) {
     throw new Error(`bingSite ${fields.bingSite.slice(0, 200)} isn't on ${client.domain}: it would show another site's Bing data in this client's reports. Use a Bing site on ${client.domain} or a subdomain of it.`);
@@ -640,9 +681,12 @@ export async function setClientProfile(
   }
   await editClientsFile((text, path) => {
     const { text: base, entry } = entryFor(text, path, client);
-    let next = setEntryFields(base, entry.slug, fields);
+    // A changed container pin drops gtmAccountId: the account is looked up from the public ID, and a stale one would mismatch.
+    let next = setEntryFields(base, entry.slug, fields.gtmContainerId === undefined ? fields : { ...fields, gtmAccountId: "" });
     // Terms already listed (in either form, ignoring case and spacing) keep their written form and metadata.
     if (brandTerms !== undefined) next = setStringList(next, entry.slug, "brandTerms", brandTerms, { objectKey: "term", same: (a, b) => squash(a) === squash(b) });
+    if (ga4Hostnames !== undefined) next = setStringList(next, entry.slug, "ga4Hostnames", ga4Hostnames);
+    if (gscExcludeQueries !== undefined) next = setStringList(next, entry.slug, "gscExcludeQueries", gscExcludeQueries);
     return { text: next, result: undefined };
   });
   const updated = await resolveClient(client.domain);
@@ -651,8 +695,15 @@ export async function setClientProfile(
     set: {
       ...(Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== "")) as Record<string, string>),
       ...(brandTerms?.length ? { brandTerms: brandTerms.join(", ") } : {}),
+      ...(ga4Hostnames?.length ? { ga4Hostnames: ga4Hostnames.join(", ") } : {}),
+      ...(gscExcludeQueries?.length ? { gscExcludeQueries: gscExcludeQueries.join(", ") } : {}),
     },
-    cleared: [...Object.entries(fields).filter(([, v]) => v === "").map(([k]) => k), ...(brandTerms?.length === 0 ? ["brandTerms"] : [])],
+    cleared: [
+      ...Object.entries(fields).filter(([, v]) => v === "").map(([k]) => k),
+      ...(brandTerms?.length === 0 ? ["brandTerms"] : []),
+      ...(ga4Hostnames?.length === 0 ? ["ga4Hostnames"] : []),
+      ...(gscExcludeQueries?.length === 0 ? ["gscExcludeQueries"] : []),
+    ],
     profile: {
       name: updated.name,
       area: updated.area ?? null,
@@ -662,6 +713,9 @@ export async function setClientProfile(
       ...(update.bingSite !== undefined ? { bingSite: updated.bingSite ?? null } : {}),
       ...(update.gbpPlaceId !== undefined ? { gbpPlaceId: updated.gbpPlaceId ?? null } : {}),
       ...(update.ahrefsSiteAuditProject !== undefined ? { ahrefsSiteAuditProject: updated.ahrefsSiteAuditProject ?? null } : {}),
+      ...(ga4Hostnames !== undefined ? { ga4Hostnames: updated.ga4Hostnames } : {}),
+      ...(gscExcludeQueries !== undefined ? { gscExcludeQueries: updated.gscExcludeQueries } : {}),
+      ...(update.gtmContainerId !== undefined ? { gtm: { containerId: updated.gtmContainerId ?? null, pinned: updated.gtmPinned } } : {}),
     },
     clientsFile: env.CLIENTS_FILE,
   };

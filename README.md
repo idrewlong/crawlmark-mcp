@@ -58,7 +58,9 @@ Run `init` again once crawlmark is set up (a `.env` in its config home and at le
 
 `init`, `setup`, `--help` and `--version` check npm for a newer crawlmark at most once a day (a plain request for the latest version number, with a 1.5 second timeout and nothing about you or your clients) and print `Update available` when there is one. It never runs in CI, when output isn't a terminal, or with `--json`. Set `CRAWLMARK_NO_UPDATE_CHECK=1` (or the common `NO_UPDATE_NOTIFIER=1`) to turn it off; the MCP server itself never checks.
 
-`crawlmark-mcp` with no arguments is the MCP server, which is what clients launch. With a subcommand it runs the admin CLI instead, so `npx crawlmark-mcp setup status` and `npx crawlmark-mcp clients list` work too.
+`crawlmark-mcp` with no arguments is the MCP server, which is what clients launch. With a subcommand it runs the admin CLI instead, so `npx -y crawlmark-mcp@latest setup status` and `npx -y crawlmark-mcp@latest clients list` work too.
+
+This README writes commands as `crawlmark-cli <command>`. If you haven't installed crawlmark globally, run the same command as `npx -y crawlmark-mcp@latest <command>` (from a source checkout, `npm run cli -- <command>`). Commands that crawlmark prints in its own messages and in `setup_status` already use the form that matches your install.
 
 Installing the package downloads a Chrome build for Lighthouse and axe (about 570 MB in `~/.cache/puppeteer`). To skip it, set `PUPPETEER_SKIP_DOWNLOAD=true` before installing and either install Google Chrome or point `CHROME_PATH` at a Chrome or Chromium binary.
 
@@ -97,6 +99,17 @@ npm run cli -- setup
 ```
 
 A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration). The wizard asks which SEO data providers you have; to change that later, run `npm run cli -- setup --step provider`, or run `npm run cli -- init` again and pick it from the menu. Set `CRAWLMARK_NO_UPDATE_CHECK=1` to turn off the daily update check.
+
+Upgrading to 0.2.0
+------------------
+
+Update with `npx -y crawlmark-mcp@latest init` (or `npm i -g crawlmark-mcp@latest`), then check these:
+
+- **GA4 numbers now count only the client's own hostnames.** By default that is the domain and its `www.` form. Sessions on subdomains, staging sites and `localhost` that the GA4 property also collects are left out, so organic sessions can drop against earlier reports. `monthly_report` and template runs say how many sessions were left out and which hostnames they came from (`GA4: 120 organic sessions from other hostnames were left out (staging.example.com 120). If a hostname belongs to this site, add it with set_client_profile ga4Hostnames.`). To count a subdomain, set `ga4Hostnames` for the client ([Client settings](#client-settings)); `"*.example.com"` covers every subdomain and `["*"]` turns the filter off.
+- **`ga4_report` returns a different shape.** It was a list of rows; it is now `{ rows, hostnames }`. Anything that reads its output needs `.rows`. See [Raw data](#raw-data).
+- **Save your Search Console history once.** Google keeps only 16 months of Search Console data. Run `crawlmark-cli gsc-history backfill --all` now (free) to save the months Google still has; from then on monthly reports and template runs save new months themselves. Details under [Search Console history](#search-console-history).
+- **`gtm_audit` picks the container the live homepage loads.** If a client's Tag Manager container choice was ambiguous before, you may now be asked to pin one. See [Tag Manager container](#tag-manager-container).
+- **Indexing checks send URLs exactly as listed.** "URL is unknown to Google" results saved by earlier versions (made with the trailing slash removed) are left out of `index_coverage` counts, with a note, and re-checked first on the next inspection run when the URL is still a key page or in the sitemap (results for URLs that are no longer listed stay hidden, with their own note). `gsc_inspect_url` results are never affected: they always sent the URL as given.
 
 Set up credentials
 ------------------
@@ -414,17 +427,17 @@ Tools that take a `client` accept its domain (`example.com`), any URL or `www.` 
 |---|---|
 | `setup_status` | Each integration's state (`working`, `configured`, `missing` or `error`) and the exact next step, plus the default SEO data provider (`seoDataProvider`). Free |
 | `list_clients` | Every client with its Search Console and GA4 properties, Tag Manager container and what's missing. `refresh: true` re-lists from Google |
-| `set_client_profile` | Sets a client's area (for local searches), niche, display name, brand terms, data provider override, country, Bing site and confirmed Google Business Profile place ID (`gbpPlaceId`) |
+| `set_client_profile` | Sets a client's area (for local searches), niche, display name, brand terms, data provider override, country, Bing site, confirmed Google Business Profile place ID (`gbpPlaceId`), GA4 hostnames (`ga4Hostnames`), Search Console query exclusions (`gscExcludeQueries`) and pinned Tag Manager container (`gtmContainerId`) ([Client settings](#client-settings)) |
 
 ### Reports
 
 | Tool | Description |
 |---|---|
-| `monthly_report` | Search Console and GA4 for the month vs the previous month and last year: top and moving queries and pages, landing pages, tracked keyword positions, top opportunities, the branded vs non-branded split, and what changed since the last audit. Free by default |
+| `monthly_report` | Search Console and GA4 for the month vs the previous month and last year: top and moving queries and pages, landing pages, tracked keyword positions, top opportunities, the branded vs non-branded split, and what changed since the last audit. Also returns `notes` (GA4 sessions left out, excluded queries, history saved) and `search.querySpikes` (days when impressions jumped on a few zero-click queries). Free by default |
 | `run_audit` | Lighthouse, axe, rendered-vs-raw HTML, index status, on-page checks and site hygiene for each key page, with optional full crawl and backlinks, Core Web Vitals history (`cruxHistory`), Tag Manager findings (`includeTagManager`) and the free local crawl (`localCrawl`). Saved, so it can be compared later |
 | `list_audits` | A client's saved audits, newest first |
 | `get_audit` | One saved audit's full result and findings |
-| `compare_audits` | What's new, resolved, still open or unverified between two audits, plus score changes |
+| `compare_audits` | What's new, resolved, still open or unverified between two audits, plus score changes. Findings on a page or source the earlier audit didn't check are `firstChecked` (not new), and findings of an old Tag Manager container after a container change are `retired` (not resolved) ([details](docs/audits.md#saved-audits-and-diffs)) |
 | `crawl_status` | Progress of a full crawl started by `run_audit` |
 | `crawl_issue_pages` | URLs failing one crawl check |
 | `list_report_templates` | Report templates for a client: the builtin `monthly`, `quarterly`, `executive` (one page), `technical` and `local`, your global file and the client's own file, with optional and paid sections. Free |
@@ -452,15 +465,15 @@ Branded queries are excluded by default. See [docs/audits.md](docs/audits.md#opp
 | Tool | Description |
 |---|---|
 | `site_hygiene` | robots.txt, sitemaps, structured data, hreflang (page tags, sitemap entries and `Link` headers), orphan pages (from the newest complete local or DataForSEO crawl), AI crawler access in robots.txt (AI search vs training-only crawlers) and llms.txt (informational: Google says it doesn't use it). Free |
-| `local_crawl` | Crawls the client's own site from your machine (free): status codes, redirects and chains, titles, meta descriptions, canonicals, H1s, internal links, depth, broken links, noindex pages and orphans against the sitemaps. Obeys robots.txt and Crawl-delay; same host only by default; up to 2,000 pages. Saved for `local_crawl_pages`, `site_hygiene` and audits |
+| `local_crawl` | Crawls the client's own site from your machine (free): status codes, redirects and chains, titles, meta descriptions, canonicals, H1s, internal links, depth, broken links, noindex pages and orphans against the sitemaps. After following links it also fetches sitemap URLs the links didn't reach (`includeSitemapUrls`, on by default; `--no-sitemap-urls` on the CLI). Obeys robots.txt and Crawl-delay; same host only by default; up to 2,000 pages. Saved for `local_crawl_pages`, `site_hygiene` and audits |
 | `local_crawl_pages` | Pages from a saved local crawl, filtered by issue or status code. Free, local |
 | `technical_issues` | One deduplicated, severity-grouped list of technical problems from the saved audit, its site checks, the newest local crawl, a stored DataForSEO crawl and stored URL Inspection results, with the sources per issue and what's new, resolved or not re-checked since the last snapshot. Never starts a crawl. Free; your existing Ahrefs Site Audit project can be added as a paid source with `allowPaid` (read-only) ([details](docs/audits.md#technical-issues)) |
 | `index_coverage` | Google's indexing of a sample of the client's URLs from stored URL Inspection results: indexed share, coverage states, the worst URLs, canonical mismatches, sitemap errors, the monthly trend and how many sitemap URLs were checked recently (or that all were). Free, local ([details](docs/audits.md#indexing-coverage)) |
 | `import_index_report` | Imports an export of Search Console's Pages report (Indexing > Pages > Export: the zip of CSVs, an Excel workbook or one CSV) so `index_coverage` and the indexing report section show Google's complete counts per reason, with example URLs from a reason's own export. Reads only `IMPORT_DIRS` or `<home>/imports`; parsed on your machine. Free ([details](docs/audits.md#importing-search-consoles-pages-report)) |
 | `inspect_index_coverage` | Inspects key pages, top Search Console pages and a weekly-rotating sample of sitemap URLs with URL Inspection (free, read-only) within a daily per-property budget, and stores the results. `all: true` checks every page when today's budget allows, else says how many daily runs a full pass needs |
 | `render_check` | Compares a page's raw HTML with what Chrome renders and flags SEO elements that only appear after JavaScript. Free |
-| `gtm_audit` | Audits the live Tag Manager container: paused, unfired and legacy tags, duplicate GA4 tags, unused variables, custom HTML, consent gaps and unpublished changes. Free |
-| `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key |
+| `gtm_audit` | Audits the live Tag Manager container the client's homepage loads (or the one you pinned): paused, unfired and legacy tags, duplicate GA4 tags, unused variables, custom HTML, consent gaps and unpublished changes. Free ([Tag Manager container](#tag-manager-container)) |
+| `lighthouse` | Lighthouse scores and lab Core Web Vitals, plus field data with a PageSpeed key. Runs one at a time per process: a second call waits its turn (up to 10 minutes), and each run gets 150 seconds once it starts. Cached results return at once |
 | `accessibility_check` | axe-core WCAG checks on one page, at level A, AA (default) or AAA. Free |
 | `crux_history` | Real-user Core Web Vitals (LCP, INP, CLS, FCP, TTFB) per week for up to 40 weeks, with ratings and a trend, for a client, an origin or a URL. Free with a key ([CrUX History](#crux-history-optional)) |
 | `bing_report` | Bing Webmaster Tools for a client: clicks, impressions and CTR for the last 28 days (7 to 180) vs the period before, by day, the top 25 queries and pages, crawl stats for the latest 30 days and up to 50 URLs with crawl issues. Read-only; free with a key ([Bing Webmaster Tools](#bing-webmaster-tools-optional)) |
@@ -512,9 +525,10 @@ All three take `estimateOnly: true` (the estimate and what's left of the caps, w
 
 | Tool | Description |
 |---|---|
-| `gsc_query` | Search Console search analytics |
+| `gsc_query` | Search Console search analytics. Leaves out the client's `gscExcludeQueries` unless `includeExcludedQueries: true` |
+| `gsc_history` | Saved monthly Search Console history (clicks, impressions, CTR, position, and a month's top pages, queries, devices and countries). `backfill: true` saves the months Google still has. Free ([details](#search-console-history)) |
 | `gsc_inspect_url` | Search Console URL inspection |
-| `ga4_report` | GA4 Data API report |
+| `ga4_report` | GA4 Data API report. Returns `{ rows, hostnames }`; counts only the client's GA4 hostnames unless you pass `hostnames` (up to 20) or `allHostnames: true` |
 | `keyword_volume` | **Paid** (the client's data provider). Search volume for keywords |
 | `serp_check` | **Paid** (DataForSEO). Live Google results for a keyword |
 | `ranked_keywords` | **Paid** (the client's data provider). Keywords a domain ranks for |
@@ -525,6 +539,43 @@ All three take `estimateOnly: true` (the estimate and what's left of the caps, w
 | `semrush_status` | Whether the Semrush v4 key is set, what Semrush serves in crawlmark, and units used this month (no free key check exists). Free |
 
 Paid results carry `provider` (whose data it is) and `units` (Ahrefs or Semrush API units used; `null` for DataForSEO, which reports `costUsd`).
+
+If Semrush or Ahrefs rejects a client's key on a paid call, the tool returns an error that names the provider and client and gives two ways out: fix the key (`crawlmark-cli setup --step semrush` or `ahrefs`), or switch that client to another provider you have set up (`set_client_profile` with `dataProvider`, or `crawlmark-cli clients set <client> --provider <name>`). crawlmark never switches providers by itself.
+
+#### Client settings
+
+Three per-client settings, in `clients.yaml` or set from Claude with `set_client_profile` or from a terminal with `clients set`:
+
+| Setting | Does | Terminal |
+|---|---|---|
+| `ga4Hostnames` | Hostnames counted in GA4 numbers. Default: the domain and its `www.` form. Exact hosts, `*.example.com` for any subdomain, or `*` for no filter. Up to 20 | `crawlmark-cli clients set example.com --ga4-hostname shop.example.com --ga4-hostname "*.example.com"` (`none` goes back to the default) |
+| `gscExcludeQueries` | Search Console queries to leave out of totals and query lists, as exact text or `/regex/` (RE2). Applies to every Search Console read; `gsc_query` can show the raw numbers with `includeExcludedQueries`. Totals say how many clicks and impressions were left out; average position is not adjusted | `crawlmark-cli clients set example.com --gsc-exclude-query "/^example( co)?$/"` (`none` clears) |
+| `gtmContainerId` | Pins the Tag Manager container `gtm_audit` uses (`GTM-XXXX` or the numeric ID) | `crawlmark-cli clients set example.com --gtm-container GTM-ABC123` (`none` unpins) |
+
+Examples and details are in [docs/clients.md](docs/clients.md#per-client-settings-for-ga4-search-console-and-tag-manager).
+
+#### Search Console history
+
+Google keeps 16 months of Search Console data. `gsc_history` and the `gsc-history` command save it month by month so older figures survive:
+
+```bash
+crawlmark-cli gsc-history backfill --all      # run this once after upgrading, then it keeps itself up to date
+crawlmark-cli gsc-history backfill example.com --months 12
+crawlmark-cli gsc-history show example.com    # the saved months
+```
+
+From chat, call `gsc_history` with `backfill: true`. It is free, paces its requests, backs off at quota limits and is safe to run again: it only fetches months not saved yet. The oldest month Google still has can be partial (`complete: false`). Saved numbers are raw. Query exclusions are applied to saved query rows when a report reads them. Saved totals are adjusted only for months saved under the same exclusions as the client has now: if you set or change `gscExcludeQueries` after saving, those months are read raw and the report says so (run the backfill again with `refresh` to re-save them). Stored page rows can't have exclusions subtracted. After that, each `monthly_report` and template run saves up to two missing months and says so in its notes. A report range older than 16 months uses saved history only when every month in it is saved.
+
+#### Tag Manager container
+
+`gtm_audit` reads the client's live homepage and audits the container whose `GTM-` ID it loads, so it audits what visitors actually get. The result has a `containerCheck` showing the page URL, the IDs found, and how the container was chosen (`pinned`, `live-page` or `only-candidate`). When several containers could match and none is on the page, it refuses and lists them with the command to pin one. A container injected only by JavaScript or a consent loader isn't visible in the page source: pin it.
+
+```bash
+crawlmark-cli clients set example.com --gtm-container GTM-ABC123   # pin
+crawlmark-cli clients set example.com --gtm-container none          # unpin: go back to matching the live page
+```
+
+From Claude: `set_client_profile` with `gtmContainerId: "GTM-ABC123"`, or `""` to unpin. A pinned container that isn't on the live page still runs, with a warning. Client discovery (`clients list`, `list_clients`) only writes a container into `clients.yaml` when exactly one matches; entries it wrote earlier count as pinned, so unpin them to go back to matching the live page. Tag Manager API calls run two at a time and retry rate-limit errors for up to a minute before giving up.
 
 ### Spend and housekeeping
 

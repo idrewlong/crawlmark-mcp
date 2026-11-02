@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { ClientDefaults } from "./lib/clients.js";
 import { dataForSeoBaseUrl, dropUnsetKeys, PHASE9_ENV_KEYS, shellUrlOverride, stripEmptyValues, urlOverrideNotice } from "./lib/env.js";
 import { GOOGLE_AUTH_MODES } from "./lib/google-auth.js";
+import { configureCliHint } from "./lib/cli-hint.js";
 import { resolveHome, type HomeInfo } from "./lib/home.js";
 import { projectRoot, resolveFromRoot } from "./lib/paths.js";
 import { resolveDefaultProvider, type DefaultProvider } from "./lib/provider-ids.js";
@@ -24,6 +25,8 @@ export const HOME: HomeInfo = resolveHome({
   cwd: process.cwd(),
   exists: existsSync,
 });
+
+configureCliHint(HOME, PROJECT_ROOT);
 
 /** `<home>/.env`. */
 export const ENV_FILE = resolve(HOME.dir, ".env");

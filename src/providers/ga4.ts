@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import type { Client } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
+import { ALL_HOSTNAMES, defaultGa4Hostnames, ga4HostnameRegex, hostnameAllowed } from "../lib/ga4-hostnames.js";
 import { ga4Error } from "../lib/google-access.js";
 import { assertGoogleConfigured, googleAuth, googleAuthIdentity, googleAuthStatus } from "./google.js";
 
@@ -16,6 +17,8 @@ export interface Ga4ReportOptions extends DateRange {
   /** Restrict to organic search sessions. */
   organicOnly?: boolean;
   limit?: number;
+  /** Count only sessions on these hostnames for this call (["*"]: no filter). Default: the client's ga4Hostnames. */
+  hostnames?: string[];
 }
 
 export type Ga4Row = Record<string, string | number>;
@@ -31,10 +34,32 @@ function requireProperty(client: Client): string {
   return `properties/${client.ga4PropertyId}`;
 }
 
-/** GA4 Data API runReport, flattened into plain row objects. */
+/** The hostnames a call counts: the call's own list, else the client's, else the domain and its www form. */
+export function effectiveHostnames(client: Client, override?: readonly string[]): string[] {
+  if (override?.length) return [...override];
+  return client.ga4Hostnames?.length ? [...client.ga4Hostnames] : defaultGa4Hostnames(client.domain);
+}
+
+/** GA4 `dimensionFilter` for a call: the organic-search filter and/or the hostName filter (an andGroup when both). */
+export function ga4DimensionFilter(organicOnly: boolean | undefined, hostnames: readonly string[]) {
+  const expressions: object[] = [];
+  if (organicOnly) {
+    expressions.push({ filter: { fieldName: "sessionDefaultChannelGroup", stringFilter: { value: "Organic Search", matchType: "EXACT" } } });
+  }
+  const regex = ga4HostnameRegex(hostnames);
+  if (regex !== null) {
+    expressions.push({ filter: { fieldName: "hostName", stringFilter: { matchType: "FULL_REGEXP", value: regex, caseSensitive: false } } });
+  }
+  if (expressions.length === 0) return undefined;
+  return expressions.length === 1 ? (expressions[0] as { filter: object }) : { andGroup: { expressions } };
+}
+
+/** GA4 Data API runReport, flattened into plain row objects, scoped to the client's hostnames (D3). */
 export async function ga4Report(client: Client, opts: Ga4ReportOptions): Promise<Ga4Row[]> {
   const property = requireProperty(client);
-  const { value } = await cached(cacheKey("ga4", googleAuthIdentity(), property, opts), TTL.day, async () => {
+  const { hostnames: override, ...rest } = opts;
+  const hostnames = effectiveHostnames(client, override);
+  const { value } = await cached(cacheKey("ga4", googleAuthIdentity(), property, rest, { hostnames }), TTL.day, async () => {
     const data = google.analyticsdata({ version: "v1beta", auth: googleAuth() });
     let res;
     try {
@@ -45,14 +70,7 @@ export async function ga4Report(client: Client, opts: Ga4ReportOptions): Promise
           metrics: opts.metrics.map((name) => ({ name })),
           dimensions: (opts.dimensions ?? []).map((name) => ({ name })),
           limit: String(opts.limit ?? 1000),
-          dimensionFilter: opts.organicOnly
-            ? {
-                filter: {
-                  fieldName: "sessionDefaultChannelGroup",
-                  stringFilter: { value: "Organic Search", matchType: "EXACT" },
-                },
-              }
-            : undefined,
+          dimensionFilter: ga4DimensionFilter(opts.organicOnly, hostnames),
         },
       });
     } catch (err) {
@@ -68,6 +86,50 @@ export async function ga4Report(client: Client, opts: Ga4ReportOptions): Promise
     });
   });
   return value;
+}
+
+export interface Ga4HostnameBreakdown {
+  /** The hostnames that were counted, or "all" when the filter is off. */
+  applied: string[] | "all";
+  /** Sessions on hostnames the filter leaves out. */
+  excludedSessions: number;
+  /** The top 10 left-out hostnames by sessions. */
+  excluded: { hostName: string; sessions: number }[];
+}
+
+/** Which hostnames the filter leaves out for a period, with their sessions (one report without the host filter, cached for a day). */
+export async function ga4HostnameBreakdown(
+  client: Client,
+  range: DateRange,
+  o: { organicOnly?: boolean; hostnames?: string[] } = {},
+): Promise<Ga4HostnameBreakdown> {
+  const hostnames = effectiveHostnames(client, o.hostnames);
+  if (hostnames.some((h) => h.trim().toLowerCase() === ALL_HOSTNAMES)) return { applied: "all", excludedSessions: 0, excluded: [] };
+  const property = requireProperty(client);
+  const { value } = await cached(cacheKey("ga4-hosts", googleAuthIdentity(), property, range, { organicOnly: Boolean(o.organicOnly) }), TTL.day, async () => {
+    const data = google.analyticsdata({ version: "v1beta", auth: googleAuth() });
+    try {
+      const res = await data.properties.runReport({
+        property,
+        requestBody: {
+          dateRanges: [{ startDate: range.startDate, endDate: range.endDate }],
+          metrics: [{ name: "sessions" }],
+          dimensions: [{ name: "hostName" }],
+          limit: "50",
+          dimensionFilter: ga4DimensionFilter(o.organicOnly, [ALL_HOSTNAMES]),
+        },
+      });
+      return (res.data.rows ?? []).map((r) => ({ hostName: r.dimensionValues?.[0]?.value ?? "", sessions: Number(r.metricValues?.[0]?.value ?? 0) }));
+    } catch (err) {
+      throw ga4Error(err, property, whoAmI());
+    }
+  });
+  const left = value.filter((r) => !hostnameAllowed(r.hostName, hostnames));
+  return {
+    applied: hostnames,
+    excludedSessions: left.reduce((a, r) => a + r.sessions, 0),
+    excluded: left.sort((a, b) => b.sessions - a.sessions).slice(0, 10),
+  };
 }
 
 /** Headline organic metrics for a date range. */

@@ -7,6 +7,7 @@ import { existingDirs, LogAccessError, logDirsFrom, resolveAllowedLogFiles } fro
 import { googleCrawlerRanges } from "../providers/crawler-ipranges.js";
 import { analyzeLogs } from "../reports/log-analysis.js";
 import { handler, READ_ONLY } from "./util.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 /**
  * Server-log analysis (Phase 12 C2). Reads only files inside LOG_DIRS or <home>/logs on
@@ -22,7 +23,7 @@ export const LOG_TIMEOUT_MS = 10 * 60_000;
 /** The setup hint when no log directory is allowed. */
 export const LOG_DIRS_HINT =
   "log_analysis reads only directories you allow. Set LOG_DIRS to one or more absolute directories, comma-separated (for example LOG_DIRS=/var/log/nginx), " +
-  "in your crawlmark .env or MCP config, or copy the logs into the logs folder of your crawlmark home. Or run crawlmark-cli logs --client <domain> <file>... in a terminal.";
+  `in your crawlmark .env or MCP config, or copy the logs into the logs folder of your crawlmark home. Or run ${cliHint()} logs --client <domain> <file>... in a terminal.`;
 
 export function registerLogTools(server: McpServer) {
   server.registerTool(

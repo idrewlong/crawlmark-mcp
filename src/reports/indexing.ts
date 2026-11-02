@@ -10,10 +10,11 @@
  */
 import type { Client } from "../config.js";
 import { aggregateInspections, fullPassSet, inProperty, inspectionTrend, isoWeek, planPool, progressText, sitemapProgress, type PoolGroup, type SitemapProgress } from "../analysis/indexing.js";
-import { cleanText, inspectionsBetween, lastInSitemap, lastInspectedAt, lastSuccessfulAt, latestInspections, markQuotaExhausted, pacificDay, quotaFor, reserveQuota, saveFailedInspection, saveInspection, saveSitemapSet, storedSitemapSet, type InspectionRecord } from "../lib/inspections.js";
+import { cleanText, inspectionsBetween, lastInSitemap, lastInspectedAt, lastSentUrls, lastSuccessfulAt, latestInspections, legacyUnknownUrls, markQuotaExhausted, pacificDay, quotaFor, reserveQuota, saveFailedInspection, saveInspection, saveSitemapSet, storedSitemapSet, type InspectionRecord } from "../lib/inspections.js";
 import { normalizeUrl } from "../analysis/findings.js";
 import { pagesReportFor, pagesReportText } from "./pages-import.js";
 import type { IndexingIssuesData } from "./report-types.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 /** The tool's default per-run cap; the report section tops up at most 25 (its own maxInspections). */
 export const DEFAULT_MAX_INSPECTIONS = 100;
@@ -207,7 +208,7 @@ export async function inspectIndexCoverage(client: Client, opts: InspectOptions,
     const start = deps.now();
     const q = quotaFor(property, pacificDay(start));
     const left = q.exhausted ? 0 : Math.max(0, deps.budget - q.used);
-    const pool = planPool({ property, keyPages: client.keyPages, gscTop, sitemapUrls, sitemapKnown, lastInspected: all ? fullPassLastChecked(client.slug, property, start) : lastInspectedAt(client.slug), now: start, staleDays, seed: `${client.slug}:${isoWeek(start)}`, max, onlyListed: all });
+    const pool = planPool({ property, keyPages: client.keyPages, gscTop, sitemapUrls, sitemapKnown, lastInspected: all ? fullPassLastChecked(client.slug, property, start) : lastInspectedAt(client.slug), now: start, staleDays, seed: `${client.slug}:${isoWeek(start)}`, max, onlyListed: all, recheck: legacyUnknownUrls(client.slug, property), sentUrls: lastSentUrls(client.slug, property) });
     const gap = Math.ceil(60_000 / Math.max(1, deps.perMinute));
     const limitMs = opts.timeLimitMs ?? INSPECTION_TIME_LIMIT_MS;
     // A run stops starting inspections after limitMs, one every `gap`: the most a single run can make.
@@ -232,7 +233,7 @@ export async function inspectIndexCoverage(client: Client, opts: InspectOptions,
       }
     }
     const planned = pool.slice(0, all ? Math.min(left, timeCap) : left);
-    const byOrigin: Record<PoolGroup, number> = { key: 0, gsc_top: 0, sitemap: 0, oldest: 0 };
+    const byOrigin: Record<PoolGroup, number> = { recheck: 0, key: 0, gsc_top: 0, sitemap: 0, oldest: 0 };
     for (const p of planned) byOrigin[p.group]++;
     // Nothing left today: Google said the quota is used up (quota), or crawlmark's own daily budget is (budget).
     let stoppedBy: InspectResult["stoppedBy"] = max > 0 && left === 0 ? (q.exhausted ? "quota" : "budget") : pool.length > planned.length ? (planned.length < left ? "time" : "budget") : null;
@@ -280,10 +281,10 @@ export async function inspectIndexCoverage(client: Client, opts: InspectOptions,
         stoppedBy = quotaFor(property, lastDay).exhausted ? "quota" : "budget";
         break;
       }
-      const origin = p.group === "oldest" ? (p.inSitemap ? "sitemap" : "manual") : p.group;
+      const origin = p.group === "oldest" || p.group === "recheck" ? (p.inSitemap ? "sitemap" : "manual") : p.group;
       try {
-        const r = await deps.inspect(client, p.url);
-        saveInspection({ ...r, url: p.url, client: client.slug, property, origin, inspectedAt: at, inSitemap: p.inSitemap ?? lastInSitemap(client.slug, p.url) ?? false });
+        const r = await deps.inspect(client, p.inspectUrl);
+        saveInspection({ ...r, url: p.inspectUrl, client: client.slug, property, origin, inspectedAt: at, inSitemap: p.inSitemap ?? lastInSitemap(client.slug, p.url) ?? false });
         inspected++;
         inARow = 0;
       } catch (err) {
@@ -296,7 +297,7 @@ export async function inspectIndexCoverage(client: Client, opts: InspectOptions,
         }
         failed++;
         inARow++;
-        saveFailedInspection({ client: client.slug, property, url: p.url, origin, inspectedAt: at });
+        saveFailedInspection({ client: client.slug, property, url: p.inspectUrl, origin, inspectedAt: at });
         if (kind === "access") {
           stoppedBy = "errors";
           notes.push("Google refused access to this property's URL Inspection (401/403); the run stopped.");
@@ -328,6 +329,14 @@ export async function indexCoverage(client: Client, opts: CoverageOptions, deps:
   const now = deps.now();
   const notes: string[] = [];
   const latest = latestInspections(client.slug, property);
+  const set = storedSitemapSet(client.slug, property);
+  // Only legacy URLs that are a key page or in the last-read sitemap are certain to be re-checked (planPool skips URLs in no current source).
+  const current = new Set([...client.keyPages, ...(set?.urls ?? [])].map(normalizeUrl));
+  const legacyUrls = legacyUnknownUrls(client.slug, property);
+  const recheckable = legacyUrls.filter((u) => current.has(u)).length;
+  const dropped = legacyUrls.length - recheckable;
+  if (recheckable > 0) notes.push(`${recheckable} earlier "URL is unknown to Google" result(s) were made with the URL's trailing slash removed and are left out of these counts until they're re-checked (the next inspection run does this first).`);
+  if (dropped > 0) notes.push(`${dropped} older "URL is unknown to Google" result(s) are for URLs that are no longer key pages or in the sitemap. They're left out of these counts and are only re-checked if the URL shows up among the top Search Console pages; otherwise they stay hidden until old results are cleared.`);
   const agg = aggregateInspections(latest, { keyPages: client.keyPages, limit: opts.limit ?? 25, now });
   const months = opts.trendMonths ?? 6;
   const from = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth() - Math.max(0, months - 1), 1);
@@ -340,12 +349,11 @@ export async function indexCoverage(client: Client, opts: CoverageOptions, deps:
   }
   const submitted = sitemaps.reduce((a, s) => a + (s.submitted ?? 0), 0);
   // How much of the sitemap URL set the last inspection run saw has been checked recently: complete, or a sample.
-  const set = storedSitemapSet(client.slug, property);
   let coverage: IndexingIssuesData["coverage"];
   if (set) {
     const p = sitemapProgress(set.urls, lastSuccessfulAt(client.slug, property), now);
     coverage = { ...p, listedAt: new Date(set.capturedAt).toISOString() };
-    notes.push(progressText(p) + (p.complete ? "" : " Run inspect_index_coverage with all: true (or crawlmark-cli index-coverage --all-pages) daily to check every page."));
+    notes.push(progressText(p) + (p.complete ? "" : ` Run inspect_index_coverage with all: true (or ${cliHint()} index-coverage --all-pages) daily to check every page.`));
   }
   // Search Console's own Pages report, when an export was imported: complete per reason; inspection is fresher per URL.
   const pagesReport = pagesReportFor(client.slug, property, latest);

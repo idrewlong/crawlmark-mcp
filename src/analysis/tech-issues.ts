@@ -8,7 +8,7 @@
  * `<source>:<rule>`, so nothing is ever dropped or merged by guesswork.
  */
 import type { IssueSeverity, IssueSource, SourceRun, TechIssue, TechIssueSource, TechnicalIssuesData } from "../reports/report-types.js";
-import { CRAWL_COMPLETE_KEY, CRAWL_COMPLETE_RULES, normalizeUrl } from "./findings.js";
+import { CRAWL_COMPLETE_KEY, CRAWL_COMPLETE_RULES, gtmContainerKey, normalizeUrl } from "./findings.js";
 
 const SEVERITIES: IssueSeverity[] = ["critical", "high", "medium", "low"];
 
@@ -51,7 +51,8 @@ export const CATALOGUE: readonly CatalogueRow[] = [
   { key: "missing-title", title: "Page has no title", category: "content", match: ["local_crawl:missing-title", "audit:onpage:no_title", "dataforseo_crawl:no_title"], ahrefs: ["Title tag missing or empty"] },
   { key: "duplicate-title", title: "Title is used by another page", category: "duplicates", match: ["local_crawl:duplicate-title", "audit:onpage:duplicate_title_tag", "dataforseo_crawl:duplicate_title_tag"], ahrefs: ["Multiple pages have same title"] },
   { key: "missing-description", title: "Page has no meta description", category: "content", match: ["local_crawl:missing-description", "audit:onpage:no_description", "dataforseo_crawl:no_description"], ahrefs: ["Meta description tag missing or empty"] },
-  { key: "missing-h1", title: "Page has no H1 heading", category: "content", match: ["audit:onpage:no_h1_tag", "dataforseo_crawl:no_h1_tag"], ahrefs: ["H1 tag missing or empty"] },
+  { key: "missing-h1", title: "Page has no H1 heading", category: "content", match: ["local_crawl:missing-h1", "audit:onpage:no_h1_tag", "dataforseo_crawl:no_h1_tag"], ahrefs: ["H1 tag missing or empty"] },
+  { key: "title-brand-repeated", title: "Title repeats the brand name", category: "content", match: ["local_crawl:title-brand-repeated"] },
   { key: "redirect-chain", title: "Redirect chain (two or more hops)", category: "redirects", match: ["local_crawl:redirect-chain", "dataforseo_crawl:redirect_chain"], ahrefs: ["Redirect chain"] },
   { key: "noindex-in-sitemap", title: "Sitemap lists a noindex page", category: "indexability", match: ["site_hygiene:sitemap-noindex"], ahrefs: ["Noindex page in sitemap"] },
   { key: "canonical-mismatch", title: "Google chose a different canonical than the page declares", category: "indexability", match: ["audit:indexing:canonical-mismatch", "gsc_inspection:canonical-mismatch"] },
@@ -161,6 +162,27 @@ export interface IssueSnapshotData {
 export interface DiffOptions {
   now: number;
   maxAgeDays: number;
+  /**
+   * Whether the base run of `source` looked at this URL-level item's page (an audit's checked pairs, a crawl's fetched pages).
+   * A boolean decides; undefined (the base data is gone, or the source can't tell) falls back to the source-level rule.
+   */
+  baseCovered?: (source: IssueSource, rule: string, url: string | null, baseRun: SourceRun) => boolean | undefined;
+}
+
+const gtmId = (url: string) => gtmContainerKey(url).replace(/^gtm:\/\//, "").toUpperCase();
+
+/** D8: whether the base snapshot's run of one source covered an item, so its appearing now is a real change. */
+function baseCovers(source: IssueSource, rule: string, url: string | null, base: SourceRun[], o: DiffOptions): boolean {
+  const run = base.find((r) => r.source === source);
+  if (!run) return false;
+  if (source === "audit") {
+    // The audit's own finding source (lighthouse, axe, gtm, …) must have run.
+    if (run.checks && !run.checks.includes(rule.split(":")[0]!)) return false;
+    // A Tag Manager item belongs to one container; a snapshot that doesn't record its container falls back to the check above.
+    if (url?.startsWith("gtm://") && run.gtmContainer !== undefined && run.gtmContainer.toUpperCase() !== gtmId(url)) return false;
+  }
+  if (url === null) return true;
+  return o.baseCovered?.(source, rule, url, run) ?? true;
 }
 
 /** True when `source` has a newer run in `cur` than in `base` (a different run that ran later). */
@@ -180,7 +202,9 @@ function reran(source: IssueSource, cur: SourceRun[], base: SourceRun[], rule: s
 }
 
 /**
- * D10: compare a run with the base snapshot. new = in the run, not in the base; persistent = in both; a base item
+ * D10: compare a run with the base snapshot. new = in the run, not in the base, and the base covered it (its source ran, the audit ran that
+ * check, the Tag Manager container matched, the page was checked); first_checked = not in the base and not covered by it;
+ * retired = an item of a Tag Manager container the audit no longer audits; persistent = in both; a base item
  * the run doesn't have is resolved only when a source that reported it has a newer run now (and, for an audit,
  * ran that check again); otherwise unverified, never counted as fixed. Unverified items stay in the open list
  * (nothing confirmed they're gone), so they are carried into the next snapshot too. With no base every item is
@@ -190,17 +214,33 @@ export function diffIssues(
   current: IssueSnapshotData,
   base: IssueSnapshotData | undefined,
   o: DiffOptions = { now: Date.now(), maxAgeDays: Number.POSITIVE_INFINITY },
-): { items: SeenIssue[]; resolved: TechIssue[]; unverified: SeenIssue[]; noLongerChecked: number; changes: TechnicalIssuesData["changes"] } {
-  if (!base) return { items: current.items.map((i) => ({ ...i, change: "first_run" })), resolved: [], unverified: [], noLongerChecked: 0, changes: null };
+): { items: SeenIssue[]; resolved: TechIssue[]; unverified: SeenIssue[]; retired: TechIssue[]; noLongerChecked: number; changes: TechnicalIssuesData["changes"]; notes: string[] } {
+  if (!base) return { items: current.items.map((i) => ({ ...i, change: "first_run" })), resolved: [], unverified: [], retired: [], noLongerChecked: 0, changes: null, notes: [] };
   const before = new Map(base.items.map((i) => [itemId(i), i]));
   const now = new Set(current.items.map(itemId));
   const available = new Set(current.checked.map((r) => r.source));
-  const items = current.items.map((i): SeenIssue => ({ ...i, change: before.has(itemId(i)) ? "persistent" : "new" }));
+  // D8: a Tag Manager container the audit replaced. Its old items are retired: nothing audits that container now, so they
+  // can't be fixed or "not re-checked", and the new container's items have nothing to be compared with.
+  const nowGtm = current.checked.find((r) => r.source === "audit")?.gtmContainer;
+  const replaced = (i: Pick<TechIssue, "url">) => nowGtm !== undefined && i.url !== null && i.url.startsWith("gtm://") && gtmId(i.url) !== nowGtm.toUpperCase();
+  const items = current.items.map((i): SeenIssue => {
+    if (before.has(itemId(i))) return { ...i, change: "persistent" };
+    const covered = i.sources.some((s) => baseCovers(s.source, s.rule, i.url, base.checked, o));
+    return { ...i, change: covered ? "new" : "first_checked" };
+  });
+  const retired: TechIssue[] = [];
+  const retiredFrom = new Set<string>();
   const resolved: TechIssue[] = [];
   const unverified: SeenIssue[] = [];
   let noLongerChecked = 0;
   for (const b of base.items) {
     if (now.has(itemId(b))) continue;
+    if (replaced(b)) {
+      const { seen: _s, ...rest } = b;
+      retired.push({ ...rest, change: "retired" });
+      retiredFrom.add(gtmId(b.url!));
+      continue;
+    }
     const seen = b.seen?.length ? b.seen : base.checked.filter((r) => b.sources.some((s) => s.source === r.source));
     const cleared = b.sources.some((s) => reran(s.source, current.checked, seen, s.rule));
     if (cleared) {
@@ -221,8 +261,17 @@ export function diffIssues(
     items: [...items, ...unverified].sort(bySeverity),
     resolved: resolved.sort(bySeverity),
     unverified: unverified.sort(bySeverity),
+    retired: retired.sort(bySeverity),
     noLongerChecked,
-    changes: { new: items.filter((i) => i.change === "new").length, resolved: resolved.length, persistent: items.filter((i) => i.change === "persistent").length, unverified: unverified.length },
+    changes: {
+      new: items.filter((i) => i.change === "new").length,
+      firstChecked: items.filter((i) => i.change === "first_checked").length,
+      resolved: resolved.length,
+      persistent: items.filter((i) => i.change === "persistent").length,
+      unverified: unverified.length,
+      retired: retired.length,
+    },
+    notes: retired.length ? [`Tag Manager container changed from ${[...retiredFrom].join(", ")} to ${nowGtm}: ${retired.length} item(s) of the old container are retired and ${nowGtm}'s are listed as first checked.`] : [],
   };
 }
 

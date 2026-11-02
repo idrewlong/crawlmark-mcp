@@ -9,7 +9,7 @@ import { analyzeCrawl, crawledUrls, topFindings, type CrawlAnalysis, type CrawlP
 import type { Finding } from "../analysis/findings.js";
 import { orphanUrls } from "../analysis/hygiene.js";
 import { newCrawlId, saveCrawl, type StoredCrawl } from "../lib/crawls.js";
-import { CRAWL_LIMITS, CRAWL_TIME_LIMIT_MS, crawlSite, inCrawlScope, type CrawlDeps, type CrawlRun, type CrawlUserAgent } from "../providers/crawler.js";
+import { CRAWL_LIMITS, CRAWL_TIME_LIMIT_MS, crawlSite, inCrawlScope, type CrawlDeps, type CrawlRun, type CrawlUserAgent, type SitemapPhase } from "../providers/crawler.js";
 import type { Hop, HopOptions, RawFetch } from "../providers/render.js";
 import type { CollectedSitemaps } from "./site-hygiene.js";
 
@@ -26,11 +26,13 @@ export interface LocalCrawlOptions {
   startUrls?: string[];
   signal?: AbortSignal;
   timeLimitMs?: number;
+  /** After the link crawl, also fetch sitemap URLs the links didn't reach (same caps, robots rules and politeness). Default true. */
+  includeSitemapUrls?: boolean;
 }
 
 export interface LocalCrawlDeps {
   crawl: CrawlDeps;
-  /** The site's sitemaps (robots.txt Sitemap lines, Search Console, else /sitemap.xml), fetched with the crawl's user agent, or throws. Only called for an exhaustive crawl. */
+  /** The site's sitemaps (robots.txt Sitemap lines, Search Console, else /sitemap.xml), fetched with the crawl's user agent, or throws. Called at most once per crawl. */
   sitemaps(client: Client, robotsSitemaps: string[], opts: { userAgent: string; signal?: AbortSignal | undefined }): Promise<CollectedSitemaps>;
   save(c: StoredCrawl): void;
   version: string;
@@ -46,7 +48,7 @@ export interface LocalCrawlResult {
   exhaustive: boolean;
   stoppedBy: CrawlRun["stoppedBy"];
   pages: number;
-  summary: CrawlAnalysis["summary"] & { fetched: number; orphans: OrphanSummary };
+  summary: CrawlAnalysis["summary"] & { fetched: number; orphans: OrphanSummary; sitemapPhase: SitemapPhase | null };
   topIssues: Finding[];
   findingCount: number;
   settings: { maxPages: number; maxDepth: number; concurrency: number; userAgent: CrawlUserAgent; includeSubdomains: boolean; startUrls: string[]; seededFromHomepage: boolean };
@@ -88,11 +90,28 @@ export function crawlSettings(client: Pick<Client, "domain" | "keyPages">, o: Lo
   };
 }
 
+/** Brand strings for the title-repeat rule: the client's name (when it isn't just the domain), its brand terms, and the domain's first label when it has 4+ characters. */
+export function crawlBrandTerms(client: Pick<Client, "name" | "domain" | "brandTerms">): string[] {
+  const host = client.domain.toLowerCase().replace(/^www\./, "");
+  const label = host.split(".")[0] ?? "";
+  const name = client.name && client.name.toLowerCase().replace(/^www\./, "") !== host ? [client.name] : [];
+  return [...name, ...(client.brandTerms ?? []),...(label.length >= 4 ? [label] : [])];
+}
+
 export async function runLocalCrawl(client: Client, o: LocalCrawlOptions, deps: LocalCrawlDeps): Promise<{ result: LocalCrawlResult; findings: Finding[]; checked: string[] }> {
   const settings = crawlSettings(client, o);
   if (!settings.startUrls.length) throw new Error(`No start URL is on ${client.domain}; pass startUrls on the client's own host.`);
-  const run = await crawlSite(client.domain, settings, deps.crawl, { signal: o.signal, timeLimitMs: o.timeLimitMs ?? CRAWL_TIME_LIMIT_MS, version: deps.version });
-  const analysis = analyzeCrawl(run.pages, { exhaustive: run.exhaustive });
+  // The sitemaps are read once, for the sitemap phase and for orphans.
+  let sitemapRead: Promise<CollectedSitemaps> | undefined;
+  const readSitemaps = (robotsSitemaps: string[], userAgent: string) => (sitemapRead ??= deps.sitemaps(client, robotsSitemaps, { userAgent, signal: o.signal }));
+  const run = await crawlSite(client.domain, settings, deps.crawl, {
+    signal: o.signal,
+    timeLimitMs: o.timeLimitMs ?? CRAWL_TIME_LIMIT_MS,
+    version: deps.version,
+    // A crawl the user narrowed with their own start URLs (none at the homepage) stays narrow: no sitemap phase.
+    ...(o.includeSitemapUrls === false || !settings.seededFromHomepage ? {} : { extraUrls: async (_reached, ctx) => [...(await readSitemaps(ctx.robots.flatMap((r) => r.sitemaps), ctx.userAgent)).urls] }),
+  });
+  const analysis = analyzeCrawl(run.pages, { exhaustive: run.exhaustive, brandTerms: crawlBrandTerms(client) });
   const notes = [...run.notes];
 
   let orphans: OrphanSummary;
@@ -103,7 +122,7 @@ export async function runLocalCrawl(client: Client, o: LocalCrawlOptions, deps: 
   } else {
     try {
       const robotsSitemaps = run.robots.flatMap((r) => r.sitemaps);
-      const sm = await deps.sitemaps(client, robotsSitemaps, { userAgent: run.userAgent, signal: o.signal });
+      const sm = await readSitemaps(robotsSitemaps, run.userAgent);
       if (!sm.complete) orphans = { available: false, reason: "not available: the sitemap URL set is incomplete" };
       else {
         const list = orphanUrls(sm.urls, crawledUrls(run.pages), { crawlAtMs: run.ranAt, lastmods: sm.lastmods });
@@ -118,7 +137,7 @@ export async function runLocalCrawl(client: Client, o: LocalCrawlOptions, deps: 
 
   const fetched = run.pages.filter((p: CrawlPage) => p.status !== null).length;
   const crawlId = newCrawlId(run.ranAt);
-  const summary = { ...analysis.summary, fetched, orphans };
+  const summary = { ...analysis.summary, fetched, orphans, sitemapPhase: run.sitemapPhase };
   deps.save({ id: crawlId, client: client.slug, ranAt: run.ranAt, settings: { ...settings, userAgentString: run.userAgent }, summary, exhaustive: run.exhaustive, pages: run.pages });
   return {
     result: {

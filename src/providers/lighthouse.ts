@@ -2,6 +2,7 @@ import * as chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
 import { env } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
+import { createSerialQueue } from "../lib/concurrency.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import { assertSafeUrlResolved } from "../lib/url-guard.js";
 import { assertAllowedByPolicy, clientDomainPolicy } from "../user-url.js";
@@ -21,6 +22,12 @@ export interface LighthouseResult {
   opportunities: { id: string; title: string; savingsMs?: number }[];
 }
 
+/** Limits read at call time (a seam for tests). Defaults come from TIMEOUTS. */
+export const lighthouseLimits = { runMs: TIMEOUTS.lighthouseRunMs as number, queueMs: TIMEOUTS.lighthouseQueueMs as number };
+
+/** Lighthouse can't run twice at once in one process (its performance marks are global), so runs take turns. */
+const lighthouseQueue = createSerialQueue();
+
 const score = (v: number | null | undefined) => Math.round((v ?? 0) * 100);
 
 /**
@@ -35,7 +42,7 @@ export async function runLighthouse(
   await assertSafeUrlResolved(url);
   const policy = await clientDomainPolicy();
   const key = cacheKey("lighthouse", url, formFactor);
-  const compute = async () => {
+  const execute = async () => {
     const launchOpts = await lighthouseLaunchOptions();
     return withChrome(`Lighthouse on ${url}`, opts.signal, () => chromeLauncher.launch(launchOpts), (c) => c.kill(), async (chrome) => {
       const runner = await lighthouse(
@@ -86,8 +93,10 @@ export async function runLighthouse(
         opportunities,
       };
       return result;
-    });
+    }, { timeoutMs: lighthouseLimits.runMs });
   };
+  // The run limit starts when a call gets the slot, not while it waits behind earlier runs.
+  const compute = () => lighthouseQueue.run(execute, { signal: opts.signal, maxWaitMs: lighthouseLimits.queueMs });
   const first = await cached(key, TTL.day, compute, { refresh: opts.refresh });
   let cachedValue = first.value;
   // An entry cached before the final URL was stored, under a restriction, can't be vouched for: run it again.

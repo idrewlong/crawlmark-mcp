@@ -272,7 +272,9 @@ describe("Ahrefs requests", () => {
   it("other errors are never retried and show the vendor text with the key redacted", async () => {
     const calls = fakeAhrefs({ respond: () => new Response(JSON.stringify({ error: `bad key ${SENTINEL}` }), { status: 401 }) });
     const err = (await routed.backlinksSummary(client()).catch((e: unknown) => e)) as Error;
-    expect(err.message).toBe("Ahrefs rejected the API key (AHREFS_API_KEY): bad key <redacted>. Create one under Account settings > API keys.");
+    expect(err.message).toMatch(/^Ahrefs rejected the API key for .+ \(HTTP 401\)\. .*To fix the key: .* setup --step ahrefs\.$/);
+    expect(err.message).not.toContain(SENTINEL);
+    expect((err.cause as Error).message).toBe("Ahrefs rejected the API key (AHREFS_API_KEY): bad key <redacted>. Create one under Account settings > API keys.");
     expect(calls).toHaveLength(1);
   });
 

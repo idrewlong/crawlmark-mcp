@@ -90,7 +90,7 @@ describe("diff (D10)", () => {
       checked: [run("local_crawl", "c2", "2026-10-01T00:00:00Z"), run("dataforseo_crawl", "t1", "2026-09-01T00:00:00Z")],
     };
     const d = diffIssues(current, base);
-    expect(d.changes).toEqual({ new: 1, persistent: 1, resolved: 1, unverified: 1 });
+    expect(d.changes).toEqual({ new: 1, firstChecked: 0, persistent: 1, resolved: 1, unverified: 1, retired: 0 });
     expect(d.resolved.map((i) => i.key)).toEqual(["redirect-chain"]);
     expect(d.unverified.map((i) => i.key)).toEqual(["missing-h1"]);
     expect(d.items.map((i) => [i.key, i.change]).sort()).toEqual([
@@ -172,8 +172,8 @@ describe("technical_issues over stored sources (Done-when)", () => {
     saveCrawl({ id: newCrawlId(now - 1000), client: slug, ranAt: now - 1000, settings: {}, summary: {}, exhaustive: true, pages: [page(`${E}/`), page(`${E}/contact`), page(`${E}/new`, { description: null })] });
     const second = await technicalIssues(C(slug), { baseBeforeMs: now - TOOL_BASE_AGE_MS, limit: 50 }, deps);
     expect(second.base?.snapshotId).toBe(first.snapshotId);
-    expect(second.changes).toEqual({ new: 1, persistent: 4, resolved: 0, unverified: 0 });
-    expect(second.issues.find((i) => i.key === "missing-description")).toMatchObject({ change: "new", url: `${E}/new` });
+    expect(second.changes).toEqual({ new: 0, firstChecked: 1, persistent: 4, resolved: 0, unverified: 0, retired: 0 });
+    expect(second.issues.find((i) => i.key === "missing-description")).toMatchObject({ change: "first_checked", url: `${E}/new` });
     expect(second.issues.find((i) => i.key === "missing-title")!.sources.map((s) => s.source)).toEqual(["audit"]);
     expect(countIssueSnapshots(slug)).toBe(2);
   });

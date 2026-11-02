@@ -13,8 +13,9 @@ export function registerGtmTools(server: McpServer) {
       description:
         "Audit a client's live (published) Tag Manager container: paused tags, tags with no firing trigger, legacy Universal Analytics tags, duplicate GA4 configuration / Google tags for one measurement ID, " +
         "unused variables and triggers, custom HTML tags (listed for review), and tags missing consent settings when Consent Mode is used elsewhere. Also counts unpublished workspace changes. " +
-        "Findings carry severity medium or low. The container comes from clients.yaml (gtmAccountId, gtmContainerId) or is discovered by matching container domains; " +
-        "needs Read access to the container in Tag Manager. Free (Google API only); cached for an hour.",
+        "Findings carry severity medium or low. Checks which GTM- container the live homepage loads and audits that one; pin one with set_client_profile gtmContainerId when it can't tell. " +
+        "A pinned container comes from clients.yaml (gtmContainerId, optionally gtmAccountId); otherwise containers are discovered by matching container domains. " +
+        "Needs Read access to the container in Tag Manager. Free (Google API only); cached for an hour.",
       inputSchema: {
         client: z
           .string()
@@ -25,7 +26,8 @@ export function registerGtmTools(server: McpServer) {
     },
     handler(
       "gtm_audit",
-      async ({ client, refresh }: { client: string; refresh?: boolean | undefined }) => runGtmAudit(await resolveClient(client), { refresh: refresh ?? false }),
+      async ({ client, refresh }: { client: string; refresh?: boolean | undefined }, { signal }) =>
+        runGtmAudit(await resolveClient(client), { refresh: refresh ?? false, signal }),
       { timeoutMs: TIMEOUTS.networkMs * 4 },
     ),
   );

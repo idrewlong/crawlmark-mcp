@@ -72,11 +72,27 @@ export interface RobotsInfo {
   sitemaps: string[];
 }
 
+/** What the sitemap phase did: URLs listed (in scope), those links hadn't reached, and how many were fetched or left out by the page cap or time. */
+export interface SitemapPhase {
+  listed: number;
+  unreached: number;
+  fetched: number;
+  notFetched: number;
+}
+
+/** Context handed to the sitemap callback so it can find the site's sitemaps. */
+export interface SitemapContext {
+  robots: RobotsInfo[];
+  userAgent: string;
+}
+
 export interface CrawlRun {
   ranAt: number;
   durationMs: number;
   exhaustive: boolean;
   stoppedBy: null | "maxPages" | "time" | "aborted";
+  /** The sitemap phase (null when it didn't run: no sitemap URLs asked for, or the link phase ended by time or abort). */
+  sitemapPhase: SitemapPhase | null;
   pages: CrawlPage[];
   robots: RobotsInfo[];
   notes: string[];
@@ -131,10 +147,21 @@ interface RobotsState extends RobotsInfo {
 interface QueueItem {
   url: string;
   key: string;
-  depth: number;
+  /** null: fetched in the sitemap phase. */
+  depth: number | null;
 }
 
-export async function crawlSite(domain: string, settings: CrawlSettings, deps: CrawlDeps, opts: { signal?: AbortSignal; timeLimitMs?: number; version?: string } = {}): Promise<CrawlRun> {
+export async function crawlSite(domain: string, settings: CrawlSettings, deps: CrawlDeps, opts: {
+    signal?: AbortSignal;
+    timeLimitMs?: number;
+    version?: string;
+    /**
+     * Sitemap URLs to fetch after the link phase (runs unless that phase ended by time or abort). Gets the normalised URLs the links
+     * reached. The returned URLs are fetched under the crawl's own robots rules, limits and guards; their links are not followed.
+     */
+    extraUrls?: (reached: ReadonlySet<string>, ctx: SitemapContext) => Promise<string[]>;
+  } = {},
+): Promise<CrawlRun> {
   const now = deps.now ?? Date.now;
   const started = now();
   const ua = settings.userAgent === "googlebot" ? GOOGLEBOT_UA : crawlerUserAgent(opts.version ?? "0.0.0");
@@ -235,7 +262,7 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
   let depthCut = 0;
   let discoveryCapped = false;
 
-  const blank = (url: string, depth: number): CrawlPage => ({
+  const blank = (url: string, depth: number | null): CrawlPage => ({
     url,
     depth,
     status: null,
@@ -257,7 +284,7 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
   });
 
   /** Read a final (non-redirect) response into `page` and queue its in-scope links at depth + 1. */
-  async function readContent(page: CrawlPage, hop: Hop, next: QueueItem[]): Promise<void> {
+  async function readContent(page: CrawlPage, hop: Hop, next: QueueItem[], follow = true): Promise<void> {
     page.contentType = text(hop.contentType);
     const xrt = hop.xRobotsTag ? text(hop.xRobotsTag) : null;
     page.noindex = hasNoindex(xrt);
@@ -294,7 +321,8 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
       incomplete = true;
       notes.push(`${page.url} has more links than crawlmark reads from one page (2,000).`);
     }
-    for (const link of x.links) {
+    // A sitemap-phase page is checked on its own: its links are neither followed nor counted as inlinks.
+    for (const link of follow ? x.links : []) {
       if (!inScope(link)) continue;
       const key = normalizeUrl(link);
       const info = linkInfo.get(key);
@@ -305,18 +333,20 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
         continue;
       }
       if (pages.has(key) || queued.has(key)) continue;
-      if (page.depth + 1 > settings.maxDepth) {
+      const childDepth = (page.depth ?? 0) + 1;
+      if (childDepth > settings.maxDepth) {
         depthCut++;
         continue;
       }
       queued.add(key);
-      next.push({ url: link, key, depth: page.depth + 1 });
+      next.push({ url: link, key, depth: childDepth });
     }
   }
 
-  async function visit(item: QueueItem, next: QueueItem[]): Promise<void> {
+  async function visit(item: QueueItem, next: QueueItem[], sitemap = false): Promise<void> {
     if (pages.has(item.key) || checkStop()) return;
     const page = blank(item.url, item.depth);
+    if (sitemap) page.fromSitemap = true;
     let allowed: boolean;
     try {
       deps.assertAllowed(item.url);
@@ -331,10 +361,12 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
     if (!allowed) {
       page.skipped = "robots";
       pages.set(item.key, page);
-      notes.push("robots.txt blocked some linked URLs; they were not fetched, so links that appear only on them were not seen.");
+      notes.push(sitemap ? "robots.txt blocked some sitemap URLs; they were not fetched." : "robots.txt blocked some linked URLs; they were not fetched, so links that appear only on them were not seen.");
       return;
     }
     if (fetched >= settings.maxPages) {
+      // Sitemap phase: counted by the caller as not fetched; the link phase's cap outcome is not changed.
+      if (sitemap) return;
       notFetched++;
       if (!stoppedBy) stoppedBy = "maxPages";
       return;
@@ -350,20 +382,21 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
         if (!r.location) {
           page.finalUrl = current;
           page.finalStatus = r.status;
-          if (hop === 0) return await readContent(page, r, next);
+          if (hop === 0) return await readContent(page, r, next, !sitemap);
           // The redirect target's own record holds its content (unless it was already crawled).
           const key = normalizeUrl(current);
           // Same normalised URL (e.g. /about → /about/): this record stands for both, so it holds the content.
-          if (key === item.key) return await readContent(page, r, next);
+          if (key === item.key) return await readContent(page, r, next, !sitemap);
           if (!pages.has(key)) {
             const target = blank(current, item.depth);
             target.status = r.status;
             target.finalUrl = current;
             target.finalStatus = r.status;
             target.fromRedirect = item.url;
+            if (sitemap) target.fromSitemap = true;
             pages.set(key, target);
             queued.add(key);
-            await readContent(target, r, next);
+            await readContent(target, r, next, !sitemap);
           }
           return;
         }
@@ -416,6 +449,61 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
     checkStop();
   }
 
+  // ------------------------------------------------------------------ the sitemap phase
+  // "exhaustive" describes the link phase only, so it is fixed before this phase runs.
+  const exhaustive = stoppedBy === null && !incomplete && depthCut === 0 && !discoveryCapped;
+  let sitemapPhase: SitemapPhase | null = null;
+  if (opts.extraUrls && (stoppedBy === null || stoppedBy === "maxPages")) {
+    const linkStop = stoppedBy;
+    stoppedBy = null; // so checkStop() reflects only abort or time during this phase; restored below
+    const reached = new Set<string>();
+    for (const [key, p] of pages) {
+      reached.add(key);
+      if (p.finalUrl) reached.add(normalizeUrl(p.finalUrl));
+      for (const u of p.redirectChain) reached.add(normalizeUrl(u));
+    }
+    const robotsNow = (await Promise.all([...robots.values()].map((r) => r.catch(() => null)))).filter((r): r is RobotsState => r !== null).map(({ rules: _rules, ...info }) => info);
+    let listedUrls: string[] = [];
+    try {
+      listedUrls = await opts.extraUrls(reached, { robots: robotsNow, userAgent: ua });
+    } catch (err) {
+      if (!signal.aborted) notes.push(`Sitemap URLs weren't fetched: the sitemaps could not be read (${errorText(err)}).`);
+    }
+    if (!checkStop()) {
+      const candidates: QueueItem[] = [];
+      const seen = new Set<string>();
+      for (const raw of listedUrls) {
+        let url: string;
+        try {
+          url = withoutHash(raw);
+        } catch {
+          continue;
+        }
+        if (!inScope(url)) continue;
+        const key = normalizeUrl(url);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push({ url, key, depth: null });
+      }
+      const unreached = candidates.filter((c) => !reached.has(c.key));
+      const before = fetched;
+      try {
+        await mapLimit(unreached, settings.concurrency, (item) => visit(item, [], true));
+      } catch (err) {
+        if (!signal.aborted) throw err;
+      }
+      checkStop();
+      const sitemapFetched = fetched - before;
+      // A robots-blocked URL has a record but isn't "not fetched"; whatever has no record was left out by the page cap or time.
+      const notFetched = unreached.filter((c) => !pages.has(c.key)).length;
+      sitemapPhase = { listed: candidates.length, unreached: unreached.length, fetched: sitemapFetched, notFetched };
+      if (sitemapFetched) notes.push(`Fetched ${sitemapFetched} sitemap URL${sitemapFetched === 1 ? "" : "s"} that links didn't reach.`);
+      if (notFetched) notes.push(`${notFetched} more sitemap URL${notFetched === 1 ? "" : "s"} weren't fetched (page cap or time limit).`);
+    }
+    // A time limit reached in this phase leaves the link phase's outcome as it was; an abort is kept.
+    if (stoppedBy !== "aborted") stoppedBy = linkStop;
+  }
+
   // Inlinks and first linking page onto each record (a start URL has none unless something links to it).
   const list = [...pages.values()];
   for (const p of list) {
@@ -425,7 +513,7 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
       p.firstLinkedFrom = info.firstFrom;
     }
   }
-  list.sort((a, b) => a.depth - b.depth || a.url.localeCompare(b.url));
+  list.sort((a, b) => (a.depth ?? Infinity) - (b.depth ?? Infinity) || a.url.localeCompare(b.url));
 
   if (stoppedBy === "maxPages") notes.push(`Stopped at the ${settings.maxPages}-page cap; ${notFetched} more URL${notFetched === 1 ? " was" : "s were"} found but not fetched.`);
   if (stoppedBy === "time") notes.push(`Stopped at the ${Math.round((opts.timeLimitMs ?? CRAWL_TIME_LIMIT_MS) / 1000)}s time limit.`);
@@ -435,8 +523,9 @@ export async function crawlSite(domain: string, settings: CrawlSettings, deps: C
   return {
     ranAt: started,
     durationMs: now() - started,
-    exhaustive: stoppedBy === null && !incomplete && depthCut === 0 && !discoveryCapped,
+    exhaustive,
     stoppedBy,
+    sitemapPhase,
     pages: list,
     robots: robotsList.filter((r): r is RobotsState => r !== null).map(({ rules: _rules, ...info }) => info),
     notes: [...new Set(notes)],

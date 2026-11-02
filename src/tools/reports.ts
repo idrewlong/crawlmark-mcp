@@ -25,6 +25,7 @@ import { assertUserUrl } from "../user-url.js";
 import { templateCatalogue } from "../reports/templates/builder.js";
 import { registerTemplateWriteTools } from "./report-template-write.js";
 import { handler, READ_ONLY } from "./util.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 const clientArg = z
   .string()
@@ -89,6 +90,7 @@ export function registerReportTools(server: McpServer) {
         "Build the data for a client's monthly SEO report. `vsPreviousMonth` and `vsLastYear` include a `previous` object, and `change` is null when the earlier period has no impressions. Covers: GSC clicks/impressions/CTR/position vs previous month and last year, " +
         "GA4 organic sessions and key events, top and moving queries and pages (each query row carries `branded: boolean`), a branded vs non-branded split of clicks, impressions, CTR and impression-weighted position for the month and the previous one (query-level, so anonymized queries are excluded), top organic landing pages, and tracked keyword positions, plus an `audit` section: the latest saved audit and its diff against the most recent audit from before the month (`null` unless there is one from before the month and a newer one; a back-dated month still diffs against the latest audit). " +
         "Also includes an `opportunities` section: the top 5 non-branded striking-distance queries, low-CTR top results and cannibalized queries for the month. " +
+        "`search.querySpikes` lists days in the month whose impressions jumped on a few zero-click queries (check them before reading a rise as growth), and the top-level `notes` array carries the caveats to repeat to the reader: GA4 sessions left out because they came from other hostnames (set `ga4Hostnames` with set_client_profile if one belongs to the site), clicks and impressions left out of the totals by the client's `gscExcludeQueries`, and Search Console history saved or not saved on this run. " +
         "Free by default (Google APIs only); set liveRanks for a paid live SERP check per tracked keyword (the whole run's estimate is checked against the budget first; when it does not fit, no check is made and `trackedKeywords.liveRanks` says why). " +
         "Returns structured JSON for you to write up; each section reports its own error if a source is unavailable.",
       inputSchema: {
@@ -317,6 +319,7 @@ export function registerReportTools(server: McpServer) {
         "its site checks (robots.txt, sitemaps, orphans, AI crawlers), the newest local crawl, the newest stored DataForSEO full crawl within 30 days (its summary only; no crawl is started) and stored URL Inspection results. " +
         "The same problem found by two sources is one item, listing both sources with their own severity; `affected` is the largest page count any one source reports. " +
         "`changes` compares with the newest snapshot older than 24 hours: new, persistent, resolved (only when the source that reported it ran again) and unverified (not re-checked, never counted as fixed); null on the first run. " +
+        "An item is new only when the earlier run covered its page and source; items on pages or sources the earlier run didn't check are first_checked. When the Tag Manager container changed, the old container's items are retired (never resolved). " +
         "Each call saves a snapshot (local). Never starts a crawl or audit; stale sources (older than maxAgeDays) are shown with their date. " +
         "Free by default. The ahrefs_site_audit source reads the client's existing Ahrefs Site Audit project (clients.yaml ahrefsSiteAuditProject, else matched by domain) and spends units " +
         "(50 for the issues, plus 50 per issueUrls call): it needs allowPaid: true and is read only (never starts a crawl or creates a project). Semrush's API has no Site Audit. " +
@@ -367,9 +370,10 @@ export function registerReportTools(server: McpServer) {
       description:
         "Google's indexing of a client's site from stored URL Inspection results (the latest per URL): how many checked URLs are indexed, coverage states, the worst URLs (not found, soft 404, " +
         "crawled or discovered but not indexed, duplicates, noindex, blocked by robots.txt), Google's canonical choices, Search Console sitemap errors and warnings, and the share indexed by month. " +
-        "It's a sample (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's Page indexing report, which the API doesn't offer; fill it with inspect_index_coverage or crawlmark-cli index-coverage. " +
+        `It's a sample (key pages, top Search Console pages and a rotating sample of sitemap URLs), not Search Console's Page indexing report, which the API doesn't offer; fill it with inspect_index_coverage or ${cliHint()} index-coverage. ` +
         "`coverage` says how many of the sitemap URLs had a check in the last 30 days and whether that's all of them (complete) or a sample. " +
-        "Free and local apart from Search Console's sitemap list (cached a day). `quota` is today's URL Inspection use for the property (Pacific-time day).",
+        "Free and local apart from Search Console's sitemap list (cached a day). `quota` is today's URL Inspection use for the property (Pacific-time day). " +
+        "Earlier \"URL is unknown to Google\" results made with the URL's trailing slash removed are left out of the counts until inspect_index_coverage re-checks them.",
       inputSchema: {
         client: clientArg,
         trendMonths: z.number().int().min(0).max(12).optional().describe("Months of trend. Default 6."),
@@ -390,6 +394,7 @@ export function registerReportTools(server: McpServer) {
       title: "Inspect URLs for indexing",
       description:
         "Check how Google indexes a client's URLs with Search Console's URL Inspection API (free, read-only; it never asks Google to index anything) and store the results for index_coverage and the indexing_issues report section. " +
+        "URLs are inspected exactly as the sitemap, key pages or Search Console list them (trailing slash kept), and earlier \"URL is unknown to Google\" results made with the slash removed are re-checked first. " +
         "Order: key pages not checked in `staleDays`, then the top 50 Search Console pages, then sitemap URLs never checked (a sample that rotates weekly), then the oldest checks. " +
         "Stays within GSC_INSPECTION_DAILY_BUDGET per property per Pacific-time day (default 1,000 of Google's 2,000, so other tools keep headroom) and GSC_INSPECTION_PER_MINUTE (default 60); " +
         "a quota error from Google stops the run and marks the day used up. `dryRun` counts what it would check per origin and inspects nothing. Takes about a second per URL. " +
@@ -494,6 +499,7 @@ export function registerReportTools(server: McpServer) {
       title: "Compare two audits",
       description:
         "Diff two saved audits of a client: new, resolved, persistent and unverified findings plus Lighthouse score changes. " +
+        "A finding is new only when the earlier audit checked that page and source; findings on pages or sources the earlier audit didn't check are firstChecked. When the Tag Manager container changed, the old container's findings are retired. " +
         "A finding counts as resolved only if its check ran successfully in the later audit; otherwise it is unverified. " +
         "Defaults to the latest audit versus the one before it. Free and local.",
       inputSchema: {

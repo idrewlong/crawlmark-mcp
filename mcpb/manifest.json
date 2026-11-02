@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "crawlmark",
   "display_name": "Crawlmark SEO",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "SEO audits and monthly reports from Google Search Console, GA4, Tag Manager, DataForSEO, Ahrefs or Semrush, Lighthouse and axe-core.",
   "long_description": "Crawlmark gives Claude read access to your SEO data: Search Console and GA4 (free), PageSpeed/Lighthouse and accessibility audits, Tag Manager container audits, and optional paid keyword, ranking, competitor and backlink data from DataForSEO, Ahrefs or Semrush, using your own API key (capped by monthly budgets: dollars for DataForSEO, API units for Ahrefs and Semrush; DataForSEO's sandbox by default). Choose the default provider in the \"Default SEO data provider\" setting (or with `npx crawlmark-mcp setup --step provider`); each client can override it. Live SERPs, on-page checks and crawls always use DataForSEO. Everything runs locally; credentials stay on this computer. Site audits drive headless Chrome: Crawlmark uses the Chrome you already have installed (or the path in the Chrome path setting); install Google Chrome if the setup_status tool reports Chrome as missing. A Google service-account key file needs no extra step. To sign in with your own Google account instead (OAuth), run `CRAWLMARK_HOME=<data folder> npx crawlmark-mcp setup --step google` in a terminal once, then restart Claude.",
   "license": "MIT",
@@ -249,6 +249,10 @@
     {
       "name": "gsc_query",
       "description": "Query Google Search Console search analytics for a client."
+    },
+    {
+      "name": "gsc_history",
+      "description": "Saved monthly Search Console history (Google keeps only 16 months): run with backfill once per client to save it. Free."
     },
     {
       "name": "gsc_inspect_url",

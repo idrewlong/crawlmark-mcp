@@ -12,6 +12,7 @@ import { suggestCompetitors } from "../competitors.js";
 import { ENTRY_SOURCES, isPlainDomain, keywordInput, normalizeHost } from "../lib/clients.js";
 import { gapCompetitors, keywordGap, keywordIdeas } from "../providers/seo-data.js";
 import { handler, READ_ONLY } from "./util.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 /**
  * Competitor and tracked-keyword management plus competitor suggestions.
@@ -133,6 +134,9 @@ export function registerCompetitorTools(server: McpServer) {
         '(e.g. "emergency plumber"). dataProvider overrides the default SEO data provider for this client; it chooses whose paid data is used, not credentials. ' +
         'country is the ISO two-letter market Ahrefs and Semrush use (e.g. "US", "GB"). bingSite pins the Bing Webmaster Tools site bing_report reads (e.g. "https://www.example.com/"; it must be on the client\'s domain or a subdomain); unset, the domain is matched against your Bing key\'s verified sites. ' +
         "gbpPlaceId saves the client's Google Business Profile place ID (matched.placeId from local_profile) for local_profile, local_pack and local_reviews: set it only after the user has confirmed that local_profile found their business (it must be a place ID local_profile returned for this client in the last day). " +
+        'ga4Hostnames limits GA4 numbers to these hostnames (default: the domain and www.; "*.example.com" for subdomains; ["*"] for no filter). ' +
+        "gscExcludeQueries leaves queries out of Search Console totals and query lists (exact text, or /regex/ in RE2). " +
+        'gtmContainerId pins the Tag Manager container gtm_audit uses ("GTM-XXXX" or the numeric ID). ' +
         'Pass an empty string to clear a field. Free, local.',
       inputSchema: {
         client: clientArg,
@@ -159,12 +163,27 @@ export function registerCompetitorTools(server: McpServer) {
           .max(300)
           .optional()
           .describe('The Google place ID local_profile returned (matched.placeId), saved only after the user confirms it is their business; "" clears it.'),
+        ga4Hostnames: z
+          .array(z.string().max(253))
+          .max(20)
+          .optional()
+          .describe('Hostnames counted in GA4 numbers, replacing the stored list: exact hosts ("shop.example.com"), "*.example.com" for any subdomain, or ["*"] for no filter. [] clears it (back to the domain and its www. form).'),
+        gscExcludeQueries: z
+          .array(z.string().max(200))
+          .max(100)
+          .optional()
+          .describe('Search Console queries to leave out of totals and query lists, replacing the stored list: exact text (case-insensitive) or "/regex/" in RE2 syntax (no lookarounds or backreferences). [] clears it.'),
+        gtmContainerId: z
+          .string()
+          .max(25)
+          .optional()
+          .describe('The Tag Manager container gtm_audit uses: "GTM-XXXX" or the numeric container ID. Also removes any stored gtmAccountId. "" clears the pin.'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     // Site Audit project IDs are set in a terminal only (crawlmark-cli clients set, SEC-1), never through chat.
-    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId }) =>
-      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId }),
+    handler("set_client_profile", ({ client, area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ga4Hostnames, gscExcludeQueries, gtmContainerId }) =>
+      setClientProfile(client, { area, niche, name, brandTerms, dataProvider, country, bingSite, gbpPlaceId, ga4Hostnames, gscExcludeQueries, gtmContainerId }),
     ),
   );
 
@@ -304,7 +323,7 @@ export function registerCompetitorTools(server: McpServer) {
       title: "Stored SEO trends",
       description:
         "Stored backlinks or visibility snapshots for a client (or a competitor's domain) over time, one series per provider and market (they're never mixed). " +
-        "Snapshots come from the backlinks, organic_visibility and competitor_overview report sections and tools, backlinks_summary on the client's own domain, and crawlmark-cli seo-snapshot. Free and local: no provider request.",
+        `Snapshots come from the backlinks, organic_visibility and competitor_overview report sections and tools, backlinks_summary on the client's own domain, and ${cliHint()} seo-snapshot. Free and local: no provider request.`,
       inputSchema: {
         client: clientArg,
         kind: z.enum(["backlinks", "visibility"]),

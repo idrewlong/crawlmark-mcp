@@ -15,9 +15,12 @@ import type { RawIssue } from "./tech-issues.js";
 const DAY_MS = 86_400_000;
 const SEVERITIES: IssueSeverity[] = ["critical", "high", "medium", "low"];
 
-export type PoolGroup = "key" | "gsc_top" | "sitemap" | "oldest";
+export type PoolGroup = "recheck" | "key" | "gsc_top" | "sitemap" | "oldest";
 export interface PoolEntry {
+  /** The normalised key (how results are stored and looked up). */
   url: string;
+  /** The exact URL to send to Google: trailing slash and all (D7). */
+  inspectUrl: string;
   group: PoolGroup;
   /** Null when the sitemaps couldn't be read this run (the stored value is kept). */
   inSitemap: boolean | null;
@@ -68,14 +71,24 @@ export function seededOrder(urls: string[], seed: string): string[] {
   return urls.map((u) => [h(u), u] as const).sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])).map(([, u]) => u);
 }
 
+const withoutFragment = (u: string) => u.trim().replace(/#.*$/, "");
+
 /**
- * D14 pool order: (1) key pages not inspected within staleDays; (2) the top Search Console pages, same rule;
+ * D14 pool order: (0) `recheck` URLs (earlier "unknown to Google" results made with a stripped slash) that are in a current
+ * source; (1) key pages not inspected within staleDays; (2) the top Search Console pages, same rule;
  * (3) sitemap URLs never inspected, in an order seeded by client + ISO week; (4) the oldest inspected URLs
  * (also only those older than staleDays, so a small site isn't re-inspected the same day). Deduplicated
  * and cut to `max`. URLs outside the Search Console property are never planned.
  */
-export function planPool(o: { property: string; keyPages: readonly string[]; gscTop: readonly string[]; sitemapUrls: readonly string[]; sitemapKnown?: boolean; lastInspected: ReadonlyMap<string, number>; now: number; staleDays: number; seed: string; max: number; onlyListed?: boolean }): PoolEntry[] {
+export function planPool(o: { property: string; keyPages: readonly string[]; gscTop: readonly string[]; sitemapUrls: readonly string[]; sitemapKnown?: boolean; lastInspected: ReadonlyMap<string, number>; now: number; staleDays: number; seed: string; max: number; onlyListed?: boolean; recheck?: readonly string[]; sentUrls?: ReadonlyMap<string, string> }): PoolEntry[] {
   const sitemap = new Set(o.sitemapUrls.map(normalizeUrl));
+  // The first raw form of each URL seen in top Search Console pages, then sitemaps, then key pages is what gets inspected:
+  // Google's own forms come first, so a key page typed without its trailing slash still sends the slash Google lists.
+  const rawBy = new Map<string, string>();
+  for (const r of [...o.gscTop, ...o.sitemapUrls, ...o.keyPages]) {
+    const k = normalizeUrl(r);
+    if (!rawBy.has(k)) rawBy.set(k, withoutFragment(r));
+  }
   const fresh = (u: string) => {
     const at = o.lastInspected.get(u);
     return at !== undefined && o.now - at < o.staleDays * DAY_MS;
@@ -88,8 +101,9 @@ export function planPool(o: { property: string; keyPages: readonly string[]; gsc
     // Only URLs inside the property: Google refuses the rest, and they'd spend the budget.
     if (!/^https?:\/\//i.test(u) || !inProperty(u, o.property) || seen.has(u) || fresh(u)) return;
     seen.add(u);
-    out.push({ url: u, group, inSitemap: o.sitemapKnown === false ? null : sitemap.has(u) });
+    out.push({ url: u, inspectUrl: rawBy.get(u) ?? o.sentUrls?.get(u) ?? u, group, inSitemap: o.sitemapKnown === false ? null : sitemap.has(u) });
   };
+  for (const u of o.recheck ?? []) if (rawBy.has(normalizeUrl(u))) add(u, "recheck");
   for (const u of o.keyPages) add(u, "key");
   for (const u of o.gscTop) add(u, "gsc_top");
   for (const u of seededOrder([...sitemap].filter((u) => !o.lastInspected.has(u)), o.seed)) add(u, "sitemap");

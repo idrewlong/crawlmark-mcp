@@ -3,6 +3,8 @@ import { env, type Client } from "../config.js";
 import { cached, cacheKey, TTL } from "../lib/cache.js";
 import type { DateRange } from "../lib/dates.js";
 import { gscError } from "../lib/google-access.js";
+import { exclusionRegex, isExcludedQuery } from "../lib/gsc-exclusions.js";
+import { historyCutoff, mergeRows, readMonths, storedMonths, wholeMonths } from "../lib/gsc-monthly.js";
 import { apiErrorInfo } from "../lib/gtm.js";
 import { lastInSitemap, markQuotaExhausted, pacificDay, reserveQuota, saveInspection, type InspectionOrigin, type InspectionRecord } from "../lib/inspections.js";
 import { assertGoogleConfigured, googleAuth, googleAuthIdentity, googleAuthStatus } from "./google.js";
@@ -17,7 +19,10 @@ async function guarded<T>(siteUrl: string, call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (err) {
-    throw gscError(err, siteUrl, whoAmI());
+    const mapped = gscError(err, siteUrl, whoAmI());
+    // The friendlier message drops the HTTP status; keep it so callers can still tell a refusal from a hiccup.
+    if (mapped !== err && mapped instanceof Error) Object.assign(mapped, { status: apiErrorInfo(err).status });
+    throw mapped;
   }
 }
 
@@ -40,6 +45,12 @@ export interface GscQueryOptions extends DateRange {
   queryContains?: string;
   /** Filter to rows whose query matches this RE2 regular expression (Search Console `includingRegex`). */
   queryRegex?: string;
+  /** D4: don't leave out the client's gscExcludeQueries (raw Search Console numbers). Default false. */
+  includeExcludedQueries?: boolean;
+  /** D5: never answer from stored monthly history (the backfill reads Google itself). */
+  live?: boolean;
+  /** Skip the cache for this call. */
+  refresh?: boolean;
 }
 
 function requireProperty(client: Client): string {
@@ -53,43 +64,144 @@ function requireProperty(client: Client): string {
   return client.gscProperty;
 }
 
-/** Search Analytics query. GSC data lags ~2-3 days, so completed months are safe to cache long. */
-export async function gscQuery(client: Client, opts: GscQueryOptions): Promise<GscRow[]> {
+type Filter = { dimension: string; operator: string; expression: string };
+
+const pct = (clicks: number, impressions: number) => (impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0);
+
+/**
+ * A5: rows of `raw` minus rows of `part` (the same request limited to the excluded queries), matched by identical keys.
+ * Clicks and impressions are subtracted, CTR is recomputed, position is kept; rows left with no impressions are dropped.
+ */
+export function subtractRows(raw: GscRow[], part: GscRow[]): GscRow[] {
+  const sub = new Map(part.map((r) => [r.keys.join("\u0000"), r]));
+  const out: GscRow[] = [];
+  for (const r of raw) {
+    const p = sub.get(r.keys.join("\u0000"));
+    if (!p) {
+      out.push(r);
+      continue;
+    }
+    const clicks = Math.max(0, r.clicks - p.clicks);
+    const impressions = r.impressions - p.impressions;
+    if (impressions <= 0) continue;
+    out.push({ keys: r.keys, clicks, impressions, ctr: pct(clicks, impressions), position: r.position });
+  }
+  return out;
+}
+
+/** What gscQuery returns, plus the exclusions' share (present only when exclusions applied; summed over the rows asked for). */
+export interface GscResult {
+  rows: GscRow[];
+  excluded?: { clicks: number; impressions: number };
+  /** Caveats a report should show (e.g. saved history that predates the client's current exclusions). */
+  notes?: string[];
+}
+
+/** D5: stored months answer a range wholly before Google's window, for totals, query and page requests. */
+function fromHistory(client: Client, opts: GscQueryOptions, items: readonly string[]): GscResult | null {
+  if (opts.live || !client.gscProperty) return null;
+  const dims = opts.dimensions ?? [];
+  const kind = dims.length === 0 ? "totals" : dims.length === 1 && dims[0] === "query" ? "query" : dims.length === 1 && dims[0] === "page" ? "page" : null;
+  if (!kind || opts.pageContains || opts.queryContains || opts.queryRegex) return null;
+  if (opts.startDate >= historyCutoff(Date.now())) return null;
+  const months = wholeMonths(opts);
+  if (!months) return null;
+  const property = client.gscProperty;
+  const stored = storedMonths(client.slug, property);
+  if (!months.every((m) => stored.includes(m))) return null;
+  const exclude = !opts.includeExcludedQueries && items.length > 0;
+  const byMonth = readMonths(client.slug, property, months, kind);
+  const rows = [...byMonth.values()].flat();
+  const filtered = kind === "query" && exclude ? rows.filter((r) => !isExcludedQuery(r.keys[0] ?? "", items)) : rows;
+  const merged = mergeRows(filtered);
+  if (kind !== "totals") return { rows: merged.slice(0, opts.rowLimit ?? 1000) };
+  const total = merged[0] ?? { keys: [], clicks: 0, impressions: 0, ctr: 0, position: 0 };
+  if (!exclude) return { rows: [total] };
+  // The saved `excluded` row is only valid for the exclusions it was computed with (its key is that regex). Months saved
+  // under different (or no) exclusions can't be adjusted, so the whole range is returned raw, with a note.
+  const current = exclusionRegex(items);
+  const exByMonth = readMonths(client.slug, property, months, "excluded");
+  if (months.some((m) => (exByMonth.get(m)?.[0]?.keys[0] ?? null) !== current)) {
+    return { rows: [total], notes: ["Search Console history for these months was saved before the current query exclusions, so their totals are raw (the excluded queries are included)."] };
+  }
+  const ex = [...exByMonth.values()].flat();
+  const excluded = { clicks: ex.reduce((a, r) => a + r.clicks, 0), impressions: ex.reduce((a, r) => a + r.impressions, 0) };
+  const clicks = Math.max(0, total.clicks - excluded.clicks);
+  const impressions = total.impressions - excluded.impressions;
+  return { rows: impressions > 0 ? [{ keys: [], clicks, impressions, ctr: pct(clicks, impressions), position: total.position }] : [], excluded };
+}
+
+/** Search Analytics query with the exclusions' share. GSC data lags ~2-3 days, so completed months are safe to cache long. */
+export async function gscQueryDetailed(client: Client, opts: GscQueryOptions): Promise<GscResult> {
+  const items = client.gscExcludeQueries ?? [];
+  const history = fromHistory(client, opts, items);
+  if (history) return history;
+
   const siteUrl = requireProperty(client);
+  const exclusion = opts.includeExcludedQueries ? null : exclusionRegex(items);
+  const dims = opts.dimensions ?? [];
   const filters = [
     opts.pageContains && { dimension: "page", operator: "contains", expression: opts.pageContains },
     opts.queryContains && { dimension: "query", operator: "contains", expression: opts.queryContains },
     opts.queryRegex && { dimension: "query", operator: "includingRegex", expression: opts.queryRegex },
-  ].filter(Boolean) as { dimension: string; operator: string; expression: string }[];
+  ].filter(Boolean) as Filter[];
 
-  const key = cacheKey("gsc", googleAuthIdentity(), siteUrl, opts);
-  const { value } = await cached(key, TTL.day, async () => {
+  const { refresh, live: _live, ...keyed } = opts;
+  const key = cacheKey("gsc2", googleAuthIdentity(), siteUrl, keyed, ...(exclusion ? [exclusion] : []));
+  const { value } = await cached(key, TTL.day, async (): Promise<GscResult> => {
     const sc = google.searchconsole({ version: "v1", auth: googleAuth() });
-    const res = await guarded(siteUrl, () => sc.searchanalytics.query({
-      siteUrl,
-      requestBody: {
-        startDate: opts.startDate,
-        endDate: opts.endDate,
-        dimensions: opts.dimensions ?? [],
-        rowLimit: opts.rowLimit ?? 1000,
-        dimensionFilterGroups: filters.length ? [{ filters }] : undefined,
-      },
-    }));
-    return (res.data.rows ?? []).map((r) => ({
-      keys: r.keys ?? [],
-      clicks: r.clicks ?? 0,
-      impressions: r.impressions ?? 0,
-      ctr: Number(((r.ctr ?? 0) * 100).toFixed(2)),
-      position: Number((r.position ?? 0).toFixed(1)),
-    }));
-  });
+    const run = async (extra: Filter[]): Promise<GscRow[]> => {
+      const all = [...filters, ...extra];
+      let res;
+      try {
+        res = await guarded(siteUrl, () => sc.searchanalytics.query({
+          siteUrl,
+          requestBody: {
+            startDate: opts.startDate,
+            endDate: opts.endDate,
+            dimensions: dims,
+            rowLimit: opts.rowLimit ?? 1000,
+            dimensionFilterGroups: all.length ? [{ filters: all }] : undefined,
+          },
+        }));
+      } catch (err) {
+        if (exclusion && apiErrorInfo(err).status === 400) {
+          throw new Error(`Search Console rejected the gscExcludeQueries pattern: ${apiErrorInfo(err).message}`, { cause: err });
+        }
+        throw err;
+      }
+      return (res.data.rows ?? []).map((r) => ({
+        keys: r.keys ?? [],
+        clicks: r.clicks ?? 0,
+        impressions: r.impressions ?? 0,
+        ctr: Number(((r.ctr ?? 0) * 100).toFixed(2)),
+        position: Number((r.position ?? 0).toFixed(1)),
+      }));
+    };
+    if (!exclusion) return { rows: await run([]) };
+    // Query-level requests: Search Console filters the excluded queries out itself (exact).
+    if (dims.includes("query")) return { rows: await run([{ dimension: "query", operator: "excludingRegex", expression: exclusion }]) };
+    // Other requests: subtract the excluded queries' share (A5), key by key.
+    const raw = await run([]);
+    const part = await run([{ dimension: "query", operator: "includingRegex", expression: exclusion }]);
+    return {
+      rows: subtractRows(raw, part),
+      excluded: { clicks: part.reduce((a, r) => a + r.clicks, 0), impressions: part.reduce((a, r) => a + r.impressions, 0) },
+    };
+  }, { refresh: refresh ?? false });
   return value;
 }
 
-/** Totals for a date range (no dimensions → one aggregate row). */
-export async function gscTotals(client: Client, range: DateRange) {
-  const [row] = await gscQuery(client, { ...range, dimensions: [] });
-  return row ?? { keys: [], clicks: 0, impressions: 0, ctr: 0, position: 0 };
+/** Search Analytics query (see gscQueryDetailed). */
+export async function gscQuery(client: Client, opts: GscQueryOptions): Promise<GscRow[]> {
+  return (await gscQueryDetailed(client, opts)).rows;
+}
+
+/** Totals for a date range (no dimensions → one aggregate row). `excluded` is what the client's gscExcludeQueries took out, when they applied. */
+export async function gscTotals(client: Client, range: DateRange): Promise<GscRow & { excluded?: { clicks: number; impressions: number }; notes?: string[] }> {
+  const { rows, excluded, notes } = await gscQueryDetailed(client, { ...range, dimensions: [] });
+  const row = rows[0] ?? { keys: [], clicks: 0, impressions: 0, ctr: 0, position: 0 };
+  return { ...row, ...(excluded ? { excluded } : {}), ...(notes?.length ? { notes } : {}) };
 }
 
 /** One URL Inspection result with every index-status field crawlmark stores (research G3). */

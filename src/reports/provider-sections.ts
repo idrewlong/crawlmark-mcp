@@ -21,6 +21,7 @@ import { stripControl } from "../lib/terminal-text.js";
 import type { BacklinksRouted, Capability, PaidPlan, ProviderId, SeoDataProvider, VisibilityFigures } from "../providers/seo-data.js";
 import type { BacklinksData, BacklinksNow, Compared, CompetitorOverviewData, CompetitorRow, SnapshotOrigin, VisibilityData, VisibilityNow } from "./report-types.js";
 import { monthLabel } from "./templates/period.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 const DAY_MS = 86_400_000;
 const PROVIDER_LABEL: Record<ProviderId, string> = { dataforseo: "DataForSEO", ahrefs: "Ahrefs", semrush: "Semrush" };
@@ -675,6 +676,6 @@ export function seoTrends(client: Client, kind: ProviderKind, target: string | u
   const notes: string[] = [];
   if (series.length > 1) notes.push("Each provider and market is its own series: their figures aren't comparable.");
   if (series.some((x) => x.provider === "semrush")) notes.push("Semrush figures are kept for 31 days (Semrush's terms).");
-  if (!series.length) notes.push(`No stored ${kind} figures for ${t} yet. They're stored by the ${kind === "backlinks" ? "backlinks section, backlinks_summary" : "organic_visibility section or tool"} and crawlmark-cli seo-snapshot.`);
+  if (!series.length) notes.push(`No stored ${kind} figures for ${t} yet. They're stored by the ${kind === "backlinks" ? "backlinks section, backlinks_summary" : "organic_visibility section or tool"} and ${cliHint()} seo-snapshot.`);
   return { client: client.slug, kind, target: t, since, series, notes };
 }

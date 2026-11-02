@@ -262,7 +262,9 @@ describe("diffing old-style and new-style stored audits", () => {
     expect(old.checked).toEqual([{ url: "site", source: "site" }]);
     const d = diffAudits(old, mk("new", 2, gsc, hy));
     expect(d.persistent.map((f) => f.rule)).toEqual(["sitemap-errors"]);
-    expect(d.new.map((f) => f.rule)).toEqual(["robots-missing"]);
+    // The old audit never ran the robots check, so this is first checked (D8), not new.
+    expect(d.new).toEqual([]);
+    expect(d.firstChecked.map((f) => f.rule)).toEqual(["robots-missing"]);
     expect(diffAudits(old, mk("new2", 3, { ok: true, data: [] }, hy)).resolved.map((f) => f.rule)).toEqual(["sitemap-errors"]);
   });
   it("new to old: hygiene findings are unverified (the old audit never ran them), GSC ones compare normally", () => {

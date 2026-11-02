@@ -25,6 +25,7 @@ import { applyTemplateWrite, planTemplateWrite, templateTargetPath } from "./rep
 import { renderTemplatePreview } from "./reports/template-preview.js";
 import type { Prompter } from "./setup/prompter.js";
 import type { Ui } from "./setup/ui.js";
+import { cliHint } from "./lib/cli-hint.js";
 
 export interface CliIo {
   out(line?: string): void;
@@ -60,7 +61,7 @@ export async function previewBrandingCommand(args: string[], flags: { client?: s
   const loaded = loadTemplates({ homeDir: io.homeDir, clientSlug: slug, ...(io.today ? { today: io.today } : {}) });
   const bad = [loaded.files.global, loaded.files.client].filter((f) => f && f.exists && !f.valid);
   if (bad.length) {
-    for (const f of bad) io.warn(`Error: ${f!.path} is not valid; fix it first (crawlmark-cli report templates validate).`);
+    for (const f of bad) io.warn(`Error: ${f!.path} is not valid; fix it first (${cliHint()} report templates validate).`);
     return 1;
   }
   const r = await deps.render(loaded.branding);
@@ -308,7 +309,7 @@ export async function reportCommand(args: string[], flags: ReportFlags, io: CliI
 
   const global = loadTemplates({ homeDir: io.homeDir, ...(io.today ? { today: io.today } : {}) }).files.global;
   if (global.exists && !global.valid) {
-    io.warn(`Error: ${global.path} is not valid; fix it first (crawlmark-cli report templates validate):`);
+    io.warn(`Error: ${global.path} is not valid; fix it first (${cliHint()} report templates validate):`);
     for (const e of global.errors ?? []) io.warn(`  ${e.path || "(file)"}: ${e.message}`);
     return 1;
   }

@@ -91,7 +91,7 @@ export async function closeAllBrowsers(): Promise<void> {
 
 /**
  * Launch a resource (a browser), run `work` on it, and always close it: on success,
- * on error, after TIMEOUTS.browserMs, or as soon as `signal` aborts (a tool-level
+ * on error, after `opts.timeoutMs` (default TIMEOUTS.browserMs), or as soon as `signal` aborts (a tool-level
  * timeout or the MCP client cancelling). Close errors are logged, not thrown.
  */
 export async function withChrome<R, T>(
@@ -100,6 +100,7 @@ export async function withChrome<R, T>(
   launch: () => Promise<R>,
   close: (r: R) => unknown,
   work: (r: R) => Promise<T>,
+  opts: { timeoutMs?: number } = {},
 ): Promise<T> {
   signal?.throwIfAborted();
   // Registered before launch() settles: a shutdown or abort during the launch still closes
@@ -126,7 +127,7 @@ export async function withChrome<R, T>(
   try {
     const resource = await launching;
     if (closing) throw new Error(`${label} was cancelled while the browser was starting`);
-    return await withTimeout(work(resource), TIMEOUTS.browserMs, label, closeOnce);
+    return await withTimeout(work(resource), opts.timeoutMs ?? TIMEOUTS.browserMs, label, closeOnce);
   } catch (err) {
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : err;
     throw err;

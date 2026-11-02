@@ -9,6 +9,7 @@ import { readTokenFile } from "../src/lib/token-store.js";
 import { CrawlmarkOAuth2Client } from "../src/providers/google-oauth-client.js";
 import { startFakeGoogle, type FakeGoogle } from "./helpers/fake-google.js";
 import { POSIX_MODES } from "./platform.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 // The login flow talks to whatever endpoints its OAuth client has. Point that client at the fake Google
 // (no production change: the client takes its endpoints as a constructor option).
@@ -182,7 +183,7 @@ describe("loopback login against a fake Google", () => {
     google.plan.token = () => ({ status: 400, body: { error: "invalid_grant", error_description: "Bad Request" } });
     const { login, authUrl } = await startLogin();
     await approve(authUrl);
-    await expect(login).rejects.toThrow(/Sign-in failed: Google rejected the authorization code \(invalid_grant\)\..*crawlmark-cli auth login/);
+    await expect(login).rejects.toThrow(new RegExp(`Sign-in failed: Google rejected the authorization code \\(invalid_grant\\)\\..*${cliRe("auth login").source}`));
     expect(existsSync(tokenFile)).toBe(false);
   });
 

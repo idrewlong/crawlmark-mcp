@@ -69,6 +69,7 @@
           "position": 8.2
         }
       },
+      "querySpikes": [],
       "branded": {
         "current": {
           "queries": 1,
@@ -515,6 +516,8 @@
             "title": "On-page check failed: is broken"
           }
         ],
+        "firstChecked": [],
+        "retired": [],
         "resolved": [
           {
             "id": "no_description",
@@ -562,13 +565,18 @@
         "warnings": [],
         "counts": {
           "new": 1,
+          "firstChecked": 0,
+          "retired": 0,
           "resolved": 1,
           "persistent": 1,
           "unverified": 1
         }
       }
     },
-    "dataSpendThisMonthUsd": 0.1235
+    "dataSpendThisMonthUsd": 0.1235,
+    "notes": [
+      "Saved Search Console history for 2 month(s) (2026-08…2026-09)."
+    ]
   },
   "liveRanks": {
     "client": {
@@ -640,6 +648,7 @@
           "position": 8.2
         }
       },
+      "querySpikes": [],
       "branded": {
         "current": {
           "queries": 1,
@@ -1089,6 +1098,8 @@
             "title": "On-page check failed: is broken"
           }
         ],
+        "firstChecked": [],
+        "retired": [],
         "resolved": [
           {
             "id": "no_description",
@@ -1136,13 +1147,18 @@
         "warnings": [],
         "counts": {
           "new": 1,
+          "firstChecked": 0,
+          "retired": 0,
           "resolved": 1,
           "persistent": 1,
           "unverified": 1
         }
       }
     },
-    "dataSpendThisMonthUsd": 0.1235
+    "dataSpendThisMonthUsd": 0.1235,
+    "notes": [
+      "Saved Search Console history for 2 month(s) (2026-08…2026-09)."
+    ]
   },
   "july": {
     "client": {
@@ -1214,6 +1230,7 @@
           "position": 8.2
         }
       },
+      "querySpikes": [],
       "branded": {
         "current": {
           "queries": 1,
@@ -1659,6 +1676,8 @@
             "title": "On-page check failed: is broken"
           }
         ],
+        "firstChecked": [],
+        "retired": [],
         "resolved": [
           {
             "id": "no_description",
@@ -1706,12 +1725,17 @@
         "warnings": [],
         "counts": {
           "new": 1,
+          "firstChecked": 0,
+          "retired": 0,
           "resolved": 1,
           "persistent": 1,
           "unverified": 1
         }
       }
     },
-    "dataSpendThisMonthUsd": 0.1235
+    "dataSpendThisMonthUsd": 0.1235,
+    "notes": [
+      "Saved Search Console history for 2 month(s) (2026-08…2026-09)."
+    ]
   }
 }

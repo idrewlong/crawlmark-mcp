@@ -264,6 +264,12 @@ describe("mergeClients", () => {
       name: "Example Co",
       gscProperty: "sc-domain:example.com",
       ga4PropertyId: "99999999",
+      // Release A: nothing pinned or matched, the default GA4 hostnames, no exclusions.
+      gtmPinned: false,
+      gtmCandidates: [],
+      ga4Hostnames: ["example.com", "www.example.com"],
+      ga4HostnamesSource: "default",
+      gscExcludeQueries: [],
       locationCode: 2840,
       languageCode: "en",
       competitors: [],

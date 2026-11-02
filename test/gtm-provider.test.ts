@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 /** runGtmAudit and the container lookup against a mocked googleapis (no network) and the real SQLite cache in a temp DATA_DIR. */
 
@@ -65,6 +66,8 @@ vi.mock("../src/providers/google.js", () => ({
 }));
 
 const { runGtmAudit } = await import("../src/reports/gtm.js");
+/** The homepage fetch is injected: no DNS or network in these tests. */
+const run = (c: Parameters<typeof runGtmAudit>[0], o?: Parameters<typeof runGtmAudit>[1]) => runGtmAudit(c, o, { fetchHomepage: async () => "" });
 
 beforeEach(() => {
   state.scopes = undefined;
@@ -78,49 +81,49 @@ const client = { domain: "example.com", gtmAccountId: "6000000001", gtmContainer
 describe("runGtmAudit", () => {
   it("audits the live version and reports unpublished workspace changes, cached for repeat calls", async () => {
     state.identity = "test:gtm-audit";
-    const r = await runGtmAudit(client);
+    const r = await run(client);
     expect(r.container).toMatchObject({ publicId: "GTM-EXAMPL1", accountId: "6000000001", containerId: "7000000001" });
     expect(r.liveVersion).toEqual({ versionId: "42", name: "Example release" });
     expect(r.summary).toMatchObject({ tags: 11, findings: 12, bySeverity: { medium: 6, low: 6 }, consentModeDetected: true });
     expect(r.unpublishedChanges.totalChanges).toBe(1);
     expect(r.fromCache).toBe(false);
-    expect((await runGtmAudit(client)).fromCache).toBe(true);
+    expect((await run(client)).fromCache).toBe(true);
     expect(state.calls.live).toBe(1);
-    await runGtmAudit(client, { refresh: true });
+    await run(client, { refresh: true });
     expect(state.calls.live).toBe(2);
   });
 
   it("errors clearly when the client has no container", async () => {
     state.identity = "test:gtm-none";
-    await expect(runGtmAudit({ domain: "example.com" })).rejects.toThrow(/No Tag Manager container found for example\.com.*clients\.yaml/s);
+    await expect(run({ domain: "example.com" })).rejects.toThrow(/No Tag Manager container found for example\.com.*clients\.yaml/s);
   });
 
   it("reports why discovery found nothing when the Tag Manager API is disabled", async () => {
     state.identity = "test:gtm-disabled";
     state.accountsError = { code: 403, message: "Tag Manager API has not been used in project 1 before or it is disabled.", response: { status: 403, data: { error: { message: "Tag Manager API has not been used in project 1 before or it is disabled.", errors: [] } } } };
-    await expect(runGtmAudit({ domain: "example.com" })).rejects.toThrow(/Tag Manager API is disabled/);
+    await expect(run({ domain: "example.com" })).rejects.toThrow(/Tag Manager API is disabled/);
     // Once the API is enabled, an explicit gtm_audit retry doesn't wait out the failure memory.
     state.accountsError = undefined;
-    await expect(runGtmAudit({ domain: "example.com" })).rejects.toThrow(/No Tag Manager container found/);
+    await expect(run({ domain: "example.com" })).rejects.toThrow(/No Tag Manager container found/);
   });
 
   it("resolves a pinned container id without an account, or a GTM- public id, through discovery", async () => {
     state.identity = "test:gtm-resolve";
-    expect((await runGtmAudit({ domain: "example.com", gtmContainerId: "7000000001" })).container.accountId).toBe("6000000001");
-    expect((await runGtmAudit({ domain: "example.com", gtmContainerId: "gtm-exampl1" })).container.containerId).toBe("7000000001");
-    await expect(runGtmAudit({ domain: "example.com", gtmContainerId: "GTM-NOPE" })).rejects.toThrow(/isn't visible/);
+    expect((await run({ domain: "example.com", gtmContainerId: "7000000001" })).container.accountId).toBe("6000000001");
+    expect((await run({ domain: "example.com", gtmContainerId: "gtm-exampl1" })).container.containerId).toBe("7000000001");
+    await expect(run({ domain: "example.com", gtmContainerId: "GTM-NOPE" })).rejects.toThrow(/isn't visible/);
   });
 
   it("explains how to grant access when Tag Manager denies it", async () => {
     state.identity = "test:gtm-denied";
     state.liveError = denied;
-    await expect(runGtmAudit(client)).rejects.toThrow(/User Management.*crawlmark@example-project\.iam\.gserviceaccount\.com.*Read access/s);
+    await expect(run(client)).rejects.toThrow(/User Management.*crawlmark@example-project\.iam\.gserviceaccount\.com.*Read access/s);
   });
 
   it("reports a never-published container instead of failing", async () => {
     state.identity = "test:gtm-unpublished";
     state.liveError = notFound;
-    const r = await runGtmAudit(client);
+    const r = await run(client);
     expect(r.liveVersion).toBeNull();
     expect(r.findings).toEqual([]);
     expect(r.notes[0]).toMatch(/never been published/);
@@ -130,13 +133,13 @@ describe("runGtmAudit", () => {
     state.identity = "test:gtm-missing";
     state.liveError = notFound;
     state.containerGetError = notFound;
-    await expect(runGtmAudit(client)).rejects.toThrow(/was not found/);
+    await expect(run(client)).rejects.toThrow(/was not found/);
   });
 
   it("tells OAuth users to log in again when their token lacks the Tag Manager scope", async () => {
     state.identity = "test:gtm-scope";
     state.scopes = ["https://www.googleapis.com/auth/webmasters.readonly"];
-    await expect(runGtmAudit(client)).rejects.toThrow(/crawlmark-cli auth login/);
+    await expect(run(client)).rejects.toThrow(cliRe("auth login"));
     expect(state.calls.live).toBe(0);
   });
 });

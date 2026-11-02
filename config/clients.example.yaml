@@ -20,8 +20,18 @@ clients:
     gscProperty: sc-domain:example.com # or a URL-prefix property, e.g. https://www.example.com/
     ga4PropertyId: "123456789" # Admin > Property details
     gtmAccountId: "6000000001" # Tag Manager account and container for gtm_audit: the numeric IDs in the Tag Manager URL
-    gtmContainerId: "7000000001" # (/container/accounts/<account>/containers/<container>), not the GTM-XXXX ID. Default: found
-    #                              by matching the container's domain list to this client; this pins one
+    gtmContainerId: "7000000001" # (/container/accounts/<account>/containers/<container>), or the public ID ("GTM-ABC1234", then leave
+    #                              gtmAccountId out). Default: found by matching the container's domain list to this client; set it
+    #                              to pin one when several match
+    ga4Hostnames: # default: [example.com, www.example.com]. GA4 numbers count only these hostnames (staging, localhost and old domains are left out)
+      - example.com # an exact host
+      - www.example.com
+      - shop.example.com
+      #- "*.example.com" # any subdomain (not example.com itself)
+      #- "*" # alone: no hostname filter at all
+    gscExcludeQueries: # default: none. Search Console queries left out of totals and query lists
+      - example login # a plain string matches the whole query exactly (ignoring case and extra spaces)
+      - "/^site:example\\.com/" # /.../ is an RE2 regular expression (case-insensitive; no lookarounds or backreferences)
     locationCode: 2840 # DataForSEO market; default DEFAULT_LOCATION_CODE (2840 = United States)
     languageCode: en # default DEFAULT_LANGUAGE_CODE
     area: Austin,Texas,United States # DataForSEO location_name for local searches (suggest_competitors); default: use locationCode

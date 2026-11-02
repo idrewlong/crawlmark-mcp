@@ -18,6 +18,7 @@ import { validateTemplateText } from "../src/reports/templates/schema.js";
 import type { RunDeps } from "../src/reports/templates/run.js";
 import { fakeDeps } from "./fixtures/reports/deps.js";
 import { fixtureReport } from "./fixtures/reports/report.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 const today = new Date("2026-10-13T12:00:00Z");
 const XSS = "<img src=x onerror=alert(1)>";
@@ -109,7 +110,7 @@ describe("runTemplate with rank sections", () => {
 
   it("rank_trend without stored rows is unavailable with the check-ranks hint", async () => {
     const r = await fixtureReport({ include: ["ranks"] });
-    expect(r.sections.find((s) => s.id === "ranks")).toMatchObject({ status: "unavailable", reason: expect.stringMatching(/run crawlmark-cli check-ranks/) });
+    expect(r.sections.find((s) => s.id === "ranks")).toMatchObject({ status: "unavailable", reason: expect.stringMatching(new RegExp(`run ${cliRe("check-ranks").source}`)) });
   });
 
   it("keyword_gap is skipped without allowPaid and makes no call", async () => {

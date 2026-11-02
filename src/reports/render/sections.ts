@@ -253,6 +253,8 @@ const CHANGE_TAG: Record<TechIssue["change"], Text> = {
   persistent: [{ t: "still open", tag: "neutral" }],
   unverified: [{ t: "not re-checked", tag: "warn" }],
   resolved: [{ t: "resolved", tag: "good" }],
+  first_checked: [{ t: "first checked", tag: "neutral" }],
+  retired: [{ t: "retired (container changed)", tag: "warn" }],
   first_run: [t("")],
 };
 const foundBy = (i: TechIssue): Text => cell([...new Set(i.sources.map((x) => ISSUE_SOURCE_NAMES[x.source]))].join(", "));
@@ -647,6 +649,8 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
           { label: "New", value: fmtInt(k.new), ...(k.new > 0 ? { tone: "bad" as const } : {}) },
           { label: "Still open", value: fmtInt(k.persistent) },
           { label: "Not re-checked", value: fmtInt(k.unverified) },
+          ...(k.firstChecked ? [{ label: "First checked", value: fmtInt(k.firstChecked) }] : []),
+          ...(k.retired ? [{ label: "Retired", value: fmtInt(k.retired) }] : []),
         ],
       },
       { kind: "paragraph", text: [t(`The latest audit (${day(cmp.ranAt)}) compared with the one before it (${day(cmp.diff.base.ranAt)}).`)] },
@@ -663,6 +667,8 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
           ]
         : []),
       ...(k.unverified > 0 ? [{ kind: "note" as const, text: [t("Findings that weren't re-checked in the latest audit are listed as not re-checked, never as fixed.")] }] : []),
+      ...(k.firstChecked ? [{ kind: "note" as const, text: [t("First checked: the earlier audit didn't check these pages or checks, so they aren't counted as new.")] }] : []),
+      ...(k.retired ? [{ kind: "note" as const, text: [t("Retired: the Tag Manager container changed, so the old container's findings are no longer audited.")] }] : []),
     ];
   },
   core_web_vitals_history: (data: CruxHistoryResult) => {
@@ -902,7 +908,7 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     // The section's own notes are fixed text; ones that tell the operator what to set stay out of the file.
     for (const n of data.notes) {
       if (/^No area is set/.test(n)) blocks.push({ kind: "note", text: [t("Map positions were checked across the client's market, not a single town.")] });
-      else if (!/set_client_profile|crawlmark-cli|setup/.test(n)) blocks.push({ kind: "note", text: [t(n)] });
+      else if (!/set_client_profile|crawlmark-cli|crawlmark-mcp|npm run cli|setup/.test(n)) blocks.push({ kind: "note", text: [t(n)] });
     }
     blocks.push({ kind: "note", text: [t(`From Google Maps and the Google Business Profile${ctx.whiteLabel ? "" : ", via DataForSEO,"} when this report was generated. Map position 1 is the top of the map pack; lower is better.`)] });
     return blocks;
@@ -950,6 +956,8 @@ export const SECTION_MAPPERS: Record<string, Mapper> = {
     const tile = (label: string, n: number, bad: boolean): Kpi => ({ label, value: fmtInt(n), ...(bad && n > 0 ? { tone: "bad" as const } : {}) });
     const tiles: Kpi[] = [tile("Critical", k.critical, true), tile("High", k.high, true), tile("Medium", k.medium, false), tile("Low", k.low, false)];
     if (ch) tiles.push(tile("New", ch.new, true), { label: "Resolved", value: fmtInt(ch.resolved), ...(ch.resolved > 0 ? { tone: "good" as const } : {}) });
+    if (ch?.firstChecked) tiles.push({ label: "First checked", value: fmtInt(ch.firstChecked) });
+    if (ch?.retired) tiles.push({ label: "Retired", value: fmtInt(ch.retired) });
     const blocks: Block[] = [{ kind: "kpiRow", items: tiles }];
     if (!data.total) blocks.push({ kind: "paragraph", text: [t("No open technical issues in the sources below.")] });
     for (const sev of ["critical", "high", "medium", "low"] as const) {

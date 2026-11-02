@@ -238,6 +238,8 @@ export function migrateUrlInspections(database: DatabaseSync): boolean {
       if (!/duplicate column/i.test((err as Error).message)) throw err;
     }
   }
+  // Release A: a database built through this function alone also gets the inspected_url column.
+  migrateInspectedUrl(database);
   return !existed;
 }
 
@@ -363,6 +365,59 @@ export function migratePagesExports(database: DatabaseSync): boolean {
 }
 
 migratePagesExports(db);
+
+/**
+ * Release A / D7 (C11): the exact URL sent to Google for an inspection, next to the normalised `url` key.
+ * Nullable: rows from older builds stay NULL (see legacyUnknownUrls in inspections.ts). Added with the same
+ * guarded ALTER as `failed`; older builds never name the column in their INSERTs, so no rollback step is needed.
+ * Returns true when this call added the column.
+ */
+export function migrateInspectedUrl(database: DatabaseSync): boolean {
+  // The table is created by migrateUrlInspections; a database without it has nothing to alter yet.
+  if (database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'url_inspections'").get() === undefined) return false;
+  const cols = database.prepare("PRAGMA table_info(url_inspections)").all() as { name: string }[];
+  if (cols.some((c) => c.name === "inspected_url")) return false;
+  try {
+    database.exec("ALTER TABLE url_inspections ADD COLUMN inspected_url TEXT");
+  } catch (err) {
+    // Another process starting at the same moment may have added it first.
+    if (!/duplicate column/i.test((err as Error).message)) throw err;
+    return false;
+  }
+  return true;
+}
+
+migrateInspectedUrl(db);
+
+/**
+ * Release A / D5 (C8): Search Console history kept beyond Google's 16 months, one row per client, property, month,
+ * kind and key (raw numbers, no exclusions or hostname scope; the `excluded` kind holds the exclusion's share).
+ * src/lib/gsc-monthly.ts replaces a whole month in one transaction. Additive and idempotent; older builds never
+ * read the table.
+ */
+export function migrateGscMonthly(database: DatabaseSync): boolean {
+  const existed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'gsc_monthly'").get() !== undefined;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS gsc_monthly (
+      client      TEXT NOT NULL,
+      property    TEXT NOT NULL,
+      month       TEXT NOT NULL,
+      kind        TEXT NOT NULL,
+      key         TEXT NOT NULL DEFAULT '',
+      clicks      INTEGER NOT NULL,
+      impressions INTEGER NOT NULL,
+      ctr         REAL NOT NULL,
+      position    REAL NOT NULL,
+      complete    INTEGER NOT NULL DEFAULT 1,
+      captured_at INTEGER NOT NULL,
+      PRIMARY KEY (client, property, month, kind, key)
+    );
+    CREATE INDEX IF NOT EXISTS gsc_monthly_month ON gsc_monthly (client, property, month);
+  `);
+  return !existed;
+}
+
+migrateGscMonthly(db);
 
 /**
  * SEC-3: the database holds cached client data and the spend ledger, so it (and SQLite's -wal and -shm files, when

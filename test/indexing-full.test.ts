@@ -236,7 +236,7 @@ describe("crawlmark-cli index-coverage --all-pages", () => {
   it("passes all with the longer CLI time limit, and refuses --max with it", async () => {
     const seen: unknown[] = [];
     const c = client("cli-all.example.com", "https://example.com/cli/");
-    const run = async (_c: Client, o: unknown) => (seen.push(o), { property: "p", planned: 0, inspected: 0, failed: 0, stoppedBy: null, quota: { day: "d", used: 0, budget: 1, exhausted: false }, byOrigin: { key: 0, gsc_top: 0, sitemap: 0, oldest: 0 }, notes: [] });
+    const run = async (_c: Client, o: unknown) => (seen.push(o), { property: "p", planned: 0, inspected: 0, failed: 0, stoppedBy: null, quota: { day: "d", used: 0, budget: 1, exhausted: false }, byOrigin: { recheck: 0, key: 0, gsc_top: 0, sitemap: 0, oldest: 0 }, notes: [] });
     const a = io();
     expect(await indexCoverageCommand([], { ...flags, "all-pages": true }, a.io, { loadClients: async () => ({ clients: [c], skipped: [] }), run })).toBe(0);
     expect(seen[0]).toEqual({ all: true, timeLimitMs: CLI_ALL_PAGES_TIME_LIMIT_MS, dryRun: false });

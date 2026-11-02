@@ -41,6 +41,17 @@ describe("technical_issues section", () => {
     expect(md).toContain("Issues not re-checked by their source are shown as not re-checked, never as fixed.");
   });
 
+  it("first checked and retired items get their own labels and key figures (D8)", () => {
+    const first = TECH_ISSUES.issues[0]!;
+    const doc = buildReportDoc(
+      p13Report({ issues: { ...TECH_ISSUES, changes: { ...TECH_ISSUES.changes!, firstChecked: 2, retired: 1 }, issues: [{ ...first, change: "first_checked" }, ...TECH_ISSUES.issues.slice(1)] } }),
+      v,
+    );
+    const kpi = doc.sections.find((x) => x.id === "issues")!.blocks[0]!;
+    expect(kpi.kind === "kpiRow" && kpi.items.map((k) => [k.label, k.value]).slice(-2)).toEqual([["First checked", "2"], ["Retired", "1"]]);
+    expect(toMarkdown(doc)).toContain("*first checked*");
+  });
+
   it("without a previous snapshot there are no New/Resolved tiles and no Change column", () => {
     const doc = buildReportDoc(p13Report({ issues: { ...TECH_ISSUES, changes: null, base: null, resolved: [], issues: TECH_ISSUES.issues.map((i) => ({ ...i, change: "first_run" as const })) } }), v);
     const md = toMarkdown(doc);

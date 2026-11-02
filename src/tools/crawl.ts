@@ -28,7 +28,8 @@ export function registerCrawlTools(server: McpServer) {
       title: "Local site crawl (free)",
       description:
         "Crawl a client's own site from this machine (free, no paid provider) and save the result: status codes, redirects and chains, titles, meta descriptions, canonicals, H1s, " +
-        "internal links, click depth, broken internal links, noindex pages, and orphan pages (sitemap URLs no link reaches; only when the crawl finished within its caps). " +
+        "internal links, click depth, broken internal links, noindex pages, missing H1s, titles that repeat the brand name, and orphan pages (sitemap URLs no link reaches; only when the crawl finished within its caps). " +
+        "After the link crawl it also fetches sitemap URLs the links didn't reach (sharing the page cap and time limit; their links are not followed; includeSitemapUrls false turns this off). " +
         "Polite: obeys robots.txt (the crawlmark group, or Googlebot's with userAgent googlebot, else *), Crawl-delay up to 10 s, otherwise one request per 250 ms per host, " +
         "honest user agent. Same host only by default (www. included). Every URL and redirect is SSRF-guarded and RESTRICT_TO_CLIENT_DOMAINS applies. HTML only, no JavaScript rendering " +
         "(render_check covers that), 2 MB per page, 15 s per request, 10 minutes per crawl. Returns a summary and the top 50 issues; list pages with local_crawl_pages. " +
@@ -40,6 +41,7 @@ export function registerCrawlTools(server: McpServer) {
         concurrency: int(CRAWL_LIMITS.concurrency).optional().describe("Requests in flight at once (still spaced per host). Default 4."),
         userAgent: z.enum(["crawlmark", "googlebot"]).optional().describe('Default "crawlmark" (its own user agent and robots group). "googlebot" sends Googlebot\'s user agent and obeys its robots group.'),
         includeSubdomains: z.boolean().optional().describe("Also crawl subdomains of the client's domain. Default false."),
+        includeSitemapUrls: z.boolean().optional().describe("After the link crawl, also fetch sitemap URLs the links didn't reach (same caps, robots rules and politeness). Default true."),
         startUrls: z.array(z.string().url()).min(1).max(50).optional().describe("Where to start, on the client's host. Default: the homepage plus the client's key pages (never sitemap URLs, so orphans can be found)."),
       },
       annotations: LOCAL_WRITE,
@@ -89,7 +91,7 @@ export function registerCrawlTools(server: McpServer) {
           url: p.url,
           status: p.status,
           ...(p.finalStatus !== null && p.redirectChain.length ? { finalStatus: p.finalStatus } : {}),
-          depth: p.depth,
+          depth: p.depth ?? "sitemap",
           title: p.title,
           description: p.description,
           canonical: p.canonical,

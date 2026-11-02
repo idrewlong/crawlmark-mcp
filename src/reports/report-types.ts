@@ -159,9 +159,14 @@ export interface AuditChangesData {
       resolved: AuditFindingOut[];
       persistent: AuditFindingOut[];
       unverified: AuditFindingOut[];
+      /** Not in the earlier audit and not checked by it. Absent in older stored data. */
+      firstChecked?: AuditFindingOut[];
+      /** Findings of a Tag Manager container the latest audit replaced. Absent in older stored data. */
+      retired?: AuditFindingOut[];
+      containerChange?: { from: string; to: string };
       scoreChanges: { url: string; category: string; from: number; to: number }[];
       warnings: string[];
-      counts: { new: number; resolved: number; persistent: number; unverified: number };
+      counts: { new: number; resolved: number; persistent: number; unverified: number; firstChecked?: number; retired?: number };
     };
   } | null;
 }
@@ -410,6 +415,8 @@ export interface SourceRun {
   stale: boolean;
   /** Audit: the finding sources that ran (lighthouse, axe, indexing, …). Local crawl: `site:crawl-complete` when it was exhaustive. */
   checks?: string[];
+  /** Audit: the public ID of the Tag Manager container the audit checked, when it ran Tag Manager. */
+  gtmContainer?: string;
 }
 
 export interface TechIssueSource {
@@ -435,7 +442,7 @@ export interface TechIssue {
   /** Pages affected: the largest count any one source reports (D8). */
   affected: number;
   sources: TechIssueSource[];
-  change: "new" | "persistent" | "resolved" | "unverified" | "first_run";
+  change: "new" | "persistent" | "resolved" | "unverified" | "first_run" | "first_checked" | "retired";
 }
 
 export interface TechnicalIssuesData {
@@ -444,7 +451,7 @@ export interface TechnicalIssuesData {
   /** Open items only. */
   counts: Record<IssueSeverity, number>;
   /** Null on the first run (nothing to compare with). */
-  changes: { new: number; resolved: number; persistent: number; unverified: number } | null;
+  changes: { new: number; firstChecked: number; resolved: number; persistent: number; unverified: number; retired: number } | null;
   base: { snapshotId: string; capturedAt: string } | null;
   /** Open, sorted severity → affected desc → key; at most `limit`. */
   issues: TechIssue[];

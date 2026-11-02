@@ -1,5 +1,6 @@
 import { lookup as dnsLookup } from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
+import { cliHint } from "./cli-hint.js";
 
 /**
  * Guard for user-supplied URLs and every outbound connection the browser checks make.
@@ -203,7 +204,7 @@ export function hostInDomains(host: string, domains: string[]): boolean {
 export function assertOnClientDomain(host: string, domains: string[]): void {
   if (!hostInDomains(host, domains)) {
     throw new UrlRefusedError(
-      `Refusing ${bare(host)}: RESTRICT_TO_CLIENT_DOMAINS=true and it is not a client domain or a subdomain of one. Add the client with \`crawlmark-cli clients add\`.`,
+      `Refusing ${bare(host)}: RESTRICT_TO_CLIENT_DOMAINS=true and it is not a client domain or a subdomain of one. Add the client with \`${cliHint()} clients add\`.`,
     );
   }
 }

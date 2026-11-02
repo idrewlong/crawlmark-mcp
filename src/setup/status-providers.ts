@@ -1,16 +1,12 @@
-import { accessSync, constants, existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { existsSync } from "node:fs";
 import { loadOverrides } from "../clients.js";
-import { ENV_FILE, ENV_FILE_KEYS, env, HOME, PROJECT_ROOT, seoDefaultProvider } from "../config.js";
+import { ENV_FILE, ENV_FILE_KEYS, env, HOME, seoDefaultProvider } from "../config.js";
 import { globalUnitCap, unitsThisMonth } from "../lib/budget.js";
 import type { ProviderId } from "../lib/provider-ids.js";
 import { checkAhrefsKey } from "../providers/ahrefs.js";
 import { checkCruxKey, cruxKey } from "../providers/crux.js";
 import { bingKey, checkBingKey } from "../providers/bing.js";
 import { remainingAiUsd } from "../lib/budget.js";
-import { shellQuote } from "../lib/claude-config.js";
-import { sourceCheckoutMarker, USER_HOME_DIRNAME, type HomeSource } from "../lib/home.js";
 import { chromeKindLabel } from "../lib/chrome.js";
 import { resolveChrome, withBrowser } from "../providers/browser.js";
 import { dataForSeoStatus } from "../providers/dataforseo.js";
@@ -20,75 +16,8 @@ import { listGtmContainers } from "../providers/gtm.js";
 import { brandingConfigured } from "../reports/branding-settings.js";
 import { cachedStatus, type StatusProviders } from "./status.js";
 
-/** True when `name` is an executable on PATH (no shell, no exec). */
-export function onPath(name: string, pathEnv = process.env.PATH ?? "", platform = process.platform): boolean {
-  const exts = platform === "win32" ? ["", ".cmd", ".exe", ".bat"] : [""];
-  for (const dir of pathEnv.split(delimiter)) {
-    if (!dir) continue;
-    for (const ext of exts) {
-      try {
-        accessSync(join(dir, name + ext), constants.X_OK);
-        return true;
-      } catch {
-        /* keep looking */
-      }
-    }
-  }
-  return false;
-}
-
-export interface CommandPrefixInputs {
-  /** Running from a source checkout (npm run cli works in its root). */
-  checkout: boolean;
-  /** `crawlmark-cli` is on PATH (a global install). */
-  cliOnPath: boolean;
-  homeSource: HomeSource;
-  homeDir: string;
-  /** The home this install uses without CRAWLMARK_HOME: the project root for a checkout, ~/.crawlmark otherwise. */
-  defaultHomeDir: string;
-  /** The user's home directory, shown as `~` in the printed CRAWLMARK_HOME. */
-  userHome?: string | undefined;
-}
-
-/** CRAWLMARK_HOME's value for a printed command: `~/rest` when it's under the user's home and needs no quoting. */
-function displayHome(dir: string, userHome: string | undefined): string {
-  if (userHome) {
-    const rel = relative(userHome, dir);
-    if (rel && !rel.startsWith("..") && !isAbsolute(rel) && /^[A-Za-z0-9_./-]+$/.test(rel.split(sep).join("/"))) return `~/${rel.split(sep).join("/")}`;
-  }
-  return shellQuote(dir);
-}
-
-/**
- * The short command for printed next steps (pure): `npm run cli --` in a source
- * checkout, `crawlmark-cli` for a global install, else `npx crawlmark-mcp`.
- * `CRAWLMARK_HOME=<dir>` goes in front only when the home came from the env and
- * isn't this install's default.
- */
-export function commandPrefix(i: CommandPrefixInputs): string {
-  const base = i.checkout ? "npm run cli --" : i.cliOnPath ? "crawlmark-cli" : "npx crawlmark-mcp";
-  if (i.homeSource !== "env" || resolve(i.homeDir) === resolve(i.defaultHomeDir)) return base;
-  return `CRAWLMARK_HOME=${displayHome(i.homeDir, i.userHome)} ${base}`;
-}
-
-/** True when this process runs from a source checkout (not an installed package). */
-export function isCheckout(): boolean {
-  return sourceCheckoutMarker(PROJECT_ROOT, existsSync) !== undefined;
-}
-
-/** commandPrefix for this process. `withHome: false` leaves out any CRAWLMARK_HOME prefix. */
-export function cliPrefix(opts: { withHome?: boolean } = {}): string {
-  const checkout = isCheckout();
-  const userHome = homedir();
-  return commandPrefix({
-    checkout,
-    cliOnPath: onPath("crawlmark-cli"),
-    homeSource: opts.withHome === false ? "user" : HOME.source,
-    homeDir: HOME.dir,
-    defaultHomeDir: checkout ? PROJECT_ROOT : join(userHome, USER_HOME_DIRNAME),
-    userHome,
-  });
-}
+export { cliPrefix, commandPrefix, isCheckout, onPath, type CommandPrefixInputs } from "../lib/cli-hint.js";
+import { cliPrefix } from "../lib/cli-hint.js";
 
 /** Variables that configure an integration; any of them set outside .env means the setup is environment-driven. */
 const CREDENTIAL_KEYS = [

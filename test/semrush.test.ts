@@ -146,7 +146,7 @@ describe("backlinks_summary (v4 overview)", () => {
 
 describe("v4 errors", () => {
   it("401 and 403 are the rejected-key message that points at a v4 key", async () => {
-    const MSG = "Semrush rejected the API key. crawlmark uses Semrush's v4 API: create a key under your profile > API keys and run setup --step semrush.";
+    const MSG = /^Semrush rejected the API key for .+ \(HTTP 40[13]\)\. .*To fix the key: .* setup --step semrush\.$/;
     fake(() => new Response(fx("v4-error-403.json"), { status: 403 }));
     await expect(routed.searchVolume(client(), ["auth kw one"])).rejects.toThrow(MSG);
     fake(() => new Response("{}", { status: 401 }));

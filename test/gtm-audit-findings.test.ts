@@ -34,7 +34,7 @@ describe("Tag Manager findings in run_audit (opt-in)", () => {
     expect(checkedPairs(audit(true))).toEqual([{ url: "gtm://GTM-EXAMPLE", source: "gtm" }]);
     for (const f of extractFindings(audit(true))) expect(checkKey(checkOf(f))).toBe(checkKey({ url: "gtm://GTM-EXAMPLE", source: "gtm" }));
     const without = diffAudits(stored("a", 1, audit(true)), stored("b", 2, audit(false)));
-    expect(without.counts).toEqual({ new: 0, resolved: 0, persistent: 0, unverified: 2 });
+    expect(without.counts).toEqual({ new: 0, firstChecked: 0, resolved: 0, persistent: 0, unverified: 2, retired: 0 });
     const failed = diffAudits(stored("a", 1, audit(true)), stored("b", 2, audit(true, false)));
     expect(failed.counts.unverified).toBe(2);
     const fixed = diffAudits(stored("a", 1, audit(true)), stored("b", 2, { ...audit(true), site: { ...audit(true).site, tagManager: { ok: true, data: { ...gtmData, findings: [] } } } } as never));

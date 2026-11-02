@@ -18,7 +18,9 @@ import { stripControl } from "../../lib/terminal-text.js";
 import type { StoredAudit } from "../../analysis/diff.js";
 import type { GscQueryOptions, GscRow } from "../../providers/gsc.js";
 import { computeHighlights } from "../highlights.js";
-import { brandedSplitFor, compare, liveRanksAvailability, movers, organicTrafficCompare, QUERY_ROW_LIMIT, trackedKeywordRows, type Ga4Summary, type PeriodTotals } from "../monthly.js";
+import { brandedSplitFor, compare, ga4ScopeNote, gscExclusionNote, liveRanksAvailability, movers, organicTrafficCompare, QUERY_ROW_LIMIT, querySpikesFor, saveRecentHistory, trackedKeywordRows, type Ga4Summary, type PeriodTotals } from "../monthly.js";
+import { spikeNote, type QuerySpike } from "../../analysis/query-spikes.js";
+import type { Ga4HostnameBreakdown } from "../../providers/ga4.js";
 import { aiReadinessFrom } from "../ai-readiness.js";
 import type { SiteHygiene } from "../../analysis/hygiene.js";
 import type {
@@ -55,6 +57,7 @@ import type { IssueSource } from "../report-types.js";
 import type { RankHistoryOptions, RankHistoryResult } from "../../ranks.js";
 import type { EstimateResult, KeywordGapRequest, KeywordGapRouted } from "../../providers/seo-data.js";
 import { analyzeCrawl, topFindings } from "../../analysis/crawl.js";
+import { crawlBrandTerms } from "../local-crawl.js";
 import type { TechIssuesOptions, TechIssuesResult } from "../technical-issues.js";
 import type { StoredCrawl } from "../../lib/crawls.js";
 import type { ProviderEstimate, SectionRequest, SectionWindow } from "../provider-sections.js";
@@ -93,6 +96,12 @@ export interface RunDeps {
   ga4TopLandingPages(client: Client, range: DateRange, limit: number): Promise<Record<string, string | number>[]>;
   /** Organic sessions per day, for the report files' trend chart (optional: without it the chart is left out). */
   ga4OrganicDaily?(client: Client, range: DateRange): Promise<{ date: string; sessions: number }[]>;
+  /** D3: the hostnames GA4 left out of a period, with sessions (optional: without it no scope note is added). */
+  ga4HostnameBreakdown?(client: Client, range: DateRange): Promise<Ga4HostnameBreakdown>;
+  /** D4: zero-click query spikes in a period (optional: without it none are looked for). */
+  querySpikes?(client: Client, range: DateRange): Promise<QuerySpike[]>;
+  /** D5: save the newest missing months of Search Console history; returns report notes (optional). */
+  saveGscHistory?(client: Client): Promise<string[]>;
   opportunitiesForMonth(client: Client, range: DateRange, n: number): Promise<OpportunityLists>;
   latestAudit(client: string): StoredAudit | undefined;
   latestAuditBefore(client: string, beforeMs: number): StoredAudit | undefined;
@@ -207,6 +216,9 @@ export async function loadDefaultRunDeps(): Promise<RunDeps> {
     ga4OrganicSummary: ga4.ga4OrganicSummary,
     ga4TopLandingPages: ga4.ga4TopLandingPages,
     ga4OrganicDaily: ga4.ga4OrganicDaily,
+    ga4HostnameBreakdown: (c, r) => ga4.ga4HostnameBreakdown(c, r, { organicOnly: true }),
+    querySpikes: (c, r) => querySpikesFor(c, r),
+    saveGscHistory: (c) => saveRecentHistory(c),
     opportunitiesForMonth: opp.opportunitiesForMonth,
     latestAudit: audits.latestAudit,
     latestAuditBefore: audits.latestAuditBefore,
@@ -455,6 +467,7 @@ export function planRun(client: Pick<Client, "slug">, opts: RunOptions): RunPlan
 export { ulid } from "../../lib/ulid.js";
 import { ulid } from "../../lib/ulid.js";
 import { trackCacheKey } from "../../lib/provider-data.js";
+import { cliHint } from "../../lib/cli-hint.js";
 
 const storeKey = (reportId: string) => cacheKey("report-run", reportId);
 
@@ -580,6 +593,9 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   const fetchers: Record<SectionSpec["type"], (s: never) => Promise<unknown>> = {
     search_overview: async (s: Extract<SectionSpec, { type: "search_overview" }>): Promise<SearchOverviewData> => {
       const c = await totals(cur);
+      const exclusionNote = gscExclusionNote(c.excluded);
+      if (exclusionNote) note(exclusionNote);
+      for (const n of c.notes ?? []) note(n);
       // The raw error stays in the tool result (comparisonErrors); the report's note is fixed text.
       const comparisonErrors: Partial<Record<Comparison, string>> = {};
       const vs = async (which: Comparison) => {
@@ -706,14 +722,14 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
         excludeSnapshotIds: [...issueSnapshotIds],
       });
       if (r.snapshotId) issueSnapshotIds.add(r.snapshotId);
-      if (!r.sources.length) throw new SectionUnavailableError(`no saved audit, crawl or URL Inspection results for ${client.domain} yet (run run_audit or crawlmark-cli crawl, free)`);
+      if (!r.sources.length) throw new SectionUnavailableError(`no saved audit, crawl or URL Inspection results for ${client.domain} yet (run run_audit or ${cliHint()} crawl, free)`);
       const { snapshotId: _id, ...data } = r;
       return removed ? { ...data, notes: [REMOVED_ISSUE_SOURCE_NOTE] } : data;
     },
     // Phase 13 A: a sample, labelled as one in the file; never Search Console's full Page indexing report.
     indexing_issues: async (s: Extract<SectionSpec, { type: "indexing_issues" }>): Promise<IndexingIssuesData> => {
       const r = await deps.indexingSection(client, { maxInspections: s.maxInspections ?? 25, staleDays: s.staleDays ?? 7, limit: s.limit ?? 10, trendMonths: s.trendMonths ?? 6 });
-      if (r.sample.inspected === 0 && !r.pagesReport) throw new SectionUnavailableError(`no URL Inspection results for ${client.domain} yet (run crawlmark-cli index-coverage, free)`);
+      if (r.sample.inspected === 0 && !r.pagesReport) throw new SectionUnavailableError(`no URL Inspection results for ${client.domain} yet (run ${cliHint()} index-coverage, free)`);
       return r;
     },
     rank_trend: async (s: Extract<SectionSpec, { type: "rank_trend" }>): Promise<RankTrendData> => {
@@ -732,14 +748,14 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
           return { keyword: k.keyword, ...(k.summary.gsc ? { gsc: k.summary.gsc } : {}), ...(k.summary.serp ? { serp: k.summary.serp } : {}), ...(gscPts || serpPts ? { series } : {}) };
         });
       if (!keywords.some((k) => (k.gsc?.checks ?? 0) + (k.serp?.checks ?? 0) > 0)) {
-        throw new SectionUnavailableError(client.trackedKeywords.length ? "no stored rank history for this period yet (run crawlmark-cli check-ranks, free, to start it)" : `no tracked keywords for ${client.domain}`);
+        throw new SectionUnavailableError(client.trackedKeywords.length ? `no stored rank history for this period yet (run ${cliHint()} check-ranks, free, to start it)` : `no tracked keywords for ${client.domain}`);
       }
       return { since, until, source: s.source ?? "both", keywords };
     },
     site_crawl: async (s: Extract<SectionSpec, { type: "site_crawl" }>): Promise<SiteCrawlData> => {
       const crawl = deps.latestLocalCrawl(client.slug);
-      if (!crawl) throw new SectionUnavailableError(`no local crawl saved for ${client.domain} yet (run crawlmark-cli crawl, free)`);
-      const a = analyzeCrawl(crawl.pages, { exhaustive: crawl.exhaustive });
+      if (!crawl) throw new SectionUnavailableError(`no local crawl saved for ${client.domain} yet (run ${cliHint()} crawl, free)`);
+      const a = analyzeCrawl(crawl.pages, { exhaustive: crawl.exhaustive, brandTerms: crawlBrandTerms(client) });
       const limit = s.limit ?? 10;
       const stored = (crawl.summary ?? {}) as { orphans?: { available: boolean; count?: number; reason?: string } };
       const orphans: SiteCrawlData["summary"]["orphans"] =
@@ -771,7 +787,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
         return await deps.bingOverview(client, { window: cur, compare: prim, limit: s.limit ?? 10 });
       } catch (err) {
         // The error lists the key's other verified sites: fine for the operator, not for a client's report.
-        if ((err as Error).name === "BingSiteError") throw new SectionUnavailableError(`no verified Bing Webmaster Tools site for ${client.domain} (set it with crawlmark-cli clients set ${client.domain} --bing-site <url>)`);
+        if ((err as Error).name === "BingSiteError") throw new SectionUnavailableError(`no verified Bing Webmaster Tools site for ${client.domain} (set it with ${cliHint()} clients set ${client.domain} --bing-site <url>)`);
         throw err;
       }
     },
@@ -789,7 +805,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
     },
     ai_readiness: async (): Promise<AiReadinessData> => {
       const audit = deps.latestAudit(client.slug);
-      if (!audit) throw new SectionUnavailableError(`no saved audit for ${client.domain} yet (run run_audit or crawlmark-cli audit)`);
+      if (!audit) throw new SectionUnavailableError(`no saved audit for ${client.domain} yet (run run_audit or ${cliHint()} audit)`);
       const hygiene = (audit.result as { site?: { hygiene?: { ok: boolean; data?: SiteHygiene } } } | null)?.site?.hygiene;
       if (!hygiene?.ok || !hygiene.data) throw new SectionUnavailableError("the newest saved audit has no site hygiene result");
       const data = aiReadinessFrom(audit, hygiene.data);
@@ -817,7 +833,7 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
       return { ...base, status: "skipped", reason: "paid section; run with allowPaid: true (tool) or --paid (CLI) to include it" };
     }
     if (GSC_TYPES.has(s.type) || GA4_TYPES.has(s.type)) {
-      if (!deps.googleConfigured()) return { ...base, status: "unavailable", reason: "Google isn't set up (run setup --step google)" };
+      if (!deps.googleConfigured()) return { ...base, status: "unavailable", reason: `Google isn't set up (run ${cliHint()} setup --step google)` };
       if (GSC_TYPES.has(s.type) && !client.gscProperty) return { ...base, status: "unavailable", reason: `no Search Console property for ${client.domain}` };
       if (GA4_TYPES.has(s.type) && !client.ga4PropertyId) return { ...base, status: "unavailable", reason: `no GA4 property for ${client.domain}` };
     }
@@ -855,6 +871,25 @@ export async function runTemplate(client: Client, opts: RunOptions, deps: RunDep
   if (sections.some((s) => s.status === "ok" && ["top_queries", "query_movers", "branded_split"].includes(s.type))) {
     const qc = await queries(cur).catch(() => []);
     if (qc.length >= QUERY_ROW_LIMIT) note(`Search Console returned its ${QUERY_ROW_LIMIT}-row limit of queries, so the long tail is missing from the query tables.`);
+  }
+  // D3 / D4 / D5: scope notes, query spikes and the history save, after the sections' own data. Extra: a failure adds no note.
+  if (deps.ga4HostnameBreakdown && sections.some((s) => s.status === "ok" && GA4_TYPES.has(s.type))) {
+    try {
+      const n = ga4ScopeNote(await deps.ga4HostnameBreakdown(client, cur));
+      if (n) note(n);
+    } catch {
+      /* the breakdown is extra */
+    }
+  }
+  if (sections.some((s) => s.status === "ok" && GSC_TYPES.has(s.type))) {
+    if (deps.querySpikes) {
+      try {
+        for (const spike of await deps.querySpikes(client, cur)) note(spikeNote(spike));
+      } catch {
+        /* spike detection is extra */
+      }
+    }
+    if (deps.saveGscHistory) for (const n of await deps.saveGscHistory(client)) note(n);
   }
   const spentAfter = { usd: deps.spentThisMonth(keys), ahrefs: deps.unitsThisMonth(keys, "ahrefs"), semrush: deps.unitsThisMonth(keys, "semrush") };
 

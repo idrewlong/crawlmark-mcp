@@ -13,6 +13,7 @@ import { exportReport } from "../src/reports/export.js";
 import { validateTemplateText } from "../src/reports/templates/schema.js";
 import { fakeDeps } from "./fixtures/reports/deps.js";
 import { fixtureReport } from "./fixtures/reports/report.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 const today = new Date("2026-10-13T12:00:00Z");
 const TEMPLATE = `version: 1
@@ -54,7 +55,7 @@ describe("site_crawl section", () => {
 
   it("is unavailable, with the free CLI hint, when no crawl is saved", async () => {
     const r = await fixtureReport({ homeDir: homeWith(TEMPLATE), template: "crawl", include: [] });
-    expect(r.sections.find((s) => s.id === "site")).toMatchObject({ status: "unavailable", reason: expect.stringMatching(/run crawlmark-cli crawl, free/) });
+    expect(r.sections.find((s) => s.id === "site")).toMatchObject({ status: "unavailable", reason: expect.stringMatching(new RegExp(`run ${cliRe("crawl, free").source}`)) });
   });
 
   it("summarises the newest saved crawl and renders it inertly in every format", async () => {

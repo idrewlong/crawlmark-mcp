@@ -114,7 +114,7 @@ describe("CrUX in audit findings", () => {
     expect(checkKey(checkOf(f[0]!))).toBe(checkKey(checkedPairs(audit(true))[0]!));
     const stored = (id: string, ranAt: number, a: AuditResult): StoredAudit => ({ id, client: "example.com", ranAt, settings: {}, summary: {}, findings: extractFindings(a), checked: checkedPairs(a), result: {} });
     const d = diffAudits(stored("a", 1, audit(true)), stored("b", 2, audit(false)));
-    expect(d.counts).toEqual({ new: 0, resolved: 0, persistent: 0, unverified: 2 });
+    expect(d.counts).toEqual({ new: 0, firstChecked: 0, resolved: 0, persistent: 0, unverified: 2, retired: 0 });
     const same = diffAudits(stored("a", 1, audit(true)), stored("b", 2, audit(true)));
     expect(same.counts.persistent).toBe(2);
   });

@@ -20,6 +20,7 @@ import {
   joinGtmContainers,
   gtmNotes,
 } from "../src/lib/gtm.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const version = JSON.parse(readFileSync(join(here, "fixtures/gtm/container-version.json"), "utf8")) as GtmContainerVersion;
@@ -221,17 +222,28 @@ describe("planSync with Tag Manager containers", () => {
   const { matches } = joinGtmContainers(Object.values(containerFixtures).flatMap((r) => containersFromResponse(r)), normalizeHost);
   const overrides = (yaml: object) => parseOverrides(yaml, "test");
 
-  it("adds the pair to a new entry and fills it on an existing entry", () => {
+  it("adds the pair to a new entry and fills it on an existing entry (single candidate)", () => {
+    const added = planSync(overrides({ clients: {} }), [{ domain: "example.com", gscAlternates: [], ga4Alternates: [] }], matches);
+    expect(added.add[0]).toMatchObject({ domain: "example.com", gtmAccountId: "6000000001", gtmContainerId: "7000000001" });
+    const filled = planSync(overrides({ clients: { "example.com": { domain: "example.com" } } }), [], matches);
+    expect(filled.fill).toEqual([
+      { key: "example.com", domain: "example.com", field: "gtmAccountId", value: "6000000001" },
+      { key: "example.com", domain: "example.com", field: "gtmContainerId", value: "7000000001" },
+    ]);
+  });
+
+  it("writes no container for a host with several candidates (the live homepage decides at audit time)", () => {
+    expect(matches.get("example.net")!.alternates).toHaveLength(1);
     const plan = planSync(
       overrides({ clients: { "example.net": { domain: "example.net" } } }),
-      [{ domain: "example.com", gscAlternates: [], ga4Alternates: [] }],
+      [{ domain: "example.net", gscAlternates: [], ga4Alternates: [] }],
       matches,
     );
-    expect(plan.add[0]).toMatchObject({ domain: "example.com", gtmAccountId: "6000000001", gtmContainerId: "7000000001" });
-    expect(plan.fill).toEqual([
-      { key: "example.net", domain: "example.net", field: "gtmAccountId", value: "6000000001" },
-      { key: "example.net", domain: "example.net", field: "gtmContainerId", value: "7000000001" },
-    ]);
+    expect(plan.fill).toEqual([]);
+    const fresh = planSync(overrides({ clients: {} }), [{ domain: "example.net", gscAlternates: [], ga4Alternates: [] }], matches);
+    expect(fresh.add).toHaveLength(1);
+    expect(fresh.add[0]).not.toHaveProperty("gtmContainerId");
+    expect(fresh.add[0]).not.toHaveProperty("gtmAccountId");
   });
 
   it("never overwrites a pinned container, even when only one id is set, and skips ignored entries", () => {
@@ -276,7 +288,7 @@ describe("Tag Manager errors", () => {
 
   it("tells OAuth users to log in again when the scope is missing", () => {
     const err = gtmApiError(gaxios(403, "Request had insufficient authentication scopes.", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"), "p", { mode: "oauth" });
-    expect(err.message).toContain("crawlmark-cli auth login");
+    expect(err.message).toContain(`${cliHint()} auth login`);
   });
 
   it("treats quota and rate-limit 403s as rate limiting, not denied access", () => {

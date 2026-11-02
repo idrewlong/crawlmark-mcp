@@ -109,13 +109,13 @@ describe("commandPrefix", () => {
   it("checkout, global install and npx", () => {
     expect(commandPrefix({ ...base, checkout: true })).toBe("npm run cli --");
     expect(commandPrefix({ ...base, checkout: false, cliOnPath: true, homeSource: "user", homeDir: "/home/u/.crawlmark", defaultHomeDir: "/home/u/.crawlmark" })).toBe("crawlmark-cli");
-    expect(commandPrefix({ ...base, checkout: false, homeSource: "user", homeDir: "/home/u/.crawlmark", defaultHomeDir: "/home/u/.crawlmark" })).toBe("npx crawlmark-mcp");
+    expect(commandPrefix({ ...base, checkout: false, homeSource: "user", homeDir: "/home/u/.crawlmark", defaultHomeDir: "/home/u/.crawlmark" })).toBe("npx -y crawlmark-mcp@latest");
   });
 
   it("adds CRAWLMARK_HOME only when it isn't this install's default, with ~ substituted", () => {
     expect(commandPrefix({ ...base, checkout: true, homeSource: "env", homeDir: "/src/crawlmark" })).toBe("npm run cli --");
-    expect(commandPrefix({ ...base, checkout: false, homeSource: "env", homeDir: "/home/u/.crawlmark", defaultHomeDir: "/home/u/.crawlmark" })).toBe("npx crawlmark-mcp");
-    expect(commandPrefix({ ...base, checkout: false, homeSource: "env", homeDir: "/home/u/work/crawlmark", defaultHomeDir: "/home/u/.crawlmark" })).toBe("CRAWLMARK_HOME=~/work/crawlmark npx crawlmark-mcp");
+    expect(commandPrefix({ ...base, checkout: false, homeSource: "env", homeDir: "/home/u/.crawlmark", defaultHomeDir: "/home/u/.crawlmark" })).toBe("npx -y crawlmark-mcp@latest");
+    expect(commandPrefix({ ...base, checkout: false, homeSource: "env", homeDir: "/home/u/work/crawlmark", defaultHomeDir: "/home/u/.crawlmark" })).toBe("CRAWLMARK_HOME=~/work/crawlmark npx -y crawlmark-mcp@latest");
     expect(commandPrefix({ ...base, checkout: true, homeSource: "env", homeDir: "/srv/data" })).toBe("CRAWLMARK_HOME=/srv/data npm run cli --");
     expect(commandPrefix({ ...base, checkout: true, homeSource: "env", homeDir: "/home/u/my data" })).toBe("CRAWLMARK_HOME='/home/u/my data' npm run cli --");
   });

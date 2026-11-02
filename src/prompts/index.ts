@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { cliHint } from "../lib/cli-hint.js";
 
 /**
  * MCP prompts. Prompt text lives in markdown under ./templates so it can be
@@ -49,7 +50,7 @@ export function renderTemplate(text: string, vars: Record<string, string>): stri
 }
 
 function template(name: string, vars: Record<string, string>): string {
-  return renderTemplate(readFileSync(new URL(`${name}.md`, TEMPLATES), "utf8"), vars);
+  return renderTemplate(readFileSync(new URL(`${name}.md`, TEMPLATES), "utf8"), { cli: cliHint(), ...vars });
 }
 
 /** The keyword-research prompt's step 2: confirm the seeds passed in, or propose some (Phase 12 B). */

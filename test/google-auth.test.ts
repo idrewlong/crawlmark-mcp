@@ -16,7 +16,7 @@ import {
   CALLBACK_PATH,
   describeAuthStatus,
   emailFromIdToken,
-  INVALID_GRANT_MESSAGE,
+  invalidGrantMessage,
   loginExchangeErrorMessage,
   isInvalidGrant,
   mapTokenError,
@@ -34,6 +34,7 @@ import {
 import { deleteTokenFile, readTokenFile, writeTokenFile } from "../src/lib/token-store.js";
 import { createOAuthClientLoader, CrawlmarkOAuth2Client } from "../src/providers/google-oauth-client.js";
 import { POSIX_MODES } from "./platform.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 const idToken = (claims: object) =>
   ["e30", Buffer.from(JSON.stringify(claims)).toString("base64url"), "sig"].join(".");
@@ -50,7 +51,7 @@ describe("selectGoogleAuthConfig", () => {
       /GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are not set/,
     );
     expect(() => selectGoogleAuthConfig({ GOOGLE_AUTH_MODE: "oauth", GOOGLE_OAUTH_CLIENT_ID: "id" })).toThrow(
-      /: GOOGLE_OAUTH_CLIENT_SECRET is not set.*crawlmark-cli auth login/,
+      new RegExp(`: GOOGLE_OAUTH_CLIENT_SECRET is not set.*${cliRe("auth login").source}`),
     );
   });
 
@@ -240,9 +241,9 @@ describe("token errors", () => {
     expect(isInvalidGrant(gaxiosLike("invalid_grant"))).toBe(true);
     expect(isInvalidGrant(new Error('{"error":"invalid_grant","error_description":"ReAuth required"}'))).toBe(true);
     const mapped = mapTokenError(gaxiosLike("invalid_grant")) as Error;
-    expect(mapped.message).toBe(INVALID_GRANT_MESSAGE);
+    expect(mapped.message).toBe(invalidGrantMessage());
     expect(mapped.message).toMatch(/expired or was revoked/);
-    expect(mapped.message).toMatch(/crawlmark-cli auth login/);
+    expect(mapped.message).toMatch(cliRe("auth login"));
     expect(mapped.message).toMatch(/Testing.*7 days/);
   });
 
@@ -254,7 +255,7 @@ describe("token errors", () => {
   it("gives login code-exchange failures their own message, without the 7-day hint", () => {
     const msg = loginExchangeErrorMessage(gaxiosLike("invalid_grant"));
     expect(msg).toMatch(/^Sign-in failed: Google rejected the authorization code \(invalid_grant\)/);
-    expect(msg).toMatch(/crawlmark-cli auth login/);
+    expect(msg).toMatch(cliRe("auth login"));
     expect(msg).not.toMatch(/7 days|expired or was revoked/);
     expect(loginExchangeErrorMessage(gaxiosLike("invalid_client"))).toMatch(/GOOGLE_OAUTH_CLIENT_ID/);
     expect(loginExchangeErrorMessage(new Error("socket hang up"))).toMatch(/\(socket hang up\)/);
@@ -333,7 +334,7 @@ describe("CrawlmarkOAuth2Client", () => {
     afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
     it("tells the user to log in when there is no token file", () => {
-      expect(() => loader()()).toThrow(/Run `crawlmark-cli auth login`/);
+      expect(() => loader()()).toThrow(new RegExp("Run `" + cliRe("auth login").source + "`"));
     });
 
     it("persists a refresh: new access_token, refresh_token and email kept, same client reused", async () => {

@@ -1,4 +1,4 @@
-import { checkKey, checkOf, normalizeUrl, SEVERITY_ORDER, type CheckedPair, type Finding } from "./findings.js";
+import { checkKey, checkOf, gtmContainerKey, normalizeUrl, SEVERITY_ORDER, type CheckedPair, type Finding } from "./findings.js";
 
 /** An audit as saved by the store: what the diff needs plus the full result. */
 export interface StoredAudit {
@@ -16,14 +16,21 @@ export interface StoredAudit {
 export interface AuditDiff {
   base: { auditId: string; ranAt: string };
   target: { auditId: string; ranAt: string };
+  /** Not in the base, and the base checked this page and source. */
   new: Finding[];
+  /** Not in the base, and the base did not check this page or source: not evidence that anything changed. */
+  firstChecked: Finding[];
   resolved: Finding[];
   persistent: Finding[];
   unverified: Finding[];
+  /** Base Tag Manager findings of a container the target replaced. */
+  retired: Finding[];
+  /** Public container IDs, when the audited Tag Manager container changed. */
+  containerChange?: { from: string; to: string };
   scoreChanges: { url: string; category: string; from: number; to: number }[];
   /** Caveats about how comparable the two audits are (stale cache, different settings). */
   warnings: string[];
-  counts: { new: number; resolved: number; persistent: number; unverified: number };
+  counts: { new: number; firstChecked: number; resolved: number; persistent: number; unverified: number; retired: number };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,14 +56,35 @@ function scoresOf(result: unknown): Map<string, Record<string, number>> {
   return out;
 }
 
+/** The normalised URLs of the pages an audit covered, or null when its result doesn't list pages. */
+function auditedPages(result: unknown): Set<string> | null {
+  const pages = (result as { pages?: { url?: unknown }[] } | null)?.pages;
+  if (!Array.isArray(pages)) return null;
+  return new Set(pages.flatMap((p) => (typeof p?.url === "string" ? [normalizeUrl(p.url)] : [])));
+}
+
 export function diffAudits(base: StoredAudit, target: StoredAudit): AuditDiff {
   const baseIds = new Map(base.findings.map((f) => [f.id, f]));
   const targetIds = new Map(target.findings.map((f) => [f.id, f]));
   const targetChecked = new Set(target.checked.map(checkKey));
+  const baseChecked = new Set(base.checked.map(checkKey));
 
-  const added = target.findings.filter((f) => !baseIds.has(f.id));
+  // A replaced Tag Manager container: the base audited gtm://X and the target gtm://Y. X's findings can't be fixed or
+  // unverified (the container isn't audited any more), and Y's have nothing to be compared with.
+  const gtmKeys = (a: StoredAudit) => new Set(a.checked.filter((c) => c.source === "gtm").map((c) => c.url));
+  const baseGtm = gtmKeys(base);
+  const targetGtm = gtmKeys(target);
+  const oldKey = [...baseGtm].find((k) => !targetGtm.has(k));
+  const newKey = [...targetGtm].find((k) => !baseGtm.has(k));
+  const containerChange = oldKey && newKey ? { from: oldKey.replace(/^gtm:\/\//, ""), to: newKey.replace(/^gtm:\/\//, "") } : undefined;
+
+  const notInBase = target.findings.filter((f) => !baseIds.has(f.id));
+  const added = notInBase.filter((f) => baseChecked.has(checkKey(checkOf(f))));
+  const firstChecked = notInBase.filter((f) => !baseChecked.has(checkKey(checkOf(f))));
   const persistent = target.findings.filter((f) => baseIds.has(f.id));
-  const gone = base.findings.filter((f) => !targetIds.has(f.id));
+  const goneAll = base.findings.filter((f) => !targetIds.has(f.id));
+  const retired = containerChange ? goneAll.filter((f) => f.source === "gtm" && gtmContainerKey(f.url) === oldKey) : [];
+  const gone = containerChange ? goneAll.filter((f) => !(f.source === "gtm" && gtmContainerKey(f.url) === oldKey)) : goneAll;
   const resolved = gone.filter((f) => targetChecked.has(checkKey(checkOf(f))));
   const unverified = gone.filter((f) => !targetChecked.has(checkKey(checkOf(f))));
 
@@ -82,8 +110,19 @@ export function diffAudits(base: StoredAudit, target: StoredAudit): AuditDiff {
     warnings.push("The target audit was not run fresh and is within 24h of the base, so some results may be cached copies of the base. Re-run run_audit with fresh (the default) to compare real changes.");
   }
 
+  if (containerChange) warnings.push(`Tag Manager container changed from ${containerChange.from} to ${containerChange.to}: ${retired.length} finding(s) of ${containerChange.from} are retired and ${containerChange.to}'s are listed as first checked.`);
+  const basePages = auditedPages(base.result);
+  const targetPages = auditedPages(target.result);
+  if (basePages && targetPages) {
+    const extra = [...targetPages].filter((u) => !basePages.has(u)).length;
+    const missing = [...basePages].filter((u) => !targetPages.has(u)).length;
+    if (extra || missing) warnings.push(`The target audited ${extra} page(s) the base didn't${missing ? `, and the base audited ${missing} the target didn't` : ""}; findings on pages the base didn't check are listed as first checked.`);
+  }
+
   const sorted = {
     new: [...added].sort(bySeverityThenUrl),
+    firstChecked: [...firstChecked].sort(bySeverityThenUrl),
+    retired: [...retired].sort(bySeverityThenUrl),
     resolved: [...resolved].sort(bySeverityThenUrl),
     persistent: [...persistent].sort(bySeverityThenUrl),
     unverified: [...unverified].sort(bySeverityThenUrl),
@@ -92,10 +131,13 @@ export function diffAudits(base: StoredAudit, target: StoredAudit): AuditDiff {
     base: { auditId: base.id, ranAt: new Date(base.ranAt).toISOString() },
     target: { auditId: target.id, ranAt: new Date(target.ranAt).toISOString() },
     ...sorted,
+    ...(containerChange ? { containerChange } : {}),
     scoreChanges,
     warnings,
     counts: {
       new: sorted.new.length,
+      firstChecked: sorted.firstChecked.length,
+      retired: sorted.retired.length,
       resolved: sorted.resolved.length,
       persistent: sorted.persistent.length,
       unverified: sorted.unverified.length,

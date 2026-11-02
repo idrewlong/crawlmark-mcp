@@ -224,6 +224,24 @@ crawlmark-cli report --client example.com --template technical --include issues,
 
 Exit codes and a cron line are in [scheduling.md](scheduling.md#report-files).
 
+## Notes in reports and saved history
+
+`monthly_report` returns a top-level `notes` array, and template runs add the same notes to the report's About section. They say when the numbers were adjusted:
+
+- **GA4 hostnames.** `GA4: 120 organic sessions from other hostnames were left out (staging.example.com 120). If a hostname belongs to this site, add it with set_client_profile ga4Hostnames.` By default GA4 counts only the client's domain and its `www.` form ([Clients](clients.md#per-client-settings-for-ga4-search-console-and-tag-manager)).
+- **Excluded queries.** `Search Console: 340 clicks and 12,000 impressions from excluded queries were left out of totals (positions are unadjusted).` when the client has `gscExcludeQueries`.
+- **Query spikes.** `monthly_report` has `search.querySpikes`: days in the month when impressions jumped on a few queries with no clicks, with the queries and their share of the jump. Template runs add one note per flagged day. Check these before reading a rise in impressions as growth.
+- **Saved history.** `Saved Search Console history for 2 month(s) (2026-08…2026-09).` or why it couldn't be saved.
+
+### Search Console history
+
+Google keeps only 16 months of Search Console data, so crawlmark saves each month as it goes. Run `crawlmark-cli gsc-history backfill --all` once after upgrading to save what Google still has (or call `gsc_history` with `backfill: true` for one client from Claude). `gsc-history show <client>` lists the saved months. After that, `monthly_report` and each template run save up to two missing months per run and add a note.
+
+- Months are saved with raw numbers (no query exclusions). Exclusions are applied to saved query rows when a report reads them. Saved totals are adjusted only for months saved under the same exclusions as the client has now; otherwise the totals are read raw and the report notes it (re-save the months with refresh). Saved page rows can't have exclusions subtracted.
+- The oldest month Google still has may be partial (`complete: false`).
+- A report range that starts more than 16 months back reads saved history only when every month in the range is saved.
+- It is free: Search Console only. Backfill paces its requests, backs off at quota limits, and only fetches months not saved yet.
+
 ## Stored provider figures
 
 The `backlinks`, `organic_visibility` and `competitor_overview` sections (and the `organic_visibility`, `competitor_overview` and `backlinks_summary` tools, and `crawlmark-cli seo-snapshot`) store what they fetch as small dated figures in the local database: counts per site, metric and day, never link lists, keyword lists or anything else row by row. Reports compare months from these:

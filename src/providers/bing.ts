@@ -41,6 +41,7 @@ import { ProviderUnavailableError } from "../lib/provider-ids.js";
 import { TIMEOUTS } from "../lib/timeout.js";
 import type { BingOverviewData } from "../reports/report-types.js";
 import { redact } from "./units-billing.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 /** Every Bing method crawlmark may call. All are reads. */
 export const BING_READ_METHODS = ["GetUserSites", "GetRankAndTrafficStats", "GetQueryStats", "GetPageStats", "GetCrawlStats", "GetCrawlIssues", "GetUrlInfo"] as const;
@@ -247,12 +248,12 @@ export async function bingSiteFor(client: { domain: string; bingSite?: string | 
   const { sites } = await bingUserSites(opts);
   const m = matchBingSite(sites, client);
   if (m.ok) return { site: m.site, source: m.source, alternates: m.alternates };
-  const fix = `set bingSite for this client to one of this key's verified sites (crawlmark-cli clients set ${client.domain} --bing-site <url>, or set_client_profile)`;
+  const fix = `set bingSite for this client to one of this key's verified sites (${cliHint()} clients set ${client.domain} --bing-site <url>, or set_client_profile)`;
   const verified = sites.filter((s) => s.verified).map((s) => s.url);
   const list = verified.length ? ` This key's verified sites: ${verified.slice(0, 20).join(", ")}${verified.length > 20 ? ", ..." : ""}.` : " This key has no verified sites.";
   switch (m.reason) {
     case "override-other-host":
-      throw new BingSiteError(`clients.yaml bingSite ${cleanText(client.bingSite, 300)} for ${client.domain} is on another host, so it would show another site's Bing data. Use a Bing site on ${client.domain} or a subdomain of it, or clear bingSite (crawlmark-cli clients set ${client.domain} --bing-site none).`);
+      throw new BingSiteError(`clients.yaml bingSite ${cleanText(client.bingSite, 300)} for ${client.domain} is on another host, so it would show another site's Bing data. Use a Bing site on ${client.domain} or a subdomain of it, or clear bingSite (${cliHint()} clients set ${client.domain} --bing-site none).`);
     case "override-not-found":
       throw new BingSiteError(`clients.yaml bingSite ${cleanText(client.bingSite, 300)} for ${client.domain} isn't a site this Bing key can read: ${fix}, or clear it.${list}`);
     case "override-unverified":

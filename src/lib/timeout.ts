@@ -4,6 +4,10 @@ export const TIMEOUTS = {
   browserMs: 90_000,
   /** One outbound API call (Google, DataForSEO, PageSpeed Insights). */
   networkMs: 30_000,
+  /** One Lighthouse run, counted from when it gets the slot (not the wait in the queue). */
+  lighthouseRunMs: 150_000,
+  /** How long a Lighthouse call may wait for earlier runs before giving up. */
+  lighthouseQueueMs: 600_000,
   /** run_audit as a whole. */
   auditMs: 10 * 60_000,
 } as const;

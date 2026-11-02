@@ -79,7 +79,7 @@ function waitForCode(server: Server, state: string, timeoutMs: number): Promise<
       if (result.kind === "reject") {
         // Wrong or missing state: never let it cancel the real sign-in.
         res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-          .end(page("Invalid or stale sign-in link", "This link doesn't match the sign-in in progress. Use the browser tab opened by crawlmark-cli, or run the login again."));
+          .end(page("Invalid or stale sign-in link", `This link doesn't match the sign-in in progress. Use the browser tab opened by the sign-in command, or run the login again.`));
         return;
       }
       if (settled) {

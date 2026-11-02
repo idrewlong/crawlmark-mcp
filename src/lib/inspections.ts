@@ -64,6 +64,14 @@ export function cleanUrl(s: string | null | undefined): string | null {
   return t ? normalizeUrl(t) : null;
 }
 
+/**
+ * D7: before 0.2.0 the URL sent to Google had its trailing slash stripped, which Google answered with "URL is unknown to
+ * Google" for pages that exist. Those rows have no `inspected_url`. They are ignored when reading results and re-checked first.
+ * Audit and manual rows are excluded: run_audit and gsc_inspect_url (origin `manual`) always sent the URL exactly as
+ * given, so "unknown to Google" there is a real answer for that URL form, not a stripped-slash artifact.
+ */
+const legacyUnknown = (a = "") => `(${a}inspected_url IS NULL AND ${a}failed = 0 AND ${a}origin NOT IN ('audit', 'manual') AND coalesce(lower(${a}coverage_state), '') LIKE '%unknown to google%')`;
+
 interface Row {
   id: number;
   client: string;
@@ -102,13 +110,16 @@ const fromRow = (r: Row): StoredInspection => ({
   inSitemap: r.in_sitemap === 1,
 });
 
-/** Save one inspection (sanitised) and delete inspections older than INSPECTION_RETENTION_DAYS. */
+/**
+ * Save one inspection (sanitised) and delete inspections older than INSPECTION_RETENTION_DAYS. `url` is the exact URL that
+ * was sent to Google: it is kept as `inspected_url`, and its normalised form is the lookup key (`url`).
+ */
 export function saveInspection(i: InspectionRecord & { client: string; property: string; origin: InspectionOrigin; inspectedAt: number; inSitemap?: boolean }): void {
   const enumText = (s: string | null) => cleanText(s, 60);
   db.prepare("DELETE FROM url_inspections WHERE inspected_at < ?").run(i.inspectedAt - INSPECTION_RETENTION_DAYS * DAY_MS);
   db.prepare(
-    `INSERT INTO url_inspections (client, property, url, inspected_at, origin, verdict, coverage_state, indexing_state, page_fetch_state, robots_txt_state, google_canonical, user_canonical, last_crawl_time, crawled_as, in_sitemap)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO url_inspections (client, property, url, inspected_at, origin, verdict, coverage_state, indexing_state, page_fetch_state, robots_txt_state, google_canonical, user_canonical, last_crawl_time, crawled_as, in_sitemap, inspected_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     i.client,
     i.property,
@@ -125,12 +136,13 @@ export function saveInspection(i: InspectionRecord & { client: string; property:
     cleanText(i.lastCrawlTime, 40),
     enumText(i.crawledAs),
     i.inSitemap ? 1 : 0,
+    cleanText(i.url, 2000),
   );
 }
 
 /** Every stored inspection of a client inspected in [fromMs, toMs), oldest first. */
 export function inspectionsBetween(client: string, fromMs: number, toMs: number): StoredInspection[] {
-  const rows = db.prepare("SELECT * FROM url_inspections WHERE client = ? AND failed = 0 AND inspected_at >= ? AND inspected_at < ? ORDER BY inspected_at ASC, id ASC").all(client, fromMs, toMs) as unknown as Row[];
+  const rows = db.prepare(`SELECT * FROM url_inspections WHERE client = ? AND failed = 0 AND NOT ${legacyUnknown()} AND inspected_at >= ? AND inspected_at < ? ORDER BY inspected_at ASC, id ASC`).all(client, fromMs, toMs) as unknown as Row[];
   return rows.map(fromRow);
 }
 
@@ -138,8 +150,8 @@ export function inspectionsBetween(client: string, fromMs: number, toMs: number)
 export function latestInspections(client: string, property?: string): StoredInspection[] {
   const rows = db
     .prepare(
-      `SELECT * FROM url_inspections u WHERE client = ? AND failed = 0${property ? " AND property = ?" : ""}
-       AND id = (SELECT id FROM url_inspections v WHERE v.client = u.client AND v.url = u.url AND v.failed = 0${property ? " AND v.property = u.property" : ""} ORDER BY inspected_at DESC, id DESC LIMIT 1)
+      `SELECT * FROM url_inspections u WHERE client = ? AND failed = 0 AND NOT ${legacyUnknown("u.")}${property ? " AND property = ?" : ""}
+       AND id = (SELECT id FROM url_inspections v WHERE v.client = u.client AND v.url = u.url AND v.failed = 0 AND NOT ${legacyUnknown("v.")}${property ? " AND v.property = u.property" : ""} ORDER BY inspected_at DESC, id DESC LIMIT 1)
        ORDER BY inspected_at DESC, id DESC`,
     )
     .all(...(property ? [client, property] : [client])) as unknown as Row[];
@@ -152,7 +164,7 @@ export function latestInspections(client: string, property?: string): StoredInsp
  */
 export function saveFailedInspection(i: { client: string; property: string; url: string; origin: InspectionOrigin; inspectedAt: number }): void {
   db.prepare("DELETE FROM url_inspections WHERE inspected_at < ?").run(i.inspectedAt - INSPECTION_RETENTION_DAYS * DAY_MS);
-  db.prepare("INSERT INTO url_inspections (client, property, url, inspected_at, origin, failed) VALUES (?, ?, ?, ?, ?, 1)").run(i.client, i.property, normalizeUrl(cleanText(i.url, 2000) ?? i.url), i.inspectedAt, i.origin);
+  db.prepare("INSERT INTO url_inspections (client, property, url, inspected_at, origin, failed, inspected_url) VALUES (?, ?, ?, ?, ?, 1, ?)").run(i.client, i.property, normalizeUrl(cleanText(i.url, 2000) ?? i.url), i.inspectedAt, i.origin, cleanText(i.url, 2000));
 }
 
 /** Whether the URL's newest stored result said it was in a sitemap (null when there is none). */
@@ -163,7 +175,7 @@ export function lastInSitemap(client: string, url: string): boolean | null {
 
 /** When each URL was last inspected (normalised URL → ms), for the pool ordering. Failed attempts count, so they rotate. */
 export function lastInspectedAt(client: string): Map<string, number> {
-  const rows = db.prepare("SELECT url, MAX(inspected_at) AS at FROM url_inspections WHERE client = ? GROUP BY url").all(client) as unknown as { url: string; at: number }[];
+  const rows = db.prepare(`SELECT url, MAX(inspected_at) AS at FROM url_inspections WHERE client = ? AND NOT ${legacyUnknown()} GROUP BY url`).all(client) as unknown as { url: string; at: number }[];
   return new Map(rows.map((r) => [r.url, Number(r.at)]));
 }
 
@@ -232,6 +244,29 @@ export function storedSitemapSet(client: string, property: string): { urls: stri
 
 /** When each URL last had a successful inspection for a client and property (normalised URL → ms). */
 export function lastSuccessfulAt(client: string, property: string): Map<string, number> {
-  const rows = db.prepare("SELECT url, MAX(inspected_at) AS at FROM url_inspections WHERE client = ? AND property = ? AND failed = 0 GROUP BY url").all(client, property) as unknown as { url: string; at: number }[];
+  const rows = db.prepare(`SELECT url, MAX(inspected_at) AS at FROM url_inspections WHERE client = ? AND property = ? AND failed = 0 AND NOT ${legacyUnknown()} GROUP BY url`).all(client, property) as unknown as { url: string; at: number }[];
   return new Map(rows.map((r) => [r.url, Number(r.at)]));
+}
+
+/**
+ * Normalised URLs whose newest stored row is a legacy "URL is unknown to Google" result (see `legacyUnknown`) with no
+ * newer result of any kind: the ones to re-check with the exact URL.
+ */
+export function legacyUnknownUrls(client: string, property: string): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT u.url FROM url_inspections u WHERE u.client = ? AND u.property = ? AND ${legacyUnknown("u.")}
+       AND NOT EXISTS (SELECT 1 FROM url_inspections v WHERE v.client = u.client AND v.property = u.property AND v.url = u.url AND NOT ${legacyUnknown("v.")} AND (v.inspected_at > u.inspected_at OR (v.inspected_at = u.inspected_at AND v.id > u.id)))
+       ORDER BY u.url`,
+    )
+    .all(client, property) as unknown as { url: string }[];
+  return rows.map((r) => r.url);
+}
+
+/** The exact URL last sent to Google for each normalised URL of a client and property (rows with no record are left out). */
+export function lastSentUrls(client: string, property: string): Map<string, string> {
+  const rows = db
+    .prepare("SELECT url, inspected_url FROM url_inspections WHERE client = ? AND property = ? AND inspected_url IS NOT NULL ORDER BY inspected_at ASC, id ASC")
+    .all(client, property) as unknown as { url: string; inspected_url: string }[];
+  return new Map(rows.map((r) => [r.url, r.inspected_url]));
 }

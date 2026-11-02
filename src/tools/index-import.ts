@@ -6,6 +6,7 @@ import { allowedDirsFrom, existingDirs, LogAccessError, resolveAllowedLogFiles, 
 import { stripControl } from "../lib/terminal-text.js";
 import { importPagesExport } from "../reports/pages-import.js";
 import { handler } from "./util.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 /**
  * import_index_report (2026-10-14): store Search Console's Pages report export for index_coverage and the
@@ -18,7 +19,7 @@ const IMPORT_LABEL: AccessLabel = { file: "export file", dirs: "import directori
 /** The setup hint when no import directory is allowed. */
 export const IMPORT_DIRS_HINT =
   "import_index_report reads only folders you allow. Put the export in the imports folder of your crawlmark home, or set IMPORT_DIRS to one or more absolute directories, comma-separated " +
-  "(for example IMPORT_DIRS=/Users/me/Downloads), in your crawlmark .env or MCP config. Or run crawlmark-cli index-coverage import --client <domain> <file> in a terminal.";
+  `(for example IMPORT_DIRS=/Users/me/Downloads), in your crawlmark .env or MCP config. Or run ${cliHint()} index-coverage import --client <domain> <file> in a terminal.`;
 
 export function registerIndexImportTools(server: McpServer) {
   server.registerTool(

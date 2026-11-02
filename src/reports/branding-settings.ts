@@ -15,6 +15,7 @@ import { clientTemplatesFile, globalTemplatesFile, safeSegment } from "./paths.j
 import { STARTER_YAML } from "./templates/builtin.js";
 import { loadTemplates, type ResolvedBranding } from "./templates/load.js";
 import { FORMATS, validateTemplateText, type Branding, type Format } from "./templates/schema.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 export const MAX_AGENCY_NAME = 80;
 export const MAX_FOOTER = 200;
@@ -154,7 +155,7 @@ const BRANDING_KEYS = ["agencyName", "logo", "primaryColor", "accentColor", "foo
  */
 export function brandingFileText(existing: string | undefined, settings: BrandingSettings, opts: { client: boolean; global?: BrandingSettings | undefined }): string {
   const doc = parseDocument(existing ?? (opts.client ? "version: 1\n" : STARTER_YAML));
-  if (!isMap(doc.contents)) throw new Error("The report templates file isn't a YAML mapping; fix it first (crawlmark-cli report templates validate).");
+  if (!isMap(doc.contents)) throw new Error(`The report templates file isn't a YAML mapping; fix it first (${cliHint()} report templates validate).`);
   if (!doc.has("branding") || !isMap(doc.get("branding"))) doc.set("branding", doc.createNode({}));
   const global = opts.client ? (opts.global ?? {}) : undefined;
   for (const key of BRANDING_KEYS) {

@@ -164,7 +164,7 @@ describe("diffAudits", () => {
       ["medium", u2, "no_description"],
       ["low", u1, "flash"],
     ]);
-    expect(d.counts).toEqual({ new: 3, resolved: 2, persistent: 1, unverified: 0 });
+    expect(d.counts).toEqual({ new: 3, firstChecked: 0, resolved: 2, persistent: 1, unverified: 0, retired: 0 });
     expect(d.base).toEqual({ auditId: "a", ranAt: new Date(1000).toISOString() });
   });
 
@@ -197,7 +197,7 @@ describe("diffAudits", () => {
   it("reports identical audits as all persistent and lists score changes", () => {
     const a = audit([withChecks(u1, ["no_title"])]);
     const d0 = diffAudits(stored("a", 1, a), stored("b", 2, a));
-    expect(d0.counts).toEqual({ new: 0, resolved: 0, persistent: 1, unverified: 0 });
+    expect(d0.counts).toEqual({ new: 0, firstChecked: 0, resolved: 0, persistent: 1, unverified: 0, retired: 0 });
     expect(d0.scoreChanges).toEqual([]);
 
     const b = audit([
@@ -233,7 +233,7 @@ describe("diffAudits", () => {
   });
 
   it("keeps ids on findings it returns", () => {
-    const f: Finding[] = diffAudits(stored("a", 1, audit([])), stored("b", 2, audit([withChecks(u1, ["flash"])]))).new;
+    const f: Finding[] = diffAudits(stored("a", 1, audit([withChecks(u1, [])])), stored("b", 2, audit([withChecks(u1, ["flash"])]))).new;
     expect(f[0]!.id).toBe(findingId("onpage", "flash", u1));
   });
 });

@@ -22,7 +22,7 @@ export const TECH_ISSUES: TechnicalIssuesData = {
   ],
   unavailable: [{ source: "gsc_inspection", reason: "no stored URL Inspection results for example.com yet" }],
   counts: { critical: 1, high: 2, medium: 3, low: 2 },
-  changes: { new: 2, resolved: 1, persistent: 4, unverified: 1 },
+  changes: { new: 2, firstChecked: 0, resolved: 1, persistent: 4, unverified: 1, retired: 0 },
   base: { snapshotId: "iss_01JBASE00000000000000000000", capturedAt: "2026-09-01T07:00:00.000Z" },
   issues: [
     issue({ key: "a11y:button-name", title: "Buttons must have discernible text", severity: "critical", category: "accessibility", url: "https://example.com/contact", sources: [{ source: "audit", rule: "button-name", nativeSeverity: "critical", count: null, examples: ["https://example.com/contact"] }] }),

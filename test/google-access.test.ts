@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { credentialsRejectedMessage, ga4AccessDeniedMessage, ga4Error, gscAccessDeniedMessage, gscError } from "../src/lib/google-access.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 const sa = { mode: "service_account" as const, email: "crawlmark@example-project.iam.gserviceaccount.com" };
 const oauth = { mode: "oauth" as const, email: "you@example.com" };
@@ -15,7 +16,7 @@ describe("access-denied messages", () => {
   it("names the OAuth account and the login command", () => {
     const m = ga4AccessDeniedMessage("properties/123456789", oauth);
     expect(m).toContain("GA4 property 123456789 isn't accessible to you@example.com (signed in with OAuth)");
-    expect(m).toContain("crawlmark-cli auth login");
+    expect(m).toContain(`${cliHint()} auth login`);
   });
   it("is generic when the email is unknown", () => {
     expect(ga4AccessDeniedMessage("1", { mode: "oauth" })).toContain("could not read the account's email");
@@ -41,7 +42,7 @@ describe("classification", () => {
     expect(sa401).toContain("setup --step google");
     expect(sa401).not.toContain("isn't shared");
     const oa401 = (gscError(e401, "sc-domain:example.com", oauth) as Error).message;
-    expect(oa401).toContain("crawlmark-cli auth login");
+    expect(oa401).toContain(`${cliHint()} auth login`);
     expect(oa401).toContain("you@example.com");
     expect(credentialsRejectedMessage("GA4", { mode: "none" })).toContain("the Google account crawlmark uses");
   });

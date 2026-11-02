@@ -6,7 +6,7 @@
  * competitors saved first with the denylist applied.
  */
 import { readFileSync } from "node:fs";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../src/config.js";
 
 process.env.SEMRUSH_API_KEY = "semrush-SECTIONS-sentinel-91f2";
@@ -53,6 +53,12 @@ function fake(): Req[] {
 afterEach(() => vi.unstubAllGlobals());
 
 const NOW = Date.parse("2026-10-02T12:00:00Z");
+// The DataForSEO history plans compute date_from from the real clock, so pin it to NOW.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterEach(() => vi.useRealTimers());
 let n = 0;
 function client(extra: Partial<Client> = {}): Client {
   n++;

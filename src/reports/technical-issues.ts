@@ -15,12 +15,13 @@ import type { Client } from "../config.js";
 import { BudgetExceededError } from "../lib/budget.js";
 import { analyzeCrawl } from "../analysis/crawl.js";
 import type { StoredAudit } from "../analysis/diff.js";
-import { CRAWL_COMPLETE_KEY, onPageSeverity } from "../analysis/findings.js";
-import { atLeast, diffIssues, mergeIssues, severityCounts, type RawIssue } from "../analysis/tech-issues.js";
+import { checkKey, checkOf, CRAWL_COMPLETE_KEY, normalizeUrl, onPageSeverity, type FindingSource } from "../analysis/findings.js";
+import { atLeast, diffIssues, mergeIssues, severityCounts, type DiffOptions, type RawIssue } from "../analysis/tech-issues.js";
 import type { StoredCrawl } from "../lib/crawls.js";
 import { cleanText, cleanUrl } from "../lib/inspections.js";
 import type { IssueSnapshot } from "../lib/issue-snapshots.js";
 import { ulid } from "../lib/ulid.js";
+import { crawlBrandTerms } from "./local-crawl.js";
 import { FREE_ISSUE_SOURCES, PAID_ISSUE_SOURCES } from "./templates/schema.js";
 import type { IssueSeverity, IssueSource, SourceRun, TechnicalIssuesData } from "./report-types.js";
 
@@ -37,6 +38,10 @@ export interface TechIssuesDeps {
   latestAudit(client: string): StoredAudit | undefined;
   latestCrawl(client: string): StoredCrawl | undefined;
   latestCrawlTask(client: string): { taskId: string; ranAt: number } | undefined;
+  /** A saved audit by ID: lets a new finding be told apart from one on a page the base audit never checked (D8). */
+  auditById?(id: string): StoredAudit | undefined;
+  /** A saved local crawl by ID, for the same question about crawled pages. */
+  crawlById?(id: string): StoredCrawl | undefined;
   /** GET /on_page/summary/{id} of a stored task (no task is posted). */
   onPageSummary(taskId: string): Promise<{ status?: string | undefined; issues: { check: string; pages: number }[] }>;
   /** Stored URL Inspection results as raw issues (Phase 13 A-5), or undefined when there are none. */
@@ -67,6 +72,8 @@ export async function loadTechIssuesDeps(): Promise<TechIssuesDeps> {
     latestAudit: audits.latestAudit,
     latestCrawl: (c) => crawls.latestCrawl(c),
     latestCrawlTask: audits.latestCrawlTask,
+    auditById: audits.getAudit,
+    crawlById: crawls.getCrawl,
     onPageSummary: async (id) => {
       const s = await dfs.onPageSummary(id);
       return { status: s.status, issues: s.issues };
@@ -111,7 +118,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const SEVERITY_OK = (s: string): s is IssueSeverity => s === "critical" || s === "high" || s === "medium" || s === "low";
 
 /** The saved audit's findings: site checks as `site_hygiene`, crawlmark's page checks as `audit`; its local crawl is read from the crawl store instead. */
-export function auditIssues(audit: StoredAudit): { audit: RawIssue[]; hygiene: RawIssue[]; checks: string[]; hygieneRan: boolean } {
+export function auditIssues(audit: StoredAudit): { audit: RawIssue[]; hygiene: RawIssue[]; checks: string[]; hygieneRan: boolean; gtmContainer?: string } {
   const out = { audit: [] as RawIssue[], hygiene: [] as RawIssue[] };
   for (const f of audit.findings) {
     if (f.source === "crawl" || !SEVERITY_OK(f.severity)) continue;
@@ -122,12 +129,47 @@ export function auditIssues(audit: StoredAudit): { audit: RawIssue[]; hygiene: R
     else out.audit.push({ source: "audit", rule: `${f.source}:${f.rule}`, url, severity: f.severity, nativeSeverity: f.severity, title, count: null, ...(evidence ? { evidence } : {}) });
   }
   const sources = new Set(audit.checked.map((c) => c.source));
-  return { ...out, checks: [...sources].filter((s) => s !== "site" && s !== "crawl").sort(), hygieneRan: sources.has("site") };
+  const gtmContainer = auditedContainer(audit);
+  return { ...out, checks: [...sources].filter((s) => s !== "site" && s !== "crawl").sort(), hygieneRan: sources.has("site"), ...(gtmContainer ? { gtmContainer } : {}) };
+}
+
+/** The public ID of the Tag Manager container a saved audit checked (its result's site.tagManager), or undefined. */
+function auditedContainer(audit: StoredAudit): string | undefined {
+  const tm = (audit.result as { site?: { tagManager?: { ok?: boolean; data?: { container?: { publicId?: unknown } } } } } | null)?.site?.tagManager;
+  const id = tm?.ok ? tm.data?.container?.publicId : undefined;
+  return typeof id === "string" ? cleanText(id, 40) ?? undefined : undefined;
+}
+
+/** D8: whether the base run's stored data shows it looked at this page (undefined when the base is gone or the source can't tell). */
+function coverageCheck(deps: TechIssuesDeps): NonNullable<DiffOptions["baseCovered"]> {
+  const audits = new Map<string, StoredAudit | undefined>();
+  const crawls = new Map<string, Set<string> | undefined>();
+  return (source, rule, url, run) => {
+    if (url === null) return undefined;
+    if (source === "audit" && deps.auditById) {
+      if (url.startsWith("gtm://")) return undefined;
+      if (!audits.has(run.runId)) audits.set(run.runId, deps.auditById(run.runId));
+      const base = audits.get(run.runId);
+      if (!base) return undefined;
+      const [findingSource, ...rest] = rule.split(":");
+      const want = checkKey(checkOf({ source: findingSource as FindingSource, url, rule: rest.join(":") }));
+      return base.checked.some((c) => checkKey(c) === want);
+    }
+    if (source === "local_crawl" && deps.crawlById) {
+      if (!crawls.has(run.runId)) {
+        const c = deps.crawlById(run.runId);
+        crawls.set(run.runId, c ? new Set(c.pages.filter((p) => p.status !== null).map((p) => normalizeUrl(p.url))) : undefined);
+      }
+      const fetched = crawls.get(run.runId);
+      return fetched ? fetched.has(normalizeUrl(url)) : undefined;
+    }
+    return undefined;
+  };
 }
 
 /** The newest local crawl's findings (exhaustive crawls also mark `site:crawl-complete`, so they can clear duplicate checks). */
-export function crawlIssues(crawl: StoredCrawl): RawIssue[] {
-  return analyzeCrawl(crawl.pages, { exhaustive: crawl.exhaustive }).findings.map((f) => ({
+export function crawlIssues(crawl: StoredCrawl, client?: Pick<Client, "name" | "domain" | "brandTerms">): RawIssue[] {
+  return analyzeCrawl(crawl.pages, { exhaustive: crawl.exhaustive, brandTerms: client ? crawlBrandTerms(client) : undefined }).findings.map((f) => ({
     source: "local_crawl" as const,
     rule: f.rule,
     url: cleanText(f.url, 2000) ?? "",
@@ -172,7 +214,7 @@ export async function technicalIssues(client: Client, opts: TechIssuesOptions, d
       const a = auditIssues(audit);
       if (want("audit")) {
         raws.push(...a.audit);
-        runs.push({ source: "audit", runId: audit.id, ranAt: iso(audit.ranAt), stale: stale(audit.ranAt), checks: a.checks });
+        runs.push({ source: "audit", runId: audit.id, ranAt: iso(audit.ranAt), stale: stale(audit.ranAt), checks: a.checks, ...(a.gtmContainer ? { gtmContainer: a.gtmContainer } : {}) });
       }
       if (want("site_hygiene")) {
         if (a.hygieneRan) {
@@ -187,7 +229,7 @@ export async function technicalIssues(client: Client, opts: TechIssuesOptions, d
     const crawl = deps.latestCrawl(client.slug);
     if (!crawl) unavailable.push({ source: "local_crawl", reason: `no saved local crawl for ${client.domain} yet` });
     else {
-      raws.push(...crawlIssues(crawl));
+      raws.push(...crawlIssues(crawl, client));
       runs.push({ source: "local_crawl", runId: crawl.id, ranAt: iso(crawl.ranAt), stale: stale(crawl.ranAt), checks: crawl.exhaustive ? [CRAWL_COMPLETE_KEY] : [] });
     }
   }
@@ -245,7 +287,7 @@ export async function technicalIssues(client: Client, opts: TechIssuesOptions, d
   // Each item remembers the source runs that reported it, so a later run can tell when a carried item is no longer checked.
   const merged = mergeIssues(raws).map((i) => ({ ...i, seen: runs.filter((r) => i.sources.some((x) => x.source === r.source)) }));
   const base = deps.latestIssueSnapshotBefore(client.slug, opts.baseBeforeMs, opts.excludeSnapshotIds ?? []);
-  const diff = diffIssues({ items: merged, checked: runs }, base ? { items: base.items.map((i) => ({ ...i, change: "first_run" as const })), checked: base.checked } : undefined, { now, maxAgeDays });
+  const diff = diffIssues({ items: merged, checked: runs }, base ? { items: base.items.map((i) => ({ ...i, change: "first_run" as const })), checked: base.checked } : undefined, { now, maxAgeDays, baseCovered: coverageCheck(deps) });
 
   let snapshotId: string | null = null;
   if (opts.save !== false && runs.length) {
@@ -268,6 +310,7 @@ export async function technicalIssues(client: Client, opts: TechIssuesOptions, d
     limit,
     total: open.length,
     ...(diff.noLongerChecked ? { noLongerChecked: diff.noLongerChecked } : {}),
+    ...(diff.notes.length ? { notes: diff.notes } : {}),
     snapshotId,
   };
 }

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POSIX_MODES } from "./platform.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 /**
  * src/providers/discovery.ts and src/clients.ts against a mocked googleapis
@@ -384,7 +385,7 @@ describe("manual clients (no Google)", () => {
       undefined,
       undefined,
     ]);
-    await expect(resolveClient("other.example")).rejects.toThrow(/crawlmark-cli clients add other\.example/);
+    await expect(resolveClient("other.example")).rejects.toThrow(cliRe("clients add other\\.example"));
     await expect(addClient("not a domain")).rejects.toThrow(/not a domain/);
   });
 

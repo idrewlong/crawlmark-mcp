@@ -35,7 +35,13 @@ export async function cached<T>(
     }
   }
   const value = await fn();
-  setStmt.run(key, JSON.stringify(value), now + ttlSeconds);
+  // The value is already computed (and a paid call already billed): a cache that can't be written must not throw it away.
+  try {
+    setStmt.run(key, JSON.stringify(value), now + ttlSeconds);
+  } catch (err) {
+    const e = err as { code?: string; errcode?: number; name?: string; message?: string };
+    console.error(`crawlmark: couldn't save a cache entry (${e.code ?? e.name ?? "error"}): ${e.message ?? String(err)}`);
+  }
   return { value, fromCache: false };
 }
 
@@ -56,4 +62,9 @@ export function peekCache<T>(key: string): T | undefined {
 /** Store a value under a cache key (see cached()). */
 export function putCache(key: string, ttlSeconds: number, value: unknown): void {
   setStmt.run(key, JSON.stringify(value), Math.floor(Date.now() / 1000) + ttlSeconds);
+}
+
+/** Test seam: how long a cache write waits on a locked database before giving up. */
+export function setCacheBusyTimeoutForTests(ms: number): void {
+  db.exec(`PRAGMA busy_timeout = ${Math.max(0, Math.floor(ms))}`);
 }

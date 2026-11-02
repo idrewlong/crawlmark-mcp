@@ -47,7 +47,9 @@ import { crawlCommand } from "./crawl-cli.js";
 import { logsCommand } from "./logs-cli.js";
 import { indexCoverageCommand, indexImportCommand } from "./index-coverage-cli.js";
 import { dataCommand } from "./data-cli.js";
+import { gscHistoryCommand } from "./gsc-history-cli.js";
 import { seoSnapshotCommand } from "./seo-snapshot-cli.js";
+import { cliHint } from "./lib/cli-hint.js";
 
 /** Phase 10: after --help / --version on a TTY, a dim "Update available" line on stderr (at most one registry request a day). */
 async function updateNoticeAfterHelp(json = false): Promise<void> {
@@ -88,7 +90,7 @@ async function login(): Promise<number> {
   if (result.missingScopes.length) {
     warn(
       `Warning: these scopes were not granted, so the matching tools will fail: ${result.missingScopes.join(", ")}. ` +
-        "Run `crawlmark-cli auth login` again and leave every box ticked on the consent screen.",
+        `Run \`${cliHint()} auth login\` again and leave every box ticked on the consent screen.`,
     );
     return 1;
   }
@@ -130,10 +132,10 @@ async function status(): Promise<number> {
   out(`Scopes: ${check.scopes.join(" ")}`);
   out("Token check: OK");
   if (check.gtmScopeMissing) {
-    out("Note: Tag Manager access isn't granted, so gtm_audit won't work. Run `crawlmark-cli auth login` again to add it.");
+    out(`Note: Tag Manager access isn't granted, so gtm_audit won't work. Run \`${cliHint()} auth login\` again to add it.`);
   }
   if (check.missingScopes?.length) {
-    out(`Missing scopes: ${check.missingScopes.join(", ")}. Run \`crawlmark-cli auth login\` again and grant all of them.`);
+    out(`Missing scopes: ${check.missingScopes.join(", ")}. Run \`${cliHint()} auth login\` again and grant all of them.`);
     return 1;
   }
   return 0;
@@ -199,7 +201,7 @@ async function clientsList(refresh: boolean): Promise<number> {
   if (d.error) out(`Discovery failed, showing clients.yaml entries only: ${d.error}`);
   for (const w of d.warnings) out(`Warning: ${w}`);
   for (const n of d.notes) out(`Note: ${n}`);
-  if (!registry.clients.length && d.skipped) out("Add a client with: crawlmark-cli clients add <domain>");
+  if (!registry.clients.length && d.skipped) out(`Add a client with: ${cliHint()} clients add <domain>`);
   // Google not being set up is fine; a configured Google that fails is not.
   return d.ok || d.skipped ? 0 : 1;
 }
@@ -252,7 +254,7 @@ async function clientsRemove(domains: string[], ignore: boolean): Promise<number
   if (removed.length) {
     out(
       "If Google still lists a removed domain, discovery will add it back on the next run. " +
-        `To hide it for good, run \`crawlmark-cli clients remove ${removed.join(" ")} --ignore\` (sets ignore: true).`,
+        `To hide it for good, run \`${cliHint()} clients remove ${removed.join(" ")} --ignore\` (sets ignore: true).`,
     );
   }
   return failed ? 1 : 0;
@@ -285,7 +287,7 @@ async function competitorsCommand(command: string | undefined, args: string[], n
   if (command === "list") {
     if (domains.length) return usageError("competitors list takes only a client.");
     const c = await resolveClient(client);
-    if (c.competitorEntries.length === 0) out(`${c.domain} has no competitors yet. Add some with: crawlmark-cli competitors add ${c.domain} <domain>...`);
+    if (c.competitorEntries.length === 0) out(`${c.domain} has no competitors yet. Add some with: ${cliHint()} competitors add ${c.domain} <domain>...`);
     else out(formatTable(["DOMAIN", "SOURCE", "ADDED", "NOTE"], c.competitorEntries.map((e) => [e.domain, ...meta(e)])));
     out(`Area: ${c.area ?? "(not set)"}. Niche: ${c.niche ?? "(not set)"}.`);
     return 0;
@@ -302,7 +304,7 @@ async function keywordsCommand(command: string | undefined, args: string[], note
   if (command === "list") {
     if (keywords.length) return usageError("keywords list takes only a client.");
     const c = await resolveClient(client);
-    if (c.keywordEntries.length === 0) out(`${c.domain} has no tracked keywords yet. Add some with: crawlmark-cli keywords add ${c.domain} "<keyword>"...`);
+    if (c.keywordEntries.length === 0) out(`${c.domain} has no tracked keywords yet. Add some with: ${cliHint()} keywords add ${c.domain} "<keyword>"...`);
     else out(formatTable(["KEYWORD", "SOURCE", "ADDED", "NOTE"], c.keywordEntries.map((e) => [e.keyword, ...meta(e)])));
     return 0;
   }
@@ -319,7 +321,7 @@ async function brandCommand(command: string | undefined, args: string[], values:
   if (command === "list") {
     if (terms.length) return usageError("brand list takes only a client.");
     const c = await resolveClient(client);
-    if (c.brandTermEntries.length === 0) out(`${c.domain} has no brand terms yet (the domain and name are always matched). Try: crawlmark-cli brand suggest ${c.domain}`);
+    if (c.brandTermEntries.length === 0) out(`${c.domain} has no brand terms yet (the domain and name are always matched). Try: ${cliHint()} brand suggest ${c.domain}`);
     else out(formatTable(["TERM", "SOURCE", "ADDED"], c.brandTermEntries.map((e) => [e.term, e.source ?? "-", e.addedAt ?? "-"])));
     return 0;
   }
@@ -381,7 +383,7 @@ async function brandSuggest(args: string[], values: BrandFlags): Promise<number>
   }
   out(formatTable(["CLIENT", "TERM", "CONFIDENCE", "SCORE", "SOURCE", "SIGNALS", "AUTO", "SAVED"], rows));
   out();
-  out(`DataForSEO cost: $${cost.toFixed(4)}.${values.apply ? ` Saved terms at ${min} confidence or above.` : " Nothing saved; re-run with --apply, or add terms with: crawlmark-cli brand add <client> <term>..."}`);
+  out(`DataForSEO cost: $${cost.toFixed(4)}.${values.apply ? ` Saved terms at ${min} confidence or above.` : ` Nothing saved; re-run with --apply, or add terms with: ${cliHint()} brand add <client> <term>...`}`);
   const ok = [...results.values()].filter((r): r is SuggestBrandResult => !(r instanceof Error));
   const auto = ok.reduce((n, r) => n + autoAddable(r.candidates, "high").length, 0);
   out(`${auto} high-confidence candidate(s) qualify for automatic adding (AUTO yes) across ${results.size} client(s); the rest are suggestions to review.`);
@@ -399,17 +401,33 @@ type ClientsSetFlags = {
   "place-id"?: string | undefined;
   "ahrefs-site-audit-project"?: string | undefined;
   "semrush-project"?: string | undefined;
+  "ga4-hostname"?: string[] | undefined;
+  "gsc-exclude-query"?: string[] | undefined;
+  "gtm-container"?: string | undefined;
 };
 
 /** `none` (any case) clears a value: the empty string setClientProfile expects. */
 const noneToEmpty = (v: string | undefined) => (v !== undefined && v.trim().toLowerCase() === "none" ? "" : v);
 
+/** A repeatable flag whose single value `none` clears the list: undefined (flag absent), [] (clear) or the values. */
+function listFlag(name: string, values: string[] | undefined): string[] | undefined | Error {
+  if (values === undefined) return undefined;
+  const none = values.filter((v) => v.trim().toLowerCase() === "none");
+  if (none.length === 0) return values;
+  if (values.length > none.length) return new Error(`${name}: none clears the list, so it can't be combined with other values.`);
+  return [];
+}
+
 async function clientsSet(args: string[], values: ClientsSetFlags): Promise<number> {
   if (args.length !== 1) return usageError("clients set takes exactly one client.");
   if (values["semrush-project"] !== undefined) return usageError("--semrush-project is no longer supported: Semrush Site Audit needs Semrush's v3 API, which crawlmark no longer supports.");
-  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"], ah: values["ahrefs-site-audit-project"] }).every((v) => v === undefined)) {
-    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site, --place-id, or --ahrefs-site-audit-project.");
+  if (Object.values({ a: values.area, n: values.niche, m: values.name, b: values["brand-terms"], p: values.provider, c: values.country, s: values["bing-site"], g: values["place-id"], ah: values["ahrefs-site-audit-project"], gh: values["ga4-hostname"], gq: values["gsc-exclude-query"], gt: values["gtm-container"] }).every((v) => v === undefined)) {
+    return usageError("clients set needs --area, --niche, --name, --brand-terms, --provider, --country, --bing-site, --place-id, --ahrefs-site-audit-project, --ga4-hostname, --gsc-exclude-query, or --gtm-container.");
   }
+  const ga4Hostnames = listFlag("--ga4-hostname", values["ga4-hostname"]);
+  if (ga4Hostnames instanceof Error) return usageError(ga4Hostnames.message);
+  const gscExcludeQueries = listFlag("--gsc-exclude-query", values["gsc-exclude-query"]);
+  if (gscExcludeQueries instanceof Error) return usageError(gscExcludeQueries.message);
   const provider = noneToEmpty(values.provider)?.trim().toLowerCase();
   if (provider !== undefined && provider !== "" && !(PROVIDER_IDS as readonly string[]).includes(provider)) {
     return usageError(`--provider must be one of ${PROVIDER_IDS.join(", ")} or none (got "${values.provider}").`);
@@ -419,7 +437,7 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
     return usageError(`--country must be a two-letter ISO code such as US or GB, or none (got "${values.country}").`);
   }
   const brandTerms = values["brand-terms"] === undefined ? undefined : values["brand-terms"].split(",");
-  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]), ahrefsSiteAuditProject: noneToEmpty(values["ahrefs-site-audit-project"]) }, { trustedPlaceId: true });
+  const r = await setClientProfile(args[0]!, { area: values.area, niche: values.niche, name: values.name, brandTerms, dataProvider: provider, country, bingSite: noneToEmpty(values["bing-site"]), gbpPlaceId: noneToEmpty(values["place-id"]), ahrefsSiteAuditProject: noneToEmpty(values["ahrefs-site-audit-project"]), ga4Hostnames, gscExcludeQueries, gtmContainerId: noneToEmpty(values["gtm-container"]) }, { trustedPlaceId: true });
   for (const [k, v] of Object.entries(r.set)) out(`Set ${k}: ${v}`);
   for (const k of r.cleared) out(`Cleared ${k}.`);
   out(
@@ -428,6 +446,9 @@ async function clientsSet(args: string[], values: ClientsSetFlags): Promise<numb
       (r.profile.bingSite !== undefined ? `Bing site ${r.profile.bingSite ?? "(matched by domain)"}. ` : "") +
       (r.profile.gbpPlaceId !== undefined ? `Google Business Profile place ID ${r.profile.gbpPlaceId ?? "(not set)"}. ` : "") +
       (r.profile.ahrefsSiteAuditProject !== undefined ? `Ahrefs Site Audit project ${r.profile.ahrefsSiteAuditProject ?? "(matched by domain)"}. ` : "") +
+      (r.profile.ga4Hostnames !== undefined ? `GA4 hostnames ${r.profile.ga4Hostnames.join(", ")}. ` : "") +
+      (r.profile.gscExcludeQueries !== undefined ? `Search Console exclusions ${r.profile.gscExcludeQueries.join(", ") || "(none)"}. ` : "") +
+      (r.profile.gtm !== undefined ? `Tag Manager container ${r.profile.gtm.containerId ?? "(not pinned)"}. ` : "") +
       `File: ${r.clientsFile}`,
   );
   return 0;
@@ -560,6 +581,9 @@ async function main(argv: string[]): Promise<number> {
       "place-id": { type: "string" },
       "ahrefs-site-audit-project": { type: "string" },
       "semrush-project": { type: "string" },
+      "ga4-hostname": { type: "string", multiple: true },
+      "gsc-exclude-query": { type: "string", multiple: true },
+      "gtm-container": { type: "string" },
       all: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
       "min-confidence": { type: "string" },
@@ -590,6 +614,7 @@ async function main(argv: string[]): Promise<number> {
       "user-agent": { type: "string" },
       "include-subdomains": { type: "boolean", default: false },
       "start-url": { type: "string" },
+      "no-sitemap-urls": { type: "boolean", default: false },
       since: { type: "string" },
       until: { type: "string" },
       bots: { type: "string" },
@@ -601,6 +626,7 @@ async function main(argv: string[]): Promise<number> {
       "confirm-property": { type: "boolean", default: false },
       kinds: { type: "string" },
       file: { type: "string" },
+      months: { type: "string" },
       replace: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -624,6 +650,17 @@ async function main(argv: string[]): Promise<number> {
         const { runLocalCrawl, loadLocalCrawlDeps } = await import("./reports/local-crawl.js");
         return (await runLocalCrawl(client, opts, await loadLocalCrawlDeps())).result;
       },
+    });
+  }
+  if (group === "gsc-history") {
+    return gscHistoryCommand(command ? [command, ...args] : args, values, { out, warn, usage: scheduledUsage }, {
+      allClients: async () => (await loadRegistry()).clients,
+      resolveClient,
+      fill: async (client, o) => {
+        const [{ fillGscMonths }, { gscQuery }] = await Promise.all([import("./lib/gsc-monthly.js"), import("./providers/gsc.js")]);
+        return fillGscMonths(client, o, { gscQuery, now: Date.now });
+      },
+      stored: async (client, limit) => (await import("./lib/gsc-monthly.js")).storedSummary(client.slug, client.gscProperty ?? "", limit),
     });
   }
   if (group === "index-coverage" && command === "import") {

@@ -21,6 +21,7 @@ import * as dfs from "./providers/dataforseo.js";
 import type { LocalBusiness, LocalReviews, MapsResult } from "./providers/dataforseo.js";
 import { requireDataForSeo } from "./providers/seo-data.js";
 import type { LocalProfileData } from "./reports/report-types.js";
+import { cliHint } from "./lib/cli-hint.js";
 
 const usd4 = (n: number) => Number(n.toFixed(4));
 const usd6 = (n: number) => Number(n.toFixed(6));
@@ -154,7 +155,7 @@ export async function localProfile(client: Client, req: LocalProfileRequest = {}
     saved: { gbpPlaceId: client.gbpPlaceId ?? null, isThisListing },
     confirm:
       matched?.placeId && !isThisListing
-        ? `Not saved. Show the user the matched listing (title, address, website) and ask whether it is their business. Only if they confirm, save it with set_client_profile { client: "${client.domain}", gbpPlaceId: "${matched.placeId}" } (or crawlmark-cli clients set ${client.domain} --place-id ${matched.placeId}).`
+        ? `Not saved. Show the user the matched listing (title, address, website) and ask whether it is their business. Only if they confirm, save it with set_client_profile { client: "${client.domain}", gbpPlaceId: "${matched.placeId}" } (or ${cliHint()} clients set ${client.domain} --place-id ${matched.placeId}).`
         : null,
     untrusted: UNTRUSTED_NOTE,
     costUsd: r.costUsd,
@@ -301,7 +302,7 @@ const taskKey = (taskId: string) => cacheKey("dfs-reviews-task", taskId.toLowerC
 function needPlaceId(client: Client): string {
   if (!client.gbpPlaceId) {
     throw new Error(
-      `local_reviews needs ${client.domain}'s confirmed Google Business Profile, so it never reads another business's reviews. Run local_profile, confirm the match with the user, then save it with set_client_profile gbpPlaceId (or crawlmark-cli clients set ${client.domain} --place-id <id>).`,
+      `local_reviews needs ${client.domain}'s confirmed Google Business Profile, so it never reads another business's reviews. Run local_profile, confirm the match with the user, then save it with set_client_profile gbpPlaceId (or ${cliHint()} clients set ${client.domain} --place-id <id>).`,
     );
   }
   return client.gbpPlaceId;

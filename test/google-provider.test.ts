@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "../src/config.js";
-import { GoogleNotConfiguredError, GTM_SCOPE, INVALID_GRANT_MESSAGE, noTokenMessage, type StoredToken } from "../src/lib/google-auth.js";
+import { GoogleNotConfiguredError, GTM_SCOPE, invalidGrantMessage, noTokenMessage, type StoredToken } from "../src/lib/google-auth.js";
 import { deleteTokenFile, readTokenFile, writeTokenFile } from "../src/lib/token-store.js";
 import {
   assertGoogleConfigured,
@@ -19,6 +19,7 @@ import {
 import { CrawlmarkOAuth2Client } from "../src/providers/google-oauth-client.js";
 import { DATA_SCOPES_GRANTED, startFakeGoogle, type FakeGoogle } from "./helpers/fake-google.js";
 import { POSIX_MODES } from "./platform.js";
+import { cliHint, cliRe } from "./helpers/cli-hint.js";
 
 // google.ts builds its token-file client through createOAuthClientLoader. Wrap that so the client it builds
 // talks to the fake Google on 127.0.0.1 instead of googleapis.com. Everything else in google.ts runs as shipped.
@@ -104,8 +105,8 @@ describe("checkGoogleAuthLive (OAuth): the refresh token is exercised against th
 
     const r = await checkGoogleAuthLive();
 
-    expect(r).toEqual({ ok: false, error: INVALID_GRANT_MESSAGE });
-    expect(r.error).toContain("crawlmark-cli auth login");
+    expect(r).toEqual({ ok: false, error: invalidGrantMessage() });
+    expect(r.error).toContain(`${cliHint()} auth login`);
     expect(readTokenFile(env.GOOGLE_TOKEN_FILE)).toMatchObject({ refresh_token: "revoked-token", access_token: "old-access" });
   });
 

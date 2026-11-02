@@ -9,6 +9,8 @@ import { z } from "zod";
 import { normalizeBrandTerm, squash } from "./brand.js";
 import { gtmNotes, joinGtmContainers, type GtmListing, type GtmMatch } from "./gtm.js";
 import { resolveCountry } from "./country.js";
+import { defaultGa4Hostnames, ga4HostnameProblem, MAX_GA4_HOSTNAMES, validateGa4Hostnames } from "./ga4-hostnames.js";
+import { exclusionProblem, MAX_EXCLUSION_LENGTH, MAX_EXCLUSIONS, validateExclusions } from "./gsc-exclusions.js";
 import { PROVIDER_IDS, type ProviderId } from "./provider-ids.js";
 
 // ---------------------------------------------------------------- normalisation
@@ -382,6 +384,9 @@ export const PLACE_ID_RE = /^[A-Za-z0-9_-]{10,300}$/;
 /** Phase 13 B: Ahrefs project IDs are digits. */
 export const PROJECT_ID_RE = /^\d{1,20}$/;
 
+/** Longer than any host (253) plus "*." so the item check, not the length check, explains a bad entry. */
+const MAX_HOST_INPUT = 300;
+
 const OverrideSchema = z.object({
   domain: z.string().min(1),
   name: z.string().optional(),
@@ -391,6 +396,10 @@ const OverrideSchema = z.object({
   /** Tag Manager account and container (the numeric IDs from the GTM URL). Override for container discovery; see src/lib/gtm.ts. */
   gtmAccountId: z.union([z.string(), z.number().int()]).transform(String).optional(),
   gtmContainerId: z.union([z.string(), z.number().int()]).transform(String).optional(),
+  /** D3: GA4 hostnames counted for this client. Unset = [domain, www.domain]. An exact host, "*.example.com" (any subdomain) or "*" alone (no filter). */
+  ga4Hostnames: z.array(z.string().max(MAX_HOST_INPUT)).min(1).max(MAX_GA4_HOSTNAMES).optional(),
+  /** D4: Search Console queries left out of totals and query lists. A plain string is an exact query; "/.../" is an RE2 regex. */
+  gscExcludeQueries: z.array(z.string().min(1).max(MAX_EXCLUSION_LENGTH)).min(1).max(MAX_EXCLUSIONS).optional(),
   locationCode: z.number().int().optional(),
   languageCode: z.string().optional(),
   competitors: z.array(CompetitorItemSchema).optional(),
@@ -474,6 +483,22 @@ export function parseOverrides(raw: unknown, source = "clients.yaml"): ClientOve
         throw new Error(`Invalid ${source}: clients.${slug}.trackedKeywords[${i}] is empty or longer than ${MAX_KEYWORD_LENGTH} characters.`);
       }
     });
+    entry.ga4Hostnames?.forEach((h, i) => {
+      const problem = ga4HostnameProblem(h);
+      if (problem) throw new Error(`Invalid ${source}: clients.${slug}.ga4Hostnames[${i}] "${h.slice(0, 100)}" ${problem}.`);
+    });
+    if (entry.ga4Hostnames) {
+      const problem = validateGa4Hostnames(entry.ga4Hostnames);
+      if (problem) throw new Error(`Invalid ${source}: clients.${slug}.ga4Hostnames ${problem}`);
+    }
+    entry.gscExcludeQueries?.forEach((q, i) => {
+      const problem = exclusionProblem(q);
+      if (problem) throw new Error(`Invalid ${source}: clients.${slug}.gscExcludeQueries[${i}] "${q.slice(0, 100)}" ${problem}.`);
+    });
+    if (entry.gscExcludeQueries) {
+      const problem = validateExclusions(entry.gscExcludeQueries);
+      if (problem) throw new Error(`Invalid ${source}: clients.${slug}.gscExcludeQueries ${problem}`);
+    }
     entry.brandTerms?.forEach((t, i) => {
       if (!normalizeBrandTerm(brandTermText(t))) throw new Error(`Invalid ${source}: clients.${slug}.brandTerms[${i}] must contain a letter or digit and be at most 100 characters.`);
     });
@@ -502,6 +527,13 @@ export interface ClientDefaults {
 /** DEFAULT_CLIENT_MONTHLY_AHREFS_UNITS / _SEMRUSH_UNITS defaults (D1). */
 export const DEFAULT_MONTHLY_UNITS = { ahrefs: 10_000, semrush: 5_000 } as const;
 
+export interface GtmCandidate {
+  gtmAccountId: string;
+  gtmContainerId: string;
+  publicId: string;
+  matchedBy: "domain" | "name";
+}
+
 export interface Client {
   /** Canonical ID: the normalised domain. Also the key for spend tracking. */
   slug: string;
@@ -512,6 +544,15 @@ export interface Client {
   /** Tag Manager container for gtm_audit: from clients.yaml, else discovery. The account may be missing when only gtmContainerId is pinned. */
   gtmAccountId?: string;
   gtmContainerId?: string;
+  /** D2: true when clients.yaml sets gtmContainerId or gtmAccountId. */
+  gtmPinned: boolean;
+  /** D2: every container discovery matched to this domain (by domain list, else by name), ordered by public ID. [] when pinned or none. */
+  gtmCandidates: GtmCandidate[];
+  /** D3: effective GA4 hostnames. ["*"] means no filter. Default [domain, `www.${domain}`]. */
+  ga4Hostnames: string[];
+  ga4HostnamesSource: "default" | "yaml";
+  /** D4: Search Console exclusion items as written in clients.yaml ([] when unset). */
+  gscExcludeQueries: string[];
   locationCode: number;
   languageCode: string;
   /** Competitor domains (normalised, de-duplicated). Details in competitorEntries. */
@@ -577,6 +618,11 @@ export function mergeClients(
         slug: domain,
         domain,
         name: y?.name ?? d?.ga4DisplayName ?? domain,
+        gtmPinned: Boolean(y?.gtmContainerId || y?.gtmAccountId),
+        gtmCandidates: [],
+        ga4Hostnames: y?.ga4Hostnames?.length ? y.ga4Hostnames : defaultGa4Hostnames(domain),
+        ga4HostnamesSource: y?.ga4Hostnames?.length ? "yaml" : "default",
+        gscExcludeQueries: y?.gscExcludeQueries ?? [],
         locationCode: y?.locationCode ?? defaults.locationCode,
         languageCode: y?.languageCode ?? defaults.languageCode,
         competitors: competitorEntries.map((c) => c.domain),
@@ -600,10 +646,18 @@ export function mergeClients(
       const ga4PropertyId = y?.ga4PropertyId ?? d?.ga4PropertyId;
       if (gscProperty) client.gscProperty = gscProperty;
       if (ga4PropertyId) client.ga4PropertyId = ga4PropertyId;
-      // A pinned container wins; discovery only supplies a pair when yaml has neither id.
-      const found = y?.gtmContainerId || y?.gtmAccountId ? undefined : gtm.get(domain);
-      const gtmAccountId = y?.gtmAccountId ?? found?.gtmAccountId;
-      const gtmContainerId = y?.gtmContainerId ?? found?.gtmContainerId;
+      // A pinned container wins. Otherwise the ids are set only when discovery found exactly one candidate; with
+      // several, gtm_audit picks by the live homepage (D2), so none is chosen here.
+      const found = client.gtmPinned ? undefined : gtm.get(domain);
+      if (found) {
+        client.gtmCandidates = [
+          { gtmAccountId: found.gtmAccountId, gtmContainerId: found.gtmContainerId, publicId: found.publicId, matchedBy: found.matchedBy },
+          ...found.alternates.map((a) => ({ ...a, matchedBy: found.matchedBy })),
+        ];
+      }
+      const single = client.gtmCandidates.length === 1 ? client.gtmCandidates[0] : undefined;
+      const gtmAccountId = y?.gtmAccountId ?? single?.gtmAccountId;
+      const gtmContainerId = y?.gtmContainerId ?? single?.gtmContainerId;
       if (gtmAccountId) client.gtmAccountId = gtmAccountId;
       if (gtmContainerId) client.gtmContainerId = gtmContainerId;
       const area = y?.area && normalizeArea(y.area);
@@ -874,7 +928,9 @@ export function planSync(
       if (d.gscProperty) entry.gscProperty = d.gscProperty;
       if (d.ga4PropertyId) entry.ga4PropertyId = d.ga4PropertyId;
       const g = gtm.get(d.domain);
-      if (g) {
+      // Only an unambiguous match is written (a written container is a pin). With several candidates
+      // gtm_audit picks by the live homepage, so clients.yaml stays unset.
+      if (g && g.alternates.length === 0) {
         entry.gtmAccountId = g.gtmAccountId;
         entry.gtmContainerId = g.gtmContainerId;
       }
@@ -888,10 +944,10 @@ export function planSync(
     }
   }
   // Tag Manager containers fill any existing entry (discovered or hand-added), and only as a pair:
-  // an entry that already pins either id is left alone.
+  // an entry that already pins either id is left alone, and so is a host with several candidate containers.
   for (const o of overrides) {
     const g = gtm.get(o.domain);
-    if (!g || o.ignore || o.gtmAccountId || o.gtmContainerId) continue;
+    if (!g || g.alternates.length > 0 || o.ignore || o.gtmAccountId || o.gtmContainerId) continue;
     plan.fill.push({ key: o.slug, domain: o.domain, field: "gtmAccountId", value: g.gtmAccountId });
     plan.fill.push({ key: o.slug, domain: o.domain, field: "gtmContainerId", value: g.gtmContainerId });
   }

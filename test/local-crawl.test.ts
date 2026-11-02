@@ -21,7 +21,7 @@ type Res = { status: number; body?: string; type?: string; location?: string; xR
 const html = (head: string, body = "") => `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
 const a = (...hrefs: string[]) => hrefs.map((h) => `<a href="${h}">x</a>`).join("");
 const page = (title: string | null, desc: string | null, links: string[], extra = "") =>
-  ({ status: 200, body: html(`${title ? `<title>${title}</title>` : ""}${desc ? `<meta name="description" content="${desc}">` : ""}${extra}`, a(...links)) }) satisfies Res;
+  ({ status: 200, body: html(`${title ? `<title>${title}</title>` : ""}${desc ? `<meta name="description" content="${desc}">` : ""}${extra}`, "<h1>H</h1>" + a(...links)) }) satisfies Res;
 
 /** An in-memory site keyed by absolute URL, plus a request log. */
 function fakeSite(site: Record<string, Res>, opts: { refuse?: (url: string) => boolean; delay?: (url: string, signal?: AbortSignal) => Promise<void> } = {}) {
@@ -352,7 +352,8 @@ describe("runLocalCrawl", () => {
 
     const capped = await runLocalCrawl(client, { maxPages: 2 }, { ...ld, crawl: fakeSite(SITE).deps });
     expect(capped.result.summary.orphans).toMatchObject({ available: false, reason: expect.stringMatching(/not exhaustive \(stopped by maxPages\)/) });
-    expect(sitemapCalls).toHaveLength(1);
+    // The sitemap phase still reads the sitemaps after a capped link phase (it then has no page budget left).
+    expect(sitemapCalls).toHaveLength(2);
   });
 
   it("doesn't judge orphans for a crawl that didn't start at the homepage (R-4)", async () => {

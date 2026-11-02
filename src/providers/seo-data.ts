@@ -9,13 +9,15 @@
  * - Live SERPs, on-page checks and crawls are DataForSEO-only; requireDataForSeo
  *   gates them (with `fallbackFrom` when another provider is the client's choice).
  * - A missing key for the chosen provider never falls back (D2), and a provider
- *   that fails passes its error up as-is (rule 5).
+ *   that fails passes its error up as-is (rule 5), except a rejected Semrush or Ahrefs key (D9b):
+ *   that becomes a ProviderKeyRejectedError telling the user how to fix the key or switch the client's
+ *   provider. Still no fallback.
  */
 import { env, seoDefaultProvider, type Client } from "../config.js";
 import { displayProviderValue, invalidProviderMessage, PROVIDER_LABELS, ProviderUnavailableError, type ProviderId } from "../lib/provider-ids.js";
-import { ahrefsProvider } from "./ahrefs.js";
+import { AhrefsApiError, ahrefsProvider } from "./ahrefs.js";
 import * as dfs from "./dataforseo.js";
-import { semrushProvider } from "./semrush.js";
+import { SemrushApiError, semrushProvider } from "./semrush.js";
 import { normalizeKeywordList } from "./semrush-shape.js";
 import type { BacklinksSummary, CompetitorsResult, KeywordVolume, RankedKeywordsResult } from "./dataforseo.js";
 import { BudgetExceededError, remainingUsd, type UnitProvider } from "../lib/budget.js";
@@ -23,6 +25,7 @@ import { cacheKey, peekCache } from "../lib/cache.js";
 import { isPlainDomain, normalizeHost, normalizeKeyword } from "../lib/clients.js";
 import { lastDays } from "../lib/dates.js";
 import { remainingUnits } from "./units-billing.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 export { PROVIDER_IDS, PROVIDER_LABELS, ProviderUnavailableError, resolveDefaultProvider, isProviderId } from "../lib/provider-ids.js";
 export type { DefaultProvider, DefaultProviderSource, ProviderId } from "../lib/provider-ids.js";
@@ -291,7 +294,7 @@ export function resolveProvider(
   else if (isDfsOnly(capability)) chosen = "dataforseo";
   else {
     const base = e.invalidMessage ?? invalidProviderMessage(displayProviderValue(e.defaultProvider.invalid));
-    return { unavailable: `${base} Change it with: ${e.cli ?? "crawlmark-cli"} setup --step provider, or in Claude Desktop's extension settings.` };
+    return { unavailable: `${base} Change it with: ${e.cli ?? cliHint()} setup --step provider, or in Claude Desktop's extension settings.` };
   }
 
   if (!CAPABILITIES[chosen].has(capability)) {
@@ -324,20 +327,11 @@ export function providerEnv(): ProviderEnv {
   };
 }
 
-/** The CLI prefix for the invalid-default message (loaded lazily: status-providers pulls in a lot). */
-async function cliForMessage(): Promise<string> {
-  try {
-    return (await import("../setup/status-providers.js")).cliPrefix();
-  } catch {
-    return "crawlmark-cli";
-  }
-}
-
 async function choose(client: Client, capability: Capability): Promise<{ provider: ProviderId; fallbackFrom?: ProviderId }> {
   const e = providerEnv();
   let r = resolveProvider(client, capability, e);
   if ("unavailable" in r && typeof e.defaultProvider !== "string" && !client.dataProvider) {
-    r = resolveProvider(client, capability, { ...e, cli: await cliForMessage() });
+    r = resolveProvider(client, capability, { ...e, cli: cliHint() });
   }
   if ("unavailable" in r) throw new ProviderUnavailableError(capability, client.dataProvider ?? (typeof e.defaultProvider === "string" ? e.defaultProvider : null), r.unavailable);
   return r;
@@ -385,10 +379,78 @@ const dataforseoProvider: SeoDataProvider = {
 
 const registry: Partial<Record<ProviderId, SeoDataProvider>> = { dataforseo: dataforseoProvider, ahrefs: ahrefsProvider, semrush: semrushProvider };
 
+/** Semrush or Ahrefs refused the key (HTTP 401/403). The original error is the `cause`. No other provider is tried (A7). */
+export class ProviderKeyRejectedError extends Error {
+  override name = "ProviderKeyRejectedError";
+  constructor(
+    readonly provider: ProviderId,
+    readonly status: number,
+    message: string,
+    cause: unknown,
+  ) {
+    super(message, { cause });
+  }
+}
+
+/** The rejected-key message: what to do about the key, or how to move this client to another configured provider. */
+export function keyRejectedMessage(
+  provider: ProviderId,
+  client: Pick<Client, "domain">,
+  status: number,
+  configured: Record<ProviderId, boolean>,
+  cli: string,
+  capability?: Capability,
+): string {
+  // Only providers that can serve the capability that failed are worth suggesting (not Semrush for ranked keywords).
+  const others = (Object.keys(configured) as ProviderId[]).filter((id) => id !== provider && configured[id] && (!capability || CAPABILITIES[id].has(capability)));
+  const switchTo = others.length
+    ? `To use another provider for this client: set_client_profile with dataProvider ${others.map((id) => `"${id}"`).join(" or ")} (or ${cli} clients set ${client.domain} --provider ${others[0]}).`
+    : `No other data provider is set up for this request; run ${cli} setup --step provider.`;
+  return `${PROVIDER_LABELS[provider]} rejected the API key for ${client.domain} (HTTP ${status}). ${switchTo} To fix the key: ${cli} setup --step ${provider}.`;
+}
+
+/** The capability a provider method serves (history methods share their summary's capability). */
+function capabilityOfMethod(method: string): Capability | undefined {
+  const alias: Record<string, Capability> = { organicHistory: "organicOverview", backlinksHistory: "backlinksSummary" };
+  const c = alias[method] ?? method;
+  return (ROUTED_CAPABILITIES as readonly string[]).includes(c) ? (c as Capability) : undefined;
+}
+
+function asKeyRejected(provider: ProviderId, client: Client | undefined, err: unknown, method?: string): unknown {
+  const status = err instanceof SemrushApiError ? err.code : err instanceof AhrefsApiError ? err.status : undefined;
+  const auth = (err instanceof SemrushApiError || err instanceof AhrefsApiError) && err.kind === "auth";
+  if (!auth || status === undefined || !client) return err;
+  return new ProviderKeyRejectedError(provider, status, keyRejectedMessage(provider, client, status, providerEnv().configured, cliHint(), method ? capabilityOfMethod(method) : undefined), err);
+}
+
+/** Semrush and Ahrefs calls fail loudly on a rejected key instead of passing the vendor error up; there is no fallback. */
+function guarded(p: SeoDataProvider): SeoDataProvider {
+  if (p.id === "dataforseo") return p;
+  return new Proxy(p, {
+    get(target, key, receiver) {
+      const value: unknown = Reflect.get(target, key, receiver);
+      if (typeof value !== "function" || typeof key !== "string" || key === "configured" || key.startsWith("plan")) return value;
+      return (...args: unknown[]) => {
+        const client = args[0] as Client | undefined;
+        try {
+          const out: unknown = value.apply(target, args);
+          return out instanceof Promise ? out.catch((e: unknown) => Promise.reject(asKeyRejected(target.id, client, e, key))) : out;
+        } catch (e) {
+          throw asKeyRejected(target.id, client, e, key);
+        }
+      };
+    },
+  });
+}
+
+const guardedCache = new Map<SeoDataProvider, SeoDataProvider>();
+
 function impl(id: ProviderId): SeoDataProvider {
   const p = registry[id];
   if (!p) throw new Error(`${PROVIDER_LABELS[id]} is not available in this build.`);
-  return p;
+  let g = guardedCache.get(p);
+  if (!g) guardedCache.set(p, (g = guarded(p)));
+  return g;
 }
 
 /** Phase 13 B: a provider's implementation (provider sections plan and call it directly after routing). */

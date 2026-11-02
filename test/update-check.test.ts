@@ -202,7 +202,7 @@ describe("printUpdateNotice", () => {
     const s = sink();
     const fetch = registry("0.2.0");
     await printUpdateNotice({ current: "0.1.0", cacheFile: file, env: {}, stdoutTTY: true, stream: s.stream, fetch });
-    expect(s.text()).toContain("Update available 0.1.0 → 0.2.0 · run npx crawlmark-mcp@latest init");
+    expect(s.text()).toContain("Update available 0.1.0 → 0.2.0 · run npx -y crawlmark-mcp@latest init");
     for (const blocked of [{ env: { CRAWLMARK_NO_UPDATE_CHECK: "1" } }, { env: { NO_UPDATE_NOTIFIER: "1" } }, { env: { CI: "1" } }, { env: {}, json: true }, { env: {}, stdoutTTY: false }]) {
       const quiet = sink();
       const f = registry("0.2.0");
@@ -213,7 +213,7 @@ describe("printUpdateNotice", () => {
   });
 
   it("updateNotice strips control characters", () => {
-    expect(updateNotice("0.1.0", "0.2.0\u001b[2J")).toBe("Update available 0.1.0 → 0.2.0[2J · run npx crawlmark-mcp@latest init");
+    expect(updateNotice("0.1.0", "0.2.0\u001b[2J")).toBe("Update available 0.1.0 → 0.2.0[2J · run npx -y crawlmark-mcp@latest init");
   });
 });
 

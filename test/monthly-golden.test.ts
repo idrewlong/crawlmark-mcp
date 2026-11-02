@@ -20,6 +20,10 @@ vi.mock("../src/providers/dataforseo.js", () => ({
   serp: vi.fn(async (_c: unknown, kw: string) => ({ keyword: kw, clientRank: kw.length % 7, clientUrl: "https://example.com/", costUsd: 0.002, fromCache: false })),
   ESTIMATE_USD: { serp: 0.002 },
 }));
+// The history save depends on today's date and on what earlier runs stored; a fixed answer keeps the golden stable.
+vi.mock("../src/lib/gsc-monthly.js", () => ({
+  fillGscMonths: vi.fn(async () => ({ stored: ["2026-09", "2026-08"], skipped: [], failed: [] })),
+}));
 vi.mock("../src/lib/audits.js", async () => {
   const d = await import("./fixtures/reports/data.js");
   return { latestAudit: vi.fn(() => d.AUDIT_LATEST), latestAuditBefore: vi.fn(() => d.AUDIT_BEFORE) };

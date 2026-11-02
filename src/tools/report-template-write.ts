@@ -19,6 +19,7 @@ import type { TemplateSpec } from "../reports/templates/schema.js";
 import { applyTemplateWrite, planTemplateWrite, TemplateFileChangedError, TemplateWriteError, type TemplatePatch, type TemplateWritePlan } from "../reports/templates/write.js";
 import { stripControl } from "../lib/terminal-text.js";
 import { handler } from "./util.js";
+import { cliHint } from "../lib/cli-hint.js";
 
 export type TemplateTool = "create_report_template" | "update_report_template";
 
@@ -86,7 +87,7 @@ export function dialogReasons(plan: Pick<TemplateWritePlan, "id" | "shadowsBuilt
 }
 
 const NO_DIALOG_HELP =
-  "This app can't ask the user to confirm directly (MCP elicitation), so crawlmark won't save it from here. The user can build it with `crawlmark-cli report templates new` in a terminal, or use an app that supports confirmation dialogs (Claude Code, for example).";
+  `This app can't ask the user to confirm directly (MCP elicitation), so crawlmark won't save it from here. The user can build it with \`${cliHint()} report templates new\` in a terminal, or use an app that supports confirmation dialogs (Claude Code, for example).`;
 
 /** The elicitation text (SEC-2): what is saved, what it hides or replaces, the sections, and the start of any text section. */
 export function confirmMessage(plan: TemplateWritePlan): string {
@@ -176,7 +177,7 @@ export async function templateWriteCall(tool: TemplateTool, args: TemplateWriteA
         (plan.shadowsBuiltin ? ` It hides the builtin "${plan.id}" template${file === "client" ? " for this client" : ""}.` : "") +
         (plan.shadowsGlobal ? ` It hides the global "${plan.id}" template for this client.` : "") +
         (plan.globalFileInvalid ? ` The global template file is invalid, so it can't be checked whether this hides a global "${plan.id}" template; fix the global file too.` : "") +
-        (!deps.elicit && dialogReasons(plan).length ? ` Saving it from here will be refused because ${dialogReasons(plan).join("; ")} and this app can't ask the user directly: tell the user to run \`crawlmark-cli report templates new\` in a terminal instead (or use an app with confirmation dialogs).` : "") +
+        (!deps.elicit && dialogReasons(plan).length ? ` Saving it from here will be refused because ${dialogReasons(plan).join("; ")} and this app can't ask the user directly: tell the user to run \`${cliHint()} report templates new\` in a terminal instead (or use an app with confirmation dialogs).` : "") +
         ` To save, call ${tool} again with exactly the same arguments plus confirmToken (valid 15 minutes, once).`,
     };
   }

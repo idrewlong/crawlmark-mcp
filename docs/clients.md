@@ -9,7 +9,7 @@ The client list is `config/clients.yaml` in the config home (path set by `CLIENT
 - **From Google.** When Google is set up, crawlmark lists every Search Console site and GA4 property (with its web streams) the account can access, joins them by domain, and adds any new domain to `clients.yaml` with its name, `gscProperty` and `ga4PropertyId`. This happens on first use and then at most once a day (cached in SQLite); `list_clients` with `refresh: true` or `crawlmark-cli clients list --refresh` re-lists now. The file is created if it's missing.
 - **By hand.** `crawlmark-cli clients add example.com` (or edit the file). Only `domain` is required. A hand-added client works for DataForSEO, Lighthouse and axe with no Google setup at all.
 
-**crawlmark never changes or removes what you write.** Discovery only appends domains that have no entry and fills a missing `gscProperty`, `ga4PropertyId` or Tag Manager container (`gtmAccountId` plus `gtmContainerId`, only when the entry has neither). It keeps your comments, order and values (indentation is normalised), writes atomically (following a symlinked file and keeping its permissions), and leaves entries for domains it no longer sees (`list_clients` notes them). If you pin a property that differs from what discovery would pick, your value wins and `list_clients` notes the difference. To drop a client for good, set `ignore: true` on its entry (or `clients remove <domain> --ignore`): it's hidden and never re-added. Deleting an entry outright only lasts until the next discovery if Google still lists the domain.
+**crawlmark never changes or removes what you write.** Discovery only appends domains that have no entry and fills a missing `gscProperty`, `ga4PropertyId` or Tag Manager container (`gtmAccountId` plus `gtmContainerId`, only when the entry has neither and exactly one container matches). It keeps your comments, order and values (indentation is normalised), writes atomically (following a symlinked file and keeping its permissions), and leaves entries for domains it no longer sees (`list_clients` notes them). If you pin a property that differs from what discovery would pick, your value wins and `list_clients` notes the difference. To drop a client for good, set `ignore: true` on its entry (or `clients remove <domain> --ignore`): it's hidden and never re-added. Deleting an entry outright only lasts until the next discovery if Google still lists the domain.
 
 Every field is in `config/clients.example.yaml`. The file is re-read on every call, so edits apply without a restart.
 
@@ -18,7 +18,7 @@ Every field is in `config/clients.example.yaml`. The file is re-read on every ca
 - Every site is reduced to a host: lowercased, with the scheme, path, port and a leading `www.` dropped. `sc-domain:example.com`, `https://www.example.com/` and an `https://example.com` GA4 stream all become `example.com`. Internationalised domains are compared in punycode, so `bücher.example` and `xn--bcher-kva.example` match. Subdomains stay separate (`shop.example.com` is its own client).
 - Search Console: if a host has both a domain property (`sc-domain:`) and URL-prefix properties, the domain property is used and the others are listed as `alternates`. Among URL-prefix properties, a root-path property (`https://example.com/`) wins over a path-scoped one (`https://example.com/blog/`), then `https` over `http`, then the shorter URL. Sites where the account is an unverified user are skipped.
 - GA4: a property maps to the host of each of its web streams. If several properties share a host, the lowest property ID is used and the rest are listed as `alternates`. Properties with no web stream (app-only) are skipped with a note.
-- Tag Manager: crawlmark lists the accounts and web containers the identity can read and matches each container's **domain list** (container settings) to a client's domain. Containers with no domain list are listed in the `list_clients` notes; pin one by setting `gtmAccountId` and `gtmContainerId` (the numeric IDs in the Tag Manager URL, not `GTM-XXXX`). If several containers list one domain, the lowest `GTM-` ID is used and the others are noted.
+- Tag Manager: crawlmark lists the accounts and web containers the identity can read and matches each container's **domain list** (container settings) to a client's domain. Discovery writes a container into `clients.yaml` only when exactly one matches; entries it wrote earlier count as pinned. Containers with no domain list are listed in the `list_clients` notes; pin one with `gtmContainerId` (`GTM-XXXX` or the numeric ID; see below). If several containers list one domain, none is written and `list_clients` notes that `gtm_audit` picks the one the live homepage loads.
 - A client can have only one side, or neither. Tools that need a missing one return an error such as "No GA4 property found for example.com"; reports mark just that section as failed.
 - Entries are keyed by domain. Tools accept the domain, any URL or `www.` form of it, or the entry's key if you used a different one (e.g. `example-co:`). A key that names a different client's domain is a config error, since it would hide that client. Spend recorded under such a key counts toward the client's budget.
 
@@ -67,6 +67,32 @@ Set or clear them with the CLI or the `set_client_profile` tool (`""` clears a v
 crawlmark-cli clients set example.com --provider ahrefs --country GB
 crawlmark-cli clients set example.com --provider none --country none   # back to the default; country from the location code
 ```
+
+### Per-client settings for GA4, Search Console and Tag Manager
+
+Three optional fields change what a client's numbers include. Set them in clients.yaml, from Claude with `set_client_profile`, or in a terminal with `clients set`:
+
+```yaml
+clients:
+  example:
+    domain: example.com
+    ga4Hostnames: [example.com, www.example.com, "*.shop.example.com"]
+    gscExcludeQueries: ["example", "/^example (co|inc)$/"]
+    gtmContainerId: GTM-ABC123
+```
+
+- **`ga4Hostnames`** limits GA4 numbers to these hostnames. Without it, crawlmark counts exactly the client's domain and its `www.` form, so sessions on subdomains, staging sites and `localhost` that the same GA4 property collects drop out. Each entry is an exact host (`shop.example.com`), `*.example.com` for any subdomain, or `*` for no filter; up to 20. `monthly_report` and template runs add a note when sessions were left out: `GA4: 120 organic sessions from other hostnames were left out (staging.example.com 120). If a hostname belongs to this site, add it with set_client_profile ga4Hostnames.` `ga4_report` takes `hostnames` or `allHostnames: true` to override the setting for one call.
+- **`gscExcludeQueries`** leaves queries out of Search Console totals and query lists: exact text (case-insensitive) or `/regex/` in RE2 syntax (no lookarounds or backreferences); up to 100. It applies to every Search Console read, including opportunity tools and reports. `gsc_query` shows raw numbers with `includeExcludedQueries: true`. Requests that are made per query are filtered by Google; the others are corrected by subtracting the excluded queries' share, which makes those requests twice as many. Average position isn't adjusted. Totals say how many clicks and impressions were left out. If Google rejects a pattern, the error says `Search Console rejected the gscExcludeQueries pattern`.
+- **`gtmContainerId`** pins the Tag Manager container `gtm_audit` uses, as `GTM-XXXX` or the numeric container ID. Without it, `gtm_audit` audits the container the live homepage loads. See [Tag Manager audit](audits.md#tag-manager-audit).
+
+```bash
+crawlmark-cli clients set example.com --ga4-hostname example.com --ga4-hostname www.example.com --ga4-hostname "*.shop.example.com"
+crawlmark-cli clients set example.com --gsc-exclude-query example --gsc-exclude-query "/^example (co|inc)\$/"
+crawlmark-cli clients set example.com --gtm-container GTM-ABC123
+crawlmark-cli clients set example.com --ga4-hostname none --gsc-exclude-query none --gtm-container none   # clear all three
+```
+
+In `set_client_profile`, `ga4Hostnames: []` and `gscExcludeQueries: []` clear the lists and `gtmContainerId: ""` unpins. Setting a container also removes any stored `gtmAccountId`.
 
 ### Bing site
 

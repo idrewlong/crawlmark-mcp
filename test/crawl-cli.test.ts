@@ -52,6 +52,16 @@ describe("crawlmark-cli crawl", () => {
     expect(h.err[0]).toBe("Crawled 287 pages in 2m 10s (exhaustive: yes). 4 broken internal links, 11 duplicate titles, 3 orphan pages. Saved as crawl_x.");
   });
 
+  it("--no-sitemap-urls turns the sitemap phase off", async () => {
+    const h = harness();
+    expect(await crawlCommand([], { client: "example.com", "no-sitemap-urls": true }, h.io, h.deps)).toBe(0);
+    expect(h.calls).toEqual([{ includeSitemapUrls: false }]);
+    const d = harness();
+    await crawlCommand([], { client: "example.com" }, d.io, d.deps);
+    expect(d.calls).toEqual([{}]);
+    expect(groupHelp("crawl", { prog: "crawlmark-cli", bold: false })).toContain("--no-sitemap-urls");
+  });
+
   it("usage errors exit 1 and run nothing", async () => {
     for (const flags of [{}, { client: "example.com", "max-pages": "0" }, { client: "example.com", "max-pages": "2001" }, { client: "example.com", "max-depth": "x" }, { client: "example.com", concurrency: "9" }, { client: "example.com", "user-agent": "bingbot" }, { client: "example.com", "start-url": "ftp://example.com/" }, { client: "example.com", "start-url": "," }]) {
       const h = harness();

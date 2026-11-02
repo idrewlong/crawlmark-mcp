@@ -12,8 +12,8 @@ export { CRAWL_COMPLETE_KEY, CRAWL_COMPLETE_RULES, CRAWL_SITE_KEY } from "./find
 export interface CrawlPage {
   /** The URL as linked (fragment removed). */
   url: string;
-  /** Link depth from the start URLs (0 = a start URL). */
-  depth: number;
+  /** Link depth from the start URLs (0 = a start URL); null for a page fetched only because a sitemap listed it. */
+  depth: number | null;
   /** First response's HTTP status; null when not fetched (skipped, or the request failed). */
   status: number | null;
   /** Where redirects ended (the URL itself when there were none); null when not fetched. */
@@ -34,6 +34,8 @@ export interface CrawlPage {
   /** Unique links on this page (internal and external). */
   outlinks: number;
   firstLinkedFrom: string | null;
+  /** True when the page was fetched in the sitemap phase: no link in the crawl led to it (so it is still an orphan). */
+  fromSitemap?: boolean;
   /** Set when the page was reached by following another URL's redirect, not a link. */
   fromRedirect?: string;
   /** Why the URL wasn't fetched or its redirect wasn't followed. */
@@ -57,6 +59,8 @@ export const CRAWL_RULES = {
   "canonical-elsewhere": { severity: "low", title: "Canonical points at a different URL" },
   "deep-page": { severity: "low", title: "Page is more than 4 clicks from the start pages" },
   "noindex-linked": { severity: "low", title: "Internally linked page is noindex" },
+  "missing-h1": { severity: "medium", title: "Page has no H1 heading" },
+  "title-brand-repeated": { severity: "low", title: "Title repeats the brand name" },
 } as const satisfies Record<string, { severity: Severity; title: string }>;
 export type CrawlRule = keyof typeof CRAWL_RULES;
 export const CRAWL_RULE_IDS = Object.keys(CRAWL_RULES) as CrawlRule[];
@@ -69,6 +73,19 @@ const snippet = (s: string) => {
   const t = stripControl(s);
   return t.length > SNIPPET ? `${t.slice(0, SNIPPET - 1)}…` : t;
 };
+/** Lowercase, punctuation to spaces, runs of spaces collapsed. */
+const plain = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+/** Brand strings in their comparable form: at least 3 characters, no duplicates. */
+export function brandStrings(terms: readonly string[]): string[] {
+  return [...new Set(terms.map(plain).filter((t) => t.length >= 3))];
+}
+/** How many times `brand` occurs as whole words (non-overlapping) in `title`, both already plain. */
+function wholeWordCount(title: string, brand: string): number {
+  const padded = ` ${title} `;
+  let n = 0;
+  for (let i = padded.indexOf(` ${brand} `); i !== -1; i = padded.indexOf(` ${brand} `, i + brand.length + 1)) n++;
+  return n;
+}
 const isHtml = (ct: string | null) => ct == null || /html/i.test(ct);
 const isOk = (s: number | null) => s !== null && s >= 200 && s < 300;
 const isRedirect = (s: number | null) => s !== null && s >= 300 && s < 400;
@@ -89,6 +106,8 @@ export interface CrawlAnalysis {
     missingTitles: number;
     duplicateDescriptions: number;
     missingDescriptions: number;
+    missingH1: number;
+    titleBrandRepeated: number;
     canonicalIssues: number;
     noindex: number;
     depthHistogram: Record<string, number>;
@@ -96,7 +115,8 @@ export interface CrawlAnalysis {
 }
 
 /** Fill each page's `issues` and build the findings, checked keys and summary. Deterministic for the same pages. */
-export function analyzeCrawl(pages: CrawlPage[], opts: { exhaustive: boolean }): CrawlAnalysis {
+export function analyzeCrawl(pages: CrawlPage[], opts: { exhaustive: boolean; brandTerms?: string[] }): CrawlAnalysis {
+  const brands = brandStrings(opts.brandTerms ?? []);
   const byKey = new Map(pages.map((p) => [normalizeUrl(p.url), p]));
   const issues = new Map<CrawlPage, Set<CrawlRule>>();
   const evidence = new Map<string, string>();
@@ -140,6 +160,17 @@ export function analyzeCrawl(pages: CrawlPage[], opts: { exhaustive: boolean }):
     if (hasContent(p) && isHtml(p.contentType)) {
       if (!p.title) flag(p, "missing-title");
       if (!p.description) flag(p, "missing-description");
+      if (p.h1Count === 0) flag(p, "missing-h1");
+      if (p.title && brands.length) {
+        const t = plain(p.title);
+        for (const b of brands) {
+          const n = wholeWordCount(t, b);
+          if (n >= 2) {
+            flag(p, "title-brand-repeated", `"${b}" appears ${n} times in "${snippet(p.title)}"`);
+            break;
+          }
+        }
+      }
       if (p.canonical && normalizeUrl(p.canonical) !== normalizeUrl(p.url)) {
         const target = byKey.get(normalizeUrl(p.canonical));
         const targetStatus = target ? (target.redirectChain.length ? target.status : (target.finalStatus ?? target.status)) : null;
@@ -147,7 +178,7 @@ export function analyzeCrawl(pages: CrawlPage[], opts: { exhaustive: boolean }):
         else flag(p, "canonical-elsewhere", `canonical ${p.canonical}`);
       }
     }
-    if (p.status !== null && p.depth > DEEP_PAGE_DEPTH) flag(p, "deep-page", `depth ${p.depth}`);
+    if (p.status !== null && p.depth !== null && p.depth > DEEP_PAGE_DEPTH) flag(p, "deep-page", `depth ${p.depth}`);
     if (p.noindex && p.inlinks > 0) flag(p, "noindex-linked", `${p.inlinks} internal link${p.inlinks === 1 ? "" : "s"}, first from ${p.firstLinkedFrom ?? "(unknown)"}`);
   }
 
@@ -177,7 +208,7 @@ export function analyzeCrawl(pages: CrawlPage[], opts: { exhaustive: boolean }):
   for (const p of pages) {
     const k = p.status !== null ? String(p.status) : p.skipped ? `skipped:${p.skipped}` : "error";
     byStatus[k] = (byStatus[k] ?? 0) + 1;
-    if (p.status !== null) depthHistogram[String(p.depth)] = (depthHistogram[String(p.depth)] ?? 0) + 1;
+    if (p.status !== null && p.depth !== null) depthHistogram[String(p.depth)] = (depthHistogram[String(p.depth)] ?? 0) + 1;
   }
   const count = (rule: CrawlRule) => pages.filter((p) => p.issues.includes(rule)).length;
   return {
@@ -191,6 +222,8 @@ export function analyzeCrawl(pages: CrawlPage[], opts: { exhaustive: boolean }):
       missingTitles: count("missing-title"),
       duplicateDescriptions: count("duplicate-description"),
       missingDescriptions: count("missing-description"),
+      missingH1: count("missing-h1"),
+      titleBrandRepeated: count("title-brand-repeated"),
       canonicalIssues: pages.filter((p) => p.issues.includes("canonical-to-non-200") || p.issues.includes("canonical-elsewhere")).length,
       noindex: pages.filter((p) => p.noindex && p.status !== null).length,
       depthHistogram,
@@ -204,10 +237,11 @@ export function topFindings(findings: Finding[], n: number): Finding[] {
   return [...findings].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity) || a.rule.localeCompare(b.rule) || a.url.localeCompare(b.url)).slice(0, n);
 }
 
-/** Every URL a crawl reached through links or redirects (fetched or skipped), for the orphan check. */
+/** Every URL a crawl reached through links or redirects (fetched or skipped), for the orphan check. Sitemap-phase pages are not reached by links, so they are left out. */
 export function crawledUrls(pages: CrawlPage[]): string[] {
   const out = new Set<string>();
   for (const p of pages) {
+    if (p.fromSitemap) continue;
     out.add(p.url);
     if (p.finalUrl) out.add(p.finalUrl);
     for (const u of p.redirectChain) out.add(u);
