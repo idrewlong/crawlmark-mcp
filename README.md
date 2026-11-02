@@ -100,6 +100,15 @@ npm run cli -- setup
 
 A source checkout keeps its settings in the project folder instead of `~/.crawlmark`. See [Configuration](#configuration). The wizard asks which SEO data providers you have; to change that later, run `npm run cli -- setup --step provider`, or run `npm run cli -- init` again and pick it from the menu. Set `CRAWLMARK_NO_UPDATE_CHECK=1` to turn off the daily update check.
 
+Upgrading to 0.4.0
+------------------
+
+Update with `npx -y crawlmark-mcp@latest init` (or `npm i -g crawlmark-mcp@latest`) **on every computer that uses your report template files**, then check these:
+
+- **Themes and PowerPoint decks are new.** Reports can use one of six looks (Cards, Minimal, Editorial, Bold, Consulting, Friendly) and can be exported as a `.pptx` deck. See [Themes](docs/reports.md#themes) and [PowerPoint decks](docs/reports.md#powerpoint-decks).
+- **Nothing changes until you pick a theme.** The default is Cards, today's look, so existing reports, templates and branding files render as before.
+- **Update every computer before you use `theme` or `pptx` in a template file.** A template file or branding file that sets `theme`, or lists `pptx` in `defaults.formats`, doesn't load in 0.3.0 or earlier: the older version marks the whole file invalid and falls back to the builtin templates and branding. Files that don't use them load in both versions.
+
 Upgrading to 0.3.0
 ------------------
 
@@ -636,7 +645,7 @@ Report files
 
 `export_report` (in Claude) and `crawlmark-cli report` (from cron) turn a client's data into Markdown, HTML, PDF or Word files from a YAML template. The files are laid out like an agency dashboard: your logo and colours, four key-figure cards with their changes, a summary, charts (clicks and impressions per day, branded share, organic sessions, Core Web Vitals and rank history), clean tables, and a short "About this report". In Claude the files carry the commentary Claude writes; from cron they are data only and say so. Files go to `<home>/reports/<client>/<YYYY-MM>/`, readable only by you.
 
-Your branding (agency name, logo, colours, fonts, footer, white label, paper size and default formats) is set up with `crawlmark-cli setup --step branding`, which shows a one-page preview with sample data before saving; `crawlmark-cli report preview-branding` shows it again later.
+Your branding (agency name, logo, colours, report theme, fonts, footer, white label, paper size and default formats) is set up with `crawlmark-cli setup --step branding`, which shows a one-page preview with sample data before saving; `crawlmark-cli report preview-branding` shows it again later.
 
 In Claude the commentary can use sub-headings, bullets, numbered lists, tables and `{{chart search}}` lines that repeat a chart from the section. Text meant for you only goes in an internal part, which is saved to a separate `<template>-<period>.internal.md` file and never into a client file. Texts are limited to 20,000 characters each (100,000 for the client's whole report). Before writing anything, `export_report` checks the client text for internal terms (crawlmark, Claude, DataForSEO, tool and setting names) and refuses the export, listing the hits, if it finds one; Ahrefs, Semrush and Google are not terms, and `allowTerms` (on the export, or in your branding) lets a term through; with white label on, only your branding's `allowTerms` can let crawlmark, Claude, Anthropic or DataForSEO through. [Commentary in docs/reports.md](docs/reports.md#commentary) has the format and the rules.
 
@@ -672,6 +681,15 @@ crawlmark-cli report templates new --client example.com    # build your own: pic
 To build your own template without writing YAML, run `crawlmark-cli report templates new` on a terminal, or ask Claude ("draft me a one-page monthly summary with search, traffic and technical issues"): it shows you the template and the change to your file, and saves only after you say yes. Paid sections are always named with their cost and never added without your OK.
 
 Optional sections are added with `--include` (`include` in Claude). Free: `cwv` (Core Web Vitals history), `gtm` (Tag Manager findings), `ranks` (tracked keyword rank trends from the stored history), `ai` (llms.txt and AI crawler access from the newest saved audit), `issues` (the technical-issues list), `indexing` (Google indexing coverage) and `spend` (paid data used this month; the tool and CLI results always report it, the files only with this section). Paid, through the client's data provider: `backlinks` and `visibility` in `monthly` and `quarterly`, and `competitors` in `quarterly`. Paid sections (also `keyword_gap`, `local_profile` and `ai_visibility` in your own templates) run only with `--paid` (`allowPaid`) after their estimate fits the caps.
+
+**Themes.** Six looks: Cards (the default), Minimal, Editorial, Bold, Consulting and Friendly. Pick one in `crawlmark-cli setup --step branding` ("Report theme"), with `theme:` in `branding` or a template, or for one run with `--theme <id>` (`theme` on `export_report`). Add `pptx` to the formats for a PowerPoint deck:
+
+```bash
+crawlmark-cli report --client example.com --format pdf,pptx --theme editorial
+crawlmark-cli report preview-branding --all-themes          # your branding in all six themes, sample data
+```
+
+Your logo, colours and fonts apply in every theme. [Themes and PowerPoint decks in docs/reports.md](docs/reports.md#themes) cover the order the theme is chosen in, the fonts, the slide plan and Google Slides.
 
 PDF uses the Chrome crawlmark already uses for Lighthouse, offline. To get a Google Doc, ask Claude: with your own Google Drive connector it can save the report there after you agree. crawlmark itself never writes to Google. [docs/reports.md](docs/reports.md) covers templates, layout, fonts, commentary, branding, paths and the Docs handoff.
 
@@ -783,7 +801,8 @@ CLI
 | `index-coverage import --client <domain> <file> [--reason <text>] [--confirm-property]` | Import an export of Search Console's Pages report (zip of CSVs, .xlsx or CSV) for `index_coverage` and the indexing report section. Local. Exit 0 imported, 1 error |
 | `seo-snapshot --client <domain>\|--all --paid [--kinds backlinks,visibility,competitors] [--dry-run]` | Store today's backlinks, visibility and competitor figures through each client's SEO data provider (paid; each client's estimate is checked against its caps first; never buys history). Exit 0 done, 2 a client failed or was over its cap, 1 error or no `--paid` |
 | `data purge --provider <ahrefs\|semrush\|dataforseo> [--client <domain>]` | Delete one provider's stored data (local only) |
-| `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format pdf,docx,html,md] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats). Exit 0 written, 2 written with a failed section or format, 1 error |
+| `report --client <domain>\|--all [--template <id>] [--month\|--quarter\|--start --end] [--format pdf,docx,html,md,pptx] [--theme <id>] [--include <id,id>] [--paid] [--dry-run]` | Report files from a template (data only; one PDF unless you pick other formats; `--theme` sets this run's look). Exit 0 written, 2 written with a failed section or format, 1 error |
+| `report preview-branding [--client <domain>] [--all-themes]` | Render the saved branding on a sample report (sample data, no network). `--all-themes` writes the same sample in all six themes to `<home>/branding/themes/` |
 | `report templates list\|validate [file]\|init` | List, check or create report templates |
 | `report templates new [--client <domain>] [--file global\|client] [--replace] [--dry-run]` | Build a template on a terminal: pick sections (marked free or paid, with the client's cost per run), period, comparisons and layout, see a sample-data preview and the file diff, then save, change or cancel. Exit 0 saved or cancelled, 1 error or no terminal, 130 Ctrl-C |
 | `crawl --client <domain> [--max-pages <n>] [--max-depth <n>] [--concurrency <n>] [--user-agent crawlmark\|googlebot] [--include-subdomains] [--start-url <url,url>]` | Free local crawl of a client's site, saved like `local_crawl`. Exit 0 saved, 1 error |
