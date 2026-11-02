@@ -228,7 +228,8 @@ export function fontStacks(fonts: DocBranding["fonts"], theme: ThemeId = "cards"
     const stack = (name: string | null) => (name ? `${fontString(name)}, ${generic}` : generic);
     return { body: stack(fonts.body), heading: stack(fonts.heading ?? fonts.body) };
   }
-  const tails = fonts.fallback === "serif" ? { body: SERIF_STACK, heading: SERIF_STACK } : themed;
+  // An explicit fallback replaces the theme's own tails; unset keeps them.
+  const tails = fonts.fallback === "serif" ? { body: SERIF_STACK, heading: SERIF_STACK } : fonts.fallbackSet ? { body: SANS_STACK, heading: SANS_STACK } : themed;
   const body = fonts.body ? `${fontString(fonts.body)}, ${tails.body}` : tails.body;
   const heading = fonts.heading ? `${fontString(fonts.heading)}, ${tails.heading}` : fonts.body ? `${fontString(fonts.body)}, ${tails.heading}` : tails.heading;
   return { body, heading };

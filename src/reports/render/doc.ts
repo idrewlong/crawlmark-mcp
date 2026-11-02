@@ -133,7 +133,7 @@ export interface DocBranding {
   /** White label: no crawlmark name or version in the file. */
   hideCrawlmark?: boolean;
   /** Font family names from the branding (null: the renderer's own default). `heading` falls back to `body` in the renderers. */
-  fonts: { body: string | null; heading: string | null; fallback: FontFallback };
+  fonts: { body: string | null; heading: string | null; fallback: FontFallback; /** True when branding sets fontFallback itself (so a theme yields its own tails). */ fallbackSet?: true };
   /** White label for data providers (DataForSEO): `hideProviders`, else `hideCrawlmark`. Ahrefs and Semrush source lines stay. */
   hideProviders?: true;
   /** The line that says commentary is written by a person or a tool; null: no line. Resolved from the branding. */
@@ -446,7 +446,7 @@ export function buildReportDoc(report: TemplateReport, opts: BuildOptions): Repo
       paper: b.paper ?? "Letter",
       ...(opts.logo ? { logo: opts.logo } : {}),
       ...(whiteLabel ? { hideCrawlmark: true } : {}),
-      fonts: { body: b.bodyFont ?? null, heading: b.headingFont ?? null, fallback: b.fontFallback ?? "sans-serif" },
+      fonts: { body: b.bodyFont ?? null, heading: b.headingFont ?? null, fallback: b.fontFallback ?? "sans-serif", ...(b.fontFallback ? { fallbackSet: true as const } : {}) },
       ...(hideProviders ? { hideProviders: true as const } : {}),
       commentaryNote,
       theme: opts.theme ?? report.template.theme ?? b.theme ?? DEFAULT_THEME,

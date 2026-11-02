@@ -199,3 +199,15 @@ describe("hostile text is inert in every theme", () => {
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
   });
 });
+
+describe("explicit sans-serif fallback", () => {
+  it("switches a serif theme's tails to the sans stack only when branding sets fontFallback", async () => {
+    const { fontStacks } = await import("../src/reports/render/html.js");
+    const unset = fontStacks({ body: null, heading: null, fallback: "sans-serif" }, "editorial")!;
+    const set = fontStacks({ body: null, heading: null, fallback: "sans-serif", fallbackSet: true }, "editorial")!;
+    expect(unset.heading).toMatch(/serif$/);
+    expect(unset.heading).not.toBe(set.heading);
+    expect(set.body).toBe(set.heading);
+    expect(set.body).toMatch(/sans-serif$/);
+  });
+});
