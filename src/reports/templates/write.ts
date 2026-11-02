@@ -39,7 +39,7 @@ export type TemplateFileKind = "global" | "client";
 export interface TemplatePatch {
   addSections?: unknown[] | undefined;
   removeSectionIds?: string[] | undefined;
-  set?: { title?: unknown; description?: unknown; period?: unknown; compare?: unknown; layout?: unknown; cover?: unknown; contents?: unknown } | undefined;
+  set?: { title?: unknown; description?: unknown; period?: unknown; compare?: unknown; layout?: unknown; cover?: unknown; contents?: unknown; theme?: unknown } | undefined;
   /** Add or replace file-level text blocks (the `blocks:` library next to `templates:`). */
   setBlocks?: Record<string, { title?: string | undefined; text: string }> | undefined;
   /** Remove file-level blocks; refused while a template in the same file still has a `block` section naming one. */
@@ -198,7 +198,7 @@ function templatesMap(doc: Document): YAMLMap {
   return map;
 }
 
-const SET_FIELDS = ["title", "description", "period", "compare", "layout", "cover", "contents"] as const;
+const SET_FIELDS = ["title", "description", "period", "compare", "layout", "cover", "contents", "theme"] as const;
 
 function asObject(v: unknown, what: string): Record<string, unknown> {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new TemplateWriteError(`${what} must be an object.`, [{ path: "", message: `${what} must be an object` }]);

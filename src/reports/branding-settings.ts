@@ -14,7 +14,7 @@ import { MAX_LOGO_BYTES, sniffImage } from "./render/image.js";
 import { clientTemplatesFile, globalTemplatesFile, safeSegment } from "./paths.js";
 import { STARTER_YAML } from "./templates/builtin.js";
 import { loadTemplates, readTemplateFile, type ResolvedBranding } from "./templates/load.js";
-import { FORMATS, validateTemplateText, type Branding, type Format } from "./templates/schema.js";
+import { FORMATS, validateTemplateText, type Branding, type Format, type ThemeId } from "./templates/schema.js";
 import { cliHint } from "../lib/cli-hint.js";
 
 export const MAX_AGENCY_NAME = 80;
@@ -28,6 +28,8 @@ export interface BrandingSettings {
   logo?: string | undefined;
   primaryColor?: string | undefined;
   accentColor?: string | undefined;
+  /** Report theme (0.4.0). Unset: cards. */
+  theme?: ThemeId | undefined;
   footer?: string | undefined;
   hideCrawlmark?: boolean | undefined;
   /** Font family names (letters, digits, spaces, hyphens). Unset: the report's own fonts. */
@@ -58,6 +60,7 @@ export const SETTING_FIELDS = [
   "logo",
   "primaryColor",
   "accentColor",
+  "theme",
   "bodyFont",
   "headingFont",
   "fontFallback",
@@ -84,6 +87,7 @@ export function currentBranding(homeDir: string, clientSlug?: string): BrandingS
     ...(b.logo ? { logo: b.logo.path } : {}),
     ...(b.primaryColor ? { primaryColor: b.primaryColor } : {}),
     ...(b.accentColor ? { accentColor: b.accentColor } : {}),
+    ...(b.theme ? { theme: b.theme } : {}),
     ...(b.footer ? { footer: b.footer } : {}),
     ...(b.hideCrawlmark ? { hideCrawlmark: true } : {}),
     ...(b.bodyFont ? { bodyFont: b.bodyFont } : {}),
@@ -107,7 +111,7 @@ function formatsSet(homeDir: string, clientSlug?: string): boolean {
 export function brandingConfigured(homeDir: string): { configured: boolean; agencyName?: string | undefined; clientOverrides: number } {
   const loaded = loadTemplates({ homeDir });
   const b = loaded.branding;
-  const configured = Boolean(b.agencyName || b.logo || b.primaryColor || b.accentColor || b.footer || b.hideCrawlmark || b.bodyFont || b.headingFont || b.fontFallback || b.hideProviders !== undefined || b.commentaryNote !== undefined);
+  const configured = Boolean(b.agencyName || b.logo || b.primaryColor || b.accentColor || b.theme || b.footer || b.hideCrawlmark || b.bodyFont || b.headingFont || b.fontFallback || b.hideProviders !== undefined || b.commentaryNote !== undefined);
   let clientOverrides = 0;
   try {
     const dir = join(homeDir, "config", "report-templates");
@@ -194,7 +198,7 @@ function setIfChanged(doc: Document, path: string[], value: unknown): void {
   doc.setIn(path, value);
 }
 
-const BRANDING_KEYS = ["agencyName", "logo", "primaryColor", "accentColor", "bodyFont", "headingFont", "fontFallback", "footer", "paper", "hideCrawlmark", "hideProviders", "commentaryNote"] as const;
+const BRANDING_KEYS = ["agencyName", "logo", "primaryColor", "accentColor", "theme", "bodyFont", "headingFont", "fontFallback", "footer", "paper", "hideCrawlmark", "hideProviders", "commentaryNote"] as const;
 
 /**
  * The templates file's text with the branding and default formats set (comments and every other setting kept).
@@ -259,6 +263,7 @@ export function asResolvedBranding(homeDir: string, s: BrandingSettings): Resolv
     ...(s.agencyName ? { agencyName: s.agencyName } : {}),
     ...(s.primaryColor ? { primaryColor: s.primaryColor } : {}),
     ...(s.accentColor ? { accentColor: s.accentColor } : {}),
+    ...(s.theme ? { theme: s.theme } : {}),
     ...(s.footer ? { footer: s.footer } : {}),
     ...(s.paper ? { paper: s.paper } : {}),
     ...(s.hideCrawlmark ? { hideCrawlmark: true } : {}),

@@ -272,6 +272,10 @@ async function wizardCommand(flags: SetupFlags, args: string[], invokedAs: "setu
     const [{ renderBrandingPreview }, { asResolvedBranding }, { chromePdfPrinter }] = await Promise.all([import("../reports/branding-preview.js"), import("../reports/branding-settings.js"), import("../reports/render/pdf.js")]);
     return renderBrandingPreview(HOME.dir, asResolvedBranding(HOME.dir, settings), { printer: chromePdfPrinter, version: ctx.version ?? "" });
   };
+  ctx.brandingThemePreviews = async (settings) => {
+    const [{ renderThemePreviews }, { asResolvedBranding }, { chromePdfPrinter }] = await Promise.all([import("../reports/branding-preview.js"), import("../reports/branding-settings.js"), import("../reports/render/pdf.js")]);
+    return renderThemePreviews(HOME.dir, asResolvedBranding(HOME.dir, settings), { printer: chromePdfPrinter, version: ctx.version ?? "" });
+  };
   ctx.yes = flags.yes;
   ctx.command = invokedAs;
   // packageVersion expects a module directly under src/ or dist/; this one is a level deeper.
